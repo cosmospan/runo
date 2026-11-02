@@ -1,10 +1,10 @@
 //! Runo v2: the crew app.
 //!
-//! A new shell around Runo's bots: Today (the morning view and the one
-//! question that waits), Live (watching a bot work), Crew (every bot, and
-//! making your own) and Chat (asking the crew in plain words). The bots are
-//! the Holo crew from `runo-holo`, drawn every frame from the same rigs as the
-//! design.
+//! A shell around Runo's bots: Today (hand the crew a job and see what is
+//! moving), Live (watch one job as the bot works), Chat (ask a bot in plain
+//! words), Crew, Inbox and History. Every job runs for real on the bot's
+//! engine in a folder the person picked, and is kept between launches. The
+//! bots are the bubble crew from `runo-holo`, drawn as their moods change.
 //!
 //! Runo v1 stays one click away on the rail while v2 grows.
 
@@ -13,7 +13,10 @@ mod crew;
 mod data;
 mod engine;
 mod engines;
+mod history;
+mod jobs;
 mod live;
+mod store;
 mod today;
 mod ui;
 
@@ -22,13 +25,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::{detail_for, Framing, Look, Mood, Renderer};
+use runo_holo::{BubbleRenderer, Framing, Mood, Pose};
 
-use data::{Job, Member, Mode};
+use data::{Member, Mode};
+use store::{Said, Status, Store};
 use ui::c;
 
 /// Where the person is.
@@ -37,11 +41,10 @@ pub enum Place {
     Today,
     Inbox,
     History,
-    Chat,
+    Chat(Member),
     Crew,
-    Schedule,
-    Rules,
-    Live(Member),
+    /// One job, by id.
+    Live(u64),
     Engines,
 }
 
@@ -51,11 +54,11 @@ pub enum Place {
 /// next tick, so a still bot (motion off) is drawn once and never again.
 struct Holos {
     frame: u64,
-    images: HashMap<(u64, u32, bool), Frame>,
-    renderers: HashMap<u16, Renderer>,
-    /// The fastest rate any bot drawn last frame needed, so the clock can slow down
-    /// on screens with only small bots.
-    pub asked: u32,
+    images: HashMap<(Pose, u32, bool), Frame>,
+    renderers: HashMap<u16, BubbleRenderer>,
+    /// The fastest rate any bot drawn this frame needed, so the clock can slow
+    /// down on screens with only small bots.
+    asked: u32,
     /// Replaced frames, released at the start of the next window frame, once the
     /// new ones have painted.
     retired: Vec<Arc<RenderImage>>,
@@ -78,7 +81,7 @@ fn fps_for(size: f32) -> u32 {
     } else if size >= 40.0 {
         15
     } else {
-        10
+        8
     }
 }
 
@@ -102,12 +105,12 @@ impl Holos {
         for old in self.retired.drain(..) {
             cx.drop_image(old, Some(window));
         }
-        let mut gone = Vec::new();
-        for (k, f) in self.images.iter() {
-            if f.used + 2 < frame {
-                gone.push(*k);
-            }
-        }
+        let gone: Vec<_> = self
+            .images
+            .iter()
+            .filter(|(_, f)| f.used + 2 < frame)
+            .map(|(k, _)| *k)
+            .collect();
         for k in gone {
             if let Some(f) = self.images.remove(&k) {
                 cx.drop_image(f.image, Some(window));
@@ -115,11 +118,9 @@ impl Holos {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn image(
         &mut self,
-        key: u64,
-        look: &Look,
+        pose: Pose,
         logical: f32,
         framing: Framing,
         t: f64,
@@ -134,7 +135,7 @@ impl Holos {
             self.asked = self.asked.max(fps);
         }
         let frame = self.frame;
-        let slot = (key, device as u32, bust);
+        let slot = (pose, device as u32, bust);
         if let Some(f) = self.images.get_mut(&slot) {
             f.used = frame;
             if f.tick == tick {
@@ -144,10 +145,10 @@ impl Holos {
         let r = self
             .renderers
             .entry(device)
-            .or_insert_with(|| Renderer::new(device));
+            .or_insert_with(|| BubbleRenderer::new(device));
         // Draw at the tick's own time, so every size stays in step.
         let at = if moving { tick as f64 / fps as f64 } else { t };
-        let premul = r.draw(look, at, framing, detail_for(logical as u32, framing));
+        let premul = r.draw(&pose, at, framing);
         // Straight-alpha BGRA, as GPUI's image path expects.
         let mut px = Vec::with_capacity(premul.len());
         for p in premul.as_chunks::<4>().0 {
@@ -165,7 +166,6 @@ impl Holos {
         let image = Arc::new(RenderImage::new(vec![image::Frame::new(buf)]));
         match self.images.get_mut(&slot) {
             Some(f) => {
-                // The old frame stays in the atlas until this one has painted.
                 self.retired
                     .push(std::mem::replace(&mut f.image, image.clone()));
                 f.tick = tick;
@@ -185,44 +185,6 @@ impl Holos {
     }
 }
 
-/// A line in a chat.
-#[derive(Clone)]
-pub(crate) struct Said {
-    pub mine: bool,
-    pub text: String,
-    /// Which engine answered, and how long it took.
-    pub via: Option<String>,
-    /// Runo speaking, not the bot: a problem or a hint.
-    pub note: bool,
-}
-
-impl Said {
-    fn mine(text: String) -> Self {
-        Said {
-            mine: true,
-            text,
-            via: None,
-            note: false,
-        }
-    }
-    fn bot(text: String, via: String) -> Self {
-        Said {
-            mine: false,
-            text,
-            via: Some(via),
-            note: false,
-        }
-    }
-    fn note(text: impl Into<String>) -> Self {
-        Said {
-            mine: false,
-            text: text.into(),
-            via: None,
-            note: true,
-        }
-    }
-}
-
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
@@ -230,24 +192,23 @@ pub struct Shell {
     holos: Holos,
     scale: f32,
     mode: Mode,
-    jobs: Vec<Job>,
-    composer: Entity<InputState>,
-    /// The person's answer to Guard's question: `Some(true)` used the fix.
-    guard_answer: Option<bool>,
-    crew_filter: usize,
-    chat_selected: usize,
+    store: Store,
+    runners: Vec<jobs::Runner>,
+    composer: Entity<TextareaState>,
     chat_input: Entity<InputState>,
-    /// What was said in each chat this session, by chat index: (from the person, text).
-    chat_log: Vec<Vec<Said>>,
+    live_input: Entity<InputState>,
+    /// Live's feed scrolls itself to the newest line while the job runs.
+    live_scroll: ScrollHandle,
+    live_len: usize,
+    chat_scroll: ScrollHandle,
+    chat_len: usize,
     /// A question on its way to a bot's engine.
     asking: Option<engine::Ask>,
-    handed_to_builder: bool,
-    live_tab: usize,
-    live_input: Entity<InputState>,
-    live_extra: Vec<String>,
-    live_paused: bool,
-    /// The "Make a bot" card cycles through looks.
-    maker_seed: u64,
+    /// The bubble in the "make your own" playground on Crew.
+    maker: runo_holo::Bubble,
+    /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
+    history_filter: usize,
+    folder_menu: bool,
     toast: Option<(SharedString, Instant)>,
     /// Motion is on (Settings → Animations); off, the crew holds still.
     motion: bool,
@@ -261,45 +222,46 @@ pub struct Shell {
     /// The last mouse move or key press. Left alone for a while, the crew keeps
     /// moving at half the frame rate.
     touched: Instant,
+    saved: Instant,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
 
 impl Shell {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let composer = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Tell the crew what you want done…"));
-        let chat_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the product…"));
-        let live_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Tell Builder something while it works…")
+        // A long job wraps and the box grows with it; Shift+Enter starts a new line.
+        let composer = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .placeholder(Mode::Build.placeholder())
+                .submit_on_enter(true)
+                .auto_grow(1, 6)
         });
+        let chat_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the code…"));
+        let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
         let subs = vec![
             cx.subscribe_in(&composer, window, |this, input, event, window, cx| {
-                if let InputEvent::PressEnter { .. } = event {
+                if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
                     let text = input.read(cx).value().trim().to_string();
-                    if !text.is_empty() {
-                        input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.drop_job(text, cx);
-                    }
+                    input.update(cx, |i, cx| i.set_value("", window, cx));
+                    this.hand_over(text, cx);
                 }
             }),
             cx.subscribe_in(&chat_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
-                    if !text.is_empty() {
+                    if let (false, Place::Chat(who)) = (text.is_empty(), this.place) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.ask(this.chat_selected, text, cx);
+                        this.ask(who, text, cx);
                     }
                 }
             }),
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
-                    if !text.is_empty() {
+                    if let (false, Place::Live(id)) = (text.is_empty(), this.place) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.live_extra.push(text);
-                        cx.notify();
+                        this.follow_up(id, text, cx);
                     }
                 }
             }),
@@ -317,7 +279,7 @@ impl Shell {
             let wait = if front {
                 1000.0 / want as f64
             } else {
-                1000.0 / want.min(8) as f64
+                1000.0 / want.min(4) as f64
             };
             cx.background_executor()
                 .timer(Duration::from_millis(wait as u64))
@@ -328,12 +290,18 @@ impl Shell {
         });
         // Learn which agents are installed and the models they offer.
         crate::caps::refresh();
+        let store = Store::load();
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
-            Ok("live") => Place::Live(Member::Builder),
             Ok("crew") => Place::Crew,
-            Ok("chat") => Place::Chat,
+            Ok("chat") => Place::Chat(Member::Explainer),
             Ok("inbox") => Place::Inbox,
+            Ok("history") => Place::History,
             Ok("engines") => Place::Engines,
+            Ok("live") => store
+                .jobs
+                .last()
+                .map(|j| Place::Live(j.id))
+                .unwrap_or(Place::Today),
             _ => Place::Today,
         };
         Shell {
@@ -342,26 +310,26 @@ impl Shell {
             holos: Holos::new(),
             scale: 1.0,
             mode: Mode::Build,
-            jobs: data::sample_jobs(),
+            store,
+            runners: Vec::new(),
             composer,
-            guard_answer: None,
-            crew_filter: 0,
-            chat_selected: 0,
             chat_input,
-            chat_log: (0..data::CHATS.len()).map(|_| Vec::new()).collect(),
-            asking: None,
-            handed_to_builder: false,
-            live_tab: 0,
             live_input,
-            live_extra: Vec::new(),
-            live_paused: false,
-            maker_seed: 0,
+            live_scroll: ScrollHandle::new(),
+            live_len: 0,
+            chat_scroll: ScrollHandle::new(),
+            chat_len: 0,
+            asking: None,
+            maker: Member::Fixer.bubble(),
+            history_filter: 0,
+            folder_menu: false,
             toast: None,
             entered: Instant::now(),
             motion: true,
             active,
             rate,
             touched: Instant::now(),
+            saved: Instant::now(),
             _subs: subs,
             _pump: pump,
         }
@@ -375,30 +343,189 @@ impl Shell {
         if self.place != place {
             self.place = place;
             self.entered = Instant::now();
+            self.folder_menu = false;
+        }
+        if let Place::Live(id) = place {
+            if let Some(j) = self.store.job_mut(id) {
+                if j.status != Status::Running && !j.seen {
+                    j.seen = true;
+                    self.store.save();
+                }
+            }
         }
         cx.notify();
     }
 
-    /// Asks the bot behind chat `chat` for real, on its own engine.
-    fn ask(&mut self, chat: usize, text: String, cx: &mut Context<Self>) {
-        let who = data::CHATS[chat].who;
-        let history: Vec<(bool, String)> = self.chat_log[chat]
+    fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        self.mode = mode;
+        self.composer.update(cx, |i, cx| {
+            i.set_placeholder(mode.placeholder(), window, cx)
+        });
+        cx.notify();
+    }
+
+    fn say(&mut self, text: impl Into<SharedString>) {
+        self.toast = Some((text.into(), Instant::now()));
+    }
+
+    /// Asks for a folder and makes it the one the crew works in.
+    fn pick_folder(&mut self, cx: &mut Context<Self>) {
+        self.folder_menu = false;
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Choose a project folder".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = rx.await else {
+                return;
+            };
+            let Some(path) = paths.first().cloned() else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.store.add_folder(path);
+                this.store.save();
+                let name = this
+                    .store
+                    .folder()
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default();
+                this.say(format!("The crew now works in {name}."));
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The text from Today's box becomes a job for the bot its mode goes to, or a
+    /// question for Explainer.
+    fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        let text = match (text.is_empty(), self.mode.default_job()) {
+            (false, _) => text,
+            (true, Some(d)) => d.to_string(),
+            (true, None) => return,
+        };
+        if self.store.folder().is_none() {
+            self.say("Pick a folder first, so the crew knows where to work.");
+            self.pick_folder(cx);
+            return;
+        }
+        if self.mode == Mode::Ask {
+            self.go(Place::Chat(Member::Explainer), cx);
+            self.ask(Member::Explainer, text, cx);
+            return;
+        }
+        let mode = self.mode;
+        self.start_job(mode, text, cx);
+    }
+
+    fn start_job(&mut self, mode: Mode, text: String, cx: &mut Context<Self>) {
+        let Some(folder) = self.store.folder().cloned() else {
+            return;
+        };
+        let bot = Member::for_mode(mode);
+        if let Some(busy) = self.store.busy(bot) {
+            let (title, id) = (busy.title.clone(), busy.id);
+            self.say(format!(
+                "{} is still on \u{201c}{title}\u{201d}. This one waits for you to try again.",
+                bot.name()
+            ));
+            self.go(Place::Live(id), cx);
+            return;
+        }
+        self.store.next_id += 1;
+        let mut job = store::Job {
+            id: self.store.next_id,
+            bot,
+            mode,
+            title: text.clone(),
+            folder,
+            started: store::now(),
+            seen: false,
+            ..Default::default()
+        };
+        let st = cx.global::<crate::settings::AppSettings>();
+        match jobs::start(st, &mut job, &text, false) {
+            Ok(r) => self.runners.push(r),
+            Err(why) => {
+                job.status = Status::Failed;
+                job.ended = Some(job.started);
+                job.engine = engine::label(st, bot);
+                job.feed.push(store::Item::Error(why));
+            }
+        }
+        let id = job.id;
+        self.store.jobs.push(job);
+        self.store.save();
+        self.go(Place::Live(id), cx);
+    }
+
+    /// More words for a job: while it runs they wait; once it's done they start a
+    /// follow-up that continues the same conversation when the engine can.
+    fn follow_up(&mut self, id: u64, text: String, cx: &mut Context<Self>) {
+        let st = cx.global::<crate::settings::AppSettings>().clone();
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
+        if job.status == Status::Running {
+            self.say("It's still working. Add this once it finishes.");
+            cx.notify();
+            return;
+        }
+        job.feed.push(store::Item::You(text.clone()));
+        match jobs::start(&st, job, &text, true) {
+            Ok(r) => self.runners.push(r),
+            Err(why) => job.feed.push(store::Item::Error(why)),
+        }
+        self.store.save();
+        cx.notify();
+    }
+
+    fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        if let Some(r) = self.runners.iter_mut().find(|r| r.id == id) {
+            r.stop();
+        }
+        cx.notify();
+    }
+
+    /// Asks `who` for real, on its own engine, in the current folder.
+    fn ask(&mut self, who: Member, text: String, cx: &mut Context<Self>) {
+        let history: Vec<(bool, String)> = self
+            .store
+            .chat(who)
             .iter()
+            .filter(|m| !m.note)
             .map(|m| (m.mine, m.text.clone()))
             .collect();
-        self.chat_log[chat].push(Said::mine(text.clone()));
+        let log = self.store.chats.entry(who).or_default();
+        log.push(Said::mine(text.clone()));
         if self.asking.is_some() {
-            self.chat_log[chat].push(Said::note(
-                "One question at a time: this one waits until the last answer is in.",
+            log.push(Said::note(
+                "One question at a time: ask again when the last answer is in.",
             ));
             cx.notify();
             return;
         }
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            log.push(Said::note(
+                "Pick a folder first (on Today), so the crew knows which code to read.",
+            ));
+            cx.notify();
+            return;
+        };
         let st = cx.global::<crate::settings::AppSettings>();
-        match engine::Ask::start(st, who, chat, &text, &history) {
+        match engine::Ask::start(st, who, &folder, &text, &history) {
             Ok(ask) => self.asking = Some(ask),
-            Err(why) => self.chat_log[chat].push(Said::note(why)),
+            Err(why) => self
+                .store
+                .chats
+                .entry(who)
+                .or_default()
+                .push(Said::note(why)),
         }
+        self.store.save();
         cx.notify();
     }
 
@@ -407,95 +534,156 @@ impl Shell {
         self.asking.as_ref().is_some_and(|a| a.who == who)
     }
 
-    /// Collects an answer that has arrived.
-    fn poll_ask(&mut self) {
-        let Some(ask) = &self.asking else { return };
-        if let Some(reply) = ask.poll() {
-            let (chat, engine) = (ask.chat, ask.engine.clone());
-            let secs = ask.started.elapsed().as_secs_f32();
-            self.chat_log[chat].push(match reply {
-                engine::Reply::Answer(text) if !text.is_empty() => {
-                    Said::bot(text, format!("{engine} · {secs:.0}s"))
+    /// Collects answers and job output that have arrived.
+    fn poll(&mut self) {
+        if let Some(ask) = &self.asking {
+            if let Some(reply) = ask.poll() {
+                let (who, engine) = (ask.who, ask.engine.clone());
+                let secs = ask.started.elapsed().as_secs_f32();
+                self.store.chats.entry(who).or_default().push(match reply {
+                    engine::Reply::Answer(text) if !text.is_empty() => {
+                        Said::bot(text, format!("{engine} · {secs:.0}s"))
+                    }
+                    engine::Reply::Answer(_) => {
+                        Said::note("The engine answered with nothing. Try asking again.")
+                    }
+                    engine::Reply::Failed(why) => Said::note(why),
+                });
+                self.asking = None;
+                self.store.save();
+            }
+        }
+        let mut finished = Vec::new();
+        for r in &mut self.runners {
+            if let Some(job) = self.store.jobs.iter_mut().find(|j| j.id == r.id) {
+                if r.pump(job) {
+                    finished.push(r.id);
+                    if self.place == Place::Live(job.id) {
+                        job.seen = true;
+                    }
                 }
-                engine::Reply::Answer(_) => {
-                    Said::note("The engine answered with nothing. Try asking again.")
+            } else {
+                finished.push(r.id);
+            }
+        }
+        // While jobs run, what they've done so far is kept every few seconds.
+        if !self.runners.is_empty() && self.saved.elapsed() > Duration::from_secs(5) {
+            self.saved = Instant::now();
+            self.store.save();
+        }
+        if !finished.is_empty() {
+            self.runners.retain(|r| !finished.contains(&r.id));
+            for id in &finished {
+                if let Some(j) = self.store.job(*id) {
+                    if self.place != Place::Live(*id) {
+                        let msg = match j.status {
+                            Status::Done => {
+                                format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.title)
+                            }
+                            _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
+                        };
+                        self.say(msg);
+                    }
                 }
-                engine::Reply::Failed(why) => Said::note(why),
-            });
-            self.asking = None;
+            }
+            self.store.save();
         }
     }
 
-    fn say(&mut self, text: impl Into<SharedString>) {
-        self.toast = Some((text.into(), Instant::now()));
+    /// How a bot feels right now, from what it is really doing.
+    fn mood(&self, who: Member) -> Mood {
+        if self.thinking(who) {
+            return Mood::Thinking;
+        }
+        if self.store.busy(who).is_some() {
+            return Mood::Working;
+        }
+        let recent = self
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .find(|j| j.bot == who && j.ended.is_some());
+        if let Some(j) = recent {
+            let fresh = store::now().saturating_sub(j.ended.unwrap_or(0)) < 8;
+            match j.status {
+                Status::Done if fresh => return Mood::Done,
+                Status::Failed if !j.seen => return Mood::NeedsYou,
+                _ => {}
+            }
+        }
+        Mood::Signature
     }
 
-    /// A sentence from the Today box becomes a job for the bot its mode goes to.
-    fn drop_job(&mut self, text: String, cx: &mut Context<Self>) {
-        // A question is answered for real, in a chat with Explainer.
-        if self.mode == Mode::Ask {
-            let chat = data::CHATS
-                .iter()
-                .position(|c| c.who == Member::Explainer && !c.group)
-                .unwrap_or(0);
-            self.chat_selected = chat;
-            self.go(Place::Chat, cx);
-            self.ask(chat, text, cx);
-            return;
+    /// One word for what a bot is doing, and its colour.
+    fn status_of(&self, who: Member) -> (String, u32) {
+        if self.thinking(who) {
+            return ("answering".into(), who.accent());
         }
-        let bot = Member::for_mode(self.mode);
-        let now = self.now();
-        self.jobs.insert(
-            0,
-            Job {
-                title: text,
-                bot,
-                color: bot.accent(),
-                start: 0.04,
-                rate: 0.012,
-                note: Some("starting"),
-                since: now,
-            },
-        );
-        self.jobs.truncate(5);
-        self.say(format!(
-            "{} has it. It'll ask you once, at the end.",
-            bot.name()
-        ));
-        cx.notify();
+        if let Some(j) = self.store.busy(who) {
+            return (
+                match j.progress() {
+                    Some((d, n)) => format!("working {d}/{n}"),
+                    None => "working".into(),
+                },
+                who.accent(),
+            );
+        }
+        if self
+            .store
+            .jobs
+            .iter()
+            .any(|j| j.bot == who && j.needs_you())
+        {
+            return ("needs you".into(), ui::AMBER);
+        }
+        (who.role().to_lowercase(), ui::FAINT)
     }
 
     /// A bot drawn at `size` logical pixels, in `mood`.
     fn bot(&mut self, who: Member, mood: Mood, size: f32, framing: Framing) -> Img {
-        let look = mood.apply(who.look());
-        let key = who.key() * 16 + Mood::ALL.iter().position(|m| *m == mood).unwrap_or(0) as u64;
-        self.look_img(key, &look, size, framing)
+        self.pose_img(who.bubble().pose(mood), size, framing)
     }
 
-    fn look_img(&mut self, key: u64, look: &Look, size: f32, framing: Framing) -> Img {
+    fn pose_img(&mut self, pose: Pose, size: f32, framing: Framing) -> Img {
         // With motion off, every bot holds one calm pose.
         let t = if self.motion { self.now() } else { 2.0 };
         let image = self
             .holos
-            .image(key, look, size, framing, t, self.scale, self.motion);
+            .image(pose, size, framing, t, self.scale, self.motion);
         img(image).size(px(size)).flex_none()
     }
 
-    /// A small bust avatar, like the ones beside chat lines.
+    /// A small avatar, like the ones beside chat lines: still, so it costs nothing.
     fn avatar(&mut self, who: Member, size: f32) -> Img {
-        self.bot(who, Mood::Idle, size, Framing::Bust)
+        let image = self.holos.image(
+            who.bubble().pose(Mood::Idle),
+            size,
+            Framing::Bust,
+            2.0,
+            self.scale,
+            false,
+        );
+        img(image).size(px(size)).flex_none()
+    }
+
+    fn inbox_count(&self) -> usize {
+        self.store.jobs.iter().filter(|j| j.needs_you()).count()
     }
 
     fn rail(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let place = self.place;
+        let inbox = self.inbox_count();
         let nav = [
             (Place::Today, IconName::House, "Today"),
             (Place::Inbox, IconName::Inbox, "Inbox"),
             (Place::History, IconName::Clock, "History"),
-            (Place::Chat, IconName::MessageSquare, "Chat"),
+            (
+                Place::Chat(Member::Explainer),
+                IconName::MessageSquare,
+                "Chat",
+            ),
             (Place::Crew, IconName::Users, "Crew"),
-            (Place::Schedule, IconName::Calendar, "Schedule"),
-            (Place::Rules, IconName::Shield, "Rules"),
         ];
         let mut icons = div()
             .flex_none()
@@ -503,8 +691,12 @@ impl Shell {
             .flex_col()
             .items_center()
             .gap(px(4.));
-        for (i, (p, icon, _label)) in nav.into_iter().enumerate() {
-            let on = place == p || (p == Place::Chat && place == Place::Chat);
+        for (i, (p, icon, label)) in nav.into_iter().enumerate() {
+            let on = match (place, p) {
+                (Place::Chat(_), Place::Chat(_)) => true,
+                (Place::Live(_), Place::History) => true,
+                _ => place == p,
+            };
             icons = icons.child(
                 div()
                     .id(("nav", i))
@@ -516,6 +708,9 @@ impl Shell {
                     .justify_center()
                     .rounded(px(12.))
                     .cursor_pointer()
+                    .tooltip(move |window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
+                    })
                     .when(on, |d| d.bg(c(0xFFFFFF)).shadow(ui::lift()))
                     .hover(|s| s.bg(c(0xFFFFFF)))
                     .child(Icon::new(icon).size(px(18.)).text_color(c(if on {
@@ -523,15 +718,17 @@ impl Shell {
                     } else {
                         ui::MUTED
                     })))
-                    .when(p == Place::Inbox, |d| {
+                    .when(p == Place::Inbox && inbox > 0, |d| {
                         d.child(
                             div()
                                 .absolute()
                                 .top(px(5.))
-                                .right(px(5.))
-                                .size(px(15.))
+                                .right(px(4.))
+                                .min_w(px(15.))
+                                .h(px(15.))
+                                .px(px(3.))
                                 .rounded_full()
-                                .bg(c(0xFF6A2B))
+                                .bg(c(ui::ORANGE))
                                 .border_2()
                                 .border_color(c(ui::RAIL))
                                 .flex()
@@ -540,10 +737,16 @@ impl Shell {
                                 .text_size(px(8.5))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(c(0xFFFFFF))
-                                .child("2"),
+                                .child(inbox.min(99).to_string()),
                         )
                     })
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(p, cx))),
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let to = match p {
+                            Place::Chat(_) => Place::Chat(this.last_chat()),
+                            other => other,
+                        };
+                        this.go(to, cx)
+                    })),
             );
         }
         // The crew takes the rail's spare height and clips gracefully in short windows.
@@ -554,25 +757,18 @@ impl Shell {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(2.));
-        for who in [
-            Member::Guard,
-            Member::Builder,
-            Member::Checker,
-            Member::Fixer,
-            Member::Explainer,
-            Member::Keeper,
-            Member::Mochi,
-        ] {
-            let on = match place {
-                Place::Live(m) => m == who,
-                Place::Chat => {
-                    who == data::CHATS[self.chat_selected.min(data::CHATS.len() - 1)].who
-                        && !data::CHATS[self.chat_selected].group
-                }
-                _ => false,
+            .gap(px(4.));
+        for who in Member::CREW {
+            let on = place == Place::Chat(who)
+                || matches!(place, Place::Live(id) if self.store.job(id).is_some_and(|j| j.bot == who));
+            let mood = self.mood(who);
+            let face = if mood == Mood::Signature {
+                self.avatar(who, 32.)
+            } else {
+                self.bot(who, mood, 32., Framing::Bust)
             };
-            let face = self.bot(who, who.mood(), 34., Framing::Bust);
+            let (_, dot) = self.status_of(who);
+            let busy = self.store.busy(who).map(|j| j.id);
             bots = bots.child(
                 div()
                     .id(("rail-bot", who.key() as usize))
@@ -584,39 +780,54 @@ impl Shell {
                     .justify_center()
                     .rounded(px(14.))
                     .cursor_pointer()
+                    .tooltip(move |window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(who.name()).build(window, cx)
+                    })
                     .when(on, |d| {
                         d.border_2().border_color(c(ui::INK)).bg(c(0xFFFFFF))
                     })
                     .hover(|s| s.bg(c(0xFFFFFF)))
                     .child(face)
-                    .child(
-                        div()
-                            .absolute()
-                            .bottom(px(5.))
-                            .right(px(5.))
-                            .size(px(9.))
-                            .rounded_full()
-                            .border_2()
-                            .border_color(c(ui::RAIL))
-                            .bg(c(who.rail_dot())),
-                    )
+                    .when(dot != ui::FAINT, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .bottom(px(5.))
+                                .right(px(5.))
+                                .size(px(9.))
+                                .rounded_full()
+                                .border_2()
+                                .border_color(c(ui::RAIL))
+                                .bg(c(dot)),
+                        )
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        let place = match who {
-                            Member::Builder => Place::Live(Member::Builder),
-                            other => {
-                                if let Some(i) = data::CHATS
-                                    .iter()
-                                    .position(|ch| ch.who == other && !ch.group)
-                                {
-                                    this.chat_selected = i;
-                                }
-                                Place::Chat
-                            }
-                        };
-                        this.go(place, cx);
+                        let to = busy.map(Place::Live).unwrap_or(Place::Chat(who));
+                        this.go(to, cx);
                     })),
             );
         }
+        let nav_button = |id: &'static str, icon: IconName, on: bool, label: &'static str| {
+            div()
+                .id(id)
+                .flex_none()
+                .size(px(42.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(12.))
+                .cursor_pointer()
+                .tooltip(move |window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
+                })
+                .when(on, |d| d.bg(c(0xFFFFFF)).shadow(ui::lift()))
+                .hover(|s| s.bg(c(0xFFFFFF)))
+                .child(Icon::new(icon).size(px(18.)).text_color(c(if on {
+                    ui::INK
+                } else {
+                    ui::MUTED
+                })))
+        };
         div()
             .w(px(76.))
             .h_full()
@@ -650,120 +861,77 @@ impl Shell {
             .child(div().w(px(32.)).h(px(1.)).bg(c(ui::LINE)))
             .child(bots)
             .child(
-                div()
-                    .id("nav-engines")
-                    .flex_none()
-                    .size(px(42.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(12.))
-                    .cursor_pointer()
-                    .when(place == Place::Engines, |d| {
-                        d.bg(c(0xFFFFFF)).shadow(ui::lift())
-                    })
-                    .hover(|s| s.bg(c(0xFFFFFF)))
-                    .child(Icon::new(IconName::Cpu).size(px(18.)).text_color(c(
-                        if place == Place::Engines {
-                            ui::INK
-                        } else {
-                            ui::MUTED
-                        },
-                    )))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                nav_button(
+                    "nav-engines",
+                    IconName::Cpu,
+                    place == Place::Engines,
+                    "Engines",
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
             )
             .child(
                 div()
                     .id("open-v1")
+                    .px(px(8.))
+                    .py(px(3.))
+                    .rounded_full()
                     .text_size(px(10.))
                     .font_family(ui::MONO)
                     .text_color(c(ui::FAINT))
                     .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::INK)))
+                    .hover(|s| s.text_color(c(ui::INK)).bg(c(0xFFFFFF)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new("Open Runo v1").build(window, cx)
+                    })
                     .child("v1")
-                    .on_click(cx.listener(|_, _, _, cx| {
-                        cx.defer(crate::open_main_window);
-                    })),
-            )
-            .child(
-                div()
-                    .flex_none()
-                    .size(px(36.))
-                    .rounded_full()
-                    .bg(c(0xFFFFFF))
-                    .border_1()
-                    .border_color(c(ui::LINE))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::BOLD)
-                    .child("A"),
+                    .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
             )
     }
 
-    /// The places v2 hasn't built yet, with Keeper keeping the spot warm.
-    fn soon(&mut self, title: &'static str, line: &'static str) -> AnyElement {
-        let keeper = self.bot(Member::Keeper, Mood::Asleep, 180., Framing::Full);
-        div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap(px(10.))
-            .child(keeper)
-            .child(
-                div()
-                    .text_size(px(30.))
-                    .font_weight(FontWeight::BOLD)
-                    .child(title),
-            )
-            .child(
-                div()
-                    .text_size(px(14.))
-                    .text_color(c(ui::MUTED))
-                    .child(line),
-            )
-            .into_any_element()
+    /// The bot whose chat was open last, else Explainer.
+    fn last_chat(&self) -> Member {
+        Member::CREW
+            .into_iter()
+            .max_by_key(|m| {
+                (
+                    self.store.chat(*m).len().min(1),
+                    (*m == Member::Explainer) as u8,
+                )
+            })
+            .unwrap_or(Member::Explainer)
     }
 }
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.scale = window.scale_factor();
+        self.poll();
         // What the last frame needed sets the clock for the next one.
         let busy = self.entered.elapsed() < Duration::from_millis(1000)
             || self
                 .toast
                 .as_ref()
-                .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(3300));
+                .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(3600));
         let resting = self.touched.elapsed() > Duration::from_secs(45);
+        let working = self.asking.is_some() || !self.runners.is_empty();
         let want = if busy {
             FPS as u32
-        } else if self.asking.is_some() {
-            self.holos.asked.max(10)
+        } else if working {
+            self.holos.asked.max(4)
         } else {
             self.holos.asked.max(2)
         };
         let want = if resting { want.min(15) } else { want };
         self.rate.store(want, std::sync::atomic::Ordering::Relaxed);
         self.holos.begin(window, cx);
+        self.motion = cx.global::<crate::settings::AppSettings>().animations;
         let body = match self.place {
             Place::Today => self.today(cx),
-            Place::Live(who) => self.live(who, cx),
+            Place::Live(id) => self.live(id, cx),
             Place::Crew => self.crew(cx),
-            Place::Chat => self.chat(cx),
-            Place::Inbox => self.soon(
-                "Inbox",
-                "Every question the crew has for you, in one place. Coming next.",
-            ),
-            Place::History => self.soon("History", "What landed, when and why. Coming next."),
-            Place::Schedule => self.soon(
-                "Schedule",
-                "Jobs the crew runs on their own, like Keeper's night shift.",
-            ),
-            Place::Rules => self.soon("Rules", "The lines Guard keeps for you. Coming next."),
+            Place::Chat(who) => self.chat(who, cx),
+            Place::Inbox => self.inbox(cx),
+            Place::History => self.history(cx),
             Place::Engines => self.engines(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
@@ -774,8 +942,6 @@ impl Render for Shell {
             .relative()
             .top(px(10. * (1. - k)))
             .child(body);
-        self.poll_ask();
-        self.motion = cx.global::<crate::settings::AppSettings>().animations;
         self.active.store(
             window.is_window_active(),
             std::sync::atomic::Ordering::Relaxed,
@@ -783,10 +949,10 @@ impl Render for Shell {
         let toast = self
             .toast
             .clone()
-            .filter(|(_, at)| at.elapsed() < Duration::from_millis(3200));
+            .filter(|(_, at)| at.elapsed() < Duration::from_millis(3500));
         let toast_el = toast.map(|(text, at)| {
             let k = (at.elapsed().as_secs_f32() / 0.25).min(1.0);
-            let fade = ((3.2 - at.elapsed().as_secs_f32()) / 0.4).clamp(0.0, 1.0);
+            let fade = ((3.5 - at.elapsed().as_secs_f32()) / 0.4).clamp(0.0, 1.0);
             div()
                 .absolute()
                 .bottom(px(28. + 10. * (1. - k)))
@@ -817,18 +983,18 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, _| {
                 this.touched = Instant::now();
             }))
-            // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places.
-            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+            // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places, even from a text box.
+            .capture_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 let m = &e.keystroke.modifiers;
                 if !(m.platform || m.control) || m.shift || m.alt {
                     return;
                 }
                 let to = match e.keystroke.key.as_str() {
                     "1" => Place::Today,
-                    "2" => Place::Live(Member::Builder),
-                    "3" => Place::Crew,
-                    "4" => Place::Chat,
-                    "5" => Place::Inbox,
+                    "2" => Place::Inbox,
+                    "3" => Place::History,
+                    "4" => Place::Chat(this.last_chat()),
+                    "5" => Place::Crew,
                     "6" => Place::Engines,
                     _ => return,
                 };

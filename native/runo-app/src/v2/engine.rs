@@ -6,7 +6,6 @@
 //! writing the one question) use the assistant agent and model, and a second agent,
 //! best from another vendor, can double-check decisions.
 
-use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Instant;
 
@@ -90,54 +89,9 @@ pub fn set(st: &mut AppSettings, who: Member, engine: BotEngine) {
     }
 }
 
-/// The folder a bot reads when it answers: the most recently added project, or the
-/// home folder when there is none yet.
-pub fn project_dir() -> (String, PathBuf) {
-    let state = crate::store::State::load();
-    state
-        .projects
-        .iter()
-        .rev()
-        .find(|p| std::path::Path::new(&p.path).is_dir())
-        .map(|p| (p.name.clone(), PathBuf::from(&p.path)))
-        .unwrap_or_else(|| {
-            (
-                "your home folder".into(),
-                std::env::var_os("HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_default(),
-            )
-        })
-}
-
-/// What a bot says it is, so its answers sound like it.
-fn persona(who: Member) -> &'static str {
-    match who {
-        Member::Explainer => {
-            "You are Explainer, a bot in Runo's crew. You answer questions about this codebase in plain words for people who may not code. Read the code to be sure, never change it. Lead with the answer in one or two sentences, then the evidence (files, numbers). No jargon without a short explanation."
-        }
-        Member::Guard => {
-            "You are Guard, a bot in Runo's crew that keeps the team's rules. Answer as Guard: point out risks to login, payments, data and the rules in plain words. Read the code, never change it."
-        }
-        Member::Fixer => {
-            "You are Fixer, a bot in Runo's crew that hunts bugs. Answer as Fixer: say what is most likely broken and where, with the evidence. Read the code, never change it."
-        }
-        Member::Checker => {
-            "You are Checker, a bot in Runo's crew that tries things for real. Answer as Checker: say how you would check the behaviour and what to look for. Read the code, never change it."
-        }
-        Member::Keeper => {
-            "You are Keeper, a bot in Runo's crew that tidies up: dependencies, flaky tests, cleanup. Answer as Keeper. Read the code, never change it."
-        }
-        _ => {
-            "You are a bot in Runo's crew. Answer in plain words, lead with the answer, then the evidence. Read the code, never change it."
-        }
-    }
-}
-
 /// A question on its way to a bot's engine.
 pub struct Ask {
     pub who: Member,
-    pub chat: usize,
     pub engine: String,
     pub agent_id: &'static str,
     pub started: Instant,
@@ -155,7 +109,7 @@ impl Ask {
     pub fn start(
         st: &AppSettings,
         who: Member,
-        chat: usize,
+        folder: &super::store::Folder,
         question: &str,
         history: &[(bool, String)],
     ) -> Result<Ask, String> {
@@ -169,10 +123,10 @@ impl Ask {
                 who.name()
             ));
         }
-        let (project, dir) = project_dir();
+        let (project, dir) = (&folder.name, &folder.path);
         let mut prompt = format!(
-            "{}\n\nThe project is \"{project}\", in the current folder.\n",
-            persona(who)
+            "{} Read the code to be sure, and never change it.\n\nThe project is \"{project}\", in the current folder.\n",
+            who.persona()
         );
         let recent: Vec<_> = history.iter().rev().take(6).collect();
         if !recent.is_empty() {
@@ -188,10 +142,9 @@ impl Ask {
         ));
         let command = agent::ask_command_on(p.id, &configured, &prompt, &model);
         let (tx, rx) = channel();
-        agent::oneshot("v2-ask".into(), command, &dir.to_string_lossy(), tx);
+        agent::oneshot("v2-ask".into(), command, dir, tx);
         Ok(Ask {
             who,
-            chat,
             engine: label(st, who),
             agent_id: p.id,
             started: Instant::now(),

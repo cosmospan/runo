@@ -13,9 +13,11 @@
 //! CPU path is the fallback the plan keeps for every platform.
 
 pub mod anim;
+pub mod bubble;
 pub mod draw;
 pub mod look;
 
+pub use bubble::{Bubble, BubbleRenderer, Eyes, Layout, Pose, Sway, Tint};
 pub use draw::Detail;
 pub use look::{custom, Bot, Eye, Look, Mood, Motion, Mouth, Palette, Props, Rgb, Shape};
 

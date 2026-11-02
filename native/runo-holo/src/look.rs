@@ -4,7 +4,7 @@
 //! A custom bot is just another [`Look`], built from the same parts.
 
 /// An sRGB colour, `0xRRGGBB`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rgb(pub u32);
 
 impl Rgb {

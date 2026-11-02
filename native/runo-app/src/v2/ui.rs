@@ -173,17 +173,28 @@ pub fn bar(frac: f32, color: u32) -> Div {
         )
 }
 
-/// Inline code, like `round_cents()`.
-pub fn code(text: impl Into<SharedString>) -> Div {
+/// A thin bar with a soft segment sweeping across, for work with no known end.
+pub fn sweep(color: u32, _phase: f32) -> Div {
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    let p = runo_holo::anim::SOFT.at((t / 1.6).rem_euclid(1.0)) as f32;
     div()
-        .px(px(6.))
-        .py(px(1.))
-        .rounded(px(6.))
-        .bg(c(0xF1F2F7))
-        .border_1()
-        .border_color(c(0xE6E7EF))
-        .font_family(MONO)
-        .text_size(px(12.))
-        .text_color(c(INK))
-        .child(text.into())
+        .h(px(4.))
+        .w_full()
+        .rounded_full()
+        .bg(c(0xEEEFF5))
+        .relative()
+        .overflow_hidden()
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .h_full()
+                .w(relative(0.3))
+                .left(relative(-0.3 + 1.3 * p))
+                .rounded_full()
+                .bg(c(color)),
+        )
 }

@@ -1,4 +1,5 @@
-//! Chat: asking the crew in plain words, and handing work between bots.
+//! Chat: ask any bot in plain words. It reads the code in the current folder
+//! and answers; nothing changes. Each bot keeps its own conversation.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::Input;
@@ -7,39 +8,38 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
 
-use super::data::{self, Member};
+use super::data::{Member, Mode};
+use super::live::{note_line, plain, typing};
 use super::ui::{self, c, ca};
-use super::Shell;
-
-const PURPLE: u32 = 0x7B4DF5;
+use super::{Place, Shell};
 
 impl Shell {
-    pub(super) fn chat(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn chat(&mut self, who: Member, cx: &mut Context<Self>) -> AnyElement {
         div()
             .size_full()
             .flex()
-            .child(self.chat_list(cx))
-            .child(self.chat_thread(cx))
+            .child(self.chat_list(who, cx))
+            .child(self.chat_thread(who, cx))
             .into_any_element()
     }
 
-    fn chat_list(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn chat_list(&mut self, selected: Member, cx: &mut Context<Self>) -> impl IntoElement {
         let mut list = div().mt(px(16.)).flex().flex_col().gap(px(4.));
-        for (i, item) in data::CHATS.iter().enumerate() {
-            let on = self.chat_selected == i;
-            let face: AnyElement = if item.group {
-                let a = self.avatar(Member::Builder, 30.);
-                let b = self.avatar(Member::Checker, 30.);
-                div()
-                    .relative()
-                    .size(px(44.))
-                    .child(div().absolute().top_0().left_0().child(a))
-                    .child(div().absolute().bottom_0().right_0().child(b))
-                    .into_any_element()
+        for (i, who) in Member::CREW.into_iter().enumerate() {
+            let on = selected == who;
+            let mood = self.mood(who);
+            let face = if mood == Mood::Signature && !on {
+                self.avatar(who, 44.)
             } else {
-                self.bot(item.who, item.who.mood(), 44., Framing::Bust)
-                    .into_any_element()
+                self.bot(who, mood, 44., Framing::Bust)
             };
+            let last = self
+                .store
+                .chat(who)
+                .last()
+                .map(|m| plain(&m.text).lines().next().unwrap_or("").to_string())
+                .unwrap_or_else(|| who.role().to_string());
+            let (status, color) = self.status_of(who);
             list = list.child(
                 div()
                     .id(("chat", i))
@@ -73,34 +73,33 @@ impl Shell {
                                         div()
                                             .text_size(px(14.))
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .child(item.title),
+                                            .child(who.name()),
                                     )
-                                    .child(
-                                        div()
-                                            .text_size(px(11.5))
-                                            .text_color(c(ui::MUTED))
-                                            .child(item.when),
-                                    ),
+                                    .when(color != ui::FAINT, |d| {
+                                        d.child(
+                                            div()
+                                                .text_size(px(11.))
+                                                .text_color(c(color))
+                                                .child(status),
+                                        )
+                                    }),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.5))
                                     .text_color(c(ui::MUTED))
                                     .truncate()
-                                    .child(
-                                        self.chat_log[i]
-                                            .last()
-                                            .map(|m| SharedString::from(m.text.clone()))
-                                            .unwrap_or_else(|| item.last.into()),
-                                    ),
+                                    .child(last),
                             ),
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.chat_selected = i;
-                        cx.notify();
-                    })),
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
             );
         }
+        let folder = self
+            .store
+            .folder()
+            .map(|f| format!("Reading {}", f.name))
+            .unwrap_or_else(|| "No folder picked yet".into());
         div()
             .w(px(300.))
             .flex_none()
@@ -109,101 +108,70 @@ impl Shell {
             .border_color(c(ui::LINE))
             .bg(ca(0xFFFFFF, 0.3))
             .px(px(14.))
-            .pt(px(24.))
+            .pt(px(if cfg!(target_os = "macos") { 34. } else { 24. }))
+            .flex()
+            .flex_col()
             .child(
                 div()
-                    .flex()
-                    .justify_between()
-                    .items_center()
                     .px(px(8.))
-                    .child(
-                        div()
-                            .text_size(px(22.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("Chats"),
-                    )
-                    .child(
-                        ui::ghost("new-chat", "New")
-                            .h(px(32.))
-                            .px(px(12.))
-                            .gap(px(6.))
-                            .flex_row_reverse()
-                            .child(
-                                Icon::new(IconName::Plus)
-                                    .size(px(13.))
-                                    .text_color(c(ui::INK)),
-                            ),
-                    ),
+                    .text_size(px(24.))
+                    .font_weight(FontWeight::BOLD)
+                    .child("Chats"),
+            )
+            .child(
+                div()
+                    .px(px(8.))
+                    .mt(px(2.))
+                    .text_size(px(12.))
+                    .text_color(c(ui::MUTED))
+                    .child(folder),
             )
             .child(list)
     }
 
-    fn chat_thread(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let item = &data::CHATS[self.chat_selected.min(data::CHATS.len() - 1)];
-        let (who, group) = (item.who, item.group);
-        let hero: AnyElement = if group {
-            let row = [Member::Builder, Member::Checker, Member::Guard]
-                .map(|m| self.bot(m, Mood::Idle, 64., Framing::Bust));
-            div().flex().gap(px(4.)).children(row).into_any_element()
-        } else {
-            let mood = if self.thinking(who) {
+    fn chat_thread(&mut self, who: Member, cx: &mut Context<Self>) -> impl IntoElement {
+        let thinking = self.thinking(who);
+        let hero = self.bot(
+            who,
+            if thinking {
                 Mood::Thinking
             } else {
-                Mood::Signature
-            };
-            self.bot(who, mood, 118., Framing::Full).into_any_element()
-        };
-        let (name, about) = if group {
-            (
-                "#checkout crew",
-                "Builder, Checker and Guard · with Priya and you",
-            )
-        } else {
-            match who {
-                Member::Explainer => (
-                    "Explainer",
-                    "Answers in plain words · reads code, never changes it",
-                ),
-                other => (other.name(), other.role()),
-            }
-        };
-        let engine_label = {
-            let st = cx.global::<crate::settings::AppSettings>();
-            super::engine::label(st, if group { Member::Builder } else { who })
-        };
+                self.mood(who)
+            },
+            92.,
+            Framing::Full,
+        );
+        let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
+        let log = self.store.chat(who).to_vec();
         let header = div()
             .flex_none()
             .flex()
             .items_center()
             .gap(px(14.))
-            .px(px(24.))
-            .py(px(4.))
-            .h(px(126.))
+            .px(px(28.))
+            .pt(px(if cfg!(target_os = "macos") { 14. } else { 8. }))
+            .pb(px(8.))
             .border_b_1()
             .border_color(c(ui::LINE))
-            .bg(linear_gradient(
-                180.,
-                linear_color_stop(c(0xEAF4FF), 0.0),
-                linear_color_stop(ca(0xFFFFFF, 0.0), 1.0),
-            ))
             .child(hero)
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
+                    .gap(px(3.))
                     .child(
                         div()
                             .text_size(px(22.))
                             .font_weight(FontWeight::BOLD)
-                            .child(name),
+                            .child(who.name()),
                     )
                     .child(
                         div()
                             .text_size(px(13.))
                             .text_color(c(ui::MUTED))
-                            .child(about),
+                            .child(format!("{} · reads the code, never changes it", who.role())),
                     ),
             )
             .child(
@@ -213,187 +181,144 @@ impl Shell {
                     .items_center()
                     .gap(px(6.))
                     .px(px(12.))
-                    .py(px(6.))
+                    .h(px(32.))
                     .rounded_full()
                     .border_1()
                     .border_color(c(ui::LINE))
                     .bg(c(0xFFFFFF))
                     .text_size(px(12.5))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xF3F4F9)))
+                    .hover(|s| s.bg(c(0xF6F7FB)))
                     .child(
                         Icon::new(IconName::Cpu)
                             .size(px(13.))
                             .text_color(c(ui::MUTED)),
                     )
-                    .child(engine_label)
-                    .on_click(cx.listener(|this, _, _, cx| this.go(super::Place::Engines, cx))),
+                    .child(engine)
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
             )
-            .when(who == Member::Explainer && !group, |d| {
-                d.child(
-                    div()
-                        .px(px(12.))
-                        .py(px(6.))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(c(ui::LINE))
-                        .bg(c(0xFFFFFF))
-                        .text_size(px(12.5))
-                        .child("Priya is asking"),
-                )
+            .when(!log.is_empty(), |d| {
+                d.child(ui::ghost("chat-clear", "Clear").on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        this.store.chats.remove(&who);
+                        this.store.save();
+                        cx.notify();
+                    },
+                )))
             });
 
-        let mut msgs = div().flex().flex_col().gap(px(12.)).px(px(28.)).py(px(22.));
-        if who == Member::Explainer && !group {
-            msgs = msgs.child(person(
-                "P",
-                PURPLE,
-                "Why is checkout slower this week? Customers are complaining.",
-            ));
-            let face = self.avatar(Member::Explainer, 32.);
-            msgs = msgs.child(
-                div()
-                    .flex()
-                    .gap(px(14.))
-                    .child(face)
-                    .child(
+        let mut body = div().flex().flex_col().gap(px(14.)).px(px(28.)).py(px(24.));
+        if log.is_empty() {
+            body = body.child(self.chat_empty(who, cx));
+        }
+        for m in &log {
+            body = if m.mine {
+                body.child(
+                    div().flex().justify_end().child(
                         div()
-                            .w(px(600.))
+                            .max_w(px(620.))
+                            .px(px(16.))
+                            .py(px(10.))
+                            .rounded(px(16.))
+                            .bg(c(ui::INK))
+                            .text_color(c(0xFFFFFF))
+                            .text_size(px(14.))
+                            .line_height(px(20.))
+                            .child(m.text.clone()),
+                    ),
+                )
+            } else if m.note {
+                body.child(note_line(&m.text))
+            } else {
+                let face = self.avatar(who, 28.);
+                body.child(
+                    div().flex().gap(px(12.)).child(face).child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .max_w(px(760.))
                             .flex()
                             .flex_col()
-                            .gap(px(10.))
-                            .child(answer().child("Product photos got much bigger on Tuesday. Each one went from about 120 KB to 2 MB, so the checkout page now loads 18 MB instead of 1.6 MB. On phones that's about 4 extra seconds."))
-                            .child(size_chart(self.entered.elapsed().as_secs_f64()))
-                            .child(answer().child("The fix is to shrink photos when they're uploaded. Builder can do it in about 10 minutes, and nothing changes for your team."))
-                            .child(self.handoff_buttons(cx)),
-                    ),
-            );
-            if self.handed_to_builder {
-                let face = self.avatar(Member::Builder, 32.);
-                msgs = msgs.child(
-                    div().flex().gap(px(14.)).child(face).child(
-                        div()
-                            .w(px(600.))
-                            .px(px(18.))
-                            .py(px(13.))
-                            .rounded(px(16.))
-                            .border_1()
-                            .border_color(c(0xFFD4BF))
-                            .bg(c(0xFFF4EE))
-                            .text_size(px(14.))
-                            .line_height(px(22.))
+                            .gap(px(5.))
                             .child(
                                 div()
-                                    .flex()
-                                    .flex_wrap()
-                                    .gap(px(4.))
-                                    .child(div().font_weight(FontWeight::BOLD).child("Builder"))
-                                    .child("joined. Got it, shrinking photos on upload. I'll send Priya a before and after when it's done."),
-                            ),
+                                    .px(px(18.))
+                                    .py(px(13.))
+                                    .rounded(px(16.))
+                                    .bg(ca(0xFFFFFF, 0.85))
+                                    .border_1()
+                                    .border_color(c(0xFFFFFF))
+                                    .shadow(ui::lift())
+                                    .text_size(px(14.))
+                                    .line_height(px(21.))
+                                    .child(plain(&m.text)),
+                            )
+                            .when_some(m.via.clone(), |d, via| {
+                                d.child(
+                                    div()
+                                        .pl(px(4.))
+                                        .text_size(px(11.))
+                                        .text_color(c(ui::FAINT))
+                                        .child(via),
+                                )
+                            }),
                     ),
-                );
-            }
-        } else {
-            let face = if group {
-                self.avatar(Member::Builder, 32.)
-            } else {
-                self.avatar(who, 32.)
+                )
             };
-            msgs = msgs.child(
-                div()
-                    .flex()
-                    .gap(px(14.))
-                    .child(face)
-                    .child(answer().max_w(px(600.)).child(item.last)),
-            );
         }
-        let chat = self.chat_selected;
-        for said in self.chat_log[chat].clone() {
-            if said.mine {
-                msgs = msgs.child(person("A", ui::INK, said.text));
-            } else if said.note {
-                msgs = msgs.child(
-                    div()
-                        .pl(px(46.))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .text_size(px(13.))
-                        .text_color(c(ui::MUTED))
-                        .child(
-                            Icon::new(IconName::TriangleAlert)
-                                .size(px(14.))
-                                .text_color(c(ui::AMBER)),
-                        )
-                        .child(div().max_w(px(560.)).child(said.text)),
-                );
-            } else {
-                let face = self.avatar(who, 32.);
-                msgs = msgs.child(
-                    div().flex().gap(px(14.)).child(face).child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(6.))
-                            .child(answer().max_w(px(600.)).child(said.text))
-                            .children(said.via.map(|v| {
-                                div()
-                                    .pl(px(4.))
-                                    .text_size(px(11.))
-                                    .text_color(c(ui::FAINT))
-                                    .child(v)
-                            })),
-                    ),
-                );
-            }
-        }
-        if self.asking.as_ref().is_some_and(|a| a.chat == chat) {
-            let face = self.avatar(who, 32.);
-            let t = self.now();
-            let mut dots = div().flex().gap(px(5.)).items_center().h(px(22.));
-            for i in 0..3 {
-                let p = runo_holo::anim::phase(t, 1.2, i as f64 * 0.16);
-                let lift = runo_holo::anim::keys(
-                    p,
-                    &[(0.0, 0.0), (0.3, -4.0), (0.6, 0.0), (1.0, 0.0)],
-                    runo_holo::anim::SOFT,
-                );
-                let op = runo_holo::anim::keys(
-                    p,
-                    &[(0.0, 0.4), (0.3, 1.0), (0.6, 0.4), (1.0, 0.4)],
-                    runo_holo::anim::SOFT,
-                );
-                dots = dots.child(
-                    div()
-                        .relative()
-                        .top(px(lift as f32))
-                        .size(px(7.))
-                        .rounded_full()
-                        .bg(c(ui::BLUE))
-                        .opacity(op as f32),
-                );
-            }
+        if thinking {
             let secs = self
                 .asking
                 .as_ref()
                 .map(|a| a.started.elapsed().as_secs())
                 .unwrap_or(0);
-            msgs = msgs.child(
+            body = body.child(
                 div()
+                    .ml(px(40.))
                     .flex()
-                    .gap(px(14.))
                     .items_center()
-                    .child(face)
-                    .child(answer().child(dots))
+                    .gap(px(10.))
+                    .child(typing(self.now()))
                     .child(
                         div()
-                            .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_size(px(12.5))
+                            .text_color(c(ui::MUTED))
                             .child(format!("reading the code · {secs}s")),
                     ),
             );
         }
-
+        if !log.is_empty() && !thinking && who != Member::Explainer {
+            // Turn the conversation into work.
+            let mode = match who {
+                Member::Fixer => Mode::Fix,
+                Member::Checker => Mode::Test,
+                Member::Guard => Mode::Review,
+                Member::Keeper => Mode::Tidy,
+                _ => Mode::Build,
+            };
+            let last_q = log.iter().rev().find(|m| m.mine).map(|m| m.text.clone());
+            if let Some(q) = last_q {
+                let doer = Member::for_mode(mode);
+                body = body.child(div().ml(px(40.)).flex().gap(px(8.)).child(
+                    ui::ghost("hand-off", format!("Make it a job for {}", doer.name())).on_click(
+                        cx.listener(move |this, _, window, cx| {
+                            this.set_mode(mode, window, cx);
+                            this.composer
+                                .update(cx, |i, cx| i.set_value(q.clone(), window, cx));
+                            this.go(Place::Today, cx);
+                            this.say(
+                                "It's in the box on Today. Edit it if you like, then press Enter.",
+                            );
+                        }),
+                    ),
+                ));
+            }
+        }
+        let len = log.len() + usize::from(thinking);
+        if len != self.chat_len {
+            self.chat_len = len;
+            self.chat_scroll.scroll_to_bottom();
+        }
         div()
             .flex_1()
             .min_w_0()
@@ -403,192 +328,105 @@ impl Shell {
             .child(header)
             .child(
                 div()
-                    .id("chat-msgs")
+                    .id("chat-body")
                     .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
-                    .child(msgs),
+                    .track_scroll(&self.chat_scroll)
+                    .child(body),
             )
             .child(
-                div().flex_none().px(px(24.)).pb(px(22.)).child(
+                div().flex_none().px(px(24.)).pb(px(20.)).child(
                     ui::card()
-                        .h(px(58.))
-                        .pl(px(18.))
-                        .pr(px(10.))
+                        .rounded(px(18.))
+                        .px(px(16.))
+                        .py(px(10.))
                         .flex()
                         .items_center()
                         .gap(px(10.))
                         .child(
                             div()
                                 .flex_1()
+                                .text_size(px(14.))
                                 .child(Input::new(&self.chat_input).appearance(false)),
                         )
                         .child(
                             div()
-                                .size(px(36.))
-                                .rounded_full()
-                                .border_1()
-                                .border_color(c(ui::LINE))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    Icon::new(IconName::Mic)
-                                        .size(px(14.))
-                                        .text_color(c(ui::INK)),
-                                ),
-                        )
-                        .child(
-                            div()
+                                .id("chat-send")
                                 .size(px(36.))
                                 .rounded_full()
                                 .bg(c(ui::INK))
                                 .flex()
                                 .items_center()
                                 .justify_center()
+                                .cursor_pointer()
+                                .hover(|s| s.bg(c(0x2C2A38)))
                                 .child(
                                     Icon::new(IconName::ArrowUp)
                                         .size(px(15.))
                                         .text_color(c(0xFFFFFF)),
-                                ),
+                                )
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    let text = this.chat_input.read(cx).value().trim().to_string();
+                                    if !text.is_empty() {
+                                        this.chat_input
+                                            .update(cx, |i, cx| i.set_value("", window, cx));
+                                        this.ask(who, text, cx);
+                                    }
+                                })),
                         ),
                 ),
             )
     }
 
-    fn handoff_buttons(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let face = self.avatar(Member::Builder, 22.);
-        let handed = self.handed_to_builder;
-        div()
+    /// An empty chat: what this bot is for, and a few things to ask it.
+    fn chat_empty(&mut self, who: Member, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut asks = div()
+            .mt(px(14.))
             .flex()
+            .flex_col()
             .gap(px(8.))
-            .child(
-                ui::solid(
-                    "hand-to-builder",
-                    if handed {
-                        "With Builder"
-                    } else {
-                        "Hand to Builder"
-                    },
-                )
-                .px(px(16.))
-                .flex_row_reverse()
-                .child(face)
-                .on_click(cx.listener(|this, _, _, cx| {
-                    if !this.handed_to_builder {
-                        this.handed_to_builder = true;
-                        let now = this.now();
-                        this.jobs.insert(
-                            0,
-                            data::Job {
-                                title: "Shrink photos on upload".into(),
-                                bot: Member::Builder,
-                                color: ui::ORANGE,
-                                start: 0.05,
-                                rate: 0.01,
-                                note: None,
-                                since: now,
-                            },
-                        );
-                        this.say("Builder has it. It's on Today under Working now.");
-                    }
-                    cx.notify();
-                })),
-            )
-            .child(ui::ghost("simpler", "Explain it simpler"))
-            .child(ui::ghost("show-code", "Show me the code"))
-    }
-}
-
-fn answer() -> Div {
-    ui::card()
-        .px(px(18.))
-        .py(px(13.))
-        .rounded(px(16.))
-        .text_size(px(14.))
-        .line_height(px(22.))
-}
-
-fn person(initial: &'static str, color: u32, text: impl Into<SharedString>) -> Div {
-    div()
-        .flex()
-        .justify_end()
-        .items_center()
-        .gap(px(10.))
-        .child(
-            div()
-                .max_w(px(560.))
-                .px(px(16.))
-                .py(px(10.))
-                .rounded(px(16.))
-                .bg(c(color))
-                .text_color(c(0xFFFFFF))
-                .text_size(px(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .child(text.into()),
-        )
-        .child(
-            div()
-                .size(px(30.))
-                .flex_none()
-                .rounded_full()
-                .bg(c(color))
-                .text_color(c(0xFFFFFF))
-                .text_size(px(12.))
-                .font_weight(FontWeight::BOLD)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(initial),
-        )
-}
-
-/// The checkout size comparison; the bars grow in when the chat opens.
-fn size_chart(now: f64) -> impl IntoElement {
-    let k = runo_holo::anim::SOFT.at((now / 0.9).min(1.0)) as f32;
-    let row = |label: &'static str, frac: f32, color: Hsla, value: &'static str| {
+            .items_center();
+        for (i, q) in who.starters().into_iter().enumerate() {
+            asks = asks.child(
+                div()
+                    .id(("chat-starter", i))
+                    .px(px(14.))
+                    .h(px(36.))
+                    .flex()
+                    .items_center()
+                    .rounded_full()
+                    .bg(ca(0xFFFFFF, 0.75))
+                    .border_1()
+                    .border_color(c(ui::LINE))
+                    .text_size(px(13.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(0xFFFFFF)))
+                    .child(q)
+                    .on_click(cx.listener(move |this, _, _, cx| this.ask(who, q.to_string(), cx))),
+            );
+        }
         div()
+            .pt(px(40.))
             .flex()
+            .flex_col()
             .items_center()
-            .gap(px(12.))
-            .text_size(px(13.))
             .child(
                 div()
-                    .flex_none()
-                    .w(px(72.))
+                    .text_size(px(18.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(format!("Ask {} anything", who.name())),
+            )
+            .child(
+                div()
+                    .mt(px(6.))
+                    .max_w(px(460.))
+                    .text_center()
+                    .text_size(px(13.5))
+                    .line_height(px(20.))
                     .text_color(c(ui::MUTED))
-                    .child(label),
+                    .child(who.pitch()),
             )
-            .child(
-                div()
-                    .flex_none()
-                    .w(px(380.) * frac * k)
-                    .h(px(12.))
-                    .rounded(px(4.))
-                    .bg(color),
-            )
-            .child(div().font_weight(FontWeight::MEDIUM).child(value))
-    };
-    answer()
-        .flex()
-        .flex_col()
-        .gap(px(10.))
-        .child(
-            div()
-                .text_size(px(14.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child("Checkout page size"),
-        )
-        .child(row(
-            "Last week",
-            1.6 / 18.0 + 0.02,
-            ca(ui::BLUE, 0.45),
-            "1.6 MB",
-        ))
-        .child(row("This week", 1.0, c(ui::BLUE), "18 MB"))
-        .child(
-            div()
-                .text_size(px(11.5))
-                .text_color(c(ui::MUTED))
-                .child("From the image upload change in PR #471 · checked 120 files"),
-        )
+            .child(asks)
+    }
 }

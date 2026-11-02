@@ -1,64 +1,87 @@
-//! Today: the crew up top, one box to drop a job in, and the day in three
-//! cards (the question waiting for you, what's being worked on, what landed).
+//! Today: the crew up top, one box to hand them a job, and what is moving:
+//! what needs you, what is being worked on, and what just finished.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::Input;
+use gpui_kit::component::input::Textarea;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
 
 use super::data::{self, Member, Mode};
+use super::store::{self, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
-fn greeting() -> &'static str {
+/// The person's first name, from the account they're signed in to.
+fn first_name() -> Option<String> {
+    let raw = std::env::var("RUNO_NAME")
+        .or_else(|_| std::env::var("USER"))
+        .or_else(|_| std::env::var("USERNAME"))
+        .ok()?;
+    let word: String = raw
+        .split(|c: char| !c.is_alphabetic())
+        .find(|w| !w.is_empty())?
+        .to_lowercase();
+    if word.len() < 2 || ["root", "admin", "user", "runner"].contains(&word.as_str()) {
+        return None;
+    }
+    let mut cs = word.chars();
+    Some(cs.next()?.to_uppercase().chain(cs).collect())
+}
+
+fn greeting() -> String {
     use chrono::Timelike;
-    match chrono::Local::now().hour() {
-        5..=11 => "Good morning, Anish.",
-        12..=17 => "Good afternoon, Anish.",
-        _ => "Good evening, Anish.",
+    let part = match chrono::Local::now().hour() {
+        5..=11 => "Good morning",
+        12..=17 => "Good afternoon",
+        _ => "Good evening",
+    };
+    match first_name() {
+        Some(n) => format!("{part}, {n}."),
+        None => format!("{part}."),
     }
 }
 
 impl Shell {
     pub(super) fn today(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let answered = self.guard_answer.is_some();
-        // The crew, Guard in the middle and bigger while it waits on you.
+        // The crew, a bot that waits on you bigger and in front.
+        let waiting = Member::CREW.into_iter().find(|m| {
+            self.store
+                .jobs
+                .iter()
+                .any(|j| j.bot == *m && j.needs_you() && j.status != Status::Done)
+        });
         let mut row = div()
             .flex_none()
-            .h(px(196.))
+            .h(px(186.))
             .flex()
             .items_end()
             .justify_center()
-            .gap(px(14.));
-        for who in [
-            Member::Builder,
-            Member::Checker,
-            Member::Guard,
-            Member::Fixer,
-            Member::Explainer,
-            Member::Keeper,
-            Member::Mochi,
-        ] {
-            let asking = who == Member::Guard && !answered;
-            let mood = if who == Member::Guard && answered {
-                Mood::Done
+            .gap(px(18.));
+        for who in Member::CREW {
+            let asking = waiting == Some(who);
+            let mood = if asking {
+                Mood::NeedsYou
             } else {
-                who.mood()
+                self.mood(who)
             };
-            let size = if asking { 150. } else { 104. };
+            let size = if asking { 140. } else { 104. };
             let face = self.bot(who, mood, size, Framing::Full);
-            let (line, color) = if who == Member::Guard && answered {
-                ("all set", Some(ui::GREEN))
-            } else {
-                who.short_status()
-            };
+            let (line, color) = self.status_of(who);
+            let to = self.store.busy(who).map(|j| j.id).or_else(|| {
+                self.store
+                    .jobs
+                    .iter()
+                    .rev()
+                    .find(|j| j.bot == who && j.needs_you())
+                    .map(|j| j.id)
+            });
             row = row.child(
                 div()
                     .id(("crew-top", who.key() as usize))
                     .relative()
-                    .w(px(if asking { 150. } else { 104. }))
+                    .w(px(size))
                     .flex()
                     .flex_col()
                     .items_center()
@@ -67,7 +90,7 @@ impl Shell {
                         d.child(
                             div()
                                 .absolute()
-                                .top(px(-6.))
+                                .top(px(-4.))
                                 .px(px(10.))
                                 .py(px(5.))
                                 .rounded(px(10.))
@@ -81,7 +104,7 @@ impl Shell {
                     .child(face)
                     .child(
                         div()
-                            .mt(px(-6.))
+                            .mt(px(-8.))
                             .text_size(px(14.))
                             .font_weight(FontWeight::BOLD)
                             .child(who.name()),
@@ -89,72 +112,38 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(11.5))
-                            .text_color(c(color.unwrap_or(ui::MUTED)))
-                            .when(color.is_some(), |d| d.font_weight(FontWeight::MEDIUM))
+                            .text_color(c(if color == ui::FAINT { ui::MUTED } else { color }))
+                            .when(color != ui::FAINT, |d| d.font_weight(FontWeight::MEDIUM))
                             .child(line),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        let to = if who == Member::Builder {
-                            Place::Live(who)
-                        } else {
-                            Place::Crew
-                        };
-                        this.go(to, cx);
+                        this.go(to.map(Place::Live).unwrap_or(Place::Chat(who)), cx);
                     })),
             );
         }
-        row = row.child(
-            div()
-                .id("make-one")
-                .w(px(96.))
-                .pb(px(2.))
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(4.))
-                .cursor_pointer()
-                .child(
-                    div()
-                        .size(px(60.))
-                        .mb(px(22.))
-                        .rounded_full()
-                        .border_1()
-                        .border_dashed()
-                        .border_color(c(0xC9CBD8))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            Icon::new(IconName::Plus)
-                                .size(px(18.))
-                                .text_color(c(ui::MUTED)),
-                        ),
-                )
-                .child(
-                    div()
-                        .text_size(px(14.))
-                        .font_weight(FontWeight::BOLD)
-                        .child("Make one"),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(c(ui::MUTED))
-                        .child("your own bot"),
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
-        );
 
-        let shipped = 6 + usize::from(self.guard_answer == Some(true));
-        let sub = if answered {
-            format!(
-                "The crew shipped {shipped} things while you were away. Nothing is waiting on you."
-            )
-        } else {
-            format!(
-                "The crew shipped {shipped} things while you were away. One question is waiting."
-            )
+        let folder = self.store.folder().map(|f| f.name.clone());
+        let running = self.store.running().count();
+        let today_done = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| {
+                j.status == Status::Done
+                    && j.ended
+                        .is_some_and(|e| store::now().saturating_sub(e) < 86_400)
+            })
+            .count();
+        let sub = match (&folder, running, today_done) {
+            (None, ..) => "Pick a folder and hand the crew its first job.".to_string(),
+            (Some(f), 0, 0) => format!("The crew is ready. What should we do in {f}?"),
+            (Some(f), 0, d) => format!(
+                "{d} {} finished today in {f}. Nothing is running.",
+                plural(d, "job", "jobs")
+            ),
+            (Some(f), r, _) => format!("{r} {} running in {f}.", plural(r, "job is", "jobs are")),
         };
+        let has_jobs = !self.store.jobs.is_empty();
 
         div()
             .id("today")
@@ -164,37 +153,31 @@ impl Shell {
             .flex_col()
             .items_center()
             .px(px(40.))
-            .pt(px(30.))
-            .pb(px(30.))
+            .pt(px(28.))
+            .pb(px(40.))
             .child(row)
             .child(
                 div()
-                    .mt(px(18.))
-                    .text_size(px(52.))
+                    .mt(px(14.))
+                    .text_size(px(48.))
                     .font_weight(FontWeight::BOLD)
-                    .line_height(px(58.))
+                    .line_height(px(56.))
                     .child(greeting()),
             )
             .child(
                 div()
-                    .mt(px(8.))
+                    .mt(px(6.))
                     .text_size(px(15.))
                     .text_color(c(ui::MUTED))
                     .child(sub),
             )
             .child(self.composer_card(cx))
-            .child(self.suggestions(cx))
-            .child(
-                div()
-                    .mt(px(40.))
-                    .w_full()
-                    .max_w(px(1280.))
-                    .flex()
-                    .gap(px(18.))
-                    .child(self.question_card(cx))
-                    .child(self.working_card(cx))
-                    .child(self.landed_card()),
-            )
+            .child(self.starters(cx))
+            .child(if has_jobs {
+                self.cards(cx).into_any_element()
+            } else {
+                how_it_works().into_any_element()
+            })
             .into_any_element()
     }
 
@@ -213,7 +196,7 @@ impl Shell {
             modes = modes.child(
                 div()
                     .id(("mode", i))
-                    .px(px(12.))
+                    .px(px(11.))
                     .h(px(30.))
                     .flex()
                     .items_center()
@@ -232,15 +215,116 @@ impl Shell {
                         }
                     })
                     .child(m.label())
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.mode = m;
-                        cx.notify();
-                    })),
+                    .on_click(cx.listener(move |this, _, window, cx| this.set_mode(m, window, cx))),
             );
         }
+        let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
+        let folder = self.store.folder().map(|f| f.name.clone());
+        let folder_chip = div()
+            .id("folder")
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .px(px(11.))
+            .h(px(32.))
+            .rounded_full()
+            .border_1()
+            .border_color(c(if folder.is_some() {
+                ui::LINE
+            } else {
+                ui::ORANGE
+            }))
+            .bg(c(0xFFFFFF))
+            .text_size(px(13.))
+            .font_weight(FontWeight::MEDIUM)
+            .cursor_pointer()
+            .hover(|s| s.bg(c(0xF6F7FB)))
+            .child(
+                Icon::new(IconName::Folder)
+                    .size(px(14.))
+                    .text_color(c(ui::MUTED)),
+            )
+            .child(folder.clone().unwrap_or_else(|| "Pick a folder".into()))
+            .child(
+                Icon::new(IconName::ChevronDown)
+                    .size(px(12.))
+                    .text_color(c(ui::FAINT)),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if this.store.folders.is_empty() {
+                    this.pick_folder(cx);
+                } else {
+                    this.folder_menu = !this.folder_menu;
+                    cx.notify();
+                }
+            }));
+        let menu = self.folder_menu.then(|| {
+            let mut list = div()
+                .absolute()
+                .top(px(38.))
+                .left_0()
+                .w(px(300.))
+                .p(px(6.))
+                .rounded(px(14.))
+                .bg(c(0xFFFFFF))
+                .border_1()
+                .border_color(c(ui::LINE))
+                .shadow(ui::lift())
+                .flex()
+                .flex_col();
+            for (i, f) in self.store.folders.iter().enumerate() {
+                let on = i == self.store.current;
+                list = list.child(
+                    div()
+                        .id(("folder-item", i))
+                        .px(px(10.))
+                        .py(px(7.))
+                        .rounded(px(9.))
+                        .cursor_pointer()
+                        .when(on, |d| d.bg(c(0xF1F2F7)))
+                        .hover(|s| s.bg(c(0xF6F7FB)))
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(f.name.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(c(ui::FAINT))
+                                .truncate()
+                                .child(f.path.clone()),
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.store.current = i;
+                            this.folder_menu = false;
+                            this.store.save();
+                            cx.notify();
+                        })),
+                );
+            }
+            list.child(div().my(px(4.)).h(px(1.)).bg(c(ui::LINE)))
+                .child(
+                    div()
+                        .id("folder-add")
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .px(px(10.))
+                        .py(px(8.))
+                        .rounded(px(9.))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(0xF6F7FB)))
+                        .text_size(px(13.))
+                        .child(Icon::new(IconName::Plus).size(px(14.)))
+                        .child("Add a folder…")
+                        .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+                )
+        });
         ui::card()
             .mt(px(26.))
-            .w(px(820.))
+            .w(px(840.))
             .px(px(20.))
             .pt(px(16.))
             .pb(px(14.))
@@ -248,10 +332,10 @@ impl Shell {
             .flex_col()
             .gap(px(14.))
             .child(
-                div().text_size(px(16.)).child(
-                    Input::new(&self.composer)
+                div().text_size(px(16.)).line_height(px(24.)).child(
+                    Textarea::new(&self.composer)
                         .appearance(false)
-                        .text_size(px(16.)),
+                        .bordered(false),
                 ),
             )
             .child(
@@ -261,23 +345,15 @@ impl Shell {
                     .gap(px(8.))
                     .child(
                         div()
-                            .size(px(34.))
-                            .rounded_full()
-                            .border_1()
-                            .border_color(c(ui::LINE))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                Icon::new(IconName::Plus)
-                                    .size(px(15.))
-                                    .text_color(c(ui::INK)),
-                            ),
+                            .relative()
+                            .child(folder_chip)
+                            .children(menu.map(|m| deferred(m).with_priority(1))),
                     )
                     .child(modes)
-                    .child(ui::pill("think", "Think hard", false))
+                    .child(div().flex_1())
                     .child(
                         div()
+                            .id("goes-to")
                             .flex()
                             .items_center()
                             .gap(px(6.))
@@ -285,36 +361,13 @@ impl Shell {
                             .pr(px(12.))
                             .h(px(32.))
                             .rounded_full()
-                            .border_1()
-                            .border_color(c(ui::LINE))
-                            .text_size(px(13.))
+                            .text_size(px(12.5))
+                            .text_color(c(ui::MUTED))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(c(0xF6F7FB)).text_color(c(ui::INK)))
                             .child(face)
-                            .child(format!(
-                                "Goes to {} · {}",
-                                target.name(),
-                                crate::agent::PROVIDERS[super::engine::engine(
-                                    cx.global::<crate::settings::AppSettings>(),
-                                    target
-                                )
-                                .0]
-                                    .name
-                            )),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .size(px(38.))
-                            .rounded(px(12.))
-                            .border_1()
-                            .border_color(c(ui::LINE))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                Icon::new(IconName::Mic)
-                                    .size(px(15.))
-                                    .text_color(c(ui::INK)),
-                            ),
+                            .child(format!("{} · {engine}", target.name()))
+                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
                     )
                     .child(
                         div()
@@ -326,6 +379,7 @@ impl Shell {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
+                            .hover(|s| s.bg(c(0x2C2A38)))
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
@@ -333,23 +387,27 @@ impl Shell {
                             )
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let text = this.composer.read(cx).value().trim().to_string();
-                                if !text.is_empty() {
-                                    this.composer
-                                        .update(cx, |i, cx| i.set_value("", window, cx));
-                                    this.drop_job(text, cx);
-                                }
+                                this.composer
+                                    .update(cx, |i, cx| i.set_value("", window, cx));
+                                this.hand_over(text, cx);
                             })),
                     ),
             )
     }
 
-    fn suggestions(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut row = div().mt(px(16.)).flex().gap(px(8.)).justify_center();
-        for (i, (who, text, mode)) in data::SUGGESTIONS.into_iter().enumerate() {
-            let face = self.avatar(who, 20.);
+    fn starters(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut row = div()
+            .mt(px(14.))
+            .flex()
+            .flex_wrap()
+            .gap(px(8.))
+            .justify_center()
+            .max_w(px(900.));
+        for (i, (mode, text)) in data::STARTERS.into_iter().enumerate() {
+            let face = self.avatar(Member::for_mode(mode), 20.);
             row = row.child(
                 div()
-                    .id(("suggest", i))
+                    .id(("starter", i))
                     .flex()
                     .items_center()
                     .gap(px(7.))
@@ -367,7 +425,7 @@ impl Shell {
                     .child(face)
                     .child(text)
                     .on_click(cx.listener(move |this, _, window, cx| {
-                        this.mode = mode;
+                        this.set_mode(mode, window, cx);
                         this.composer
                             .update(cx, |i, cx| i.set_value(text, window, cx));
                         cx.notify();
@@ -377,249 +435,271 @@ impl Shell {
         row
     }
 
-    fn question_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let answer = self.guard_answer;
-        let mood = match answer {
-            Some(true) => Mood::Done,
-            Some(false) => Mood::Thinking,
-            None => Mood::NeedsYou,
-        };
-        let guard = self.bot(Member::Guard, mood, 150., Framing::Full);
-        let (head, quote) = match answer {
-            None => (
-                "4 min ago",
-                "\u{201C}Apple Pay works, but line 40 touches login. Use my safe fix?\u{201D}",
-            ),
-            Some(true) => (
-                "just now",
-                "Landed the safe fix. Login is untouched, and Checker re-ran Apple Pay: it passes.",
-            ),
-            Some(false) => (
-                "just now",
-                "Opened the change for you. I'll wait here until you decide.",
-            ),
-        };
+    /// What needs you, what's running and what finished, as three cards.
+    fn cards(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let needs: Vec<_> = self
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .filter(|j| j.needs_you())
+            .take(4)
+            .cloned()
+            .collect();
+        let running: Vec<_> = self.store.running().cloned().collect();
+        let finished: Vec<_> = self
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .filter(|j| j.status == Status::Done && !j.needs_you())
+            .take(4)
+            .cloned()
+            .collect();
+        let mut needs_card = column_card("Needs you", needs.len(), ui::AMBER);
+        if needs.is_empty() {
+            needs_card = needs_card.child(empty_line("Nothing is waiting on you."));
+        }
+        for j in &needs {
+            let face = self.avatar(j.bot, 26.);
+            let (word, color) = match j.status {
+                Status::Done => ("Done · have a look", ui::GREEN),
+                Status::Failed => ("Stopped with a problem", ui::RED),
+                _ => ("Interrupted", ui::AMBER),
+            };
+            needs_card = needs_card.child(job_row(j.id, face, &j.title, word, color, None, cx));
+        }
+        let mut work_card = column_card("Working now", running.len(), ui::ORANGE);
+        if running.is_empty() {
+            work_card =
+                work_card.child(empty_line("No one is working. Hand them something above."));
+        }
+        for j in &running {
+            let face = self.bot(j.bot, Mood::Working, 26., Framing::Bust);
+            let frac = j.progress().map(|(d, n)| d as f32 / n.max(1) as f32);
+            let doing = format!("{} · {}", j.doing(), store::span(j.seconds()));
+            work_card = work_card.child(job_row(
+                j.id,
+                face,
+                &j.title,
+                &doing,
+                j.bot.accent(),
+                Some(frac),
+                cx,
+            ));
+        }
+        let mut done_card = column_card("Finished", finished.len(), ui::GREEN);
+        if finished.is_empty() {
+            done_card = done_card.child(empty_line("Finished jobs land here."));
+        }
+        for j in &finished {
+            let face = self.avatar(j.bot, 26.);
+            let when = match store::ago(j.ended.unwrap_or(j.started)).as_str() {
+                "just now" => format!("just now · {}", j.bot.name()),
+                a => format!("{a} ago · {}", j.bot.name()),
+            };
+            done_card = done_card.child(job_row(j.id, face, &j.title, &when, ui::MUTED, None, cx));
+        }
+        // Only the cards with something in them; one alone sits under the box.
+        let all = done_card.child(
+            div()
+                .id("all-jobs")
+                .mt(px(4.))
+                .text_size(px(12.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::ORANGE))
+                .cursor_pointer()
+                .hover(|s| s.text_color(c(ui::INK)))
+                .child("All jobs →")
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
+        );
+        let shown: Vec<Div> = [
+            (!needs.is_empty()).then_some(needs_card),
+            (!running.is_empty()).then_some(work_card),
+            (!finished.is_empty()).then_some(all),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let n = shown.len();
+        div()
+            .mt(px(36.))
+            .w_full()
+            .max_w(px(match n {
+                1 => 840.,
+                2 => 1040.,
+                _ => 1240.,
+            }))
+            .flex()
+            .gap(px(18.))
+            .children(shown)
+    }
+}
+
+fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
+    if n == 1 {
+        one
+    } else {
+        many
+    }
+}
+
+fn column_card(title: &'static str, count: usize, color: u32) -> Div {
+    ui::card()
+        .flex_1()
+        .flex_basis(px(0.))
+        .min_w_0()
+        .min_h(px(150.))
+        .p(px(20.))
+        .flex()
+        .flex_col()
+        .gap(px(12.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(title),
+                )
+                .when(count > 0, |d| {
+                    d.child(
+                        div()
+                            .px(px(8.))
+                            .h(px(20.))
+                            .flex()
+                            .items_center()
+                            .rounded_full()
+                            .bg(ca(color, 0.12))
+                            .text_color(c(color))
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::BOLD)
+                            .child(count.to_string()),
+                    )
+                }),
+        )
+}
+
+fn empty_line(text: &'static str) -> Div {
+    div()
+        .py(px(6.))
+        .text_size(px(13.))
+        .text_color(c(ui::FAINT))
+        .child(text)
+}
+
+pub(super) fn job_row(
+    id: u64,
+    face: Img,
+    title: &str,
+    note: &str,
+    color: u32,
+    progress: Option<Option<f32>>,
+    cx: &mut Context<Shell>,
+) -> Stateful<Div> {
+    div()
+        .id(("job-row", id as usize))
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .mx(px(-8.))
+        .px(px(8.))
+        .py(px(6.))
+        .rounded(px(12.))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(0xF6F7FB)))
+        .child(face)
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(3.))
+                .child(
+                    div()
+                        .text_size(px(13.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .truncate()
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .text_color(c(color))
+                        .truncate()
+                        .child(note.to_string()),
+                )
+                .when_some(progress, |d, frac| {
+                    d.child(match frac {
+                        Some(f) => ui::bar(f.max(0.04), color).into_any_element(),
+                        None => ui::sweep(color, 0.0).into_any_element(),
+                    })
+                }),
+        )
+        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
+}
+
+/// The first-run card: what happens when you hand the crew a job.
+fn how_it_works() -> impl IntoElement {
+    let step = |n: &'static str, title: &'static str, line: &'static str| {
         div()
             .flex_1()
             .flex_basis(px(0.))
             .min_w_0()
-            .h(px(268.))
-            .relative()
-            .rounded(px(20.))
-            .border_1()
-            .border_color(c(0xF6DFA8))
-            .bg(linear_gradient(
-                135.,
-                linear_color_stop(c(0xFFF6DE), 0.0),
-                linear_color_stop(c(0xFFFBF2), 1.0),
-            ))
-            .shadow(ui::lift())
             .flex()
             .flex_col()
-            .p(px(18.))
+            .gap(px(6.))
             .child(
                 div()
-                    .flex()
-                    .gap(px(8.))
-                    .child(div().flex_none().mt(px(-4.)).child(guard))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .flex()
-                                    .gap(px(6.))
-                                    .items_baseline()
-                                    .text_size(px(13.))
-                                    .child(
-                                        div()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child("Guard · Apple Pay"),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(12.))
-                                            .text_color(c(ui::MUTED))
-                                            .child(head),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .mt(px(10.))
-                                    .text_size(px(18.))
-                                    .line_height(px(25.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(quote),
-                            ),
-                    ),
-            )
-            .child(div().flex_1())
-            .child(match answer {
-                None => div()
-                    .flex()
-                    .flex_wrap()
-                    .gap(px(8.))
-                    .child(ui::solid("use-fix", "Use the fix").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.guard_answer = Some(true);
-                            this.say("Guard landed the safe fix.");
-                            cx.notify();
-                        },
-                    )))
-                    .child(ui::ghost("look-first", "Look first").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.guard_answer = Some(false);
-                            cx.notify();
-                        },
-                    ))),
-                Some(_) => div()
-                    .flex()
-                    .gap(px(8.))
-                    .child(ui::ghost("undo-fix", "Undo").on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.guard_answer = None;
-                            cx.notify();
-                        },
-                    ))),
-            })
-    }
-
-    fn working_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let now = self.now();
-        let jobs = self.jobs.clone();
-        let mut list = div().flex().flex_col().gap(px(14.)).mt(px(14.));
-        for (i, job) in jobs.iter().take(4).enumerate() {
-            let face = self.bot(job.bot, Mood::Working, 30., Framing::Bust);
-            let p = job.progress(now);
-            let note: SharedString = match job.note {
-                Some("starting") if p > 0.1 => "working".into(),
-                Some(n) => n.into(),
-                None => format!("{}%", (p * 100.) as u32).into(),
-            };
-            list = list.child(
-                div()
-                    .id(("job", i))
+                    .size(px(28.))
+                    .rounded_full()
+                    .bg(c(ui::INK))
+                    .text_color(c(0xFFFFFF))
                     .flex()
                     .items_center()
-                    .gap(px(12.))
-                    .cursor_pointer()
-                    .child(face)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(7.))
-                            .child(
-                                div()
-                                    .flex()
-                                    .justify_between()
-                                    .gap(px(8.))
-                                    .child(
-                                        div()
-                                            .text_size(px(13.5))
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .truncate()
-                                            .child(job.title.clone()),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_none()
-                                            .text_size(px(11.5))
-                                            .text_color(c(ui::MUTED))
-                                            .child(note),
-                                    ),
-                            )
-                            .child(ui::bar(p, job.color)),
-                    )
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.go(Place::Live(Member::Builder), cx)),
-                    ),
-            );
-        }
-        let cost = 0.84 + 0.0004 * now;
-        ui::card()
-            .flex_1()
-            .flex_basis(px(0.))
-            .min_w_0()
-            .h(px(268.))
-            .p(px(20.))
-            .flex()
-            .flex_col()
+                    .justify_center()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::BOLD)
+                    .child(n),
+            )
             .child(
                 div()
-                    .flex()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Working now"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(c(ui::MUTED))
-                            .child(format!("{} jobs · ${cost:.2}", self.jobs.len())),
-                    ),
+                    .mt(px(4.))
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(title),
             )
-            .child(list)
-    }
-
-    fn landed_card(&mut self) -> impl IntoElement {
-        let mut list = div().flex().flex_col().gap(px(13.)).mt(px(14.));
-        for (who, text, note) in data::LANDED {
-            let face = self.bot(who, Mood::Done, 28., Framing::Bust);
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(face)
-                    .child(div().flex_1().text_size(px(13.5)).child(text))
-                    .children(
-                        note.map(|n| div().text_size(px(11.5)).text_color(c(ui::MUTED)).child(n)),
-                    ),
-            );
-        }
-        ui::card()
-            .flex_1()
-            .flex_basis(px(0.))
-            .min_w_0()
-            .h(px(268.))
-            .p(px(20.))
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Landed overnight"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::GREEN))
-                            .child("all green"),
-                    ),
-            )
-            .child(list)
-            .child(div().flex_1())
             .child(
                 div()
                     .text_size(px(13.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::ORANGE))
-                    .child("Watch the 2 minute recap →"),
+                    .line_height(px(19.))
+                    .text_color(c(ui::MUTED))
+                    .child(line),
             )
-    }
+    };
+    ui::card()
+        .mt(px(40.))
+        .w(px(840.))
+        .p(px(26.))
+        .flex()
+        .gap(px(28.))
+        .child(step(
+            "1",
+            "Pick a folder",
+            "Any project on this computer. The crew only works inside it.",
+        ))
+        .child(step(
+            "2",
+            "Say what you want",
+            "Build, fix, review or test. Each kind goes to the bot that does it best.",
+        ))
+        .child(step(
+            "3",
+            "Watch, then check",
+            "Follow along live. It tells you in plain words what changed and how to try it.",
+        ))
 }
