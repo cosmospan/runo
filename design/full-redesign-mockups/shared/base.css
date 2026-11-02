@@ -1,0 +1,46 @@
+/* Shared reset + the small cross-cutting rules used by every direction.
+   Each direction's own CSS layers tokens and surface styles on top.
+   Palette seeds come from themes.rs: light "runo" + dark "tokyo-night". */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+             -webkit-font-smoothing: antialiased; }
+
+body { background: var(--canvas, #fff); color: var(--text, #111); overflow: hidden; }
+
+code, kbd, pre { font-family: "SF Mono", "JetBrains Mono", Menlo, monospace; }
+
+:root { color-scheme: light; }
+:root[data-t="dark"] { color-scheme: dark; }
+
+/* Shared traffic-light buttons: the mockups are "window-shaped" so these appear
+   in every direction's chrome. */
+.traffic { display: flex; gap: 8px; align-items: center; padding-left: 12px; }
+.traffic .t { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.traffic .t.r { background: #ff5f57; }
+.traffic .t.y { background: #febc2e; }
+.traffic .t.g { background: #28c840; }
+
+/* The wallpaper layer, drawn behind the window on the translucent surface. */
+.wallpaper { position: fixed; inset: 0; z-index: -1;
+             background: linear-gradient(135deg, #ffb37a 0%, #ff80b2 30%, #8e63ff 70%, #2b47c7 100%); }
+:root[data-t="dark"] .wallpaper { background: linear-gradient(135deg, #1a0f3a 0%, #2d1b55 35%, #3a2a66 70%, #0d1430 100%); }
+
+/* A tiny image "attachment" we fake with a gradient; keeps renders self-contained. */
+.att-img { background: linear-gradient(130deg, #cfd4e3 0%, #a8b1cc 50%, #7a86a8 100%); border-radius: 10px; }
+:root[data-t="dark"] .att-img { background: linear-gradient(130deg, #3a4160 0%, #27304a 60%, #1a2033 100%); }
+
+/* Markdown-ish defaults inside agent replies. */
+.md h3 { font-weight: 650; font-size: 14px; margin: 0 0 6px; }
+.md p  { line-height: 1.52; margin: 0 0 8px; }
+.md ul { padding-left: 18px; margin: 0 0 8px; }
+.md ul li { line-height: 1.5; margin: 2px 0; }
+.md code { font-size: 12px; padding: 1px 5px; border-radius: 4px;
+           background: var(--subtle); color: var(--text); }
+
+/* Tabular numbers wherever we show durations or counts. */
+.num { font-variant-numeric: tabular-nums; }
+
+/* Scrollbars off, we're just drawing frames. */
+::-webkit-scrollbar { display: none; }

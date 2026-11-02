@@ -1,0 +1,719 @@
+<!doctype html>
+<!--
+  Direction B — Raycast/Arc-like.
+  Rounded, floating cards on a tinted canvas, generous padding, soft gradients,
+  playful but not cartoonish. Chat messages as cards; the composer floats.
+  URL: b.html?s=main|panels|arcade|settings|translucent&t=light|dark
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Runo redesign · Direction B · Raycast/Arc-like</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  /* ---------- Tokens ---------- */
+  :root[data-t="light"] {
+    --canvas:  #f6f2fb;              /* tinted lilac canvas */
+    --canvas-grad: radial-gradient(1200px 800px at 20% -10%, #fff5e8 0%, transparent 55%),
+                   radial-gradient(1000px 700px at 110% 110%, #e9dcff 0%, transparent 60%),
+                   #f6f2fb;
+    --card:    #ffffff;
+    --card-2:  #fbf7ff;
+    --sheet:   rgba(255,255,255,.6);
+    --subtle:  #ece3f6;
+    --hair:    rgba(60,30,90,.08);
+    --hair-strong: rgba(60,30,90,.14);
+    --text:    #1b1230;
+    --text2:   #40366a;
+    --muted:   #726594;
+    --faint:   #a097bf;
+    --accent:  #6540e8;              /* vibrant purple */
+    --accent-2: #e4345c;              /* raspberry for pills */
+    --accent-grad: linear-gradient(135deg, #6540e8 0%, #a84eff 100%);
+    --accent-wash: rgba(101,64,232,.10);
+    --accent-ring: rgba(101,64,232,.22);
+    --amber:   #d78008;
+    --amber-wash: rgba(255,170,40,.18);
+    --amber-ring: rgba(255,170,40,.38);
+    --green:   #0f8a4a;
+    --red:     #d53b4e;
+    --shadow:   0 2px 6px rgba(60,30,90,.06), 0 24px 50px -12px rgba(60,30,90,.18);
+    --shadow-sm: 0 1px 2px rgba(60,30,90,.04), 0 6px 18px -8px rgba(60,30,90,.14);
+  }
+  :root[data-t="dark"] {
+    --canvas:  #130c22;
+    --canvas-grad: radial-gradient(1100px 700px at 20% -10%, #3b1a44 0%, transparent 50%),
+                   radial-gradient(900px 700px at 110% 110%, #1a2a7a 0%, transparent 60%),
+                   #0f0a1f;
+    --card:    #1c1430;
+    --card-2:  #231a3c;
+    --sheet:   rgba(28,20,48,.6);
+    --subtle:  #27204a;
+    --hair:    rgba(255,255,255,.07);
+    --hair-strong: rgba(255,255,255,.13);
+    --text:    #e8e4f8;
+    --text2:   #c0b6e0;
+    --muted:   #8f84b4;
+    --faint:   #6a608f;
+    --accent:  #a383ff;
+    --accent-2: #ff7599;
+    --accent-grad: linear-gradient(135deg, #a383ff 0%, #ff7599 100%);
+    --accent-wash: rgba(163,131,255,.14);
+    --accent-ring: rgba(163,131,255,.32);
+    --amber:   #ffc470;
+    --amber-wash: rgba(255,196,112,.14);
+    --amber-ring: rgba(255,196,112,.30);
+    --green:   #7cd99f;
+    --red:     #ff7698;
+    --shadow:   0 4px 10px rgba(0,0,0,.3), 0 32px 70px -16px rgba(0,0,0,.6);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.3), 0 10px 24px -8px rgba(0,0,0,.5);
+  }
+
+  /* ---------- Window frame ---------- */
+  .win { position: relative; width: 1440px; height: 900px;
+         background: var(--canvas-grad); color: var(--text);
+         border-radius: 16px; overflow: hidden; box-shadow: var(--shadow);
+         border: 1px solid var(--hair); }
+  .chrome { height: 44px; display: flex; align-items: center; gap: 12px; padding-right: 16px;
+            background: transparent; font-size: 12.5px; color: var(--muted); }
+  .chrome .pill-bar { flex: 1; display: flex; justify-content: center; }
+  .chrome .bar { height: 28px; padding: 0 14px; border-radius: 14px; background: var(--card);
+                 box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 10px;
+                 border: 1px solid var(--hair); font-size: 12px; color: var(--text2); }
+  .chrome .right { display: flex; align-items: center; gap: 10px; }
+  .chrome .mini { height: 28px; padding: 0 10px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow-sm); border: 1px solid var(--hair); display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text2); }
+
+  .body { height: calc(100% - 44px - 28px); display: flex; padding: 4px 10px 10px; gap: 10px; }
+  .status { height: 28px; display: flex; align-items: center; gap: 12px; padding: 0 20px; font-size: 11px; color: var(--muted); }
+  .status .pill { padding: 2px 8px; border-radius: 10px; background: var(--card); box-shadow: var(--shadow-sm); border: 1px solid var(--hair); }
+
+  /* ---------- Sidebar ---------- */
+  .side { width: 288px; flex: none; background: var(--sheet); backdrop-filter: blur(14px);
+          border-radius: 14px; border: 1px solid var(--hair); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .search { height: 36px; padding: 0 12px; border-radius: 10px; background: var(--card);
+            box-shadow: inset 0 0 0 1px var(--hair); display: flex; align-items: center; gap: 9px;
+            color: var(--muted); font-size: 12.5px; }
+  .search .kbd { margin-left: auto; font-size: 10.5px; padding: 2px 6px; border-radius: 6px;
+                 background: var(--subtle); color: var(--faint); }
+  .proj { padding: 6px 10px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .proj .n { margin-left: auto; font-size: 11px; color: var(--faint); font-weight: 500; }
+
+  .crew-card { padding: 10px 12px; border-radius: 12px; background: var(--accent-grad); color: #fff;
+               box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.2);
+               display: flex; align-items: center; gap: 10px; }
+  .crew-card .chip { width: 24px; height: 24px; border-radius: 7px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; }
+  .crew-card .label { flex: 1; font-size: 13.5px; font-weight: 650; }
+  .crew-card .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.22); font-weight: 600; }
+
+  .group-head { padding: 6px 10px 2px; font-size: 10.5px; font-weight: 650; color: var(--faint); letter-spacing: .03em; display: flex; align-items: center; gap: 6px; }
+  .group-head .n { font-weight: 500; opacity: .9; }
+
+  .trow { position: relative; padding: 8px 10px; display: flex; align-items: center; gap: 10px;
+          font-size: 13px; color: var(--text2); border-radius: 10px; }
+  .trow .st { width: 14px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .trow .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow.unread .ttl { color: var(--text); font-weight: 500; }
+  .trow .age { flex: none; font-size: 11px; color: var(--faint); }
+  .trow .age.live { color: var(--accent); font-weight: 600; }
+  .trow .age.amber { color: var(--amber); font-weight: 600; }
+  .trow.done { color: var(--muted); }
+
+  .trow.sel { background: var(--card); box-shadow: var(--shadow-sm); color: var(--text); padding: 10px; flex-wrap: wrap; }
+  .trow.sel .ttl { font-weight: 600; }
+  .trow.sel .l2 { flex: 0 0 100%; display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--muted); padding-left: 22px; }
+  .trow.sel .l2 .mono { font-family: "SF Mono", Menlo, monospace; }
+  .trow.sel .l2 .chip { background: var(--subtle); padding: 2px 7px; border-radius: 999px; font-size: 10.5px; color: var(--text2); }
+
+  .fold { padding: 7px 10px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); border-radius: 10px; }
+  .fold .st { width: 14px; display: flex; justify-content: center; }
+  .fold .lbl { flex: 1; }
+
+  .hair-line { height: 1px; background: var(--hair); margin: 4px 2px; }
+  .sect-head { padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 650; color: var(--faint); letter-spacing: .03em; }
+
+  .srow { padding: 7px 10px; display: flex; align-items: center; gap: 10px; border-radius: 10px; }
+  .srow .av { width: 28px; height: 28px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; position: relative; }
+  .srow .av .stx { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--sheet); display: flex; align-items: center; justify-content: center; }
+  .srow .av .stx i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  .srow .body { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 12.5px; color: var(--text2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .sub { font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .rt { font-size: 10.5px; color: var(--faint); text-align: right; }
+
+  /* ---------- Chat column ---------- */
+  .chat-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; position: relative; }
+  .thread-head { padding: 10px 20px; background: var(--sheet); backdrop-filter: blur(14px); border-radius: 14px; border: 1px solid var(--hair); display: flex; align-items: center; gap: 14px; }
+  .thread-head .ttl { font-size: 15px; font-weight: 650; }
+  .thread-head .meta { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .thread-head .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .thread-head .tab { padding: 5px 12px; border-radius: 10px; font-size: 12px; color: var(--muted); }
+  .thread-head .tab.active { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 600; }
+
+  .scroll { flex: 1; overflow: hidden; padding: 2px 2px 10px; display: flex; flex-direction: column; gap: 14px; }
+
+  .from-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; height: 28px;
+               padding: 0 12px 0 10px; border-radius: 14px; background: var(--accent-wash); color: var(--accent);
+               font-size: 12px; font-weight: 500; border: 1px solid var(--accent-ring); }
+  .from-chip .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .bubble { max-width: 760px; padding: 16px 18px; border-radius: 16px; }
+  .bubble.user { background: var(--card); box-shadow: var(--shadow-sm); border: 1px solid var(--hair); }
+  .bubble.agent { background: var(--card-2); box-shadow: var(--shadow-sm); border: 1px solid var(--hair); }
+  .bubble .who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11.5px; color: var(--muted); }
+  .bubble .who b { color: var(--text); font-weight: 650; font-size: 12.5px; }
+  .bubble .text { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  .bubble .text h3 { font-size: 15px; font-weight: 650; margin-bottom: 8px; }
+  .bubble .text p { margin: 0 0 8px; }
+  .bubble .text ul { padding-left: 18px; margin: 2px 0 8px; }
+  .bubble .text ul li { margin: 2px 0; }
+  .bubble .img { width: 300px; height: 180px; margin-top: 10px; border-radius: 10px; }
+
+  .steps-card { max-width: 760px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--hair); box-shadow: var(--shadow-sm); margin-top: -4px; }
+  .steps-card .st-hdr { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .03em; font-weight: 650; margin-bottom: 2px; padding: 4px 4px 2px; }
+  .step { padding: 6px 6px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .step .st { width: 14px; display: flex; justify-content: center; }
+  .step .lbl { font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--text2); }
+  .step.done .lbl { color: var(--muted); }
+
+  .work-pill { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px;
+               border-radius: 999px; color: #fff; background: var(--accent-grad); font-size: 12px; font-weight: 500;
+               box-shadow: var(--shadow-sm); }
+  .work-pill .shim { width: 10px; height: 10px; border-radius: 50%; background: #fff; opacity: .9; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+  /* Floating composer */
+  .composer { position: relative; margin-top: auto; padding: 4px 4px 4px; }
+  .composer .float { position: relative; background: var(--card); border-radius: 18px; padding: 14px 14px 14px;
+                     box-shadow: var(--shadow); border: 1px solid var(--hair); display: flex; flex-direction: column; gap: 10px; }
+  .composer .float::before { content: ""; position: absolute; inset: -1px; border-radius: 18px; padding: 1.5px; pointer-events: none;
+                             background: linear-gradient(135deg, var(--accent-ring) 0%, transparent 60%); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+  .composer .input { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+  .composer .input .caret { display: inline-block; width: 1.5px; height: 15px; background: var(--text); vertical-align: -3px; }
+  .composer .foot { display: flex; align-items: center; gap: 10px; }
+  .composer .mode { display: flex; background: var(--subtle); border-radius: 10px; padding: 3px; font-size: 12px; }
+  .composer .mode .m { padding: 4px 12px; border-radius: 7px; color: var(--muted); font-weight: 500; }
+  .composer .mode .m.active { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); }
+  .composer .attach { padding: 6px 12px; border-radius: 10px; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text2); background: var(--subtle); font-weight: 500; }
+  .composer .spacer { flex: 1; }
+  .composer .send { padding: 7px 14px; border-radius: 10px; display: flex; align-items: center; gap: 7px;
+                    font-size: 12.5px; color: #fff; background: var(--accent-grad); font-weight: 650; box-shadow: var(--shadow-sm); }
+
+  /* ---------- Panels page ---------- */
+  .panels-page { position: relative; width: 1440px; height: 900px; background: var(--canvas-grad); color: var(--text);
+                 display: flex; align-items: center; justify-content: center; gap: 36px; padding: 60px 40px; }
+  .panels-page .label { position: absolute; top: 24px; left: 24px; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
+  .panel { width: 400px; background: var(--card); border-radius: 18px; box-shadow: var(--shadow); border: 1px solid var(--hair); overflow: hidden; display: flex; flex-direction: column; }
+  .panel .ph { font-size: 10.5px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; padding: 12px 16px 6px; font-weight: 650; }
+
+  /* Peek pane */
+  .peek { height: 620px; }
+  .peek-top { padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--hair); }
+  .peek-top .back { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; background: var(--subtle); color: var(--text2); }
+  .peek-top .ttl { color: var(--text); font-weight: 650; font-size: 13px; flex: 1; }
+  .peek-top .maxi { padding: 4px 10px; border-radius: 8px; background: var(--subtle); color: var(--text2); font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
+  .peek-body { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .decision { font-size: 12px; padding: 10px 12px; border-radius: 12px; background: var(--amber-wash); color: var(--amber); border: 1px solid var(--amber-ring); display: flex; align-items: center; gap: 10px; }
+  .peek-msg { padding: 12px 14px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--hair); }
+  .peek-msg .who { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 7px; }
+  .peek-msg .who b { color: var(--text); font-weight: 650; font-size: 12px; }
+  .peek-msg .text { font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+  .peek-foot { border-top: 1px solid var(--hair); padding: 12px 14px; background: var(--card-2); }
+  .peek-foot .wrap { background: var(--card); border-radius: 12px; padding: 10px 12px; min-height: 48px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow-sm); border: 1px solid var(--hair); }
+  .peek-foot .wrap .send { width: 26px; height: 26px; border-radius: 7px; background: var(--accent-grad); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+  /* Menubar panel */
+  .menubar { width: 400px; height: 620px; }
+  .mb-tabs { display: flex; padding: 10px 12px 2px; gap: 4px; }
+  .mb-tabs .tab { font-size: 12.5px; padding: 7px 14px; border-radius: 10px; color: var(--muted); font-weight: 500; }
+  .mb-tabs .tab.active { color: var(--text); background: var(--subtle); font-weight: 650; }
+  .mb-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px 12px 2px; }
+  .mb-tile { padding: 10px 12px; border-radius: 14px; background: var(--card-2); display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--hair); }
+  .mb-tile .n { font-size: 22px; font-weight: 650; line-height: 1; }
+  .mb-tile .l { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+  .mb-tile.b .n { color: var(--accent); }
+  .mb-tile.a .n { color: var(--amber); }
+  .mb-tile.g .n { color: var(--green); }
+  .mb-sect { padding: 12px 16px 4px; font-size: 10px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; font-weight: 650; }
+  .mb-row { margin: 4px 10px; padding: 11px 12px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--hair); box-shadow: var(--shadow-sm); }
+  .mb-row .meta { font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+  .mb-row .ttl { font-size: 13px; font-weight: 650; color: var(--text); }
+  .mb-row .cmd { margin-top: 6px; font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--text2); background: var(--subtle); padding: 6px 10px; border-radius: 8px; }
+  .mb-row .acts { margin-top: 8px; display: flex; gap: 7px; }
+  .mb-row .btn { height: 28px; padding: 0 12px; border-radius: 9px; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; }
+  .mb-row .btn.p { background: var(--accent-grad); color: #fff; box-shadow: var(--shadow-sm); }
+  .mb-row .btn.s { background: var(--subtle); color: var(--text); }
+  .mb-row .btn.g { color: var(--muted); background: transparent; }
+  .mb-row.sess { display: flex; align-items: center; gap: 10px; }
+  .mb-row.sess .body { flex: 1; }
+  .mb-row.sess .ttl { font-size: 12.5px; font-weight: 650; }
+  .mb-row.sess .sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .mb-row.sess .t { font-size: 10.5px; color: var(--muted); }
+  .mb-input { padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
+  .mb-input .f { flex: 1; height: 38px; padding: 0 14px; background: var(--card-2); border-radius: 12px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; border: 1px solid var(--hair); }
+  .mb-input .send { width: 38px; height: 38px; background: var(--accent-grad); border-radius: 12px; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); }
+
+  /* Assistant panel */
+  .assist { width: 400px; height: 480px; }
+  .assist-top { padding: 16px 18px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--hair); }
+  .assist-top .mk { width: 36px; height: 36px; border-radius: 11px; background: var(--accent-grad); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; box-shadow: var(--shadow-sm); }
+  .assist-top .body .ttl { font-size: 14px; font-weight: 700; }
+  .assist-top .body .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .assist-search { margin: 12px 14px; height: 36px; padding: 0 14px; background: var(--card-2); border-radius: 11px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); border: 1px solid var(--hair); }
+  .starter-head { font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); padding: 6px 16px; font-weight: 650; }
+  .starter { margin: 4px 12px; padding: 11px 14px; border-radius: 12px; font-size: 12.5px; color: var(--text2); display: flex; align-items: center; gap: 10px; background: var(--card-2); border: 1px solid var(--hair); }
+  .starter .d { color: var(--accent); font-size: 10px; }
+  .corner-mark { position: absolute; right: 28px; bottom: 52px; width: 48px; height: 48px; border-radius: 14px;
+                 background: var(--accent-grad); color: #fff; display: flex; align-items: center; justify-content: center;
+                 font-weight: 700; font-size: 18px; box-shadow: var(--shadow); }
+  .corner-mark .b { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
+                    background: var(--accent-2); color: #fff; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+                    display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); }
+
+  /* ---------- Arcade modal ---------- */
+  .arcade-page { position: relative; width: 1440px; height: 900px; background: var(--canvas-grad); color: var(--text); overflow: hidden; }
+  .arcade-page .dim { position: absolute; inset: 0; background: rgba(20,10,40,.4); backdrop-filter: blur(12px); }
+  :root[data-t="light"] .arcade-page .dim { background: rgba(255,255,255,.3); }
+  .arcade-modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                  width: 860px; height: 600px; background: var(--card); border-radius: 20px;
+                  box-shadow: 0 32px 80px rgba(20,10,40,.4); border: 1px solid var(--hair); overflow: hidden; display: flex; flex-direction: column; }
+  .arcade-head { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--hair); }
+  .arcade-head .mk { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-grad); color: #fff; display: flex; align-items: center; justify-content: center; }
+  .arcade-head .ttl { font-size: 15px; font-weight: 700; }
+  .arcade-head .tags { color: var(--muted); font-size: 12px; }
+  .arcade-head .close { margin-left: auto; width: 32px; height: 32px; border-radius: 10px; color: var(--muted); display: flex; align-items: center; justify-content: center; background: var(--subtle); }
+  .arcade-main { flex: 1; display: grid; grid-template-columns: 220px 1fr; }
+  .arcade-nav { border-right: 1px solid var(--hair); background: var(--card-2); padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .arcade-nav .g { padding: 10px 12px; font-size: 13px; color: var(--text2); border-radius: 11px; display: flex; justify-content: space-between; align-items: center; }
+  .arcade-nav .g.active { background: var(--accent-wash); color: var(--accent); font-weight: 650; }
+  .arcade-nav .g .s { font-size: 11px; color: var(--faint); }
+  .arcade-nav .g.active .s { color: var(--accent); opacity: .8; }
+  .arcade-field { position: relative; display: flex; align-items: center; justify-content: center;
+                  background: linear-gradient(180deg, var(--card-2) 0%, color-mix(in oklab, var(--accent) 7%, var(--card)) 100%); overflow: hidden; }
+  .arcade-field .scene { position: relative; width: 480px; height: 320px; }
+  .arcade-field .scene .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 20%, transparent), transparent); border-radius: 8px; }
+  .arcade-field .scene .gate { position: absolute; top: 15%; bottom: 15%; width: 6px; background: var(--accent-grad); border-radius: 3px; box-shadow: 0 0 12px var(--accent-ring); }
+  .arcade-field .scene .gate.g1 { left: 20%; opacity: .5; }
+  .arcade-field .scene .gate.g2 { left: 48%; }
+  .arcade-field .scene .gate.g3 { left: 72%; opacity: .3; }
+  .arcade-field .scene .spark { position: absolute; left: 36%; top: 44%; }
+  .arcade-field .score-lb { position: absolute; top: 16px; left: 22px; display: flex; gap: 12px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text); }
+  .arcade-field .score-lb .k { color: var(--muted); margin-right: 4px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  .gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+              width: 300px; padding: 24px 26px; background: var(--card); border-radius: 16px;
+              box-shadow: 0 16px 44px rgba(20,10,40,.3); border: 1px solid var(--hair); text-align: center; }
+  .gameover h3 { font-size: 15px; font-weight: 650; margin-bottom: 6px; }
+  .gameover .n { font-family: "SF Mono", Menlo, monospace; font-size: 32px; font-weight: 700; background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; margin: 6px 0; }
+  .gameover .best { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .gameover .hint { font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+  .gameover .retry { margin-top: 14px; padding: 9px 14px; border-radius: 11px; background: var(--accent-grad); color: #fff; font-size: 12.5px; font-weight: 650; display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ---------- Settings ---------- */
+  .set-body { height: calc(100% - 44px - 28px); display: grid; grid-template-columns: 280px 1fr; padding: 0 10px 10px; gap: 10px; }
+  .set-nav { background: var(--sheet); backdrop-filter: blur(14px); border-radius: 14px; border: 1px solid var(--hair); padding: 14px 8px; }
+  .set-nav .h { font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; padding: 6px 12px 10px; font-weight: 650; }
+  .set-nav .l { padding: 9px 12px; display: flex; align-items: center; font-size: 13px; color: var(--text2); border-radius: 10px; }
+  .set-nav .l.active { background: var(--card); color: var(--text); font-weight: 650; box-shadow: var(--shadow-sm); }
+  .set-main { background: var(--sheet); backdrop-filter: blur(14px); border-radius: 14px; border: 1px solid var(--hair); padding: 32px 40px; overflow: hidden; }
+  .set-main h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .set-main .lead { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  .set-row { padding: 16px 0; display: flex; align-items: center; gap: 20px; border-top: 1px solid var(--hair); }
+  .set-row:first-of-type { border-top: 0; }
+  .set-row .text { flex: 1; max-width: 540px; }
+  .set-row .text .t { font-size: 14px; font-weight: 650; }
+  .set-row .text .d { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .set-row .ctl { flex: none; }
+  .toggle { width: 42px; height: 24px; background: var(--accent-grad); border-radius: 999px; position: relative; }
+  .toggle .k { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transform: translateX(18px); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .toggle.off { background: var(--subtle); }
+  .toggle.off .k { transform: translateX(0); }
+  .seg { display: flex; background: var(--subtle); border-radius: 10px; padding: 3px; font-size: 12px; }
+  .seg .s { padding: 5px 14px; border-radius: 7px; color: var(--muted); font-weight: 500; }
+  .seg .s.active { background: var(--card); color: var(--text); box-shadow: var(--shadow-sm); font-weight: 650; }
+  .picker { padding: 7px 12px; background: var(--card); border-radius: 10px; font-size: 12.5px; display: flex; align-items: center; gap: 10px; min-width: 190px; justify-content: space-between; box-shadow: var(--shadow-sm); border: 1px solid var(--hair); font-weight: 500; }
+
+  /* ---------- Translucent scenario ---------- */
+  .trans-page { position: relative; width: 1440px; height: 900px; overflow: hidden; }
+  .trans-page .wp { position: absolute; inset: 0; background: linear-gradient(135deg, #ffb37a 0%, #ff80b2 30%, #8e63ff 70%, #2b47c7 100%); }
+  :root[data-t="dark"] .trans-page .wp { background: linear-gradient(135deg, #1a0f3a 0%, #2d1b55 35%, #3a2a66 70%, #0d1430 100%); }
+  .trans-win { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1240px; height: 780px;
+               border-radius: 18px; background: color-mix(in oklab, var(--canvas) 60%, transparent); backdrop-filter: blur(30px);
+               box-shadow: 0 28px 80px rgba(20,10,40,.35); border: 1px solid rgba(255,255,255,.3); overflow: hidden; }
+  :root[data-t="dark"] .trans-win { border-color: rgba(255,255,255,.08); }
+  .trans-win .side, .trans-win .set-nav, .trans-win .set-main, .trans-win .thread-head { background: color-mix(in oklab, var(--card) 60%, transparent); }
+
+</style>
+</head>
+<body>
+<main id="root"></main>
+
+<script src="shared/data.js"></script>
+<script src="shared/icons.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const S = q.get("s") || "main";
+const T = q.get("t") || "light";
+document.documentElement.dataset.t = T;
+document.documentElement.dataset.v = "b";
+
+const D = window.RUNO;
+const col = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const colAccent = () => col("--accent");
+const colMuted = () => col("--muted");
+const colAmber = () => col("--amber");
+const colGreen = () => col("--green");
+const colFaint = () => col("--faint");
+const colText2 = () => col("--text2");
+
+const glyph = st => {
+  if (st === "needs") return DOT(colAmber());
+  if (st === "working") return SPIN(colAccent());
+  if (st === "watching") return `<span style="width:10px;height:10px;border-radius:50%;border:1.5px solid ${colMuted()};display:inline-block"></span>`;
+  if (st === "waiting") return `<span style="width:10px;height:10px;border-radius:50%;border:1.5px dashed ${colMuted()};display:inline-block"></span>`;
+  if (st === "done") return ICONS.check(colGreen());
+  return "";
+};
+
+// ---------- Window ----------
+function renderWindow() {
+  return `<div class="win">
+    ${renderChrome()}
+    <div class="body">
+      ${renderSidebar()}
+      <section class="chat-col">
+        ${renderThreadHead()}
+        <div class="scroll">${renderChat()}</div>
+        ${renderComposer()}
+      </section>
+    </div>
+    ${renderStatus()}
+  </div>`;
+}
+
+function renderChrome() {
+  return `<div class="chrome">
+    <div class="traffic"><span class="t r"></span><span class="t y"></span><span class="t g"></span></div>
+    <div class="pill-bar">
+      <div class="bar">
+        ${ICONS.folder(colText2(), 13)}<span style="font-weight:650;color:var(--text)">runo-lab</span>
+        <span style="color:var(--faint)">·</span>
+        <span>Full UI redesign mockups</span>
+      </div>
+    </div>
+    <div class="right">
+      <span class="mini">${AGENT_MARK("claude", 11)}<span>Claude · Opus</span><span class="num" style="color:var(--muted)">8m</span></span>
+      <span class="mini"><span style="width:12px;height:12px;border-radius:50%;background:conic-gradient(var(--accent) 72%, var(--subtle) 0)"></span><span class="num">72%</span></span>
+      <span class="mini">${ICONS.arcade(colMuted(), 13)}</span>
+      <span class="mini">${ICONS.settings(colMuted(), 13)}</span>
+    </div>
+  </div>`;
+}
+
+function renderStatus() {
+  return `<div class="status">
+    <span class="pill num">60 fps</span>
+    <span class="pill">runo-lab · 10 threads · 11 done today</span>
+    <span class="pill" style="display:flex;align-items:center;gap:5px">${ICONS.branch(colMuted(), 10)}<span>runo/full-ui-redesign-mockups</span></span>
+    <span style="margin-left:auto" class="pill">Claude · 72% · resets in 1h 44m</span>
+  </div>`;
+}
+
+function renderSidebar() {
+  const groups = { needs: [], working: [], watching: [], waiting: [] };
+  D.THREADS.forEach(t => groups[t.st].push(t));
+  const labels = { needs: "Needs you", working: "Working", watching: "Watching CI", waiting: "Waiting" };
+  let threads = "";
+  for (const key of ["needs", "working", "watching", "waiting"]) {
+    if (!groups[key].length) continue;
+    threads += `<div class="group-head">${labels[key]}<span class="n num">· ${groups[key].length}</span></div>`;
+    threads += groups[key].map(rowB).join("");
+  }
+  threads += `<div class="fold"><span class="st">${ICONS.check(colGreen(), 11)}</span><span class="lbl">${D.DONE_N} done</span>${ICONS.chevR(colFaint(), 10)}</div>`;
+
+  const sess = D.OWN_SESSIONS.map(s => `
+    <div class="srow">
+      <span class="av" style="background:${D.AGENTS[s.ag].color}22;color:${D.AGENTS[s.ag].color}">${D.AGENTS[s.ag].mark}
+        <span class="stx"><i style="background:${D.AGENTS[s.ag].color}"></i></span></span>
+      <div class="body"><div class="ttl">${s.title}</div><div class="sub">${s.sub}</div></div>
+      <div class="rt"><div class="num">${s.when}</div>${s.diff ? `<div style="margin-top:2px">${DIFF(s.diff[0], s.diff[1], colGreen(), "var(--red)")}</div>` : ""}</div>
+    </div>`).join("");
+
+  return `<aside class="side">
+    <div class="search">${ICONS.search(colMuted(), 13)}<span>Search sessions</span><span class="kbd">⌘K</span></div>
+    <div class="proj">${ICONS.chevD(colMuted(), 11)}${ICONS.folder(colText2(), 14)}<span>runo-lab</span><span class="n num">6</span></div>
+    ${crewCard()}
+    ${threads}
+    <div class="hair-line"></div>
+    <div class="sect-head"><span>Sessions</span><span>${ICONS.plus(colFaint(), 13)}</span></div>
+    ${sess}
+    <div style="flex:1"></div>
+    <div class="hair-line"></div>
+    <div class="proj" style="color:var(--muted);font-weight:500">${ICONS.chevR(colMuted(), 11)}${ICONS.folder(colMuted(), 14)}<span>gpui-kit</span><span class="n num">3</span></div>
+    <div class="proj" style="color:var(--muted);font-weight:500">${ICONS.chevR(colMuted(), 11)}${ICONS.folder(colMuted(), 14)}<span>deltalark.dev</span><span class="n num">1</span></div>
+  </aside>`;
+}
+
+function crewCard() {
+  return `<div class="crew-card">
+    <span class="chip">${ICONS.crew("#fff", 13)}</span>
+    <span class="label">Crew</span>
+    <span class="pill">1 needs you</span>
+  </div>`;
+}
+
+function rowB(t) {
+  const ageCls = t.st === "working" ? "live" : t.st === "needs" ? "amber" : "";
+  if (t.sel) {
+    return `<div class="trow sel"><span class="st">${glyph(t.st)}</span>
+      <span class="ttl">${t.title}</span><span class="age ${ageCls} num">${t.age}</span>
+      <div class="l2">${AGENT_MARK(t.ag, 11)}<span class="mono">${t.br}</span><span class="chip">${t.size}</span></div>
+    </div>`;
+  }
+  return `<div class="trow ${t.unread ? "unread" : ""}"><span class="st">${glyph(t.st)}</span>
+    <span class="ttl">${t.title}</span><span class="age ${ageCls} num">${t.age}</span></div>`;
+}
+
+function renderThreadHead() {
+  const sel = D.THREADS.find(t => t.sel);
+  return `<div class="thread-head">
+    <span>${AGENT_MARK(sel.ag, 14)}</span>
+    <span class="ttl">${sel.title}</span>
+    <span class="meta">Claude Code · Opus · ${ICONS.branch(colMuted(), 11)} runo/full-ui-redesign-mockups</span>
+    <div class="right">
+      <span class="tab active">Chat</span>
+      <span class="tab">Steps</span>
+      <span class="tab">Checks</span>
+      <span class="tab">Diff</span>
+    </div>
+  </div>`;
+}
+
+function renderChat() {
+  const c = D.CHAT;
+  const from = `<div class="from-chip"><span class="d"></span>From thread · ${c.fromChip.thread} · ${c.fromChip.status}</div>`;
+  const user = c.turns[0];
+  const agent = c.turns[1];
+  const userHtml = `<div class="bubble user">
+    <div class="who"><b>You</b><span>· 9:14 PM</span></div>
+    <div class="text">${user.text}</div>
+    ${user.image ? '<div class="att-img img"></div>' : ""}
+  </div>`;
+  const bodyMd = agent.body.map(x => {
+    if (typeof x === "string") return `<p>${x.replace(/`([^`]+)`/g, "<code>$1</code>")}</p>`;
+    if (x.kind === "list") return `<ul>${x.items.map(i => `<li>${i.replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`).join("")}</ul>`;
+    return "";
+  }).join("");
+  const agentHtml = `<div class="bubble agent">
+    <div class="who">${AGENT_MARK(agent.ag, 13)}<b>Claude Code</b><span>· 9:14 PM · thinking: Opus</span></div>
+    <div class="text md">
+      <h3>${agent.heading}</h3>
+      ${bodyMd}
+    </div>
+  </div>`;
+  const steps = agent.steps.map(s => `<div class="step ${s.state}"><span class="st">${s.state === "done" ? ICONS.check(colGreen(), 11) : SPIN(colAccent())}</span><span class="lbl">${s.label}</span></div>`).join("");
+  const stepsCard = `<div class="steps-card"><div class="st-hdr">Steps · in Edit alerts.rs</div>${steps}</div>`;
+  const work = `<div class="work-pill"><span class="shim"></span><span>Working · ${agent.working.label} · <span class="num">${agent.working.secs}s</span></span></div>`;
+  return from + userHtml + agentHtml + stepsCard + work;
+}
+
+function renderComposer() {
+  const c = D.CHAT.composer;
+  const modes = c.modes.map(m => `<span class="m ${m === c.mode ? "active" : ""}">${m}</span>`).join("");
+  return `<div class="composer">
+    <div class="float">
+      <div class="input">${c.placeholder}<span class="caret"></span></div>
+      <div class="foot">
+        <div class="mode">${modes}</div>
+        <div class="attach">${ICONS.attach(colText2(), 13)}<span>Attach</span></div>
+        <div class="spacer"></div>
+        <div class="send">${ICONS.send("#fff", 13)}<span>Send</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- Panels ----------
+function renderPanels() {
+  return `<div class="panels-page">
+    <div class="label">Panels · Peek · Menu bar · Assistant</div>
+    ${renderPeek()}
+    ${renderMenubar()}
+    ${renderAssistant()}
+  </div>`;
+}
+
+function renderPeek() {
+  const p = D.PEEK;
+  const turns = p.turns.map(t => `
+    <div class="peek-msg">
+      <div class="who">${t.who === "crew" ? ICONS.crew(colMuted(), 11) : AGENT_MARK(t.ag || "claude", 11)}<b>${t.who === "crew" ? "Crew" : "Claude Code"}</b></div>
+      <div class="text">${t.text}</div>
+    </div>`).join("");
+  return `<div class="panel peek">
+    <div class="ph">Thread peek</div>
+    <div class="peek-top">
+      <span class="back">${ICONS.chevL(colText2(), 11)}<span>Threads</span></span>
+      <span class="ttl">${p.title}</span>
+      <span class="maxi">${ICONS.maxi(colText2(), 11)}<span>Open in main</span></span>
+    </div>
+    <div class="peek-body">
+      <div class="decision">${DOT(colAmber())}<span>${p.decision}: ${p.question}</span></div>
+      ${turns}
+    </div>
+    <div class="peek-foot">
+      <div class="wrap"><span>Answer the question\u2026</span><span class="send">${ICONS.send("#fff", 11)}</span></div>
+    </div>
+  </div>`;
+}
+
+function renderMenubar() {
+  const m = D.MENUBAR;
+  const tiles = m.tiles.map(t => `<div class="mb-tile ${t.tone === "blue" ? "b" : t.tone === "amber" ? "a" : "g"}"><div class="n num">${t.n}</div><div class="l">${t.label}</div></div>`).join("");
+  const sections = m.sections.map(sec => {
+    const rows = sec.rows.map(r => {
+      if (r.kind === "approval") {
+        return `<div class="mb-row">
+          <div class="meta">${AGENT_MARK(r.agent, 11)} ${r.project} · ${r.thread}</div>
+          <div class="ttl">${r.ask}</div>
+          <div class="cmd">${r.code}</div>
+          <div class="acts"><span class="btn p">Allow</span><span class="btn s">Always</span><span class="btn g">Deny</span></div>
+        </div>`;
+      }
+      if (r.kind === "session") {
+        return `<div class="mb-row sess">
+          <span>${SPIN(colAccent())}</span>
+          <div class="body"><div class="ttl">${r.thread}</div><div class="sub">${r.project} · ${r.step}</div></div>
+          <div class="t num">${r.t}</div>
+        </div>`;
+      }
+      if (r.kind === "ci") {
+        return `<div class="mb-row sess">
+          <span>${RING(colMuted())}</span>
+          <div class="body"><div class="ttl">${r.thread}</div><div class="sub">#${r.pr} · ${r.phase}</div></div>
+          <div class="t num">${r.t}</div>
+        </div>`;
+      }
+    }).join("");
+    return `<div class="mb-sect">${sec.title}</div>${rows}`;
+  }).join("");
+
+  return `<div class="panel menubar">
+    <div class="ph">Menu bar panel</div>
+    <div class="mb-tabs">${m.tabs.map(t => `<span class="tab ${t === m.active ? "active" : ""}">${t}</span>`).join("")}</div>
+    <div class="mb-tiles">${tiles}</div>
+    ${sections}
+    <div style="flex:1"></div>
+    <div class="mb-input"><div class="f">${m.input}</div><div class="send">${ICONS.send("#fff", 13)}</div></div>
+  </div>`;
+}
+
+function renderAssistant() {
+  const a = D.ASSISTANT;
+  const starters = a.starters.map(s => `<div class="starter"><span class="d">●</span><span>${s}</span></div>`).join("");
+  return `<div class="panel assist">
+    <div class="ph">Assistant panel</div>
+    <div class="assist-top">
+      <span class="mk">?</span>
+      <div class="body"><div class="ttl">${a.heading}</div><div class="sub">${a.sub}</div></div>
+    </div>
+    <div class="assist-search">${ICONS.search(colMuted(), 13)}<span>Ask Runo, or search guides\u2026</span></div>
+    <div class="starter-head">Try asking</div>
+    ${starters}
+  </div>`;
+}
+
+// ---------- Arcade ----------
+function renderArcade() {
+  const a = D.ARCADE;
+  const games = ["Spark", ...a.others].map(g => `<div class="g ${g === a.game ? "active" : ""}"><span>${g}</span><span class="s">best <span class="num">${g === a.game ? a.best : "—"}</span></span></div>`).join("");
+  return `<div class="arcade-page">
+    ${renderBaseWindow()}
+    <div class="dim"></div>
+    <div class="arcade-modal">
+      <div class="arcade-head">
+        <span class="mk">${ICONS.arcade("#fff", 16)}</span>
+        <span class="ttl">Arcade</span>
+        <span class="tags">${a.game} · ${a.tagline} · ${a.hint}</span>
+        <span class="close">✕</span>
+      </div>
+      <div class="arcade-main">
+        <div class="arcade-nav">${games}</div>
+        <div class="arcade-field">
+          <div class="score-lb"><span><span class="k">Score</span> <span class="num">${a.score}</span></span><span><span class="k">Best</span> <span class="num">${a.best}</span></span></div>
+          <div class="scene">
+            <div class="ground"></div>
+            <div class="gate g1"></div>
+            <div class="gate g2"></div>
+            <div class="gate g3"></div>
+            <div class="spark">${ICONS.spark(colAccent(), 28)}</div>
+          </div>
+          <div class="gameover">
+            <h3>Game over</h3>
+            <div class="n num">${a.gameOver.score}</div>
+            <div class="best">best <span class="num">${a.gameOver.best}</span></div>
+            <div class="hint">${a.gameOver.leave}</div>
+            <div class="retry">${ICONS.spark("#fff", 12)}<span>${a.gameOver.retry}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBaseWindow() {
+  return `<div class="win" style="position:absolute;inset:0;border-radius:0;box-shadow:none;border:0;filter:blur(0.4px)">
+    ${renderChrome()}
+    <div class="body">${renderSidebar()}<section class="chat-col">${renderThreadHead()}<div class="scroll">${renderChat()}</div>${renderComposer()}</section></div>
+    ${renderStatus()}
+  </div>`;
+}
+
+// ---------- Settings ----------
+function renderSettings() {
+  const s = D.SETTINGS;
+  const nav = s.nav.map(n => `<div class="l ${n === s.active ? "active" : ""}">${n}</div>`).join("");
+  const rows = s.rows.map(r => {
+    let ctl = "";
+    if (r.control === "toggle") ctl = `<div class="toggle ${r.value === "On" ? "" : "off"}"><span class="k"></span></div>`;
+    else if (r.control === "segmented") ctl = `<div class="seg">${r.options.map(o => `<span class="s ${o === r.value ? "active" : ""}">${o}</span>`).join("")}</div>`;
+    else if (r.control === "picker") ctl = `<div class="picker"><span>${r.value}</span>${ICONS.chevD(colMuted(), 11)}</div>`;
+    return `<div class="set-row"><div class="text"><div class="t">${r.title}</div><div class="d">${r.desc}</div></div><div class="ctl">${ctl}</div></div>`;
+  }).join("");
+
+  return `<div class="win">
+    ${renderChrome()}
+    <div class="set-body">
+      <aside class="set-nav">
+        <div class="h">Settings</div>
+        ${nav}
+      </aside>
+      <section class="set-main">
+        <h1>Look</h1>
+        <p class="lead">How Runo looks on this Mac. Changes save as you make them.</p>
+        ${rows}
+      </section>
+    </div>
+    ${renderStatus()}
+  </div>`;
+}
+
+// ---------- Translucent ----------
+function renderTranslucent() {
+  return `<div class="trans-page">
+    <div class="wp"></div>
+    <div class="trans-win">
+      ${renderChrome()}
+      <div class="body">${renderSidebar()}<section class="chat-col">${renderThreadHead()}<div class="scroll">${renderChat()}</div>${renderComposer()}</section></div>
+      ${renderStatus()}
+    </div>
+  </div>`;
+}
+
+const root = document.getElementById("root");
+if (S === "main")          root.innerHTML = renderWindow();
+else if (S === "panels")    root.innerHTML = renderPanels();
+else if (S === "arcade")    root.innerHTML = renderArcade();
+else if (S === "settings")  root.innerHTML = renderSettings();
+else if (S === "translucent") root.innerHTML = renderTranslucent();
+</script>
+</body>
+</html>
