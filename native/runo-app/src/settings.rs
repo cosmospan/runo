@@ -274,6 +274,23 @@ pub struct AppSettings {
     pub run_in_background: bool,
     /// The person was told once that Runo kept running in the menu bar.
     pub background_told: bool,
+    /// Runo v2: the agent and model each bot runs on, by bot name ("builder"). A bot
+    /// that isn't here runs on `default_provider` with that agent's default model.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub bot_engines: HashMap<String, BotEngine>,
+    /// Runo v2: the agent that double-checks the crew's decisions. Best from another
+    /// vendor than the one that did the work; empty is no second check.
+    pub challenge_agent: String,
+}
+
+/// The engine under one of Runo v2's bots.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BotEngine {
+    /// The agent's id, as in `agent::PROVIDERS`; empty runs on the default agent.
+    pub agent: String,
+    /// Its model; empty is the agent's own default.
+    pub model: String,
 }
 
 /// `Name = command` lines; a line without `=` uses the command as its name.
@@ -379,6 +396,8 @@ impl Default for AppSettings {
             dock_badge: true,
             run_in_background: true,
             background_told: false,
+            bot_engines: HashMap::new(),
+            challenge_agent: String::new(),
         }
     }
 }

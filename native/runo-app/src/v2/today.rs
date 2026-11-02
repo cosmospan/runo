@@ -289,7 +289,16 @@ impl Shell {
                             .border_color(c(ui::LINE))
                             .text_size(px(13.))
                             .child(face)
-                            .child(format!("Goes to {}", target.name())),
+                            .child(format!(
+                                "Goes to {} · {}",
+                                target.name(),
+                                crate::agent::PROVIDERS[super::engine::engine(
+                                    cx.global::<crate::settings::AppSettings>(),
+                                    target
+                                )
+                                .0]
+                                    .name
+                            )),
                     )
                     .child(div().flex_1())
                     .child(
@@ -406,72 +415,76 @@ impl Shell {
             ))
             .shadow(ui::lift())
             .flex()
+            .flex_col()
             .p(px(18.))
-            .gap(px(8.))
-            .child(div().mt(px(-4.)).child(guard))
             .child(
                 div()
-                    .flex_1()
-                    .min_w_0()
                     .flex()
-                    .flex_col()
+                    .gap(px(8.))
+                    .child(div().flex_none().mt(px(-4.)).child(guard))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .flex()
-                            .gap(px(6.))
-                            .items_baseline()
-                            .text_size(px(13.))
+                            .flex_col()
                             .child(
                                 div()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Guard · Apple Pay"),
+                                    .flex()
+                                    .gap(px(6.))
+                                    .items_baseline()
+                                    .text_size(px(13.))
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child("Guard · Apple Pay"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(c(ui::MUTED))
+                                            .child(head),
+                                    ),
                             )
                             .child(
                                 div()
-                                    .text_size(px(12.))
-                                    .text_color(c(ui::MUTED))
-                                    .child(head),
+                                    .mt(px(10.))
+                                    .text_size(px(18.))
+                                    .line_height(px(25.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(quote),
                             ),
-                    )
-                    .child(
-                        div()
-                            .mt(px(10.))
-                            .text_size(px(18.))
-                            .line_height(px(25.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(quote),
-                    )
-                    .child(div().flex_1())
-                    .child(match answer {
-                        None => div()
-                            .flex()
-                            .gap(px(8.))
-                            .child(ui::solid("use-fix", "Use the fix").on_click(cx.listener(
-                                |this, _, _, cx| {
-                                    this.guard_answer = Some(true);
-                                    this.say("Guard landed the safe fix.");
-                                    cx.notify();
-                                },
-                            )))
-                            .child(ui::ghost("look-first", "Look first").on_click(cx.listener(
-                                |this, _, _, cx| {
-                                    this.guard_answer = Some(false);
-                                    cx.notify();
-                                },
-                            ))),
-                        Some(_) => {
-                            div()
-                                .flex()
-                                .gap(px(8.))
-                                .child(ui::ghost("undo-fix", "Undo").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.guard_answer = None;
-                                        cx.notify();
-                                    },
-                                )))
-                        }
-                    }),
+                    ),
             )
+            .child(div().flex_1())
+            .child(match answer {
+                None => div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(8.))
+                    .child(ui::solid("use-fix", "Use the fix").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.guard_answer = Some(true);
+                            this.say("Guard landed the safe fix.");
+                            cx.notify();
+                        },
+                    )))
+                    .child(ui::ghost("look-first", "Look first").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.guard_answer = Some(false);
+                            cx.notify();
+                        },
+                    ))),
+                Some(_) => div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(ui::ghost("undo-fix", "Undo").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.guard_answer = None;
+                            cx.notify();
+                        },
+                    ))),
+            })
     }
 
     fn working_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {

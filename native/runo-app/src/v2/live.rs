@@ -86,7 +86,10 @@ impl Shell {
                                         .border_color(c(ui::LINE))
                                         .bg(c(0xFFFFFF))
                                         .text_size(px(11.5))
-                                        .child("Claude Code"),
+                                        .child(super::engine::label(
+                                            cx.global::<crate::settings::AppSettings>(),
+                                            who,
+                                        )),
                                 ),
                         )
                         .child(
@@ -456,7 +459,8 @@ impl Shell {
                                 div()
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Ready for you in about 12 min"),
+                                    .whitespace_nowrap()
+                                    .child("Ready in about 12 min"),
                             )
                             .child(
                                 div()

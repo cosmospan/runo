@@ -87,7 +87,12 @@ impl Shell {
                                     .text_size(px(12.5))
                                     .text_color(c(ui::MUTED))
                                     .truncate()
-                                    .child(item.last),
+                                    .child(
+                                        self.chat_log[i]
+                                            .last()
+                                            .map(|m| SharedString::from(m.text.clone()))
+                                            .unwrap_or_else(|| item.last.into()),
+                                    ),
                             ),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -141,8 +146,12 @@ impl Shell {
                 .map(|m| self.bot(m, Mood::Idle, 64., Framing::Bust));
             div().flex().gap(px(4.)).children(row).into_any_element()
         } else {
-            self.bot(who, Mood::Signature, 118., Framing::Full)
-                .into_any_element()
+            let mood = if self.thinking(who) {
+                Mood::Thinking
+            } else {
+                Mood::Signature
+            };
+            self.bot(who, mood, 118., Framing::Full).into_any_element()
         };
         let (name, about) = if group {
             (
@@ -157,6 +166,10 @@ impl Shell {
                 ),
                 other => (other.name(), other.role()),
             }
+        };
+        let engine_label = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            super::engine::label(st, if group { Member::Builder } else { who })
         };
         let header = div()
             .flex_none()
@@ -193,6 +206,29 @@ impl Shell {
                             .child(about),
                     ),
             )
+            .child(
+                div()
+                    .id("chat-engine")
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(px(12.))
+                    .py(px(6.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(c(ui::LINE))
+                    .bg(c(0xFFFFFF))
+                    .text_size(px(12.5))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(0xF3F4F9)))
+                    .child(
+                        Icon::new(IconName::Cpu)
+                            .size(px(13.))
+                            .text_color(c(ui::MUTED)),
+                    )
+                    .child(engine_label)
+                    .on_click(cx.listener(|this, _, _, cx| this.go(super::Place::Engines, cx))),
+            )
             .when(who == Member::Explainer && !group, |d| {
                 d.child(
                     div()
@@ -227,7 +263,7 @@ impl Shell {
                             .flex_col()
                             .gap(px(10.))
                             .child(answer().child("Product photos got much bigger on Tuesday. Each one went from about 120 KB to 2 MB, so the checkout page now loads 18 MB instead of 1.6 MB. On phones that's about 4 extra seconds."))
-                            .child(size_chart(self.now()))
+                            .child(size_chart(self.entered.elapsed().as_secs_f64()))
                             .child(answer().child("The fix is to shrink photos when they're uploaded. Builder can do it in about 10 minutes, and nothing changes for your team."))
                             .child(self.handoff_buttons(cx)),
                     ),
@@ -271,19 +307,91 @@ impl Shell {
                     .child(answer().max_w(px(600.)).child(item.last)),
             );
         }
-        for (mine, text) in self.chat_extra.clone() {
-            if mine {
-                msgs = msgs.child(person("A", ui::INK, text));
+        let chat = self.chat_selected;
+        for said in self.chat_log[chat].clone() {
+            if said.mine {
+                msgs = msgs.child(person("A", ui::INK, said.text));
+            } else if said.note {
+                msgs = msgs.child(
+                    div()
+                        .pl(px(46.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .text_size(px(13.))
+                        .text_color(c(ui::MUTED))
+                        .child(
+                            Icon::new(IconName::TriangleAlert)
+                                .size(px(14.))
+                                .text_color(c(ui::AMBER)),
+                        )
+                        .child(div().max_w(px(560.)).child(said.text)),
+                );
             } else {
                 let face = self.avatar(who, 32.);
                 msgs = msgs.child(
-                    div()
-                        .flex()
-                        .gap(px(14.))
-                        .child(face)
-                        .child(answer().max_w(px(600.)).child(text)),
+                    div().flex().gap(px(14.)).child(face).child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(answer().max_w(px(600.)).child(said.text))
+                            .children(said.via.map(|v| {
+                                div()
+                                    .pl(px(4.))
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::FAINT))
+                                    .child(v)
+                            })),
+                    ),
                 );
             }
+        }
+        if self.asking.as_ref().is_some_and(|a| a.chat == chat) {
+            let face = self.avatar(who, 32.);
+            let t = self.now();
+            let mut dots = div().flex().gap(px(5.)).items_center().h(px(22.));
+            for i in 0..3 {
+                let p = runo_holo::anim::phase(t, 1.2, i as f64 * 0.16);
+                let lift = runo_holo::anim::keys(
+                    p,
+                    &[(0.0, 0.0), (0.3, -4.0), (0.6, 0.0), (1.0, 0.0)],
+                    runo_holo::anim::SOFT,
+                );
+                let op = runo_holo::anim::keys(
+                    p,
+                    &[(0.0, 0.4), (0.3, 1.0), (0.6, 0.4), (1.0, 0.4)],
+                    runo_holo::anim::SOFT,
+                );
+                dots = dots.child(
+                    div()
+                        .relative()
+                        .top(px(lift as f32))
+                        .size(px(7.))
+                        .rounded_full()
+                        .bg(c(ui::BLUE))
+                        .opacity(op as f32),
+                );
+            }
+            let secs = self
+                .asking
+                .as_ref()
+                .map(|a| a.started.elapsed().as_secs())
+                .unwrap_or(0);
+            msgs = msgs.child(
+                div()
+                    .flex()
+                    .gap(px(14.))
+                    .items_center()
+                    .child(face)
+                    .child(answer().child(dots))
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(c(ui::FAINT))
+                            .child(format!("reading the code · {secs}s")),
+                    ),
+            );
         }
 
         div()
@@ -443,9 +551,16 @@ fn size_chart(now: f64) -> impl IntoElement {
             .items_center()
             .gap(px(12.))
             .text_size(px(13.))
-            .child(div().w(px(72.)).text_color(c(ui::MUTED)).child(label))
             .child(
                 div()
+                    .flex_none()
+                    .w(px(72.))
+                    .text_color(c(ui::MUTED))
+                    .child(label),
+            )
+            .child(
+                div()
+                    .flex_none()
                     .w(px(380.) * frac * k)
                     .h(px(12.))
                     .rounded(px(4.))

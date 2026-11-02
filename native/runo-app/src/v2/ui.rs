@@ -18,6 +18,15 @@ pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
 pub const MONO: &str = "JetBrains Mono";
 
+/// The spacing scale every screen keeps to, in pixels.
+pub mod space {
+    pub const S: f32 = 8.;
+    pub const SM: f32 = 12.;
+    pub const M: f32 = 16.;
+    pub const L: f32 = 24.;
+    pub const XL: f32 = 32.;
+}
+
 pub fn c(hex: u32) -> Hsla {
     rgb(hex).into()
 }

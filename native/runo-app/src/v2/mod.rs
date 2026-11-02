@@ -11,6 +11,8 @@
 mod chat;
 mod crew;
 mod data;
+mod engine;
+mod engines;
 mod live;
 mod today;
 mod ui;
@@ -40,40 +42,80 @@ pub enum Place {
     Schedule,
     Rules,
     Live(Member),
+    Engines,
 }
 
-/// The crew's frames for the current tick, drawn once and shared by every
-/// place that shows the same bot at the same size.
+/// The crew's frames, drawn once a tick and shared by every place that shows the
+/// same bot at the same size. Small bots move less, so they get fewer ticks: a 24 px
+/// avatar redraws 10 times a second, a big one 30. A frame is kept until its bot's
+/// next tick, so a still bot (motion off) is drawn once and never again.
 struct Holos {
     frame: u64,
-    images: HashMap<(u64, u32, bool), Arc<RenderImage>>,
+    images: HashMap<(u64, u32, bool), Frame>,
     renderers: HashMap<u16, Renderer>,
+    /// The fastest rate any bot drawn last frame needed, so the clock can slow down
+    /// on screens with only small bots.
+    pub asked: u32,
+    /// Replaced frames, released at the start of the next window frame, once the
+    /// new ones have painted.
+    retired: Vec<Arc<RenderImage>>,
 }
 
-/// Frames a second for the crew. Smooth enough for the slow, soft motion and
-/// half the work of 60.
+struct Frame {
+    tick: u64,
+    used: u64,
+    image: Arc<RenderImage>,
+}
+
+/// Frames a second for a big bot. Smooth enough for the slow, soft motion and half
+/// the work of 60.
 const FPS: f64 = 30.0;
+
+/// Frames a second for a bot this many logical pixels tall.
+fn fps_for(size: f32) -> u32 {
+    if size >= 90.0 {
+        30
+    } else if size >= 40.0 {
+        15
+    } else {
+        10
+    }
+}
 
 impl Holos {
     fn new() -> Self {
         Holos {
-            frame: u64::MAX,
+            frame: 0,
             images: HashMap::new(),
             renderers: HashMap::new(),
+            asked: 0,
+            retired: Vec::new(),
         }
     }
 
-    /// Starts a tick: frames from the last tick are released from the GPU atlas.
-    fn begin(&mut self, frame: u64, window: &mut Window, cx: &mut App) {
-        if frame == self.frame {
-            return;
+    /// Starts a window frame: frames replaced or not shown last time are released
+    /// from the GPU atlas.
+    fn begin(&mut self, window: &mut Window, cx: &mut App) {
+        self.frame += 1;
+        let frame = self.frame;
+        self.asked = 0;
+        for old in self.retired.drain(..) {
+            cx.drop_image(old, Some(window));
         }
-        self.frame = frame;
-        for (_, image) in self.images.drain() {
-            cx.drop_image(image, Some(window));
+        let mut gone = Vec::new();
+        for (k, f) in self.images.iter() {
+            if f.used + 2 < frame {
+                gone.push(*k);
+            }
+        }
+        for k in gone {
+            if let Some(f) = self.images.remove(&k) {
+                cx.drop_image(f.image, Some(window));
+            }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn image(
         &mut self,
         key: u64,
@@ -82,17 +124,30 @@ impl Holos {
         framing: Framing,
         t: f64,
         scale: f32,
+        moving: bool,
     ) -> Arc<RenderImage> {
         let device = (logical * scale).round().clamp(8.0, 1024.0) as u16;
         let bust = framing == Framing::Bust;
-        if let Some(img) = self.images.get(&(key, device as u32, bust)) {
-            return img.clone();
+        let fps = fps_for(logical);
+        let tick = if moving { (t * fps as f64) as u64 } else { 0 };
+        if moving {
+            self.asked = self.asked.max(fps);
+        }
+        let frame = self.frame;
+        let slot = (key, device as u32, bust);
+        if let Some(f) = self.images.get_mut(&slot) {
+            f.used = frame;
+            if f.tick == tick {
+                return f.image.clone();
+            }
         }
         let r = self
             .renderers
             .entry(device)
             .or_insert_with(|| Renderer::new(device));
-        let premul = r.draw(look, t, framing, detail_for(logical as u32, framing));
+        // Draw at the tick's own time, so every size stays in step.
+        let at = if moving { tick as f64 / fps as f64 } else { t };
+        let premul = r.draw(look, at, framing, detail_for(logical as u32, framing));
         // Straight-alpha BGRA, as GPUI's image path expects.
         let mut px = Vec::with_capacity(premul.len());
         for p in premul.as_chunks::<4>().0 {
@@ -107,9 +162,64 @@ impl Holos {
             px.extend_from_slice(&[un(p[2]), un(p[1]), un(p[0]), a]);
         }
         let buf = image::RgbaImage::from_raw(device as u32, device as u32, px).expect("frame size");
-        let img = Arc::new(RenderImage::new(vec![image::Frame::new(buf)]));
-        self.images.insert((key, device as u32, bust), img.clone());
-        img
+        let image = Arc::new(RenderImage::new(vec![image::Frame::new(buf)]));
+        match self.images.get_mut(&slot) {
+            Some(f) => {
+                // The old frame stays in the atlas until this one has painted.
+                self.retired
+                    .push(std::mem::replace(&mut f.image, image.clone()));
+                f.tick = tick;
+            }
+            None => {
+                self.images.insert(
+                    slot,
+                    Frame {
+                        tick,
+                        used: frame,
+                        image: image.clone(),
+                    },
+                );
+            }
+        }
+        image
+    }
+}
+
+/// A line in a chat.
+#[derive(Clone)]
+pub(crate) struct Said {
+    pub mine: bool,
+    pub text: String,
+    /// Which engine answered, and how long it took.
+    pub via: Option<String>,
+    /// Runo speaking, not the bot: a problem or a hint.
+    pub note: bool,
+}
+
+impl Said {
+    fn mine(text: String) -> Self {
+        Said {
+            mine: true,
+            text,
+            via: None,
+            note: false,
+        }
+    }
+    fn bot(text: String, via: String) -> Self {
+        Said {
+            mine: false,
+            text,
+            via: Some(via),
+            note: false,
+        }
+    }
+    fn note(text: impl Into<String>) -> Self {
+        Said {
+            mine: false,
+            text: text.into(),
+            via: None,
+            note: true,
+        }
     }
 }
 
@@ -127,7 +237,10 @@ pub struct Shell {
     crew_filter: usize,
     chat_selected: usize,
     chat_input: Entity<InputState>,
-    chat_extra: Vec<(bool, String)>,
+    /// What was said in each chat this session, by chat index: (from the person, text).
+    chat_log: Vec<Vec<Said>>,
+    /// A question on its way to a bot's engine.
+    asking: Option<engine::Ask>,
     handed_to_builder: bool,
     live_tab: usize,
     live_input: Entity<InputState>,
@@ -136,6 +249,18 @@ pub struct Shell {
     /// The "Make a bot" card cycles through looks.
     maker_seed: u64,
     toast: Option<(SharedString, Instant)>,
+    /// Motion is on (Settings → Animations); off, the crew holds still.
+    motion: bool,
+    /// When the current place was opened, for its entrance.
+    entered: Instant,
+    /// Whether the window is in front; behind, the crew slows to save power.
+    active: Arc<std::sync::atomic::AtomicBool>,
+    /// Redraws a second the screen needs: 30 with a big bot or an entrance
+    /// playing, fewer with only small bots, a trickle when nothing moves.
+    rate: Arc<std::sync::atomic::AtomicU32>,
+    /// The last mouse move or key press. Left alone for a while, the crew keeps
+    /// moving at half the frame rate.
+    touched: Instant,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -164,12 +289,7 @@ impl Shell {
                     let text = input.read(cx).value().trim().to_string();
                     if !text.is_empty() {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.chat_extra.push((true, text));
-                        this.chat_extra.push((
-                            false,
-                            "Looking into it. I'll answer in plain words, with the numbers.".into(),
-                        ));
-                        cx.notify();
+                        this.ask(this.chat_selected, text, cx);
                     }
                 }
             }),
@@ -184,20 +304,36 @@ impl Shell {
                 }
             }),
         ];
-        // The crew's clock: one redraw per frame while the window is shown.
+        // The crew's clock: as many redraws as the screen needs while the window is
+        // in front (see `rate`), a few a second behind other windows.
+        let active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let rate = Arc::new(std::sync::atomic::AtomicU32::new(FPS as u32));
+        let (seen, wanted) = (active.clone(), rate.clone());
         let pump = cx.spawn(async move |this, cx| loop {
+            let front = seen.load(std::sync::atomic::Ordering::Relaxed);
+            let want = wanted
+                .load(std::sync::atomic::Ordering::Relaxed)
+                .clamp(2, FPS as u32);
+            let wait = if front {
+                1000.0 / want as f64
+            } else {
+                1000.0 / want.min(8) as f64
+            };
             cx.background_executor()
-                .timer(Duration::from_millis((1000.0 / FPS) as u64))
+                .timer(Duration::from_millis(wait as u64))
                 .await;
             if this.update(cx, |_, cx| cx.notify()).is_err() {
                 break;
             }
         });
+        // Learn which agents are installed and the models they offer.
+        crate::caps::refresh();
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("live") => Place::Live(Member::Builder),
             Ok("crew") => Place::Crew,
             Ok("chat") => Place::Chat,
             Ok("inbox") => Place::Inbox,
+            Ok("engines") => Place::Engines,
             _ => Place::Today,
         };
         Shell {
@@ -212,7 +348,8 @@ impl Shell {
             crew_filter: 0,
             chat_selected: 0,
             chat_input,
-            chat_extra: Vec::new(),
+            chat_log: (0..data::CHATS.len()).map(|_| Vec::new()).collect(),
+            asking: None,
             handed_to_builder: false,
             live_tab: 0,
             live_input,
@@ -220,6 +357,11 @@ impl Shell {
             live_paused: false,
             maker_seed: 0,
             toast: None,
+            entered: Instant::now(),
+            motion: true,
+            active,
+            rate,
+            touched: Instant::now(),
             _subs: subs,
             _pump: pump,
         }
@@ -230,8 +372,58 @@ impl Shell {
     }
 
     fn go(&mut self, place: Place, cx: &mut Context<Self>) {
-        self.place = place;
+        if self.place != place {
+            self.place = place;
+            self.entered = Instant::now();
+        }
         cx.notify();
+    }
+
+    /// Asks the bot behind chat `chat` for real, on its own engine.
+    fn ask(&mut self, chat: usize, text: String, cx: &mut Context<Self>) {
+        let who = data::CHATS[chat].who;
+        let history: Vec<(bool, String)> = self.chat_log[chat]
+            .iter()
+            .map(|m| (m.mine, m.text.clone()))
+            .collect();
+        self.chat_log[chat].push(Said::mine(text.clone()));
+        if self.asking.is_some() {
+            self.chat_log[chat].push(Said::note(
+                "One question at a time: this one waits until the last answer is in.",
+            ));
+            cx.notify();
+            return;
+        }
+        let st = cx.global::<crate::settings::AppSettings>();
+        match engine::Ask::start(st, who, chat, &text, &history) {
+            Ok(ask) => self.asking = Some(ask),
+            Err(why) => self.chat_log[chat].push(Said::note(why)),
+        }
+        cx.notify();
+    }
+
+    /// Whether `who` is answering a question right now.
+    fn thinking(&self, who: Member) -> bool {
+        self.asking.as_ref().is_some_and(|a| a.who == who)
+    }
+
+    /// Collects an answer that has arrived.
+    fn poll_ask(&mut self) {
+        let Some(ask) = &self.asking else { return };
+        if let Some(reply) = ask.poll() {
+            let (chat, engine) = (ask.chat, ask.engine.clone());
+            let secs = ask.started.elapsed().as_secs_f32();
+            self.chat_log[chat].push(match reply {
+                engine::Reply::Answer(text) if !text.is_empty() => {
+                    Said::bot(text, format!("{engine} · {secs:.0}s"))
+                }
+                engine::Reply::Answer(_) => {
+                    Said::note("The engine answered with nothing. Try asking again.")
+                }
+                engine::Reply::Failed(why) => Said::note(why),
+            });
+            self.asking = None;
+        }
     }
 
     fn say(&mut self, text: impl Into<SharedString>) {
@@ -240,6 +432,17 @@ impl Shell {
 
     /// A sentence from the Today box becomes a job for the bot its mode goes to.
     fn drop_job(&mut self, text: String, cx: &mut Context<Self>) {
+        // A question is answered for real, in a chat with Explainer.
+        if self.mode == Mode::Ask {
+            let chat = data::CHATS
+                .iter()
+                .position(|c| c.who == Member::Explainer && !c.group)
+                .unwrap_or(0);
+            self.chat_selected = chat;
+            self.go(Place::Chat, cx);
+            self.ask(chat, text, cx);
+            return;
+        }
         let bot = Member::for_mode(self.mode);
         let now = self.now();
         self.jobs.insert(
@@ -270,8 +473,11 @@ impl Shell {
     }
 
     fn look_img(&mut self, key: u64, look: &Look, size: f32, framing: Framing) -> Img {
-        let t = self.now();
-        let image = self.holos.image(key, look, size, framing, t, self.scale);
+        // With motion off, every bot holds one calm pose.
+        let t = if self.motion { self.now() } else { 2.0 };
+        let image = self
+            .holos
+            .image(key, look, size, framing, t, self.scale, self.motion);
         img(image).size(px(size)).flex_none()
     }
 
@@ -340,12 +546,15 @@ impl Shell {
                     .on_click(cx.listener(move |this, _, _, cx| this.go(p, cx))),
             );
         }
+        // The crew takes the rail's spare height and clips gracefully in short windows.
         let mut bots = div()
-            .flex_none()
+            .flex_1()
+            .min_h_0()
+            .overflow_hidden()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(4.));
+            .gap(px(2.));
         for who in [
             Member::Guard,
             Member::Builder,
@@ -369,7 +578,7 @@ impl Shell {
                     .id(("rail-bot", who.key() as usize))
                     .relative()
                     .flex_none()
-                    .size(px(44.))
+                    .size(px(42.))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -415,7 +624,8 @@ impl Shell {
             .flex()
             .flex_col()
             .items_center()
-            .pt(px(20.))
+            // On a Mac the window buttons sit in the top-left corner, over the rail.
+            .pt(px(if cfg!(target_os = "macos") { 46. } else { 20. }))
             .pb(px(16.))
             .gap(px(14.))
             .bg(c(ui::RAIL))
@@ -439,7 +649,29 @@ impl Shell {
             .child(icons)
             .child(div().w(px(32.)).h(px(1.)).bg(c(ui::LINE)))
             .child(bots)
-            .child(div().flex_1())
+            .child(
+                div()
+                    .id("nav-engines")
+                    .flex_none()
+                    .size(px(42.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(12.))
+                    .cursor_pointer()
+                    .when(place == Place::Engines, |d| {
+                        d.bg(c(0xFFFFFF)).shadow(ui::lift())
+                    })
+                    .hover(|s| s.bg(c(0xFFFFFF)))
+                    .child(Icon::new(IconName::Cpu).size(px(18.)).text_color(c(
+                        if place == Place::Engines {
+                            ui::INK
+                        } else {
+                            ui::MUTED
+                        },
+                    )))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+            )
             .child(
                 div()
                     .id("open-v1")
@@ -500,8 +732,23 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.scale = window.scale_factor();
-        let frame = (self.now() * FPS) as u64;
-        self.holos.begin(frame, window, cx);
+        // What the last frame needed sets the clock for the next one.
+        let busy = self.entered.elapsed() < Duration::from_millis(1000)
+            || self
+                .toast
+                .as_ref()
+                .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(3300));
+        let resting = self.touched.elapsed() > Duration::from_secs(45);
+        let want = if busy {
+            FPS as u32
+        } else if self.asking.is_some() {
+            self.holos.asked.max(10)
+        } else {
+            self.holos.asked.max(2)
+        };
+        let want = if resting { want.min(15) } else { want };
+        self.rate.store(want, std::sync::atomic::Ordering::Relaxed);
+        self.holos.begin(window, cx);
         let body = match self.place {
             Place::Today => self.today(cx),
             Place::Live(who) => self.live(who, cx),
@@ -517,7 +764,22 @@ impl Render for Shell {
                 "Jobs the crew runs on their own, like Keeper's night shift.",
             ),
             Place::Rules => self.soon("Rules", "The lines Guard keeps for you. Coming next."),
+            Place::Engines => self.engines(cx),
         };
+        // Each place eases in: a short fade and a lift of a few pixels.
+        let k = runo_holo::anim::spring(self.entered.elapsed().as_secs_f64(), 0.32) as f32;
+        let body = div()
+            .size_full()
+            .opacity(0.35 + 0.65 * k)
+            .relative()
+            .top(px(10. * (1. - k)))
+            .child(body);
+        self.poll_ask();
+        self.motion = cx.global::<crate::settings::AppSettings>().animations;
+        self.active.store(
+            window.is_window_active(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let toast = self
             .toast
             .clone()
@@ -549,6 +811,30 @@ impl Render for Shell {
             .size_full()
             .relative()
             .flex()
+            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, _| {
+                this.touched = Instant::now();
+            }))
+            .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, _| {
+                this.touched = Instant::now();
+            }))
+            // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places.
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                let m = &e.keystroke.modifiers;
+                if !(m.platform || m.control) || m.shift || m.alt {
+                    return;
+                }
+                let to = match e.keystroke.key.as_str() {
+                    "1" => Place::Today,
+                    "2" => Place::Live(Member::Builder),
+                    "3" => Place::Crew,
+                    "4" => Place::Chat,
+                    "5" => Place::Inbox,
+                    "6" => Place::Engines,
+                    _ => return,
+                };
+                this.go(to, cx);
+                cx.stop_propagation();
+            }))
             .font_family("Geist")
             .text_color(c(ui::INK))
             .bg(linear_gradient(
