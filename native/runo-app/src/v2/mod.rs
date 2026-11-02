@@ -75,13 +75,19 @@ struct Frame {
 const FPS: f64 = 30.0;
 
 /// Frames a second for a bot this many logical pixels tall.
-fn fps_for(size: f32) -> u32 {
-    if size >= 90.0 {
-        30
-    } else if size >= 40.0 {
-        15
-    } else {
-        8
+/// How often a bot of this size needs a new frame. A calm bubble drifts slowly,
+/// so it needs far fewer than one that is busy, celebrating or asking.
+fn fps_for(size: f32, pose: &Pose) -> u32 {
+    use runo_holo::Layout;
+    let lively = pose.sparks
+        || pose.ask
+        || pose.shine
+        || matches!(pose.layout, Layout::Think | Layout::Busy | Layout::Splash);
+    match (lively, size >= 90.0, size >= 40.0) {
+        (true, true, _) => 24,
+        (true, false, true) => 15,
+        (false, true, _) => 12,
+        _ => 8,
     }
 }
 
@@ -129,7 +135,7 @@ impl Holos {
     ) -> Arc<RenderImage> {
         let device = (logical * scale).round().clamp(8.0, 1024.0) as u16;
         let bust = framing == Framing::Bust;
-        let fps = fps_for(logical);
+        let fps = fps_for(logical, &pose);
         let tick = if moving { (t * fps as f64) as u64 } else { 0 };
         if moving {
             self.asked = self.asked.max(fps);
@@ -222,6 +228,8 @@ pub struct Shell {
     /// The last mouse move or key press. Left alone for a while, the crew keeps
     /// moving at half the frame rate.
     touched: Instant,
+    /// The bot under the pointer: it gets the light sweep.
+    hovered: Option<Member>,
     saved: Instant,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
@@ -329,6 +337,7 @@ impl Shell {
             active,
             rate,
             touched: Instant::now(),
+            hovered: None,
             saved: Instant::now(),
             _subs: subs,
             _pump: pump,
@@ -642,7 +651,21 @@ impl Shell {
 
     /// A bot drawn at `size` logical pixels, in `mood`.
     fn bot(&mut self, who: Member, mood: Mood, size: f32, framing: Framing) -> Img {
-        self.pose_img(who.bubble().pose(mood), size, framing)
+        let mut pose = who.bubble().pose(mood);
+        pose.shine |= self.hovered == Some(who);
+        self.pose_img(pose, size, framing)
+    }
+
+    fn hover_bot(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
+        let was = self.hovered;
+        if on {
+            self.hovered = Some(who);
+        } else if self.hovered == Some(who) {
+            self.hovered = None;
+        }
+        if was != self.hovered {
+            cx.notify();
+        }
     }
 
     fn pose_img(&mut self, pose: Pose, size: f32, framing: Framing) -> Img {
@@ -762,16 +785,16 @@ impl Shell {
             let on = place == Place::Chat(who)
                 || matches!(place, Place::Live(id) if self.store.job(id).is_some_and(|j| j.bot == who));
             let mood = self.mood(who);
-            let face = if mood == Mood::Signature {
-                self.avatar(who, 32.)
-            } else {
-                self.bot(who, mood, 32., Framing::Bust)
-            };
+            // Small and slow (a few frames a second), so the rail stays alive cheaply.
+            let face = self.bot(who, mood, 34., Framing::Bust);
             let (_, dot) = self.status_of(who);
             let busy = self.store.busy(who).map(|j| j.id);
             bots = bots.child(
                 div()
                     .id(("rail-bot", who.key() as usize))
+                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                        this.hover_bot(who, *on, cx);
+                    }))
                     .relative()
                     .flex_none()
                     .size(px(42.))
@@ -912,7 +935,8 @@ impl Render for Shell {
                 .toast
                 .as_ref()
                 .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(3600));
-        let resting = self.touched.elapsed() > Duration::from_secs(45);
+        // Nobody at the keyboard: the crew slows down, then nearly stops.
+        let idle = self.touched.elapsed();
         let working = self.asking.is_some() || !self.runners.is_empty();
         let want = if busy {
             FPS as u32
@@ -921,7 +945,13 @@ impl Render for Shell {
         } else {
             self.holos.asked.max(2)
         };
-        let want = if resting { want.min(15) } else { want };
+        let want = if idle > Duration::from_secs(120) {
+            want.min(4)
+        } else if idle > Duration::from_secs(20) {
+            want.min(8)
+        } else {
+            want
+        };
         self.rate.store(want, std::sync::atomic::Ordering::Relaxed);
         self.holos.begin(window, cx);
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
@@ -1037,7 +1067,12 @@ pub fn open_window(cx: &mut App) {
         app_id: Some("runo".into()),
         ..Default::default()
     };
-    let _ = gpui_kit::open_window(options, cx, |window, cx| {
+    let opened = gpui_kit::open_window(options, cx, |window, cx| {
         cx.new(|cx| Shell::new(window, cx))
     });
+    // Come to the front when opened, not behind whatever had focus.
+    if let Ok((handle, _)) = opened {
+        let _ = handle.update(cx, |_, window, _| window.activate_window());
+    }
+    cx.activate(true);
 }

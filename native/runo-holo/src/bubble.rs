@@ -124,6 +124,9 @@ pub struct Pose {
     pub sparks: bool,
     pub tick: bool,
     pub ask: bool,
+    /// The light sweep across the bubble: for hover and for moments worth
+    /// marking (a job done), not all the time.
+    pub shine: bool,
 }
 
 impl Bubble {
@@ -184,6 +187,7 @@ impl Bubble {
             sparks: false,
             tick: false,
             ask: false,
+            shine: false,
         };
         match mood {
             Mood::Signature => base,
@@ -213,6 +217,7 @@ impl Bubble {
                 sway: Sway::Pop,
                 sparks: true,
                 tick: true,
+                shine: true,
                 ..base
             },
             Mood::NeedsYou => Pose {
@@ -664,10 +669,10 @@ impl BubbleRenderer {
         let a = phase(t, 9.0, 0.0) * std::f64::consts::TAU;
         // The diagonal (1, 1) turned by the gradient's rotation.
         let turn = (((a.cos() - a.sin()) as f32), ((a.sin() + a.cos()) as f32));
-        // The shine: a soft stripe sweeping across between 40 % and 80 % of 5 s.
+        // The shine: a soft stripe sweeping across, then a pause, every 2.4 s.
         let sh = keys(
-            phase(t, 5.0, 0.0),
-            &[(0.0, 0.0), (0.4, 0.0), (0.8, 300.0), (1.0, 300.0)],
+            phase(t, 2.4, 0.0),
+            &[(0.0, 0.0), (0.55, 300.0), (1.0, 300.0)],
             SOFT,
         ) as f32;
         let (sin24, cos24) = (24f32.to_radians().sin(), 24f32.to_radians().cos());
@@ -773,7 +778,7 @@ impl BubbleRenderer {
                             let s = c + f[i] * q[3] - c * f[i];
                             q[i] = c + (s - c) * 0.22;
                         }
-                        if !small {
+                        if pose.shine {
                             // Stripe: x' along the rotated axis.
                             let rx = (bx - 0.0) * cos24 + (by - 100.0) * sin24;
                             let center = -45.0 + sh;
@@ -1246,5 +1251,22 @@ mod tests {
         let mut r = BubbleRenderer::new(64);
         let a = r.draw(&b, 0.0, Framing::Full).to_vec();
         assert_ne!(a, r.draw(&b, 0.5, Framing::Full));
+    }
+
+    #[test]
+    fn shines_only_when_asked() {
+        let calm = Bot::Builder.bubble().pose(Mood::Idle);
+        assert!(!calm.shine);
+        assert!(Bot::Builder.bubble().pose(Mood::Done).shine);
+        let lit = Pose {
+            shine: true,
+            ..calm
+        };
+        for px in [34, 96] {
+            let mut r = BubbleRenderer::new(px);
+            // Mid-sweep, the stripe crosses the bubble.
+            let a = r.draw(&calm, 0.66, Framing::Full).to_vec();
+            assert_ne!(a, r.draw(&lit, 0.66, Framing::Full));
+        }
     }
 }

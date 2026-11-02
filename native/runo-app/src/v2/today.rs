@@ -16,6 +16,10 @@ use super::{Place, Shell};
 /// The person's first name, from the account they're signed in to.
 fn first_name() -> Option<String> {
     let raw = std::env::var("RUNO_NAME")
+        .ok()
+        .filter(|n| !n.trim().is_empty())
+        .or_else(full_name)
+        .ok_or(std::env::VarError::NotPresent)
         .or_else(|_| std::env::var("USER"))
         .or_else(|_| std::env::var("USERNAME"))
         .ok()?;
@@ -30,9 +34,29 @@ fn first_name() -> Option<String> {
     Some(cs.next()?.to_uppercase().chain(cs).collect())
 }
 
+/// The account's full name ("Anish T R"), which reads better than a login
+/// name like "anishtr".
+fn full_name() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    let out = std::process::Command::new("id").arg("-F").output().ok()?;
+    #[cfg(not(target_os = "macos"))]
+    let out = {
+        let user = std::env::var("USER").ok()?;
+        std::process::Command::new("getent")
+            .args(["passwd", &user])
+            .output()
+            .ok()?
+    };
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    #[cfg(not(target_os = "macos"))]
+    let text = text.split(':').nth(4)?.split(',').next()?.to_string();
+    (!text.is_empty()).then_some(text)
+}
+
 fn greeting() -> String {
     use chrono::Timelike;
     let part = match chrono::Local::now().hour() {
+        0..=4 => "Working late",
         5..=11 => "Good morning",
         12..=17 => "Good afternoon",
         _ => "Good evening",
@@ -80,6 +104,9 @@ impl Shell {
             row = row.child(
                 div()
                     .id(("crew-top", who.key() as usize))
+                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                        this.hover_bot(who, *on, cx);
+                    }))
                     .relative()
                     .w(px(size))
                     .flex()

@@ -106,6 +106,9 @@ impl Shell {
             .unwrap_or(Mode::Ask);
         div()
             .id(("crew-card", who.key() as usize))
+            .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                this.hover_bot(who, *on, cx);
+            }))
             .flex_grow(1.)
             .flex_basis(px(340.))
             .max_w(px(520.))
