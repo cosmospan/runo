@@ -71,11 +71,23 @@ impl Shell {
             );
         }
         let filter = self.history_filter;
+        let query = self.history_input.read(cx).value().to_lowercase();
         let jobs: Vec<Job> = self
             .store
             .jobs
             .iter()
             .rev()
+            .filter(|j| {
+                let hay = format!(
+                    "{} {} {} {}",
+                    j.title,
+                    j.bot.name(),
+                    j.folder.name,
+                    j.mode.label()
+                )
+                .to_lowercase();
+                query.split_whitespace().all(|w| hay.contains(w))
+            })
             .filter(|j| match filter {
                 1 => j.status == Status::Running,
                 2 => j.status == Status::Done,
@@ -93,7 +105,11 @@ impl Shell {
                 .py(px(20.))
                 .text_size(px(13.))
                 .text_color(c(ui::FAINT))
-                .child("Nothing here.")
+                .child(if query.trim().is_empty() {
+                    "Nothing here.".to_string()
+                } else {
+                    format!("No jobs match \u{201c}{}\u{201d}.", query.trim())
+                })
                 .into_any_element()
         } else {
             self.job_list(&jobs, cx).into_any_element()
@@ -105,7 +121,39 @@ impl Shell {
                 if total == 1 { "job" } else { "jobs" }
             ),
         )
-        .child(tabs)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(14.))
+                .child(tabs)
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .w(px(300.))
+                        .h(px(36.))
+                        .px(px(12.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .rounded(px(12.))
+                        .bg(c(0xFFFFFF))
+                        .border_1()
+                        .border_color(c(ui::LINE))
+                        .child(
+                            gpui_kit::component::Icon::new(gpui_kit::assets::IconName::Search)
+                                .size(px(14.))
+                                .text_color(c(ui::FAINT)),
+                        )
+                        .child(
+                            div().flex_1().text_size(px(13.)).child(
+                                gpui_kit::component::input::Input::new(&self.history_input)
+                                    .appearance(false)
+                                    .bordered(false),
+                            ),
+                        ),
+                ),
+        )
         .child(list)
         .into_any_element()
     }
@@ -133,6 +181,7 @@ impl Shell {
                     })
                     .unwrap_or_default(),
             };
+            let k = self.stagger(n + 1);
             list = list
                 .when(n > 0, |d| {
                     d.child(div().mx(px(14.)).h(px(1.)).bg(c(ui::LINE)))
@@ -203,7 +252,10 @@ impl Shell {
                                     format!("{} · {} · {when}", j.bot.name(), j.folder.name),
                                 )),
                         )
-                        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+                        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
+                        .opacity(k)
+                        .relative()
+                        .top(px(8. * (1. - k))),
                 );
         }
         list

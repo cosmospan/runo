@@ -16,6 +16,7 @@ mod engines;
 mod history;
 mod jobs;
 mod live;
+mod palette;
 mod store;
 mod today;
 mod ui;
@@ -33,7 +34,7 @@ use runo_holo::{BubbleRenderer, Framing, Mood, Pose};
 
 use data::{Member, Mode};
 use store::{Said, Status, Store};
-use ui::c;
+use ui::{c, ca};
 
 /// Where the person is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -230,9 +231,55 @@ pub struct Shell {
     touched: Instant,
     /// The bot under the pointer: it gets the light sweep.
     hovered: Option<Member>,
+    hover_at: Instant,
+    /// The rail bot under the pointer, which shows its card.
+    rail_hover: Option<Member>,
+    /// The command palette (⌘K), its box, the picked row and when it opened.
+    palette: bool,
+    /// The window's own focus, so shortcuts work before any box is clicked.
+    focus: FocusHandle,
+    /// When focus was last moved to a box on purpose.
+    focus_moved: Instant,
+    palette_input: Entity<InputState>,
+    /// History's search box.
+    history_input: Entity<InputState>,
+    palette_sel: usize,
+    palette_at: Instant,
+    /// Where the person has been, newest last, for Back (⌘[).
+    trail: Vec<Place>,
+    /// The rail's highlight glides between items: from, to, and since when.
+    nav_from: f32,
+    nav_to: f32,
+    nav_at: Instant,
+    /// Progress bars' shown values, by job, so they glide.
+    bars: HashMap<u64, f32>,
+    /// Today's mode tabs: the highlight glides from one to the next.
+    mode_from: f32,
+    mode_at: Instant,
+    /// The Inbox count last frame, and when it last went up, for the badge's pop.
+    inbox_seen: usize,
+    inbox_at: Instant,
+    /// When the newest chat line arrived, so it can slide in.
+    chat_at: Instant,
     saved: Instant,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
+}
+
+/// Width of one of Today's mode tabs plus the gap after it.
+const MODE_STEP: f32 = 66.;
+
+/// The rail's place for each part of the app, as a y offset of its highlight.
+fn nav_slot(place: Place) -> Option<f32> {
+    let i = match place {
+        Place::Today => 0,
+        Place::Inbox => 1,
+        Place::History | Place::Live(_) => 2,
+        Place::Chat(_) => 3,
+        Place::Crew => 4,
+        Place::Engines => return None,
+    };
+    Some(i as f32 * 46.)
 }
 
 impl Shell {
@@ -247,8 +294,29 @@ impl Shell {
         let chat_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the code…"));
         let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
+        let palette_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Jump to a place, a bot, a job or a folder…")
+        });
+        let focus = cx.focus_handle();
+        focus.focus(window, cx);
+        let history_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search jobs, bots, folders…"));
         let subs = vec![
+            cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
+            cx.subscribe_in(&palette_input, window, |this, _, event, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.palette_sel = 0;
+                    cx.notify();
+                }
+            }),
             cx.subscribe_in(&composer, window, |this, input, event, window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
                 if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
                     let text = input.read(cx).value().trim().to_string();
                     input.update(cx, |i, cx| i.set_value("", window, cx));
@@ -338,6 +406,25 @@ impl Shell {
             rate,
             touched: Instant::now(),
             hovered: None,
+            hover_at: Instant::now(),
+            rail_hover: None,
+            palette: false,
+            focus,
+            focus_moved: Instant::now(),
+            palette_input,
+            history_input,
+            palette_sel: 0,
+            palette_at: Instant::now(),
+            trail: Vec::new(),
+            nav_from: nav_slot(start).unwrap_or(0.),
+            nav_to: nav_slot(start).unwrap_or(0.),
+            nav_at: Instant::now(),
+            bars: HashMap::new(),
+            mode_from: MODE_STEP,
+            mode_at: Instant::now(),
+            inbox_seen: usize::MAX,
+            inbox_at: Instant::now(),
+            chat_at: Instant::now(),
             saved: Instant::now(),
             _subs: subs,
             _pump: pump,
@@ -350,10 +437,85 @@ impl Shell {
 
     fn go(&mut self, place: Place, cx: &mut Context<Self>) {
         if self.place != place {
+            self.trail.push(self.place);
+            if self.trail.len() > 40 {
+                self.trail.remove(0);
+            }
+            self.arrive(place);
+        }
+        self.visit(place, cx);
+    }
+
+    /// Back to the place before this one.
+    fn back(&mut self, cx: &mut Context<Self>) {
+        while let Some(p) = self.trail.pop() {
+            // Skip jobs that are gone and repeats of where we are.
+            let ok = match p {
+                Place::Live(id) => self.store.job(id).is_some(),
+                _ => true,
+            };
+            if ok && p != self.place {
+                self.arrive(p);
+                self.visit(p, cx);
+                return;
+            }
+        }
+    }
+
+    /// Switches place and starts its entrance and the rail's glide.
+    fn arrive(&mut self, place: Place) {
+        {
+            if let Some(to) = nav_slot(place) {
+                let now = self.nav_y();
+                self.nav_from = if nav_slot(self.place).is_some() {
+                    now
+                } else {
+                    to
+                };
+                self.nav_to = to;
+                self.nav_at = Instant::now();
+            }
             self.place = place;
             self.entered = Instant::now();
             self.folder_menu = false;
         }
+    }
+
+    /// Where Today's mode highlight is now, in pixels from the first tab.
+    fn mode_x(&self) -> f32 {
+        let to = Mode::ALL.iter().position(|m| *m == self.mode).unwrap_or(0) as f32 * MODE_STEP;
+        let k = runo_holo::anim::spring(self.mode_at.elapsed().as_secs_f64(), 0.3) as f32;
+        self.mode_from + (to - self.mode_from) * k
+    }
+
+    /// How far item `i` of the current place has eased in, 0 → 1; each item
+    /// starts a beat after the one before.
+    fn stagger(&self, i: usize) -> f32 {
+        if !self.motion {
+            return 1.0;
+        }
+        let t = self.entered.elapsed().as_secs_f64() - 0.045 * i.min(12) as f64;
+        runo_holo::anim::spring(t.max(0.0), 0.36) as f32
+    }
+
+    /// A progress bar's shown value, gliding toward `to` instead of jumping.
+    fn glide_bar(&mut self, id: u64, to: f32) -> f32 {
+        let v = self.bars.entry(id).or_insert(to);
+        *v += (to - *v) * 0.18;
+        if (to - *v).abs() < 0.002 {
+            *v = to;
+        }
+        *v
+    }
+
+    /// Where the rail's highlight is now, between its last two stops.
+    fn nav_y(&self) -> f32 {
+        let k = runo_holo::anim::spring(self.nav_at.elapsed().as_secs_f64(), 0.34) as f32;
+        self.nav_from + (self.nav_to - self.nav_from) * k
+    }
+
+    /// Marks a finished job seen once it's opened.
+    fn visit(&mut self, place: Place, cx: &mut Context<Self>) {
         if let Place::Live(id) = place {
             if let Some(j) = self.store.job_mut(id) {
                 if j.status != Status::Running && !j.seen {
@@ -366,6 +528,10 @@ impl Shell {
     }
 
     fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+        if mode != self.mode {
+            self.mode_from = self.mode_x();
+            self.mode_at = Instant::now();
+        }
         self.mode = mode;
         self.composer.update(cx, |i, cx| {
             i.set_placeholder(mode.placeholder(), window, cx)
@@ -430,10 +596,47 @@ impl Shell {
         self.start_job(mode, text, cx);
     }
 
+    /// Takes a folder off the crew's list. Its files and past jobs stay.
+    fn forget_folder(&mut self, i: usize, cx: &mut Context<Self>) {
+        if i >= self.store.folders.len() {
+            return;
+        }
+        let gone = self.store.folders.remove(i);
+        if self.store.current >= self.store.folders.len() || self.store.current > i {
+            self.store.current = self.store.current.saturating_sub(1);
+        }
+        if self.store.folders.is_empty() {
+            self.folder_menu = false;
+        }
+        self.store.save();
+        self.say(format!(
+            "Removed {} from the list. Its files are untouched.",
+            gone.name
+        ));
+        cx.notify();
+    }
+
+    /// Starts a stopped or failed job over, as a new job in the same folder.
+    fn retry_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(j) = self.store.job(id) else { return };
+        let (mode, title, folder) = (j.mode, j.title.clone(), j.folder.clone());
+        self.start_job_in(mode, title, folder, cx);
+    }
+
     fn start_job(&mut self, mode: Mode, text: String, cx: &mut Context<Self>) {
         let Some(folder) = self.store.folder().cloned() else {
             return;
         };
+        self.start_job_in(mode, text, folder, cx);
+    }
+
+    fn start_job_in(
+        &mut self,
+        mode: Mode,
+        text: String,
+        folder: store::Folder,
+        cx: &mut Context<Self>,
+    ) {
         let bot = Member::for_mode(mode);
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
@@ -659,6 +862,9 @@ impl Shell {
     fn hover_bot(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
         let was = self.hovered;
         if on {
+            if was != Some(who) {
+                self.hover_at = Instant::now();
+            }
             self.hovered = Some(who);
         } else if self.hovered == Some(who) {
             self.hovered = None;
@@ -697,6 +903,19 @@ impl Shell {
     fn rail(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let place = self.place;
         let inbox = self.inbox_count();
+        // The Inbox badge pops when something new lands in it.
+        if inbox > self.inbox_seen {
+            self.inbox_at = Instant::now();
+        }
+        self.inbox_seen = inbox;
+        let pop = {
+            let t = self.inbox_at.elapsed().as_secs_f32();
+            if t < 0.6 && self.motion {
+                3.0 * (t / 0.6 * std::f32::consts::PI).sin() * (1.0 - t / 0.6)
+            } else {
+                0.0
+            }
+        };
         let nav = [
             (Place::Today, IconName::House, "Today"),
             (Place::Inbox, IconName::Inbox, "Inbox"),
@@ -708,12 +927,27 @@ impl Shell {
             ),
             (Place::Crew, IconName::Users, "Crew"),
         ];
+        // One white highlight glides between the items as the place changes.
+        let glide = nav_slot(place).map(|_| self.nav_y());
         let mut icons = div()
             .flex_none()
+            .relative()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(4.));
+            .gap(px(4.))
+            .when_some(glide, |d, y| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(y))
+                        .left(px(0.))
+                        .size(px(42.))
+                        .rounded(px(12.))
+                        .bg(c(0xFFFFFF))
+                        .shadow(ui::lift()),
+                )
+            });
         for (i, (p, icon, label)) in nav.into_iter().enumerate() {
             let on = match (place, p) {
                 (Place::Chat(_), Place::Chat(_)) => true,
@@ -734,8 +968,7 @@ impl Shell {
                     .tooltip(move |window, cx| {
                         gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
                     })
-                    .when(on, |d| d.bg(c(0xFFFFFF)).shadow(ui::lift()))
-                    .hover(|s| s.bg(c(0xFFFFFF)))
+                    .when(!on, |d| d.hover(|s| s.bg(ca(0xFFFFFF, 0.7))))
                     .child(Icon::new(icon).size(px(18.)).text_color(c(if on {
                         ui::INK
                     } else {
@@ -745,10 +978,10 @@ impl Shell {
                         d.child(
                             div()
                                 .absolute()
-                                .top(px(5.))
-                                .right(px(4.))
-                                .min_w(px(15.))
-                                .h(px(15.))
+                                .top(px(5. - pop))
+                                .right(px(4. - pop))
+                                .min_w(px(15. + 2. * pop))
+                                .h(px(15. + 2. * pop))
                                 .px(px(3.))
                                 .rounded_full()
                                 .bg(c(ui::ORANGE))
@@ -793,6 +1026,11 @@ impl Shell {
                 div()
                     .id(("rail-bot", who.key() as usize))
                     .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                        if *on {
+                            this.rail_hover = Some(who);
+                        } else if this.rail_hover == Some(who) {
+                            this.rail_hover = None;
+                        }
                         this.hover_bot(who, *on, cx);
                     }))
                     .relative()
@@ -803,14 +1041,71 @@ impl Shell {
                     .justify_center()
                     .rounded(px(14.))
                     .cursor_pointer()
-                    .tooltip(move |window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new(who.name()).build(window, cx)
-                    })
                     .when(on, |d| {
                         d.border_2().border_color(c(ui::INK)).bg(c(0xFFFFFF))
                     })
+                    // Hovered, a card slides out beside the rail: who, what it's
+                    // doing, and what a click does.
+                    .when(self.rail_hover == Some(who), |d| {
+                        let k = runo_holo::anim::spring(self.hover_at.elapsed().as_secs_f64(), 0.22)
+                            as f32;
+                        let (line, color) = self.status_of(who);
+                        let tip = if busy.is_some() {
+                            "Click to watch the job"
+                        } else {
+                            "Click to chat"
+                        };
+                        d.child(
+                            deferred(
+                                div()
+                                    .absolute()
+                                    .left(px(52. + 8. * (1. - k)))
+                                    .top(px(-6.))
+                                    .w(px(210.))
+                                    .opacity(k)
+                                    .p(px(12.))
+                                    .rounded(px(14.))
+                                    .bg(c(0xFFFFFF))
+                                    .border_1()
+                                    .border_color(c(ui::LINE))
+                                    .shadow(ui::lift())
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(3.))
+                                    .child(
+                                        div()
+                                            .text_size(px(14.))
+                                            .font_weight(FontWeight::BOLD)
+                                            .child(who.name()),
+                                    )
+                                    .child(ui::status(color, line))
+                                    .child(
+                                        div()
+                                            .mt(px(4.))
+                                            .text_size(px(11.))
+                                            .text_color(c(ui::FAINT))
+                                            .child(tip),
+                                    ),
+                            )
+                            .with_priority(2),
+                        )
+                    })
                     .hover(|s| s.bg(c(0xFFFFFF)))
                     .child(face)
+                    // A working bot's dot breathes: a soft ring swells and fades.
+                    .when(dot != ui::FAINT && busy.is_some() && self.motion, |d| {
+                        let p = runo_holo::anim::phase(self.now(), 1.6, 0.0) as f32;
+                        let r = 9. + 10. * p;
+                        d.child(
+                            div()
+                                .absolute()
+                                .bottom(px(9.5 - r / 2.))
+                                .right(px(9.5 - r / 2.))
+                                .size(px(r))
+                                .rounded_full()
+                                .bg(ca(dot, 0.35 * (1. - p))),
+                        )
+                    })
                     .when(dot != ui::FAINT, |d| {
                         d.child(
                             div()
@@ -865,8 +1160,10 @@ impl Shell {
             .bg(c(ui::RAIL))
             .border_r_1()
             .border_color(c(ui::LINE))
+            // The top button finds anything: places, bots, jobs, folders (⌘K).
             .child(
                 div()
+                    .id("open-palette")
                     .flex_none()
                     .size(px(40.))
                     .rounded(px(12.))
@@ -874,11 +1171,18 @@ impl Shell {
                     .flex()
                     .items_center()
                     .justify_center()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(0x2C2A38)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new("Find anything (⌘K)")
+                            .build(window, cx)
+                    })
                     .child(
-                        Icon::new(IconName::ArrowUpRight)
+                        Icon::new(IconName::Search)
                             .size(px(17.))
                             .text_color(c(0xFFFFFF)),
-                    ),
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )
             .child(icons)
             .child(div().w(px(32.)).h(px(1.)).bg(c(ui::LINE)))
@@ -929,8 +1233,22 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.scale = window.scale_factor();
         self.poll();
+        // A box that had focus may be gone (a new place opened): take focus back,
+        // so shortcuts keep working without a click.
+        // (Not just after focus moved on purpose: the new box may not be drawn yet.)
+        if self.focus_moved.elapsed() > Duration::from_millis(300)
+            && !self.focus.contains_focused(window, cx)
+        {
+            self.focus.focus(window, cx);
+        }
         // What the last frame needed sets the clock for the next one.
         let busy = self.entered.elapsed() < Duration::from_millis(1000)
+            || (self.palette && self.palette_at.elapsed() < Duration::from_millis(600))
+            || self.mode_at.elapsed() < Duration::from_millis(500)
+            || self.inbox_at.elapsed() < Duration::from_millis(700)
+            || self.chat_at.elapsed() < Duration::from_millis(500)
+            || self.nav_at.elapsed() < Duration::from_millis(600)
+            || (self.hovered.is_some() && self.hover_at.elapsed() < Duration::from_millis(400))
             || self
                 .toast
                 .as_ref()
@@ -1007,19 +1325,47 @@ impl Render for Shell {
             .size_full()
             .relative()
             .flex()
+            .track_focus(&self.focus)
             .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, _| {
                 this.touched = Instant::now();
             }))
             .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, _| {
                 this.touched = Instant::now();
             }))
-            // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places, even from a text box.
-            .capture_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+            // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places, even from a text box;
+            // ⌘K opens the palette and ⌘[ goes back.
+            .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
+                let key = e.keystroke.key.as_str();
+                if this.palette && !m.platform && !m.control {
+                    if this.palette_key(key, window, cx) {
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if !(m.platform || m.control) || m.shift || m.alt {
                     return;
                 }
-                let to = match e.keystroke.key.as_str() {
+                match key {
+                    "k" => {
+                        if this.palette {
+                            this.close_palette(window, cx);
+                        } else {
+                            this.open_palette(window, cx);
+                        }
+                        cx.stop_propagation();
+                        return;
+                    }
+                    "[" => {
+                        this.palette = false;
+                        this.back(cx);
+                        cx.stop_propagation();
+                        return;
+                    }
+                    _ => {}
+                }
+                this.palette = false;
+                let to = match key {
                     "1" => Place::Today,
                     "2" => Place::Inbox,
                     "3" => Place::History,
@@ -1048,6 +1394,8 @@ impl Render for Shell {
                     .child(body),
             )
             .children(toast_el)
+            // Deferred, so it paints over the crew's frames too.
+            .when(self.palette, |d| d.child(self.palette_view(cx)))
     }
 }
 

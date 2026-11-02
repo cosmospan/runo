@@ -148,10 +148,11 @@ impl Shell {
                             .gap(px(12.))
                             .child(
                                 div().w(px(220.)).child(match (running, progress) {
-                                    (true, Some((d, n))) => {
-                                        ui::bar((d as f32 + 0.5) / n.max(1) as f32, accent)
-                                            .into_any_element()
-                                    }
+                                    (true, Some((d, n))) => ui::bar(
+                                        self.glide_bar(job.id, (d as f32 + 0.5) / n.max(1) as f32),
+                                        accent,
+                                    )
+                                    .into_any_element(),
                                     (true, None) => ui::sweep(accent, 0.0).into_any_element(),
                                     (false, _) => {
                                         ui::bar(1.0, status_color(job.status)).into_any_element()
@@ -172,6 +173,25 @@ impl Shell {
                     .pt(px(16.))
                     .flex()
                     .gap(px(8.))
+                    .when(!self.trail.is_empty(), |d| {
+                        d.child(
+                            ui::ghost("back", "Back")
+                                .gap(px(6.))
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new("Back (⌘[)")
+                                        .build(window, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
+                        )
+                    })
+                    .when(!running && job.status != Status::Done, |d| {
+                        let id = job.id;
+                        d.child(
+                            ui::ghost("retry", "Try again").on_click(
+                                cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
+                            ),
+                        )
+                    })
                     .when(running, |d| {
                         let id = job.id;
                         d.child(
@@ -193,6 +213,9 @@ impl Shell {
         // The feed: what the bot said, the steps it took, and what you added.
         let mut feed = div().flex().flex_col().gap(px(10.)).px(px(30.)).py(px(20.));
         let mut tools: Vec<(String, String, u8)> = Vec::new();
+        // A step in progress shows a dot that breathes.
+        let breathe =
+            0.35 + 0.65 * runo_holo::anim::alternate(self.now(), 0.9, runo_holo::anim::SOFT) as f32;
         let flush = |feed: Div, tools: &mut Vec<(String, String, u8)>| -> Div {
             if tools.is_empty() {
                 return feed;
@@ -246,12 +269,19 @@ impl Shell {
                                 .text_color(c(ui::BODY))
                                 .child(label),
                         )
-                        .child(
+                        .child(if state == 0 {
+                            div()
+                                .size(px(7.))
+                                .mx(px(2.))
+                                .rounded_full()
+                                .bg(c(col))
+                                .opacity(breathe)
+                        } else {
                             div()
                                 .text_color(c(col))
                                 .font_weight(FontWeight::BOLD)
-                                .child(mark),
-                        ),
+                                .child(mark)
+                        }),
                 );
             }
             feed.child(list)

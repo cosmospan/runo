@@ -84,7 +84,8 @@ pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(INK))
         .cursor_pointer()
-        .hover(|s| s.bg(c(0xF3F4F9)))
+        .hover(|s| s.bg(c(0xF3F4F9)).border_color(c(0xD8DAE6)))
+        .active(|s| s.bg(c(0xE9EBF3)))
         .child(label.into())
 }
 
@@ -105,6 +106,7 @@ pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .text_color(c(0xFFFFFF))
         .cursor_pointer()
         .hover(|s| s.bg(c(0x2C2A38)))
+        .active(|s| s.bg(c(0x000000)))
         .child(label.into())
 }
 
@@ -130,6 +132,7 @@ pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) 
                     .border_color(c(LINE))
                     .text_color(c(INK))
                     .hover(|s| s.bg(c(0xF3F4F9)))
+                    .active(|s| s.bg(c(0xE9EBF3)))
             }
         })
         .child(label.into())
@@ -197,4 +200,11 @@ pub fn sweep(color: u32, _phase: f32) -> Div {
                 .rounded_full()
                 .bg(c(color)),
         )
+}
+
+/// Eases an element in: `k` runs 0 → 1, fading it up from a few pixels lower.
+pub fn rise<E: Styled>(el: E, k: f32) -> E {
+    el.opacity(k.clamp(0.0, 1.0))
+        .relative()
+        .top(px(8. * (1. - k)))
 }

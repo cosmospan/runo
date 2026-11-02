@@ -211,9 +211,17 @@ impl Shell {
         if log.is_empty() {
             body = body.child(self.chat_empty(who, cx));
         }
-        for m in &log {
-            body = if m.mine {
-                body.child(
+        // The newest line slides in when it arrives.
+        let last = log.len().saturating_sub(1);
+        let fresh = if self.motion {
+            runo_holo::anim::spring(self.chat_at.elapsed().as_secs_f64(), 0.3) as f32
+        } else {
+            1.0
+        };
+        for (i, m) in log.iter().enumerate() {
+            let k = if i == last { fresh } else { 1.0 };
+            let row: Div = if m.mine {
+                div().child(
                     div().flex().justify_end().child(
                         div()
                             .max_w(px(620.))
@@ -228,10 +236,10 @@ impl Shell {
                     ),
                 )
             } else if m.note {
-                body.child(note_line(&m.text))
+                div().child(note_line(&m.text))
             } else {
                 let face = self.avatar(who, 28.);
-                body.child(
+                div().child(
                     div().flex().gap(px(12.)).child(face).child(
                         div()
                             .flex_1()
@@ -265,6 +273,7 @@ impl Shell {
                     ),
                 )
             };
+            body = body.child(ui::rise(row, k));
         }
         if thinking {
             let secs = self
@@ -316,6 +325,9 @@ impl Shell {
         }
         let len = log.len() + usize::from(thinking);
         if len != self.chat_len {
+            if len > self.chat_len {
+                self.chat_at = std::time::Instant::now();
+            }
             self.chat_len = len;
             self.chat_scroll.scroll_to_bottom();
         }

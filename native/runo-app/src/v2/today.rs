@@ -70,11 +70,14 @@ fn greeting() -> String {
 impl Shell {
     pub(super) fn today(&mut self, cx: &mut Context<Self>) -> AnyElement {
         // The crew, a bot that waits on you bigger and in front.
+        // A bot that is working right now isn't waiting on anyone.
         let waiting = Member::CREW.into_iter().find(|m| {
-            self.store
-                .jobs
-                .iter()
-                .any(|j| j.bot == *m && j.needs_you() && j.status != Status::Done)
+            self.store.busy(*m).is_none()
+                && self
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == *m && j.needs_you() && j.status != Status::Done)
         });
         let mut row = div()
             .flex_none()
@@ -182,67 +185,103 @@ impl Shell {
             .px(px(40.))
             .pt(px(28.))
             .pb(px(40.))
-            .child(row)
-            .child(
+            .child(ui::rise(div().child(row), self.stagger(0)))
+            .child(ui::rise(
                 div()
                     .mt(px(14.))
                     .text_size(px(48.))
                     .font_weight(FontWeight::BOLD)
                     .line_height(px(56.))
                     .child(greeting()),
-            )
-            .child(
+                self.stagger(1),
+            ))
+            .child(ui::rise(
                 div()
                     .mt(px(6.))
                     .text_size(px(15.))
                     .text_color(c(ui::MUTED))
                     .child(sub),
-            )
-            .child(self.composer_card(cx))
-            .child(self.starters(cx))
-            .child(if has_jobs {
-                self.cards(cx).into_any_element()
-            } else {
-                how_it_works().into_any_element()
-            })
+                self.stagger(2),
+            ))
+            .child(ui::rise(
+                div()
+                    .w_full()
+                    .flex()
+                    .justify_center()
+                    .child(self.composer_card(cx)),
+                self.stagger(3),
+            ))
+            .child(ui::rise(
+                div()
+                    .w_full()
+                    .flex()
+                    .justify_center()
+                    .child(self.starters(cx)),
+                self.stagger(4),
+            ))
+            .child(ui::rise(
+                div().w_full().flex().justify_center().child(if has_jobs {
+                    self.cards(cx).into_any_element()
+                } else {
+                    how_it_works().into_any_element()
+                }),
+                self.stagger(5),
+            ))
             .into_any_element()
     }
 
     fn composer_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let target = Member::for_mode(self.mode);
+        let ready =
+            !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 22.);
+        // The white highlight glides under the tabs as the mode changes.
+        let x = self.mode_x();
         let mut modes = div()
+            .relative()
             .flex()
             .items_center()
             .p(px(3.))
-            .gap(px(2.))
+            .gap(px(super::MODE_STEP - 64.))
             .rounded(px(12.))
-            .bg(c(0xF1F2F7));
+            .bg(c(0xF1F2F7))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(3.))
+                    .left(px(3. + x))
+                    .w(px(64.))
+                    .h(px(30.))
+                    .rounded(px(9.))
+                    .bg(c(0xFFFFFF))
+                    .shadow(ui::lift()),
+            );
         for (i, m) in Mode::ALL.into_iter().enumerate() {
             let on = self.mode == m;
             modes = modes.child(
                 div()
                     .id(("mode", i))
-                    .px(px(11.))
+                    .w(px(64.))
                     .h(px(30.))
                     .flex()
                     .items_center()
+                    .justify_center()
                     .rounded(px(9.))
                     .text_size(px(13.))
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(0xFFFFFF))
-                                .shadow(ui::lift())
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(ui::INK))
+                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::INK))
                         } else {
                             d.text_color(c(ui::MUTED))
                                 .hover(|s| s.text_color(c(ui::INK)))
                         }
                     })
                     .child(m.label())
-                    .on_click(cx.listener(move |this, _, window, cx| this.set_mode(m, window, cx))),
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.set_mode(m, window, cx);
+                        this.composer.update(cx, |i, cx| i.focus(window, cx));
+                    })),
             );
         }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
@@ -304,6 +343,10 @@ impl Shell {
                 list = list.child(
                     div()
                         .id(("folder-item", i))
+                        .group("folder-item")
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
                         .px(px(10.))
                         .py(px(7.))
                         .rounded(px(9.))
@@ -312,16 +355,50 @@ impl Shell {
                         .hover(|s| s.bg(c(0xF6F7FB)))
                         .child(
                             div()
-                                .text_size(px(13.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(f.name.clone()),
+                                .flex_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .child(f.name.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .text_color(c(ui::FAINT))
+                                        .truncate()
+                                        .child(f.path.clone()),
+                                ),
                         )
+                        // Forget a folder: only the list entry, never the files.
                         .child(
                             div()
-                                .text_size(px(11.))
-                                .text_color(c(ui::FAINT))
-                                .truncate()
-                                .child(f.path.clone()),
+                                .id(("folder-forget", i))
+                                .flex_none()
+                                .size(px(22.))
+                                .rounded(px(6.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .invisible()
+                                .group_hover("folder-item", |s| s.visible())
+                                .hover(|s| s.bg(c(0xE7E8F0)))
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "Remove from this list (the files stay)",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .child(
+                                    Icon::new(IconName::X)
+                                        .size(px(12.))
+                                        .text_color(c(ui::MUTED)),
+                                )
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.forget_folder(i, cx);
+                                })),
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.store.current = i;
@@ -401,12 +478,14 @@ impl Shell {
                             .id("send")
                             .size(px(38.))
                             .rounded_full()
-                            .bg(c(ui::INK))
+                            // Dark once there is something to send.
+                            .bg(c(if ready { ui::INK } else { 0xD5D7E3 }))
                             .flex()
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .hover(|s| s.bg(c(0x2C2A38)))
+                            .when(ready, |d| d.hover(|s| s.bg(c(0x2C2A38))))
+                            .active(|s| s.bg(c(0x000000)))
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
@@ -503,7 +582,9 @@ impl Shell {
         }
         for j in &running {
             let face = self.bot(j.bot, Mood::Working, 26., Framing::Bust);
-            let frac = j.progress().map(|(d, n)| d as f32 / n.max(1) as f32);
+            let frac = j
+                .progress()
+                .map(|(d, n)| self.glide_bar(j.id, d as f32 / n.max(1) as f32));
             let doing = format!("{} · {}", j.doing(), store::span(j.seconds()));
             work_card = work_card.child(job_row(
                 j.id,

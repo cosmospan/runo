@@ -51,8 +51,9 @@ type Choice = (String, bool, Box<dyn Fn(&mut Shell)>);
 impl Shell {
     pub(super) fn crew(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let mut grid = div().flex().flex_wrap().gap(px(16.));
-        for who in Member::CREW {
-            grid = grid.child(self.crew_card(who, cx));
+        for (i, who) in Member::CREW.into_iter().enumerate() {
+            let k = self.stagger(i + 1);
+            grid = grid.child(ui::rise(self.crew_card(who, cx), k));
         }
         div()
             .id("crew")
@@ -78,11 +79,11 @@ impl Shell {
                     ),
             )
             .child(grid)
-            .child(self.maker_card(cx))
+            .child(ui::rise(div().child(self.maker_card(cx)), self.stagger(8)))
             .into_any_element()
     }
 
-    fn crew_card(&mut self, who: Member, cx: &mut Context<Self>) -> impl IntoElement {
+    fn crew_card(&mut self, who: Member, cx: &mut Context<Self>) -> Stateful<Div> {
         let mood = self.mood(who);
         let face = self.bot(who, mood, 150., Framing::Full);
         let (status, color) = self.status_of(who);
