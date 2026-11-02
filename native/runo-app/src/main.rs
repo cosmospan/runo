@@ -133,6 +133,7 @@ mod turns;
 mod updater;
 mod usage;
 mod usage_ui;
+mod v2;
 mod wake;
 mod working;
 mod workspace;
@@ -9840,7 +9841,11 @@ fn main() {
     // Clicking the Dock icon with the window closed (macOS keeps Runo running) opens it again.
     app.on_reopen(|cx| {
         if cx.windows().is_empty() {
-            open_main_window(cx);
+            if std::env::var_os("RUNO_V1").is_some() {
+                open_main_window(cx);
+            } else {
+                v2::open_window(cx);
+            }
         }
     });
     app.run(|cx| {
@@ -9865,7 +9870,13 @@ fn main() {
         startup::mark("notifications, menu bar");
         cx.set_menus(app_menus());
         startup::mark("menus");
-        open_main_window(cx);
+        // Runo v2 opens by default on this branch; RUNO_V1=1 opens the v1 window instead
+        // (v1 is also one click away on v2's rail).
+        if std::env::var_os("RUNO_V1").is_some() {
+            open_main_window(cx);
+        } else {
+            v2::open_window(cx);
+        }
         startup::mark("window opened");
     });
 }
@@ -9951,7 +9962,7 @@ fn app_menus() -> Vec<Menu> {
 }
 
 /// Open Runo's window where it was last time, or centred on first launch.
-fn open_main_window(cx: &mut App) {
+pub(crate) fn open_main_window(cx: &mut App) {
     let glass = settings::glass_alpha(&cx.global::<AppSettings>().glass) < 255;
     let saved = store::saved_window().and_then(|w| {
         let bounds = Bounds::new(point(px(w.x), px(w.y)), size(px(w.width), px(w.height)));

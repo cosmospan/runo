@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["native/runo-app"]
+members = ["native/runo-app", "native/runo-holo"]
 exclude = ["vendor/block", "vendor/portable-pty", "vendor/gpui-pre-apple", "vendor/vt100"]
 
 [workspace.package]
@@ -77,3 +77,17 @@ strip = "none"
 [patch.crates-io]
 block = { path = "vendor/block" }
 gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
+
+# The Holo crew is drawn on the CPU every frame; unoptimised it can't keep up.
+[profile.dev.package.runo-holo]
+opt-level = 3
+[profile.dev.package.vello_cpu]
+opt-level = 3
+[profile.dev.package.vello_common]
+opt-level = 3
+[profile.dev.package.kurbo]
+opt-level = 3
+[profile.dev.package.peniko]
+opt-level = 3
+[profile.dev.package.fearless_simd]
+opt-level = 3

@@ -73,6 +73,8 @@ percent-encoding = "2"
 # The SQL editor's completions speak the editor's LSP types.
 lsp-types = { version = "0.97", features = ["proposed"] }
 anyhow = "1"
+# Runo v2's crew, drawn from the Holo rigs.
+runo-holo = { path = "../runo-holo" }
 # Wakes the window when a shell prints, without polling.
 async-channel = "2"
 
