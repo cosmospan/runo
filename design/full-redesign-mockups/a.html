@@ -1,0 +1,700 @@
+<!doctype html>
+<!--
+  Direction A — Linear-like.
+  Tight, information-dense, muted palette, borderless, tabular numbers,
+  small accents, serious tool feel. Dense sidebar, dense chat, understated status bar.
+  URL: a.html?s=main|panels|arcade|settings|translucent&t=light|dark
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Runo redesign · Direction A · Linear-like</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  /* ---------- Tokens ---------- */
+  :root[data-t="light"] {
+    --canvas:  #ffffff;
+    --sheet:   #f8f8fa;
+    --subtle:  #eff0f3;
+    --sunken:  #e6e8ec;
+    --hair:    #e5e6ea;
+    --hair-strong: #d8dade;
+    --text:    #0f1115;
+    --text2:   #3c3f46;
+    --muted:   #6a6f7a;
+    --faint:   #9196a1;
+    --accent:  #5b63f0;
+    --accent-wash: rgba(91,99,240,.08);
+    --accent-wash-edge: rgba(91,99,240,.22);
+    --amber:   #cc7a0a;
+    --amber-wash: rgba(240,160,32,.14);
+    --amber-edge: rgba(240,160,32,.30);
+    --green:   #137a3a;
+    --red:     #c42b2b;
+    --shadow:  0 1px 2px rgba(10,10,14,.04), 0 6px 20px rgba(10,10,14,.06);
+    --chrome:  rgba(248,248,250,.86);
+  }
+  :root[data-t="dark"] {
+    --canvas:  #1a1b26;
+    --sheet:   #16161e;
+    --subtle:  #202234;
+    --sunken:  #0f1018;
+    --hair:    #262840;
+    --hair-strong: #343857;
+    --text:    #c0caf5;
+    --text2:   #a9b1d6;
+    --muted:   #737aa2;
+    --faint:   #595f80;
+    --accent:  #7aa2f7;
+    --accent-wash: rgba(122,162,247,.10);
+    --accent-wash-edge: rgba(122,162,247,.28);
+    --amber:   #e0af68;
+    --amber-wash: rgba(224,175,104,.14);
+    --amber-edge: rgba(224,175,104,.32);
+    --green:   #9ece6a;
+    --red:     #f7768e;
+    --shadow:  0 1px 2px rgba(0,0,0,.4), 0 10px 32px rgba(0,0,0,.55);
+    --chrome:  rgba(22,22,30,.86);
+  }
+
+  /* ---------- Window frame ---------- */
+  .win { position: relative; width: 1440px; height: 900px;
+         background: var(--canvas); color: var(--text);
+         border-radius: 10px; overflow: hidden;
+         box-shadow: var(--shadow); border: 1px solid var(--hair); }
+  .win.translucent { background: color-mix(in oklab, var(--canvas) 72%, transparent); backdrop-filter: blur(28px); }
+  .chrome { height: 36px; background: var(--chrome); border-bottom: 1px solid var(--hair);
+            display: flex; align-items: center; gap: 10px; padding-right: 12px; backdrop-filter: blur(14px); font-size: 12px; color: var(--muted); }
+  .chrome .proj { padding-left: 10px; }
+  .chrome .proj b { color: var(--text); font-weight: 600; }
+  .chrome .center { flex: 1; display: flex; justify-content: center; gap: 8px; align-items: center; font-size: 12px; color: var(--text2); }
+  .chrome .center .ag { opacity: .85; }
+  .chrome .right { display: flex; align-items: center; gap: 10px; }
+  .chrome .ring { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .chrome .ring .r { width: 12px; height: 12px; border-radius: 50%;
+      background: conic-gradient(var(--accent) 72%, var(--subtle) 0); display: inline-block; }
+  .chrome .ring .r.hi { background: conic-gradient(var(--amber) 78%, var(--subtle) 0); }
+
+  .body { height: calc(100% - 36px - 24px); display: flex; }
+  .status { height: 24px; border-top: 1px solid var(--hair); background: var(--sheet);
+            display: flex; align-items: center; gap: 12px; padding: 0 12px; font-size: 11px; color: var(--muted); }
+  .status .sep { width: 1px; height: 10px; background: var(--hair-strong); }
+
+  /* ---------- Sidebar (dense) ---------- */
+  .side { width: 240px; flex: none; border-right: 1px solid var(--hair); background: var(--sheet); padding: 8px 4px 10px; }
+  .search { height: 26px; margin: 2px 6px 10px; border-radius: 5px; background: var(--subtle);
+            display: flex; align-items: center; gap: 7px; padding: 0 8px; color: var(--muted); font-size: 11.5px; }
+  .search .kbd { margin-left: auto; font-size: 10px; padding: 1px 5px; border-radius: 3px; background: var(--sunken); color: var(--faint); }
+  .proj { height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .proj .n { margin-left: auto; font-size: 10.5px; color: var(--faint); font-weight: 500; }
+  .proj.closed { color: var(--text2); font-weight: 500; }
+
+  .crew-row { position: relative; height: 30px; margin: 2px 6px; padding: 0 8px; display: flex; align-items: center; gap: 8px;
+              border-radius: 5px; background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent-wash-edge); }
+  .crew-row .chip { width: 18px; height: 18px; border-radius: 4px; background: color-mix(in oklab, var(--accent) 18%, transparent);
+                    display: flex; align-items: center; justify-content: center; }
+  .crew-row .label { flex: 1; font-size: 12.5px; font-weight: 600; }
+  .pill { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; font-weight: 500; white-space: nowrap; }
+  .pill.amber { background: var(--amber-wash); color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber-edge); }
+  .pill.acc { background: color-mix(in oklab, var(--accent) 12%, transparent); color: var(--accent); }
+
+  .guide { margin: 2px 6px 2px 14px; border-left: 1.5px solid var(--accent-wash-edge); padding-left: 8px; }
+  .group-head { height: 22px; display: flex; align-items: flex-end; padding: 0 6px 3px; font-size: 10px; font-weight: 650;
+                color: var(--faint); letter-spacing: .035em; text-transform: uppercase; }
+  .group-head .n { margin-left: 5px; opacity: .85; font-weight: 500; }
+
+  .trow { position: relative; height: 26px; padding: 0 8px; display: flex; align-items: center; gap: 8px;
+          font-size: 12.5px; color: var(--text2); border-radius: 4px; }
+  .trow.sel { background: var(--subtle); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-wash-edge); }
+  .trow .st { width: 14px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .trow .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow.unread .ttl { color: var(--text); font-weight: 500; }
+  .trow .age { flex: none; font-size: 10.5px; color: var(--faint); }
+  .trow .age.live { color: var(--accent); }
+  .trow .age.amber { color: var(--amber); }
+  .trow.done { color: var(--muted); }
+  .trow.done .ttl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow.sel-two { height: auto; padding-top: 4px; padding-bottom: 4px; align-items: flex-start; flex-wrap: wrap; }
+  .trow.sel-two .l2 { flex: 0 0 100%; padding-left: 22px; display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .trow.sel-two .l2 .mono { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; }
+
+  .fold { height: 24px; padding: 0 8px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); border-radius: 4px; }
+  .fold .st { width: 14px; display: flex; justify-content: center; }
+  .fold .lbl { flex: 1; }
+
+  .hair-line { height: 1px; background: var(--hair); margin: 6px 10px; }
+
+  .sect-head { height: 20px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 8px 2px; font-size: 10px; font-weight: 650; color: var(--faint); letter-spacing: .035em; text-transform: uppercase; }
+
+  .srow { position: relative; height: 32px; margin: 0 6px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 4px; }
+  .srow .av { width: 20px; height: 20px; border-radius: 4px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; }
+  .srow .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0; }
+  .srow .ttl { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .sub { font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .rt { flex: none; font-size: 10px; color: var(--faint); text-align: right; }
+
+  /* ---------- Chat column ---------- */
+  .chat-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .chat-top { height: 38px; border-bottom: 1px solid var(--hair); padding: 0 20px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .chat-top .ttl { font-weight: 600; color: var(--text); }
+  .chat-top .meta { color: var(--muted); font-size: 11.5px; }
+  .chat-top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11.5px; }
+  .chat-top .tab { padding: 2px 8px; border-radius: 4px; }
+  .chat-top .tab.active { color: var(--text); background: var(--subtle); }
+
+  .scroll { flex: 1; overflow: hidden; padding: 14px 24px 10px; }
+  .from-chip { display: inline-flex; align-items: center; gap: 7px; height: 22px; padding: 0 9px 0 6px; border-radius: 999px;
+               background: var(--accent-wash); color: var(--accent); font-size: 11px; font-weight: 500; margin-bottom: 10px;
+               box-shadow: inset 0 0 0 1px var(--accent-wash-edge); }
+  .from-chip .d { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+  .msg { padding: 2px 0 10px; }
+  .msg .who { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .msg .who b { color: var(--text); font-weight: 600; font-size: 12px; }
+  .msg.user .text { font-size: 13px; color: var(--text); line-height: 1.5; max-width: 720px; }
+  .msg.user .img { width: 280px; height: 170px; margin-top: 8px; }
+  .msg.agent .text { font-size: 13px; color: var(--text); line-height: 1.52; max-width: 760px; }
+  .msg.agent .text h3 { font-size: 13.5px; font-weight: 650; margin: 2px 0 6px; }
+  .msg.agent .text ul { padding-left: 18px; margin: 0 0 6px; }
+  .msg.agent .text ul li { margin: 2px 0; }
+
+  .steps { margin: 8px 0 0; max-width: 720px; }
+  .step { height: 24px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); padding-left: 2px; }
+  .step .st { width: 12px; display: flex; justify-content: center; }
+  .step .lbl { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--text2); }
+  .step.done .lbl { color: var(--muted); }
+  .step.run .lbl { color: var(--text); }
+
+  .work { margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 5px; background: var(--accent-wash); color: var(--accent); font-size: 11.5px; }
+  .work .shim { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.85); } }
+
+  /* Composer */
+  .composer { border-top: 1px solid var(--hair); padding: 10px 20px 14px; background: var(--canvas); }
+  .composer .wrap { border: 1px solid var(--hair-strong); border-radius: 7px; background: var(--canvas); padding: 10px 12px; min-height: 72px; display: flex; flex-direction: column; gap: 8px; }
+  .composer .input { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .composer .input .caret { display: inline-block; width: 1px; height: 14px; background: var(--text); vertical-align: -3px; }
+  .composer .foot { display: flex; align-items: center; gap: 10px; }
+  .composer .mode { display: flex; background: var(--subtle); border-radius: 5px; padding: 2px; font-size: 11.5px; }
+  .composer .mode .m { padding: 3px 10px; border-radius: 4px; color: var(--muted); }
+  .composer .mode .m.active { background: var(--canvas); color: var(--text); box-shadow: 0 0 0 1px var(--hair-strong); }
+  .composer .attach { height: 24px; padding: 0 9px; border-radius: 5px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); background: var(--subtle); }
+  .composer .spacer { flex: 1; }
+  .composer .send { height: 26px; padding: 0 12px; border-radius: 5px; display: flex; align-items: center; gap: 6px;
+                    font-size: 12px; color: #fff; background: var(--accent); font-weight: 600; }
+  .composer .send .k { font-size: 10.5px; opacity: .8; }
+
+  /* ---------- Panels (peek + menubar + assistant) ---------- */
+  .panels-page { position: relative; width: 1440px; height: 900px; background: var(--canvas); color: var(--text);
+                 display: flex; align-items: center; justify-content: center; gap: 32px; padding: 40px; }
+  .panels-page .label { position: absolute; top: 24px; left: 24px; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
+  .panel { width: 400px; background: var(--sheet); border: 1px solid var(--hair); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
+  .panel .ph { font-size: 10.5px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; padding: 10px 14px 2px; }
+
+  /* Peek pane */
+  .peek { height: 620px; }
+  .peek-top { height: 44px; border-bottom: 1px solid var(--hair); padding: 0 14px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+  .peek-top .back { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .peek-top .ttl { color: var(--text); font-weight: 600; font-size: 12.5px; }
+  .peek-top .right { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .peek-body { flex: 1; overflow: hidden; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .decision { font-size: 11.5px; padding: 8px 10px; border-radius: 6px; background: var(--amber-wash); color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber-edge); }
+  .peek-msg .who { font-size: 11px; color: var(--muted); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .peek-msg .who b { color: var(--text); font-weight: 600; font-size: 11.5px; }
+  .peek-msg .text { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .peek-foot { border-top: 1px solid var(--hair); padding: 10px 12px; background: var(--canvas); }
+  .peek-foot .wrap { border: 1px solid var(--hair-strong); border-radius: 6px; padding: 8px 10px; min-height: 44px; font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; }
+  .peek-foot .wrap .send { width: 22px; height: 22px; border-radius: 4px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; }
+
+  /* Menubar panel */
+  .menubar { width: 392px; height: 620px; }
+  .mb-tabs { display: flex; padding: 10px 10px 0; gap: 4px; }
+  .mb-tabs .tab { font-size: 12px; padding: 5px 10px; border-radius: 5px; color: var(--muted); }
+  .mb-tabs .tab.active { color: var(--text); background: var(--subtle); }
+  .mb-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 8px 10px 2px; }
+  .mb-tile { padding: 8px 10px; border-radius: 6px; background: var(--canvas); border: 1px solid var(--hair); display: flex; flex-direction: column; gap: 2px; }
+  .mb-tile .n { font-size: 18px; font-weight: 600; line-height: 1; }
+  .mb-tile .l { font-size: 10.5px; color: var(--muted); }
+  .mb-tile.b .n { color: var(--accent); }
+  .mb-tile.a .n { color: var(--amber); }
+  .mb-tile.g .n { color: var(--green); }
+  .mb-sect { padding: 10px 14px 2px; font-size: 10px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; font-weight: 650; }
+  .mb-row { margin: 2px 10px; padding: 8px 10px; border-radius: 6px; background: var(--canvas); border: 1px solid var(--hair); }
+  .mb-row .meta { font-size: 10.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .mb-row .ttl { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .mb-row .ask { font-size: 11.5px; color: var(--text2); margin-top: 4px; }
+  .mb-row .cmd { margin-top: 6px; font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text2); background: var(--subtle); padding: 5px 8px; border-radius: 4px; }
+  .mb-row .acts { margin-top: 7px; display: flex; gap: 6px; }
+  .mb-row .btn { height: 22px; padding: 0 10px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; }
+  .mb-row .btn.p { background: var(--accent); color: #fff; }
+  .mb-row .btn.s { background: var(--subtle); color: var(--text); }
+  .mb-row .btn.g { color: var(--muted); background: transparent; }
+  .mb-row.sess { display: flex; align-items: center; gap: 9px; padding: 7px 10px; }
+  .mb-row.sess .body { flex: 1; }
+  .mb-row.sess .ttl { font-size: 12px; font-weight: 600; }
+  .mb-row.sess .sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .mb-row.sess .t { font-size: 10.5px; color: var(--muted); }
+  .mb-input { border-top: 1px solid var(--hair); padding: 8px 10px; display: flex; gap: 6px; align-items: center; }
+  .mb-input .f { flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--hair-strong); border-radius: 5px; font-size: 12px; color: var(--muted); display: flex; align-items: center; }
+  .mb-input .send { width: 30px; height: 30px; background: var(--accent); border-radius: 5px; color: #fff; display: flex; align-items: center; justify-content: center; }
+
+  /* Assistant panel */
+  .assist { width: 380px; height: 480px; }
+  .assist-top { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hair); }
+  .assist-top .mk { width: 28px; height: 28px; border-radius: 7px; background: var(--accent-wash); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .assist-top .body .ttl { font-size: 13px; font-weight: 650; }
+  .assist-top .body .sub { font-size: 11.5px; color: var(--muted); }
+  .assist-search { margin: 10px 12px; height: 30px; padding: 0 10px; border: 1px solid var(--hair-strong); border-radius: 5px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .starter-head { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); padding: 4px 14px 4px; font-weight: 650; }
+  .starter { margin: 2px 10px; padding: 9px 12px; border-radius: 5px; font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 10px; border: 1px solid var(--hair); }
+  .starter:hover { background: var(--subtle); }
+  .starter .d { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+  .corner-mark { position: absolute; right: 24px; bottom: 44px; width: 36px; height: 36px; border-radius: 10px;
+                 background: var(--canvas); border: 1px solid var(--hair-strong); box-shadow: var(--shadow);
+                 display: flex; align-items: center; justify-content: center; color: var(--accent); font-weight: 700; }
+  .corner-mark .b { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px;
+                    background: var(--amber); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;
+                    display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- Arcade modal ---------- */
+  .arcade-page { position: relative; width: 1440px; height: 900px; background: var(--sheet); color: var(--text); overflow: hidden; }
+  .arcade-page .dim { position: absolute; inset: 0; background: rgba(10,10,14,.55); }
+  :root[data-t="light"] .arcade-page .dim { background: rgba(255,255,255,.65); backdrop-filter: blur(8px); }
+  .arcade-modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+                  width: 820px; height: 580px; background: var(--canvas); border-radius: 10px;
+                  box-shadow: 0 24px 60px rgba(0,0,0,.3); border: 1px solid var(--hair); overflow: hidden; display: flex; flex-direction: column; }
+  .arcade-head { height: 48px; border-bottom: 1px solid var(--hair); padding: 0 20px; display: flex; align-items: center; gap: 12px; }
+  .arcade-head .ttl { font-size: 14px; font-weight: 650; }
+  .arcade-head .tags { color: var(--muted); font-size: 11.5px; }
+  .arcade-head .close { margin-left: auto; width: 24px; height: 24px; border-radius: 5px; color: var(--muted); display: flex; align-items: center; justify-content: center; background: var(--subtle); }
+  .arcade-main { flex: 1; display: grid; grid-template-columns: 190px 1fr; }
+  .arcade-nav { border-right: 1px solid var(--hair); background: var(--sheet); padding: 10px 6px; }
+  .arcade-nav .g { padding: 7px 10px; font-size: 12.5px; color: var(--text2); border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+  .arcade-nav .g.active { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+  .arcade-nav .g .s { font-size: 10.5px; color: var(--faint); }
+  .arcade-nav .g.active .s { color: var(--accent); }
+  .arcade-field { position: relative; display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, var(--canvas) 0%, var(--subtle) 100%); overflow: hidden; }
+  .arcade-field .scene { position: relative; width: 440px; height: 300px; }
+  .arcade-field .scene .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 60%; background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 10%, transparent), transparent); border-top: 1px solid var(--accent-wash-edge); border-radius: 6px; }
+  .arcade-field .scene .gate { position: absolute; top: 20%; bottom: 20%; width: 4px; background: var(--accent); border-radius: 2px; opacity: .6; }
+  .arcade-field .scene .gate.g1 { left: 20%; }
+  .arcade-field .scene .gate.g2 { left: 48%; opacity: .9; }
+  .arcade-field .scene .gate.g3 { left: 72%; opacity: .4; }
+  .arcade-field .scene .spark { position: absolute; left: 36%; top: 44%; color: var(--accent); font-size: 24px; }
+  .arcade-field .score { position: absolute; top: 14px; left: 20px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text); }
+  .arcade-field .best { position: absolute; top: 14px; right: 20px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+              width: 280px; padding: 22px 24px; background: var(--canvas); border: 1px solid var(--hair-strong); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
+  .gameover h3 { font-size: 15px; font-weight: 650; margin-bottom: 10px; }
+  .gameover .n { font-family: "SF Mono", Menlo, monospace; font-size: 26px; font-weight: 650; color: var(--accent); margin: 4px 0; }
+  .gameover .best { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .gameover .hint { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+  /* ---------- Settings page ---------- */
+  .set-body { height: calc(100% - 36px - 24px); display: grid; grid-template-columns: 240px 1fr; }
+  .set-nav { background: var(--sheet); border-right: 1px solid var(--hair); padding: 16px 8px; }
+  .set-nav .h { font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; padding: 4px 10px; font-weight: 650; }
+  .set-nav .l { height: 28px; padding: 0 10px; display: flex; align-items: center; font-size: 12.5px; color: var(--text2); border-radius: 5px; }
+  .set-nav .l.active { background: var(--subtle); color: var(--text); font-weight: 600; }
+  .set-main { padding: 32px 40px 32px; overflow: hidden; }
+  .set-main h1 { font-size: 20px; font-weight: 650; margin-bottom: 4px; }
+  .set-main .lead { font-size: 12.5px; color: var(--muted); margin-bottom: 20px; }
+  .set-row { border-top: 1px solid var(--hair); padding: 14px 0; display: flex; align-items: center; gap: 16px; }
+  .set-row .text { flex: 1; max-width: 540px; }
+  .set-row .text .t { font-size: 13px; font-weight: 600; }
+  .set-row .text .d { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .set-row .ctl { flex: none; }
+  .toggle { width: 36px; height: 20px; background: var(--accent); border-radius: 999px; position: relative; }
+  .toggle .k { position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transform: translateX(16px); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .toggle.off { background: var(--sunken); }
+  .toggle.off .k { transform: translateX(0); }
+  .seg { display: flex; background: var(--subtle); border-radius: 5px; padding: 2px; font-size: 11.5px; }
+  .seg .s { padding: 3px 10px; border-radius: 4px; color: var(--muted); }
+  .seg .s.active { background: var(--canvas); color: var(--text); box-shadow: 0 0 0 1px var(--hair-strong); }
+  .picker { padding: 5px 10px; border: 1px solid var(--hair-strong); border-radius: 5px; font-size: 12px; display: flex; align-items: center; gap: 8px; min-width: 160px; justify-content: space-between; }
+
+  /* ---------- Translucent scenario ---------- */
+  .trans-page { position: relative; width: 1440px; height: 900px; overflow: hidden; }
+  .trans-page .wp { position: absolute; inset: 0; background: linear-gradient(135deg, #ffb37a 0%, #ff80b2 30%, #8e63ff 70%, #2b47c7 100%); }
+  :root[data-t="dark"] .trans-page .wp { background: linear-gradient(135deg, #1a0f3a 0%, #2d1b55 35%, #3a2a66 70%, #0d1430 100%); }
+  .trans-win { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1200px; height: 760px;
+               border-radius: 12px; background: color-mix(in oklab, var(--canvas) 68%, transparent); backdrop-filter: blur(28px);
+               box-shadow: 0 20px 60px rgba(0,0,0,.3); border: 1px solid color-mix(in oklab, var(--text) 10%, transparent); overflow: hidden; }
+  .trans-win .chrome { background: color-mix(in oklab, var(--canvas) 55%, transparent); border-bottom: 1px solid color-mix(in oklab, var(--text) 10%, transparent); }
+  .trans-win .side { background: color-mix(in oklab, var(--sheet) 55%, transparent); border-right: 1px solid color-mix(in oklab, var(--text) 10%, transparent); }
+  .trans-win .status { background: color-mix(in oklab, var(--sheet) 55%, transparent); border-top: 1px solid color-mix(in oklab, var(--text) 10%, transparent); }
+  .trans-win .composer { background: color-mix(in oklab, var(--canvas) 50%, transparent); border-top: 1px solid color-mix(in oklab, var(--text) 10%, transparent); }
+
+</style>
+</head>
+<body>
+<div class="wallpaper" style="display:none"></div>
+<main id="root"></main>
+
+<script src="shared/data.js"></script>
+<script src="shared/icons.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const S = q.get("s") || "main";
+const T = q.get("t") || "light";
+document.documentElement.dataset.t = T;
+document.documentElement.dataset.v = "a";
+
+const D = window.RUNO;
+const colText2 = () => getComputedStyle(document.documentElement).getPropertyValue("--text2").trim();
+const colMuted = () => getComputedStyle(document.documentElement).getPropertyValue("--muted").trim();
+const colAccent = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+const colAmber = () => getComputedStyle(document.documentElement).getPropertyValue("--amber").trim();
+const colGreen = () => getComputedStyle(document.documentElement).getPropertyValue("--green").trim();
+const colFaint = () => getComputedStyle(document.documentElement).getPropertyValue("--faint").trim();
+
+const glyph = st => {
+  if (st === "needs") return DOT(colAmber());
+  if (st === "working") return SPIN(colAccent());
+  if (st === "watching") return `<span style="width:10px;height:10px;border-radius:50%;border:1.5px solid ${colMuted()};display:inline-block"></span>`;
+  if (st === "waiting") return `<span style="width:10px;height:10px;border-radius:50%;border:1.5px dashed ${colMuted()};display:inline-block"></span>`;
+  if (st === "done") return ICONS.check(colGreen());
+  return "";
+};
+
+// ---------- Window chrome + sidebar + chat + composer ----------
+function renderWindow(opts = {}) {
+  const trans = opts.translucent ? " translucent" : "";
+  return `
+  <div class="win${trans}">
+    ${renderChrome()}
+    <div class="body">
+      ${renderSidebar()}
+      <section class="chat-col">
+        ${renderChatTop()}
+        <div class="scroll">${renderChat()}</div>
+        ${renderComposer()}
+      </section>
+    </div>
+    ${renderStatus()}
+  </div>`;
+}
+
+function renderChrome() {
+  const sel = D.THREADS.find(t => t.sel);
+  return `<div class="chrome">
+    <div class="traffic"><span class="t r"></span><span class="t y"></span><span class="t g"></span></div>
+    <div class="proj"><b>runo-lab</b> · ${sel.title}</div>
+    <div class="center">${AGENT_MARK(sel.ag, 12)} <span class="ag">Claude Code · Opus</span> <span style="color:var(--faint)">·</span> <span class="num">8m</span></div>
+    <div class="right">
+      <span class="ring"><span class="r"></span><span>72%</span></span>
+      <span>${ICONS.arcade(colMuted(), 14)}</span>
+      <span>${ICONS.settings(colMuted(), 14)}</span>
+    </div>
+  </div>`;
+}
+
+function renderStatus() {
+  return `<div class="status">
+    <span><span class="num">60</span> fps</span>
+    <span class="sep"></span>
+    <span>runo-lab · 10 threads · 11 done today</span>
+    <span class="sep"></span>
+    <span>${ICONS.branch(colMuted(), 11)} runo/full-ui-redesign-mockups</span>
+    <span style="margin-left:auto">Claude Code · 72% used · resets in 1h 44m</span>
+  </div>`;
+}
+
+function renderSidebar() {
+  const groups = { needs: [], working: [], watching: [], waiting: [] };
+  D.THREADS.forEach(t => groups[t.st].push(t));
+  const labels = { needs: "Needs you", working: "Working", watching: "Watching CI", waiting: "Waiting" };
+  let threads = "";
+  for (const key of ["needs", "working", "watching", "waiting"]) {
+    if (!groups[key].length) continue;
+    threads += `<div class="group-head">${labels[key]} <span class="n num">${groups[key].length}</span></div>`;
+    threads += groups[key].map(rowA).join("");
+  }
+  threads += `<div class="fold"><span class="st">${ICONS.check(colGreen(), 11)}</span><span class="lbl">${D.DONE_N} done</span>${ICONS.chevR(colFaint(), 10)}</div>`;
+
+  const sess = D.OWN_SESSIONS.map(s => `
+    <div class="srow">
+      <span class="av" style="background:${D.AGENTS[s.ag].color}22;color:${D.AGENTS[s.ag].color}">${D.AGENTS[s.ag].mark}</span>
+      <div class="body"><div class="ttl">${s.title}</div><div class="sub">${s.sub}</div></div>
+      <div class="rt"><div class="num">${s.when}</div>${s.diff ? `<div style="margin-top:1px">${DIFF(s.diff[0], s.diff[1], colGreen(), "var(--red)")}</div>` : ""}</div>
+    </div>`).join("");
+
+  return `<aside class="side">
+    <div class="search">${ICONS.search(colMuted(), 12)}<span>Search sessions</span><span class="kbd">⌘K</span></div>
+    <div class="proj">${ICONS.chevD(colMuted(), 10)}${ICONS.folder(colText2(), 13)}<span>runo-lab</span><span class="n num">6</span></div>
+    <div class="crew-row">
+      <span class="chip">${ICONS.crew(colAccent(), 12)}</span>
+      <span class="label">Crew</span>
+      <span class="pill amber">1 needs you</span>
+    </div>
+    <div class="guide">${threads}</div>
+    <div class="hair-line"></div>
+    <div class="sect-head"><span>Sessions</span><span>${ICONS.plus(colFaint(), 12)}</span></div>
+    ${sess}
+    <div class="hair-line"></div>
+    <div class="proj closed">${ICONS.chevR(colMuted(), 10)}${ICONS.folder(colMuted(), 13)}<span>gpui-kit</span><span class="n num">3</span></div>
+    <div class="proj closed">${ICONS.chevR(colMuted(), 10)}${ICONS.folder(colMuted(), 13)}<span>deltalark.dev</span><span class="n num">1</span></div>
+  </aside>`;
+}
+
+function rowA(t) {
+  const ageCls = t.st === "working" ? "live" : t.st === "needs" ? "amber" : "";
+  if (t.sel) {
+    return `<div class="trow sel sel-two"><span class="st">${glyph(t.st)}</span>
+      <span class="ttl">${t.title}</span><span class="age ${ageCls} num">${t.age}</span>
+      <div class="l2">${AGENT_MARK(t.ag, 10)}<span class="mono">${t.br}</span><span style="color:var(--faint)">· ${t.size}</span></div>
+    </div>`;
+  }
+  return `<div class="trow ${t.unread ? "unread" : ""}"><span class="st">${glyph(t.st)}</span>
+    <span class="ttl">${t.title}</span><span class="age ${ageCls} num">${t.age}</span></div>`;
+}
+
+function renderChatTop() {
+  const sel = D.THREADS.find(t => t.sel);
+  return `<div class="chat-top">
+    <span class="ttl">${sel.title}</span>
+    <span class="meta">${AGENT_MARK(sel.ag, 11)} Claude Code · Opus · runo/full-ui-redesign-mockups</span>
+    <div class="right">
+      <span class="tab active">Chat</span>
+      <span class="tab">Steps</span>
+      <span class="tab">Checks</span>
+      <span class="tab">Diff</span>
+      <span style="width:1px;height:14px;background:var(--hair-strong)"></span>
+      <span>${ICONS.maxi(colMuted(), 12)}</span>
+    </div>
+  </div>`;
+}
+
+function renderChat() {
+  const c = D.CHAT;
+  const from = `<div class="from-chip"><span class="d"></span>From thread · ${c.fromChip.thread} · ${c.fromChip.status}</div>`;
+  const user = c.turns[0];
+  const agent = c.turns[1];
+  const userHtml = `<div class="msg user">
+    <div class="who"><b>You</b><span>9:14 PM</span></div>
+    <div class="text">${user.text}</div>
+    ${user.image ? '<div class="att-img img"></div>' : ""}
+  </div>`;
+  const bodyMd = agent.body.map(x => {
+    if (typeof x === "string") return `<p>${x.replace(/`([^`]+)`/g, "<code>$1</code>")}</p>`;
+    if (x.kind === "list") return `<ul>${x.items.map(i => `<li>${i.replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`).join("")}</ul>`;
+    return "";
+  }).join("");
+  const steps = agent.steps.map(s => `<div class="step ${s.state}"><span class="st">${s.state === "done" ? ICONS.check(colGreen(), 11) : SPIN(colAccent())}</span><span class="lbl">${s.label}</span></div>`).join("");
+  const work = `<div class="work"><span class="shim"></span><span>Working · ${agent.working.label} · <span class="num">${agent.working.secs}s</span></span></div>`;
+  const agentHtml = `<div class="msg agent">
+    <div class="who">${AGENT_MARK(agent.ag, 12)}<b>Claude Code</b><span>· 9:14 PM · thinking: Opus</span></div>
+    <div class="text md">
+      <h3>${agent.heading}</h3>
+      ${bodyMd}
+    </div>
+    <div class="steps">${steps}</div>
+    ${work}
+  </div>`;
+  return from + userHtml + agentHtml;
+}
+
+function renderComposer() {
+  const c = D.CHAT.composer;
+  const modes = c.modes.map(m => `<span class="m ${m === c.mode ? "active" : ""}">${m}</span>`).join("");
+  return `<div class="composer">
+    <div class="wrap">
+      <div class="input">${c.placeholder}<span class="caret"></span></div>
+      <div class="foot">
+        <div class="mode">${modes}</div>
+        <div class="attach">${ICONS.attach(colMuted(), 13)}<span>Attach</span></div>
+        <div class="spacer"></div>
+        <div class="send">${ICONS.send("#fff", 13)}<span>Send</span><span class="k">⌘⏎</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- Panels page ----------
+function renderPanels() {
+  return `<div class="panels-page">
+    <div class="label">Panels · Peek · Menu bar · Assistant</div>
+    ${renderPeek()}
+    ${renderMenubar()}
+    ${renderAssistant()}
+  </div>`;
+}
+
+function renderPeek() {
+  const p = D.PEEK;
+  const turns = p.turns.map(t => `
+    <div class="peek-msg">
+      <div class="who">${t.who === "crew" ? ICONS.crew(colMuted(), 11) : AGENT_MARK(t.ag || "claude", 11)}<b>${t.who === "crew" ? "Crew" : "Claude Code"}</b></div>
+      <div class="text">${t.text}</div>
+    </div>`).join("");
+  return `<div class="panel peek">
+    <div class="ph">Thread peek</div>
+    <div class="peek-top">
+      <span class="back">${ICONS.chevL(colMuted(), 11)}<span>Threads</span></span>
+      <span class="ttl">${p.title}</span>
+      <span class="right"><span>${ICONS.maxi(colMuted(), 11)}</span><span>Open in main</span><span>${ICONS.more(colMuted(), 13)}</span></span>
+    </div>
+    <div class="peek-body">
+      <div class="decision">${DOT(colAmber())}&nbsp; ${p.decision}: ${p.question}</div>
+      ${turns}
+    </div>
+    <div class="peek-foot">
+      <div class="wrap"><span>Answer the question\u2026</span><span class="send">${ICONS.send("#fff", 11)}</span></div>
+    </div>
+  </div>`;
+}
+
+function renderMenubar() {
+  const m = D.MENUBAR;
+  const tiles = m.tiles.map(t => `<div class="mb-tile ${t.tone === "blue" ? "b" : t.tone === "amber" ? "a" : "g"}"><div class="n num">${t.n}</div><div class="l">${t.label}</div></div>`).join("");
+  const sections = m.sections.map(sec => {
+    const rows = sec.rows.map(r => {
+      if (r.kind === "approval") {
+        return `<div class="mb-row">
+          <div class="meta">${AGENT_MARK(r.agent, 10)} ${r.project} · ${r.thread}</div>
+          <div class="ttl">${r.ask}</div>
+          <div class="cmd">${r.code}</div>
+          <div class="acts"><span class="btn p">Allow</span><span class="btn s">Always</span><span class="btn g">Deny</span></div>
+        </div>`;
+      }
+      if (r.kind === "session") {
+        return `<div class="mb-row sess">
+          <span>${SPIN(colAccent())}</span>
+          <div class="body"><div class="ttl">${r.thread}</div><div class="sub">${r.project} · ${r.step}</div></div>
+          <div class="t num">${r.t}</div>
+        </div>`;
+      }
+      if (r.kind === "ci") {
+        return `<div class="mb-row sess">
+          <span>${RING(colMuted())}</span>
+          <div class="body"><div class="ttl">${r.thread}</div><div class="sub">#${r.pr} · ${r.phase}</div></div>
+          <div class="t num">${r.t}</div>
+        </div>`;
+      }
+    }).join("");
+    return `<div class="mb-sect">${sec.title}</div>${rows}`;
+  }).join("");
+
+  return `<div class="panel menubar">
+    <div class="ph">Menu bar panel</div>
+    <div class="mb-tabs">${m.tabs.map(t => `<span class="tab ${t === m.active ? "active" : ""}">${t}</span>`).join("")}</div>
+    <div class="mb-tiles">${tiles}</div>
+    ${sections}
+    <div style="flex:1"></div>
+    <div class="mb-input"><div class="f">${m.input}</div><div class="send">${ICONS.send("#fff", 12)}</div></div>
+  </div>`;
+}
+
+function renderAssistant() {
+  const a = D.ASSISTANT;
+  const starters = a.starters.map(s => `<div class="starter"><span class="d"></span><span>${s}</span></div>`).join("");
+  return `<div class="panel assist">
+    <div class="ph">Assistant panel</div>
+    <div class="assist-top">
+      <span class="mk">?</span>
+      <div class="body"><div class="ttl">${a.heading}</div><div class="sub">${a.sub}</div></div>
+    </div>
+    <div class="assist-search">${ICONS.search(colMuted(), 12)}<span>Ask Runo, or search guides\u2026</span></div>
+    <div class="starter-head">Try asking</div>
+    ${starters}
+  </div>`;
+}
+
+// ---------- Arcade ----------
+function renderArcade() {
+  const a = D.ARCADE;
+  const games = ["Spark", ...a.others].map(g => `<div class="g ${g === a.game ? "active" : ""}"><span>${g}</span><span class="s">best <span class="num">${g === a.game ? a.best : "—"}</span></span></div>`).join("");
+  return `<div class="arcade-page">
+    ${renderBaseWindow()}
+    <div class="dim"></div>
+    <div class="arcade-modal">
+      <div class="arcade-head">
+        <span>${ICONS.arcade(colAccent(), 15)}</span>
+        <span class="ttl">Arcade</span>
+        <span class="tags">${a.game} · ${a.tagline} · ${a.hint}</span>
+        <span class="close">✕</span>
+      </div>
+      <div class="arcade-main">
+        <div class="arcade-nav">${games}</div>
+        <div class="arcade-field">
+          <div class="score">Score <span class="num">${a.score}</span></div>
+          <div class="best">Best <span class="num">${a.best}</span></div>
+          <div class="scene">
+            <div class="ground"></div>
+            <div class="gate g1"></div>
+            <div class="gate g2"></div>
+            <div class="gate g3"></div>
+            <div class="spark">${ICONS.spark(colAccent(), 24)}</div>
+          </div>
+          <div class="gameover">
+            <h3>Game over</h3>
+            <div class="n num">${a.gameOver.score}</div>
+            <div class="best">Best <span class="num">${a.gameOver.best}</span></div>
+            <div class="hint">${a.gameOver.retry} · ${a.gameOver.leave}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// A minimal, blurred window underneath the Arcade modal.
+function renderBaseWindow() {
+  return `<div class="win" style="position:absolute;inset:0;filter:blur(0.4px) saturate(.85) brightness(.98);border-radius:0;box-shadow:none;border:0">
+    ${renderChrome()}
+    <div class="body">${renderSidebar()}<section class="chat-col">${renderChatTop()}<div class="scroll">${renderChat()}</div>${renderComposer()}</section></div>
+    ${renderStatus()}
+  </div>`;
+}
+
+// ---------- Settings ----------
+function renderSettings() {
+  const s = D.SETTINGS;
+  const nav = s.nav.map(n => `<div class="l ${n === s.active ? "active" : ""}">${n}</div>`).join("");
+  const rows = s.rows.map(r => {
+    let ctl = "";
+    if (r.control === "toggle") ctl = `<div class="toggle ${r.value === "On" ? "" : "off"}"><span class="k"></span></div>`;
+    else if (r.control === "segmented") ctl = `<div class="seg">${r.options.map(o => `<span class="s ${o === r.value ? "active" : ""}">${o}</span>`).join("")}</div>`;
+    else if (r.control === "picker") ctl = `<div class="picker"><span>${r.value}</span>${ICONS.chevD(colMuted(), 10)}</div>`;
+    return `<div class="set-row"><div class="text"><div class="t">${r.title}</div><div class="d">${r.desc}</div></div><div class="ctl">${ctl}</div></div>`;
+  }).join("");
+
+  return `<div class="win">
+    ${renderChrome()}
+    <div class="set-body">
+      <aside class="set-nav">
+        <div class="h">Settings</div>
+        ${nav}
+      </aside>
+      <section class="set-main">
+        <h1>Look</h1>
+        <p class="lead">How Runo looks on this Mac. Changes save as you make them.</p>
+        ${rows}
+      </section>
+    </div>
+    ${renderStatus()}
+  </div>`;
+}
+
+// ---------- Translucent scenario ----------
+function renderTranslucent() {
+  return `<div class="trans-page">
+    <div class="wp"></div>
+    <div class="trans-win">
+      ${renderChrome()}
+      <div class="body">${renderSidebar()}<section class="chat-col">${renderChatTop()}<div class="scroll">${renderChat()}</div>${renderComposer()}</section></div>
+      ${renderStatus()}
+    </div>
+  </div>`;
+}
+
+// ---------- Dispatch ----------
+const root = document.getElementById("root");
+if (S === "main")          root.innerHTML = renderWindow();
+else if (S === "panels")    root.innerHTML = renderPanels();
+else if (S === "arcade")    root.innerHTML = renderArcade();
+else if (S === "settings")  root.innerHTML = renderSettings();
+else if (S === "translucent") root.innerHTML = renderTranslucent();
+</script>
+</body>
+</html>
