@@ -18,12 +18,14 @@ mod home;
 mod jobs;
 mod live;
 mod palette;
+mod review;
 mod sidebar;
 mod store;
 mod today;
 mod ui;
 mod usage;
 mod welcome;
+mod work;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -444,6 +446,11 @@ pub struct Shell {
     /// When the newest chat line arrived, so it can slide in.
     chat_at: Instant,
     saved: Instant,
+    /// Checker's runs of the checks on finished jobs, by job.
+    checking: Vec<(u64, std::sync::mpsc::Receiver<Vec<crate::proof::CheckRun>>)>,
+    /// The changed file whose diff is open on a job's review, if any.
+    diff_open: Option<(u64, String)>,
+    diff_text: String,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -679,6 +686,9 @@ impl Shell {
             inbox_at: Instant::now(),
             chat_at: Instant::now(),
             saved: Instant::now(),
+            checking: Vec::new(),
+            diff_open: None,
+            diff_text: String::new(),
             _subs: subs,
             _pump: pump,
         }
@@ -1060,6 +1070,26 @@ impl Shell {
             seen: false,
             ..Default::default()
         };
+        // A job that may change files gets its own branch and worktree, so your
+        // checkout stays as it is and its changes wait for your approval.
+        if mode.writes() {
+            match work::isolate(&job.folder.path, &text, job.id) {
+                Ok(Some(iso)) => {
+                    job.feed.push(store::Item::Note(format!(
+                        "Working on its own branch, {}, so your checkout stays as it is.",
+                        iso.branch
+                    )));
+                    job.branch = iso.branch;
+                    job.worktree = iso.worktree;
+                    job.base = iso.base;
+                    job.base_sha = iso.base_sha;
+                }
+                Ok(None) => {}
+                Err(why) => job.feed.push(store::Item::Note(format!(
+                    "Couldn't give it its own branch ({why}), so it works in your folder."
+                ))),
+            }
+        }
         let st = cx.global::<crate::settings::AppSettings>();
         match jobs::start(st, &mut job, &text, false) {
             Ok(r) => self.runners.push(r),
@@ -1093,6 +1123,98 @@ impl Shell {
             Ok(r) => self.runners.push(r),
             Err(why) => job.feed.push(store::Item::Error(why)),
         }
+        self.store.save();
+        cx.notify();
+    }
+
+    /// A writing job finished in its own worktree: list what it changed and have
+    /// Checker run the checks. With nothing changed there's nothing to review.
+    fn begin_review(&mut self, id: u64) {
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
+        if job.status != Status::Done || job.worktree.is_empty() {
+            return;
+        }
+        job.changes = work::changed(job);
+        if job.changes.is_empty() {
+            work::discard(job);
+            job.worktree.clear();
+            job.feed
+                .push(store::Item::Note("It didn't change any files.".into()));
+            return;
+        }
+        job.status = Status::Review;
+        job.seen = false;
+        job.checks.clear();
+        job.checking = true;
+        let dir = job.worktree.clone();
+        self.checking.push((id, work::run_checks(dir)));
+    }
+
+    /// Runs the checks on a job's changes again.
+    pub(super) fn recheck(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
+        if job.worktree.is_empty() || job.checking {
+            return;
+        }
+        job.checks.clear();
+        job.checking = true;
+        let dir = job.worktree.clone();
+        self.checking.retain(|(j, _)| *j != id);
+        self.checking.push((id, work::run_checks(dir)));
+        cx.notify();
+    }
+
+    /// Approves a job's changes: merged into the branch it started from.
+    pub(super) fn approve(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(job) = self.store.job(id).cloned() else {
+            return;
+        };
+        if job.status != Status::Review {
+            return;
+        }
+        match work::merge(&job) {
+            Ok(hash) => {
+                let msg = format!("Merged into {} as {hash}.", job.base);
+                if let Some(j) = self.store.job_mut(id) {
+                    j.status = Status::Shipped;
+                    j.shipped = msg.clone();
+                    j.worktree.clear();
+                    j.seen = true;
+                    j.feed.push(store::Item::Note(msg.clone()));
+                }
+                self.say(msg);
+            }
+            Err(why) => {
+                if let Some(j) = self.store.job_mut(id) {
+                    j.feed
+                        .push(store::Item::Error(format!("Couldn't merge it: {why}")));
+                }
+                self.say("Couldn't merge it. The reason is on the job.");
+            }
+        }
+        self.store.save();
+        cx.notify();
+    }
+
+    /// Throws a job's changes away, with its branch and worktree.
+    pub(super) fn discard_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(job) = self.store.job(id).cloned() else {
+            return;
+        };
+        work::discard(&job);
+        if let Some(j) = self.store.job_mut(id) {
+            j.status = Status::Discarded;
+            j.worktree.clear();
+            j.seen = true;
+            j.feed
+                .push(store::Item::Note("You discarded its changes.".into()));
+        }
+        self.diff_open = None;
+        self.say("Discarded. Your checkout was never touched.");
         self.store.save();
         cx.notify();
     }
@@ -1185,8 +1307,31 @@ impl Shell {
             self.saved = Instant::now();
             self.store.save();
         }
+        // Checker's runs of the checks coming back.
+        let mut back = Vec::new();
+        self.checking.retain(|(id, rx)| match rx.try_recv() {
+            Ok(results) => {
+                back.push((*id, results));
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                back.push((*id, Vec::new()));
+                false
+            }
+        });
+        for (id, results) in back {
+            if let Some(job) = self.store.job_mut(id) {
+                job.checks = results;
+                job.checking = false;
+            }
+            self.store.save();
+        }
         if !finished.is_empty() {
             self.runners.retain(|r| !finished.contains(&r.id));
+            for id in &finished {
+                self.begin_review(*id);
+            }
             for id in &finished {
                 if let Some(j) = self.store.job(*id).cloned() {
                     if self.place != Place::Live(*id) {

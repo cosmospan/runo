@@ -700,6 +700,8 @@ pub(super) fn status_of(j: &Job) -> (String, (u32, u32, u32)) {
         Status::Done => ("Done".to_string(), OK),
         Status::Failed => ("Failed".to_string(), BAD),
         Status::Interrupted => ("Interrupted".to_string(), ASK),
+        Status::Review => ("Ready for review".to_string(), ASK),
+        Status::Shipped => ("Shipped".to_string(), OK),
         s => (s.label().to_string(), GREY),
     }
 }

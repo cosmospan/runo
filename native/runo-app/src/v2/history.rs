@@ -195,6 +195,7 @@ impl Shell {
         let id = j.id;
         let face = self.bot(j.bot, runo_holo::Mood::Idle, 56., runo_holo::Framing::Bust);
         let headline = match j.status {
+            Status::Review => format!("{} has changes for you to review", j.bot.name()),
             Status::Done if j.files.is_empty() => format!("{} finished", j.bot.name()),
             Status::Done => format!(
                 "{} changed {} {}",
@@ -213,6 +214,7 @@ impl Shell {
         for para in said.split("\n\n").filter(|p| !p.trim().is_empty()).take(6) {
             said_lines = said_lines.child(div().child(para.trim().to_string()));
         }
+        let mut review = self.review_card(j, cx);
         let mut files = ui::card().overflow_hidden().child(
             div()
                 .h(px(40.))
@@ -328,7 +330,10 @@ impl Shell {
                             .text_color(c(ui::BODY))
                             .child(said_lines),
                     )
-                    .child(files)
+                    .map(|d| match review.take() {
+                        Some(card) => d.child(card.ml(px(0.))),
+                        None => d.child(files),
+                    })
                     .when(!j.plan.is_empty(), |d| {
                         d.child(
                             ui::card()
@@ -364,6 +369,9 @@ impl Shell {
                             .text_size(px(12.5))
                             .text_color(c(ui::MUTED))
                             .child(match j.status {
+                                Status::Review => {
+                                    "Approve to merge it, or open it to send it back."
+                                }
                                 Status::Done => "Look it over, then mark it seen or ask for more.",
                                 _ => "Open the job to see where it stopped, or ask it to carry on.",
                             }),
@@ -371,26 +379,36 @@ impl Shell {
                     .child(
                         ui::ghost(
                             "inbox-open",
-                            if j.status == Status::Done {
-                                "Ask for changes"
+                            if matches!(j.status, Status::Done | Status::Review) {
+                                "Send back"
                             } else {
                                 "Open job"
                             },
                         )
                         .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
                     )
-                    .child(
-                        ui::solid("inbox-seen", "Mark as seen").on_click(cx.listener(
-                            move |this, _, _, cx| {
-                                if let Some(j) = this.store.jobs.iter_mut().find(|j| j.id == id) {
-                                    j.seen = true;
-                                }
-                                this.inbox_pick = None;
-                                this.store.save();
-                                cx.notify();
-                            },
-                        )),
-                    ),
+                    .when(j.status == Status::Review, |d| {
+                        let label = format!("Approve & merge into {}", j.base);
+                        d.child(
+                            ui::solid("inbox-approve", label)
+                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
+                        )
+                    })
+                    .when(j.status != Status::Review, |d| {
+                        d.child(
+                            ui::solid("inbox-seen", "Mark as seen").on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    if let Some(j) = this.store.jobs.iter_mut().find(|j| j.id == id)
+                                    {
+                                        j.seen = true;
+                                    }
+                                    this.inbox_pick = None;
+                                    this.store.save();
+                                    cx.notify();
+                                },
+                            )),
+                        )
+                    }),
             )
     }
 
@@ -434,7 +452,7 @@ impl Shell {
             })
             .filter(|j| match filter {
                 1 => j.status == Status::Running,
-                2 => j.status == Status::Done,
+                2 => matches!(j.status, Status::Done | Status::Shipped),
                 3 => matches!(
                     j.status,
                     Status::Failed | Status::Interrupted | Status::Stopped

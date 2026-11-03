@@ -78,7 +78,7 @@ pub fn start(
             String::new()
         };
     }
-    let dir = job.folder.path.clone();
+    let dir = job.dir().to_string();
     let sent = prompt(job, text, resume);
     let spec = agent::RunSpec {
         provider: p.id,

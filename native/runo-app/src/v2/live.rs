@@ -70,7 +70,8 @@ impl Shell {
                     Mood::Signature
                 }
             }
-            Status::Failed => Mood::NeedsYou,
+            Status::Failed | Status::Review => Mood::NeedsYou,
+            Status::Shipped => Mood::Signature,
             _ => Mood::Idle,
         };
         let hero = self.bot(who, mood, 132., Framing::Full);
@@ -80,6 +81,9 @@ impl Shell {
             Status::Failed => "stopped on",
             Status::Stopped => "was stopped on",
             Status::Interrupted => "was interrupted on",
+            Status::Review => "finished, waiting for your review of",
+            Status::Shipped => "shipped",
+            Status::Discarded => "had its changes discarded on",
         };
         let progress = job.progress();
         // The engine's own summary already says how long it took.
@@ -184,14 +188,27 @@ impl Shell {
                                 .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
                         )
                     })
-                    .when(!running && job.status != Status::Done, |d| {
+                    .when(job.status == Status::Review, |d| {
                         let id = job.id;
+                        let label = format!("Approve & merge into {}", job.base);
                         d.child(
-                            ui::ghost("retry", "Try again").on_click(
-                                cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
-                            ),
+                            ui::solid("approve-top", label)
+                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
                         )
                     })
+                    .when(
+                        !running
+                            && !matches!(
+                                job.status,
+                                Status::Done | Status::Review | Status::Shipped
+                            ),
+                        |d| {
+                            let id = job.id;
+                            d.child(ui::ghost("retry", "Try again").on_click(
+                                cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
+                            ))
+                        },
+                    )
                     .when(running, |d| {
                         let id = job.id;
                         d.child(
@@ -357,6 +374,9 @@ impl Shell {
             };
         }
         feed = flush(feed, &mut tools);
+        if let Some(card) = self.review_card(job, cx) {
+            feed = feed.child(card);
+        }
         if running {
             let dots = typing(self.now());
             feed = feed.child(
@@ -390,6 +410,8 @@ impl Shell {
         }
         let input_hint = if running {
             "It's working. You can add to the job when it finishes."
+        } else if job.status == Status::Review {
+            "Send it back: say what to change…"
         } else {
             "Ask a follow-up or ask for a change…"
         };
@@ -594,6 +616,12 @@ impl Shell {
                                     ago_phrase(job.ended.unwrap_or(job.started)),
                                     store::span(job.seconds())
                                 ),
+                                Status::Review => format!(
+                                    "Finished {} on its own branch. Your checkout is untouched until you approve.",
+                                    ago_phrase(job.ended.unwrap_or(job.started)),
+                                ),
+                                Status::Shipped => job.shipped.clone(),
+                                Status::Discarded => "Its changes were thrown away; your checkout never changed.".to_string(),
                                 _ => format!(
                                     "Ran for {}. Its last note says what went wrong; ask a follow-up to carry on.",
                                     store::span(job.seconds())
@@ -655,8 +683,9 @@ fn ago_phrase(at: u64) -> String {
 pub(super) fn status_color(s: Status) -> u32 {
     match s {
         Status::Running => ui::ORANGE,
-        Status::Done => ui::GREEN,
+        Status::Done | Status::Shipped => ui::GREEN,
         Status::Failed => ui::RED,
+        Status::Discarded => ui::FAINT,
         _ => ui::AMBER,
     }
 }

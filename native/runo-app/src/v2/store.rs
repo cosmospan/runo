@@ -46,6 +46,12 @@ pub enum Status {
     Stopped,
     /// Runo closed while it ran.
     Interrupted,
+    /// It changed files in its own worktree and waits for you to approve them.
+    Review,
+    /// Approved: merged, or handed to Shipper for a pull request.
+    Shipped,
+    /// You threw its changes away.
+    Discarded,
 }
 
 impl Status {
@@ -56,6 +62,9 @@ impl Status {
             Status::Failed => "Stopped with a problem",
             Status::Stopped => "Stopped by you",
             Status::Interrupted => "Interrupted",
+            Status::Review => "Ready for review",
+            Status::Shipped => "Shipped",
+            Status::Discarded => "Discarded",
         }
     }
 }
@@ -105,6 +114,33 @@ pub struct Job {
     pub conversation: String,
     /// The person has opened it since it finished.
     pub seen: bool,
+    /// The branch and worktree a writing job works in, apart from your own
+    /// checkout, and the branch it started from. Empty when it worked in the folder.
+    pub branch: String,
+    pub worktree: String,
+    pub base: String,
+    /// Where `base` was when the job started, for its diff.
+    pub base_sha: String,
+    /// What it changed, once it finished.
+    pub changes: Vec<Changed>,
+    /// Checker's run of the project's checks on those changes.
+    pub checks: Vec<crate::proof::CheckRun>,
+    /// Checker is running them now.
+    pub checking: bool,
+    /// What happened when it was approved: "Merged into main as 3f2a1c9", or the
+    /// pull request's address.
+    pub shipped: String,
+}
+
+/// One file a job changed.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Changed {
+    pub path: String,
+    /// Git's letter: A added, M modified, D deleted.
+    pub status: String,
+    pub added: usize,
+    pub removed: usize,
 }
 
 impl Default for Job {
@@ -126,6 +162,14 @@ impl Default for Job {
             summary: String::new(),
             conversation: String::new(),
             seen: true,
+            branch: String::new(),
+            worktree: String::new(),
+            base: String::new(),
+            base_sha: String::new(),
+            changes: Vec::new(),
+            checks: Vec::new(),
+            checking: false,
+            shipped: String::new(),
         }
     }
 }
@@ -174,7 +218,27 @@ impl Job {
         })
     }
 
+    /// Lines added and removed across its changes.
+    pub fn lines(&self) -> (usize, usize) {
+        self.changes
+            .iter()
+            .fold((0, 0), |a, c| (a.0 + c.added, a.1 + c.removed))
+    }
+
+    /// The folder it runs in: its worktree, or the project folder.
+    pub fn dir(&self) -> &str {
+        if self.worktree.is_empty() {
+            &self.folder.path
+        } else {
+            &self.worktree
+        }
+    }
+
     pub fn needs_you(&self) -> bool {
+        // Changes waiting for approval stay in Needs you until you decide.
+        if self.status == Status::Review {
+            return true;
+        }
         !self.seen
             && matches!(
                 self.status,
@@ -292,6 +356,9 @@ impl Store {
                 j.ended = Some(j.ended.unwrap_or(j.started));
                 j.feed
                     .push(Item::Note("Runo closed while this was running.".into()));
+            }
+            if j.checking {
+                j.checking = false;
             }
         }
         s.folders.retain(|f| std::path::Path::new(&f.path).is_dir());
