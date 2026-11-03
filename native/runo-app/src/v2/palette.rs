@@ -45,7 +45,7 @@ impl Shell {
         let places = [
             (Place::Today, IconName::House, "Today", "⌘1"),
             (Place::Inbox, IconName::Inbox, "Inbox", "⌘2"),
-            (Place::History, IconName::Clock, "History", "⌘3"),
+            (Place::History, IconName::Clock, "Jobs", "⌘3"),
             (Place::Crew, IconName::Users, "Crew", "⌘5"),
             (Place::Engines, IconName::Cpu, "Engines", "⌘6"),
         ];

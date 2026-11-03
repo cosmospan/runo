@@ -4,6 +4,16 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.3] - 2026-11-03
+
+### Changed
+
+- A new, enterprise-style layout. The dock and the icon rail are replaced by a sidebar: the folder you're in, search (⌘K), Home, Inbox, Jobs, Chats and Crew, then the crew itself, one row per bot with its bubble, what it's doing right now and a progress bar while it works.
+- A top bar over every page shows where you are, how many jobs are running and a New job button.
+- Home is a working page: a short header, the job box with the chosen bot's bubble beside it, a strip of numbers (running, needs you, done today, spend today) and a jobs table with Active, Needs you and Finished tabs, showing each job's bot, status, progress, files changed and last update.
+- A calmer look throughout: a neutral grey page, white surfaces with thin borders instead of soft shadows and a colour wash, smaller headings, and tighter buttons and tabs. The bubbles are the one colourful element.
+- Chat uses the whole width; you pick the bot in the sidebar. History is now called Jobs.
+
 ## [2.0.0-alpha.2] - 2026-11-03
 
 ### Changed

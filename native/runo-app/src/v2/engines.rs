@@ -421,7 +421,7 @@ impl Shell {
             .child(
                 div()
                     .child(ui::caption("ENGINES"))
-                    .child(div().mt(px(6.)).text_size(px(34.)).font_weight(FontWeight::BOLD).child("What runs your crew"))
+                    .child(div().mt(px(6.)).text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child("What runs your crew"))
                     .child(
                         div()
                             .mt(px(6.))

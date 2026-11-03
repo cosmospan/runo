@@ -6,7 +6,7 @@ use gpui_kit::component::input::Textarea;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::{Framing, Mood};
+use runo_holo::Framing;
 
 use super::data::{Member, Mode};
 use super::store::{self, Status};
@@ -105,50 +105,44 @@ impl Shell {
             .child(self.folder_picker(cx));
         let has_jobs = !self.store.jobs.is_empty();
 
-        // The group sits in the middle of the space above the dock, and
-        // scrolls when the window is too short for it.
+        // A working page: a short header, the job box, the numbers, the table.
         let page = div()
             .w_full()
-            .min_h_full()
+            .max_w(px(1160.))
             .flex()
             .flex_col()
-            .items_center()
-            .justify_center()
-            .px(px(40.))
-            .pt(px(if cfg!(target_os = "macos") { 64. } else { 40. }))
-            .pb(px(28. + super::DOCK_ROOM))
+            .gap(px(20.))
+            .px(px(28.))
+            .pt(px(24.))
+            .pb(px(32.))
             .child(ui::rise(
                 div()
-                    .text_size(px(52.))
-                    .font_weight(FontWeight::BOLD)
-                    .line_height(px(58.))
-                    .child(greeting()),
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(px(24.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(greeting()),
+                    )
+                    .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
             ))
-            .child(ui::rise(sub, self.stagger(1)))
+            .child(ui::rise(div().w_full().child(self.composer_card(cx)), self.stagger(1)))
             .child(ui::rise(
-                div()
-                    .w_full()
-                    .flex()
-                    .justify_center()
-                    .child(self.composer_card(cx)),
-                self.stagger(3),
-            ))
-            .child(ui::rise(
-                div()
-                    .w_full()
-                    .flex()
-                    .justify_center()
-                    .child(self.starters(cx)),
-                self.stagger(4),
-            ))
-            .child(ui::rise(
-                div().w_full().flex().justify_center().child(if has_jobs {
-                    self.cards(cx).into_any_element()
+                div().w_full().child(if has_jobs {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(20.))
+                        .child(self.kpis())
+                        .child(self.jobs_table(cx))
+                        .into_any_element()
                 } else {
                     how_it_works().into_any_element()
                 }),
-                self.stagger(5),
+                self.stagger(2),
             ));
         div()
             .id("today")
@@ -224,21 +218,19 @@ impl Shell {
             );
         }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
-        ui::card()
-            .mt(px(30.))
-            .w(px(840.))
-            .rounded(px(24.))
-            .px(px(22.))
-            .pt(px(20.))
-            .pb(px(14.))
+        let mood = self.mood(target);
+        let hero = self.bot(target, mood, 76., Framing::Bust);
+        let box_ = div()
+            .flex_1()
+            .min_w_0()
             .flex()
             .flex_col()
-            .gap(px(14.))
+            .gap(px(12.))
             .child(
                 div()
-                    .min_h(px(78.))
-                    .text_size(px(17.))
-                    .line_height(px(26.))
+                    .min_h(px(64.))
+                    .text_size(px(15.))
+                    .line_height(px(22.))
                     .child(
                         Textarea::new(&self.composer)
                             .appearance(false)
@@ -304,7 +296,35 @@ impl Shell {
                                 this.hand_over(text, cx);
                             })),
                     ),
+            );
+        div()
+            .w_full()
+            .flex()
+            .gap(px(18.))
+            .px(px(18.))
+            .pt(px(18.))
+            .pb(px(14.))
+            .bg(c(0xFFFFFF))
+            .border_1()
+            .border_color(c(ui::LINE))
+            .rounded(px(12.))
+            .child(
+                div()
+                    .w(px(92.))
+                    .flex_none()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(hero)
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(c(ui::MUTED))
+                            .child(target.name()),
+                    ),
             )
+            .child(box_)
     }
 
     /// The folder the crew works in, as words in a sentence you can click.
@@ -453,163 +473,6 @@ impl Shell {
             .children(menu.map(|m| deferred(m).with_priority(1)))
     }
 
-    /// Up to three things to ask the bot that would take the job, in one
-    /// row under the box. They follow the tab, and go once you start typing.
-    fn starters(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let who = self.doer();
-        let typing = !self.composer.read(cx).value().trim().is_empty();
-        let mut row = div()
-            .mt(px(12.))
-            .w(px(840.))
-            .h(px(34.))
-            .flex()
-            .flex_wrap()
-            .gap(px(8.))
-            // Only what fits on one line; the rest wraps out of sight.
-            .overflow_hidden();
-        if typing {
-            return row;
-        }
-        let mode = self.mode;
-        let picks: Vec<&'static str> = match mode.default_job() {
-            Some(job) => std::iter::once(job)
-                .chain(who.starters().into_iter().take(2))
-                .collect(),
-            None => who.starters().to_vec(),
-        };
-        for (i, text) in picks.into_iter().enumerate() {
-            row = row.child(
-                div()
-                    .id(("starter", i))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .px(px(13.))
-                    .h(px(34.))
-                    .rounded_full()
-                    .bg(ca(0xFFFFFF, 0.6))
-                    .border_1()
-                    .border_color(ca(0xFFFFFF, 0.9))
-                    .text_size(px(13.))
-                    .text_color(c(ui::BODY))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(0xFFFFFF)).text_color(c(ui::INK)))
-                    .active(|s| s.bg(c(0xF1F2F7)))
-                    .child(text)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.set_mode(mode, window, cx);
-                        this.composer
-                            .update(cx, |i, cx| i.set_value(text, window, cx));
-                        this.composer.update(cx, |i, cx| i.focus(window, cx));
-                        this.focus_moved = std::time::Instant::now();
-                        cx.notify();
-                    })),
-            );
-        }
-        row
-    }
-
-    /// What needs you, what's running and what finished, as three cards.
-    fn cards(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let needs: Vec<_> = self
-            .store
-            .jobs
-            .iter()
-            .rev()
-            .filter(|j| j.needs_you())
-            .take(4)
-            .cloned()
-            .collect();
-        let running: Vec<_> = self.store.running().cloned().collect();
-        let finished: Vec<_> = self
-            .store
-            .jobs
-            .iter()
-            .rev()
-            .filter(|j| j.status == Status::Done && !j.needs_you())
-            .take(4)
-            .cloned()
-            .collect();
-        let mut needs_card = column_card("Needs you", needs.len(), ui::AMBER);
-        if needs.is_empty() {
-            needs_card = needs_card.child(empty_line("Nothing is waiting on you."));
-        }
-        for j in &needs {
-            let face = self.avatar(j.bot, 34.);
-            let (word, color) = match j.status {
-                Status::Done => ("Done · have a look", ui::GREEN),
-                Status::Failed => ("Stopped with a problem", ui::RED),
-                _ => ("Interrupted", ui::AMBER),
-            };
-            needs_card = needs_card.child(job_row(j.id, face, &j.title, word, color, None, cx));
-        }
-        let mut work_card = column_card("Working now", running.len(), ui::ORANGE);
-        if running.is_empty() {
-            work_card =
-                work_card.child(empty_line("No one is working. Hand them something above."));
-        }
-        for j in &running {
-            let face = self.bot(j.bot, Mood::Working, 34., Framing::Bust);
-            let frac = j
-                .progress()
-                .map(|(d, n)| self.glide_bar(j.id, d as f32 / n.max(1) as f32));
-            let doing = format!("{} · {}", j.doing(), store::span(j.seconds()));
-            work_card = work_card.child(job_row(
-                j.id,
-                face,
-                &j.title,
-                &doing,
-                j.bot.accent(),
-                Some(frac),
-                cx,
-            ));
-        }
-        let mut done_card = column_card("Finished", finished.len(), ui::GREEN);
-        if finished.is_empty() {
-            done_card = done_card.child(empty_line("Finished jobs land here."));
-        }
-        for j in &finished {
-            let face = self.avatar(j.bot, 34.);
-            let when = match store::ago(j.ended.unwrap_or(j.started)).as_str() {
-                "just now" => format!("just now · {}", j.bot.name()),
-                a => format!("{a} ago · {}", j.bot.name()),
-            };
-            done_card = done_card.child(job_row(j.id, face, &j.title, &when, ui::MUTED, None, cx));
-        }
-        // Only the cards with something in them; one alone sits under the box.
-        let all = done_card.child(
-            div()
-                .id("all-jobs")
-                .mt(px(4.))
-                .text_size(px(12.5))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(ui::ORANGE))
-                .cursor_pointer()
-                .hover(|s| s.text_color(c(ui::INK)))
-                .child("All jobs →")
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
-        );
-        let shown: Vec<Div> = [
-            (!needs.is_empty()).then_some(needs_card),
-            (!running.is_empty()).then_some(work_card),
-            (!finished.is_empty()).then_some(all),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        let n = shown.len();
-        div()
-            .mt(px(36.))
-            .w_full()
-            .max_w(px(match n {
-                1 => 840.,
-                2 => 1040.,
-                _ => 1240.,
-            }))
-            .flex()
-            .gap(px(18.))
-            .children(shown)
-    }
 }
 
 fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
@@ -618,105 +481,6 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
     } else {
         many
     }
-}
-
-fn column_card(title: &'static str, count: usize, color: u32) -> Div {
-    ui::card()
-        .flex_1()
-        .flex_basis(px(0.))
-        .min_w_0()
-        .min_h(px(150.))
-        .p(px(20.))
-        .flex()
-        .flex_col()
-        .gap(px(12.))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(14.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(title),
-                )
-                .when(count > 0, |d| {
-                    d.child(
-                        div()
-                            .px(px(8.))
-                            .h(px(20.))
-                            .flex()
-                            .items_center()
-                            .rounded_full()
-                            .bg(ca(color, 0.12))
-                            .text_color(c(color))
-                            .text_size(px(11.5))
-                            .font_weight(FontWeight::BOLD)
-                            .child(count.to_string()),
-                    )
-                }),
-        )
-}
-
-fn empty_line(text: &'static str) -> Div {
-    div()
-        .py(px(6.))
-        .text_size(px(13.))
-        .text_color(c(ui::FAINT))
-        .child(text)
-}
-
-pub(super) fn job_row(
-    id: u64,
-    face: Img,
-    title: &str,
-    note: &str,
-    color: u32,
-    progress: Option<Option<f32>>,
-    cx: &mut Context<Shell>,
-) -> Stateful<Div> {
-    div()
-        .id(("job-row", id as usize))
-        .flex()
-        .items_center()
-        .gap(px(12.))
-        .mx(px(-8.))
-        .px(px(8.))
-        .py(px(6.))
-        .rounded(px(12.))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(0xF6F7FB)))
-        .child(face)
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(px(3.))
-                .child(
-                    div()
-                        .text_size(px(13.5))
-                        .font_weight(FontWeight::MEDIUM)
-                        .truncate()
-                        .child(title.to_string()),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(c(color))
-                        .truncate()
-                        .child(note.to_string()),
-                )
-                .when_some(progress, |d, frac| {
-                    d.child(match frac {
-                        Some(f) => ui::bar(f.max(0.04), color).into_any_element(),
-                        None => ui::sweep(color, 0.0).into_any_element(),
-                    })
-                }),
-        )
-        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
 }
 
 /// The first-run card: what happens when you hand the crew a job.

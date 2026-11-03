@@ -11,7 +11,8 @@
 mod chat;
 mod crew;
 mod data;
-mod dock;
+mod home;
+mod sidebar;
 mod engine;
 mod engines;
 mod history;
@@ -27,9 +28,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
-use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{BubbleRenderer, Framing, Mood, Pose};
@@ -404,17 +403,12 @@ pub struct Shell {
     maker_like: Member,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
+    /// Home's table tab: active, needs you or finished.
+    home_tab: u8,
     setup_crew: Vec<Member>,
     /// A made bot chosen for Today's next job (its mode must match).
     target: Option<Member>,
     hover_at: Instant,
-    /// The rail bot under the pointer, which shows its card.
-    rail_hover: Option<Member>,
-    /// The dock's bot sizes as they ease, and whether any is still moving.
-    dock_sizes: HashMap<u64, f32>,
-    dock_moving: bool,
-    /// The soft colour wash behind every screen, drawn once.
-    backdrop: Arc<RenderImage>,
     /// The command palette (⌘K), its box, the picked row and when it opened.
     palette: bool,
     /// The window's own focus, so shortcuts work before any box is clicked.
@@ -477,53 +471,11 @@ fn doze_after() -> Duration {
     Duration::from_secs(secs)
 }
 
-/// Extra room at the bottom of a page. The dock has its own strip now, so
-/// pages no longer pad themselves around it.
-pub(super) const DOCK_ROOM: f32 = 0.;
+/// Extra room at the bottom of a page (the crew is in the sidebar now).
+pub(super) const DOCK_ROOM: f32 = 16.;
 
-/// The height of the dock's strip under every page: the bar at rest and its
-/// margin. A bot grown under the pointer rises out of it for a moment.
-const DOCK_STRIP: f32 = 108.;
-
-/// The soft wash of colour behind the app: a few big, blurred tints on a pale
-/// base, drawn small once and stretched (it has no edges to blur).
-fn backdrop() -> Arc<RenderImage> {
-    let (w, h) = (160usize, 100usize);
-    // (x, y, radius, colour, strength), in the image's 0..1 space.
-    let blobs: [(f32, f32, f32, u32, f32); 5] = [
-        (0.05, 0.0, 0.55, 0xFFD3BC, 0.55),
-        (0.95, 0.08, 0.5, 0xDCCFFF, 0.5),
-        (0.75, 0.95, 0.55, 0xC9F0DF, 0.45),
-        (0.15, 0.9, 0.45, 0xCFE6FF, 0.45),
-        (0.5, 0.45, 0.4, 0xFFF1E0, 0.3),
-    ];
-    let base = [0xF5u8 as f32, 0xF5 as f32, 0xFA as f32];
-    let mut px = Vec::with_capacity(w * h * 4);
-    for y in 0..h {
-        for x in 0..w {
-            let (u, v) = (x as f32 / (w - 1) as f32, y as f32 / (h - 1) as f32);
-            let mut col = base;
-            for (bx, by, r, rgb_hex, k) in blobs {
-                // Aspect-correct distance, so blobs stay round on a wide window.
-                let d = (((u - bx) * 1.6).powi(2) + (v - by).powi(2)).sqrt() / r;
-                let a = (1.0 - d).clamp(0.0, 1.0);
-                let a = a * a * (3.0 - 2.0 * a) * k;
-                let t = [
-                    ((rgb_hex >> 16) & 0xFF) as f32,
-                    ((rgb_hex >> 8) & 0xFF) as f32,
-                    (rgb_hex & 0xFF) as f32,
-                ];
-                for i in 0..3 {
-                    col[i] += (t[i] - col[i]) * a;
-                }
-            }
-            // BGRA, opaque.
-            px.extend_from_slice(&[col[2] as u8, col[1] as u8, col[0] as u8, 255]);
-        }
-    }
-    let buf = image::RgbaImage::from_raw(w as u32, h as u32, px).expect("backdrop size");
-    Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
-}
+/// The page ground: a quiet neutral grey under white surfaces.
+pub(super) const PAGE: u32 = 0xF6F6F7;
 
 /// Width of one of Today's mode tabs plus the gap after it.
 const MODE_STEP: f32 = 78.;
@@ -693,15 +645,12 @@ impl Shell {
             hovered: None,
             target: None,
             setup_step: 0,
+            home_tab: 0,
             setup_crew: data::STARTER_CREW.to_vec(),
             maker_name,
             maker_role,
             maker_like: Member::Checker,
             hover_at: Instant::now(),
-            rail_hover: None,
-            dock_sizes: HashMap::new(),
-            dock_moving: false,
-            backdrop: backdrop(),
             palette: false,
             focus,
             focus_moved: Instant::now(),
@@ -1350,202 +1299,6 @@ impl Shell {
         self.store.jobs.iter().filter(|j| j.needs_you()).count()
     }
 
-    fn rail(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let place = self.place;
-        let inbox = self.inbox_count();
-        // The Inbox badge pops when something new lands in it.
-        if inbox > self.inbox_seen {
-            self.inbox_at = Instant::now();
-        }
-        self.inbox_seen = inbox;
-        let pop = {
-            let t = self.inbox_at.elapsed().as_secs_f32();
-            if t < 0.6 && self.motion {
-                3.0 * (t / 0.6 * std::f32::consts::PI).sin() * (1.0 - t / 0.6)
-            } else {
-                0.0
-            }
-        };
-        let nav = [
-            (Place::Today, IconName::House, "Today"),
-            (Place::Inbox, IconName::Inbox, "Inbox"),
-            (Place::History, IconName::Clock, "History"),
-            (
-                Place::Chat(Member::Explainer),
-                IconName::MessageSquare,
-                "Chat",
-            ),
-            (Place::Crew, IconName::Users, "Crew"),
-        ];
-        // One white highlight glides between the items as the place changes.
-        let glide = nav_slot(place).map(|_| self.nav_y());
-        let mut icons = div()
-            .flex_none()
-            .relative()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(4.))
-            .when_some(glide, |d, y| {
-                d.child(
-                    div()
-                        .absolute()
-                        .top(px(y))
-                        .left(px(0.))
-                        .size(px(42.))
-                        .rounded(px(12.))
-                        .bg(c(0xFFFFFF))
-                        .shadow(ui::lift()),
-                )
-            });
-        for (i, (p, icon, label)) in nav.into_iter().enumerate() {
-            let on = match (place, p) {
-                (Place::Chat(_), Place::Chat(_)) => true,
-                (Place::Live(_), Place::History) => true,
-                _ => place == p,
-            };
-            icons = icons.child(
-                div()
-                    .id(("nav", i))
-                    .relative()
-                    .flex_none()
-                    .size(px(42.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(12.))
-                    .cursor_pointer()
-                    .tooltip(move |window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
-                    })
-                    .when(!on, |d| d.hover(|s| s.bg(ca(0xFFFFFF, 0.7))))
-                    .child(Icon::new(icon).size(px(18.)).text_color(c(if on {
-                        ui::INK
-                    } else {
-                        ui::MUTED
-                    })))
-                    .when(p == Place::Inbox && inbox > 0, |d| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .top(px(5. - pop))
-                                .right(px(4. - pop))
-                                .min_w(px(15. + 2. * pop))
-                                .h(px(15. + 2. * pop))
-                                .px(px(3.))
-                                .rounded_full()
-                                .bg(c(ui::ORANGE))
-                                .border_2()
-                                .border_color(c(ui::RAIL))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_size(px(8.5))
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(c(0xFFFFFF))
-                                .child(inbox.min(99).to_string()),
-                        )
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let to = match p {
-                            Place::Chat(_) => Place::Chat(this.last_chat()),
-                            other => other,
-                        };
-                        this.go(to, cx)
-                    })),
-            );
-        }
-        let nav_button = |id: &'static str, icon: IconName, on: bool, label: &'static str| {
-            div()
-                .id(id)
-                .flex_none()
-                .size(px(42.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(12.))
-                .cursor_pointer()
-                .tooltip(move |window, cx| {
-                    gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
-                })
-                .when(on, |d| d.bg(c(0xFFFFFF)).shadow(ui::lift()))
-                .hover(|s| s.bg(c(0xFFFFFF)))
-                .child(Icon::new(icon).size(px(18.)).text_color(c(if on {
-                    ui::INK
-                } else {
-                    ui::MUTED
-                })))
-        };
-        div()
-            .w(px(76.))
-            .h_full()
-            .flex_none()
-            .flex()
-            .flex_col()
-            .items_center()
-            // On a Mac the window buttons sit in the top-left corner, over the rail.
-            .pt(px(if cfg!(target_os = "macos") { 46. } else { 20. }))
-            .pb(px(16.))
-            .gap(px(14.))
-            .bg(ca(0xFFFFFF, 0.45))
-            .border_r_1()
-            .border_color(c(ui::LINE))
-            // The top button finds anything: places, bots, jobs, folders (⌘K).
-            .child(
-                div()
-                    .id("open-palette")
-                    .flex_none()
-                    .size(px(40.))
-                    .rounded(px(12.))
-                    .bg(ca(0xFFFFFF, 0.7))
-                    .border_1()
-                    .border_color(c(ui::LINE))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(0xFFFFFF)))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Find anything (⌘K)")
-                            .build(window, cx)
-                    })
-                    .child(
-                        Icon::new(IconName::Search)
-                            .size(px(17.))
-                            .text_color(c(ui::INK)),
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
-            )
-            .child(icons)
-            .child(div().flex_1())
-            .child(
-                nav_button(
-                    "nav-engines",
-                    IconName::Cpu,
-                    place == Place::Engines,
-                    "Engines",
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
-            )
-            .child(
-                div()
-                    .id("open-v1")
-                    .px(px(8.))
-                    .py(px(3.))
-                    .rounded_full()
-                    .text_size(px(10.))
-                    .font_family(ui::MONO)
-                    .text_color(c(ui::FAINT))
-                    .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::INK)).bg(c(0xFFFFFF)))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Open Runo v1").build(window, cx)
-                    })
-                    .child("v1")
-                    .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
-            )
-    }
-
     /// The bot whose chat was open last, else Explainer.
     fn last_chat(&self) -> Member {
         Member::all()
@@ -1581,7 +1334,6 @@ impl Render for Shell {
             || self.chat_at.elapsed() < Duration::from_millis(500)
             || self.nav_at.elapsed() < Duration::from_millis(600)
             || (self.hovered.is_some() && self.hover_at.elapsed() < Duration::from_millis(400))
-            || self.dock_moving
             || self
                 .toast
                 .as_ref()
@@ -1759,11 +1511,9 @@ impl Render for Shell {
             }))
             .font_family("Geist")
             .text_color(c(ui::INK))
-            .bg(c(0xF5F5FA))
-            // The colour wash, stretched under everything.
-            .child(img(self.backdrop.clone()).absolute().inset_0().size_full())
-            // The walkthrough has the whole window; the rail and dock come after it.
-            .when(!setup, |d| d.child(self.rail(cx)))
+            .bg(c(PAGE))
+            // The walkthrough has the whole window; the sidebar comes after it.
+            .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
                 div()
                     .flex_1()
@@ -1771,8 +1521,7 @@ impl Render for Shell {
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    // The page above, the crew below: the dock has a strip of
-                    // its own, so it never sits on top of a card or a reply.
+                    .when(!setup, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
                             .flex_1()
@@ -1781,20 +1530,7 @@ impl Render for Shell {
                             .relative()
                             .overflow_hidden()
                             .child(div().size_full().child(body)),
-                    )
-                    .when(!setup, |d| {
-                        d.child(
-                            div()
-                                .flex_none()
-                                .h(px(DOCK_STRIP))
-                                .w_full()
-                                .flex()
-                                .items_end()
-                                .justify_center()
-                                .pb(px(12.))
-                                .child(self.dock(cx)),
-                        )
-                    }),
+                    ),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

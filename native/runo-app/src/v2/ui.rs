@@ -8,8 +8,7 @@ pub const INK: u32 = 0x17151F;
 pub const BODY: u32 = 0x3A3C50;
 pub const MUTED: u32 = 0x6A6C80;
 pub const FAINT: u32 = 0x9A9CB0;
-pub const LINE: u32 = 0xE7E8F0;
-pub const RAIL: u32 = 0xF9FAFD;
+pub const LINE: u32 = 0xE6E6E9;
 pub const ORANGE: u32 = 0xFF6A2B;
 pub const GREEN: u32 = 0x1FC27A;
 pub const AMBER: u32 = 0xF5A300;
@@ -37,46 +36,36 @@ pub fn ca(hex: u32, a: f32) -> Hsla {
     h
 }
 
-/// The design's soft drop shadow under cards.
+/// A hairline shadow, for raised controls like the selected tab.
 pub fn lift() -> Vec<BoxShadow> {
-    vec![
-        BoxShadow {
-            color: ca(0x28285A, 0.10),
-            offset: point(px(0.), px(14.)),
-            blur_radius: px(34.),
-            spread_radius: px(-18.),
-            inset: false,
-        },
-        BoxShadow {
-            color: ca(0x28285A, 0.05),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(2.),
-            spread_radius: px(0.),
-            inset: false,
-        },
-    ]
+    vec![BoxShadow {
+        color: ca(0x10101A, 0.06),
+        offset: point(px(0.), px(1.)),
+        blur_radius: px(2.),
+        spread_radius: px(0.),
+        inset: false,
+    }]
 }
 
 /// A white, softly lifted card.
 pub fn card() -> Div {
     div()
-        .bg(ca(0xFFFFFF, 0.86))
+        .bg(c(0xFFFFFF))
         .border_1()
-        .border_color(c(0xFFFFFF))
-        .rounded(px(20.))
-        .shadow(lift())
+        .border_color(c(LINE))
+        .rounded(px(12.))
 }
 
 /// A rounded outline button, like "Look first" or "Pause".
 pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(16.))
-        .h(px(38.))
+        .px(px(14.))
+        .h(px(32.))
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(12.))
+        .rounded(px(8.))
         .bg(c(0xFFFFFF))
         .border_1()
         .border_color(c(LINE))
@@ -93,13 +82,13 @@ pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
 pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(30.))
-        .h(px(38.))
+        .px(px(16.))
+        .h(px(32.))
         .flex()
         .items_center()
         .justify_center()
         .gap(px(8.))
-        .rounded(px(12.))
+        .rounded(px(8.))
         .bg(c(0x17151F))
         .text_size(px(13.5))
         .font_weight(FontWeight::SEMIBOLD)
@@ -114,12 +103,12 @@ pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
 pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(13.))
-        .h(px(32.))
+        .px(px(11.))
+        .h(px(28.))
         .flex()
         .items_center()
         .gap(px(6.))
-        .rounded_full()
+        .rounded(px(7.))
         .text_size(px(13.))
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()

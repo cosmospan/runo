@@ -115,7 +115,7 @@ impl Shell {
             self.job_list(&jobs, cx).into_any_element()
         };
         page(
-            "History",
+            "Jobs",
             format!(
                 "{total} {} so far.",
                 if total == 1 { "job" } else { "jobs" }
@@ -267,8 +267,8 @@ fn page(title: &'static str, line: String) -> Stateful<Div> {
         .id(title)
         .size_full()
         .overflow_y_scroll()
-        .px(px(40.))
-        .pt(px(if cfg!(target_os = "macos") { 40. } else { 30. }))
+        .px(px(28.))
+        .pt(px(24.))
         .pb(px(40. + super::DOCK_ROOM))
         .flex()
         .flex_col()
@@ -280,8 +280,8 @@ fn page(title: &'static str, line: String) -> Stateful<Div> {
                 .gap(px(6.))
                 .child(
                     div()
-                        .text_size(px(34.))
-                        .font_weight(FontWeight::BOLD)
+                        .text_size(px(24.))
+                        .font_weight(FontWeight::SEMIBOLD)
                         .child(title),
                 )
                 .child(
