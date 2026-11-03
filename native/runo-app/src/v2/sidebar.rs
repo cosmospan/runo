@@ -25,7 +25,7 @@ impl Shell {
         let place = self.place;
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let jobs = self.store.jobs.len();
+        let jobs = self.store.listed().len();
         let folder = self.store.folder().cloned();
 
         // The folder you're working in, at the top.

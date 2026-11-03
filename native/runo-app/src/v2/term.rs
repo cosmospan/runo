@@ -108,6 +108,9 @@ impl Shell {
         }
         self.term_open = Some(id);
         window.focus(&self.term_focus, cx);
+        // Not handed back to the window's own focus while the drawer appears.
+        self.focus_moved = std::time::Instant::now();
+        self.term_grab = 6;
         // The drawer isn't drawn yet: focus it again once it is.
         let h = self.term_focus.clone();
         window.on_next_frame(move |window, cx| window.focus(&h, cx));

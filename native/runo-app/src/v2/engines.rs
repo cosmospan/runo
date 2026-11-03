@@ -381,7 +381,8 @@ impl Shell {
             .iter()
             .filter(|j| j.agent == id && super::store::now().saturating_sub(j.started) < 86_400)
             .filter_map(|j| super::home::cost(&j.summary))
-            .sum();
+            .sum::<f64>()
+            + 0.0;
         let jobs = self.store.jobs.iter().filter(|j| j.agent == id).count();
         let mut head = div()
             .flex()
@@ -538,12 +539,13 @@ impl Shell {
             for (k, m) in models.iter().take(6).enumerate() {
                 let value = m.value.clone();
                 picks = picks.child(
-                    choice(
+                    ui::pill(
                         ("engine-model", n * 100 + k),
                         m.label.clone(),
                         model == m.value,
-                        true,
                     )
+                    .h(px(26.))
+                    .text_size(px(12.))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         let value = value.clone();
                         save(cx, |st| {

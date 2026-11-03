@@ -99,7 +99,7 @@ impl Shell {
                             .justify_end()
                             .child("Spend"),
                     )
-                    .child(div().w(px(250.)).flex_none()),
+                    .child(div().w(px(290.)).flex_none()),
             );
         for who in all {
             list = list.child(self.crew_row(who, cx));
@@ -199,10 +199,12 @@ impl Shell {
         let small = |id: (&'static str, usize), label: &'static str| {
             div()
                 .id(id)
-                .px(px(8.))
+                .w(px(54.))
+                .flex_none()
                 .h(px(26.))
                 .flex()
                 .items_center()
+                .justify_center()
                 .rounded(px(6.))
                 .text_size(px(12.))
                 .text_color(c(ui::MUTED))
@@ -316,12 +318,11 @@ impl Shell {
             ))
             .child(
                 div()
-                    .w(px(250.))
+                    .w(px(290.))
                     .flex_none()
                     .flex()
                     .items_center()
-                    .justify_end()
-                    .gap(px(2.))
+                    .gap(px(4.))
                     .child(
                         small(("crew-pin", key), if pinned { "Unpin" } else { "Pin" }).on_click(
                             cx.listener(move |this, _, _, cx| {
@@ -569,6 +570,7 @@ impl Shell {
                             .child(
                                 div()
                                     .flex_1()
+                                    .min_w_0()
                                     .text_size(px(12.5))
                                     .text_color(c(ui::MUTED))
                                     .child("Pick a look, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),

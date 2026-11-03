@@ -361,7 +361,7 @@ impl Shell {
         let words = if self.store.folders.is_empty() {
             "Pick the project the crew should work in. You can add more folders later, or drop one onto the window."
         } else {
-            "The crew works in one project folder at a time. Pick one here, or add another. You can switch any time from Today."
+            "The crew works in one project folder at a time. Pick one here, or add another. You can switch any time from Jobs."
         };
         card_with(
             hero,
@@ -390,7 +390,9 @@ impl Shell {
             grid = grid.child(
                 div()
                     .id(("setup-bot", who.key() as usize))
-                    .w(px(270.))
+                    .flex_grow(1.)
+                    .flex_basis(px(220.))
+                    .max_w(px(250.))
                     .flex()
                     .items_center()
                     .gap(px(10.))

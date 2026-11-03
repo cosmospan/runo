@@ -488,6 +488,8 @@ pub struct Shell {
     term_open: Option<u64>,
     term_focus: FocusHandle,
     term_focused: bool,
+    /// Frames left to keep handing focus to a drawer that just opened.
+    term_grab: u8,
     term_cols: u16,
     /// The window's width, for fitting the terminal to it.
     view_w: f32,
@@ -775,6 +777,7 @@ impl Shell {
             term_open: None,
             term_focus: cx.focus_handle(),
             term_focused: false,
+            term_grab: 0,
             term_cols: 100,
             view_w: 1280.,
             queue_at: Instant::now(),
@@ -2358,6 +2361,11 @@ impl Render for Shell {
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
+        if self.term_grab > 0 && self.term_open.is_some() {
+            self.term_grab -= 1;
+            self.focus_moved = Instant::now();
+            self.term_focus.focus(window, cx);
+        }
         if self.focus_moved.elapsed() > Duration::from_millis(300)
             && !self.focus.contains_focused(window, cx)
         {

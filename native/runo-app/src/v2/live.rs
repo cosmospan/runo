@@ -197,7 +197,7 @@ impl Shell {
                     .gap(px(8.))
                     .when(!self.trail.is_empty(), |d| {
                         d.child(
-                            ui::ghost("back", "Back")
+                            ui::ghost("back", "\u{2190} Back")
                                 .gap(px(6.))
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new("Back (⌘[)")
