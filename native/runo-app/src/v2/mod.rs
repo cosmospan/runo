@@ -19,6 +19,7 @@ mod jobs;
 mod live;
 mod palette;
 mod review;
+mod ship;
 mod sidebar;
 mod store;
 mod today;
@@ -451,6 +452,18 @@ pub struct Shell {
     /// The changed file whose diff is open on a job's review, if any.
     diff_open: Option<(u64, String)>,
     diff_text: String,
+    /// Shipper opening pull requests, by job.
+    shipping: Vec<(u64, std::sync::mpsc::Receiver<ship::Step>)>,
+    /// Looks at open pull requests, by job, and when the last round started.
+    watching: Vec<(
+        u64,
+        std::sync::mpsc::Receiver<Option<crate::github::PrStatus>>,
+    )>,
+    watched: Instant,
+    /// Pull requests being merged (true) or closed (false) on GitHub, by job.
+    landing: Vec<(u64, bool, std::sync::mpsc::Receiver<Result<(), String>>)>,
+    /// What Approve does in each folder, worked out once per folder.
+    ways: HashMap<String, ship::Way>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -689,6 +702,11 @@ impl Shell {
             checking: Vec::new(),
             diff_open: None,
             diff_text: String::new(),
+            shipping: Vec::new(),
+            watching: Vec::new(),
+            watched: Instant::now() - Duration::from_secs(3600),
+            landing: Vec::new(),
+            ways: HashMap::new(),
             _subs: subs,
             _pump: pump,
         }
@@ -1168,12 +1186,78 @@ impl Shell {
         cx.notify();
     }
 
-    /// Approves a job's changes: merged into the branch it started from.
+    /// What Approve does for this job's project.
+    pub(super) fn way(&mut self, job: &store::Job) -> ship::Way {
+        let key = format!("{}\u{0}{}", job.folder.path, job.folder.ship);
+        if let Some(w) = self.ways.get(&key) {
+            return *w;
+        }
+        let ship_pref = self
+            .store
+            .folders
+            .iter()
+            .find(|f| f.path == job.folder.path)
+            .map(|f| f.ship.clone())
+            .unwrap_or_default();
+        let w = ship::way_for(&job.folder.path, &ship_pref);
+        self.ways.insert(key, w);
+        w
+    }
+
+    /// The Approve button's words for this job.
+    pub(super) fn approve_label(&mut self, job: &store::Job) -> String {
+        match self.way(job) {
+            ship::Way::PullRequest => "Approve & open PR".into(),
+            ship::Way::Merge => format!("Approve & merge into {}", job.base),
+        }
+    }
+
+    /// Switches what Approve does in a job's project: pull request or local merge.
+    pub(super) fn set_way(&mut self, id: u64, way: ship::Way, cx: &mut Context<Self>) {
+        let Some(path) = self.store.job(id).map(|j| j.folder.path.clone()) else {
+            return;
+        };
+        let pref = match way {
+            ship::Way::PullRequest => "pr",
+            ship::Way::Merge => "merge",
+        };
+        for f in &mut self.store.folders {
+            if f.path == path {
+                f.ship = pref.into();
+            }
+        }
+        for j in &mut self.store.jobs {
+            if j.folder.path == path {
+                j.folder.ship = pref.into();
+            }
+        }
+        self.ways.clear();
+        self.store.save();
+        cx.notify();
+    }
+
+    /// Approves a job's changes: a pull request from Shipper on GitHub projects,
+    /// otherwise merged into the branch it started from.
     pub(super) fn approve(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(job) = self.store.job(id).cloned() else {
             return;
         };
         if job.status != Status::Review {
+            return;
+        }
+        if self.way(&job) == ship::Way::PullRequest {
+            if let Some(j) = self.store.job_mut(id) {
+                j.status = Status::Shipping;
+                j.shipping = true;
+                j.seen = true;
+                j.feed.push(store::Item::By(
+                    Member::Shipper,
+                    "Approved. Opening a pull request.".into(),
+                ));
+            }
+            self.shipping.push((id, ship::open_pr(job)));
+            self.store.save();
+            cx.notify();
             return;
         }
         match work::merge(&job) {
@@ -1217,6 +1301,227 @@ impl Shell {
         self.say("Discarded. Your checkout was never touched.");
         self.store.save();
         cx.notify();
+    }
+
+    /// Merges (or closes) a job's pull request on GitHub now.
+    pub(super) fn land_pr(&mut self, id: u64, merge: bool, cx: &mut Context<Self>) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.pr.is_empty() || self.landing.iter().any(|(j, ..)| *j == id) {
+            return;
+        }
+        let (dir, url) = (job.folder.path.clone(), job.pr.clone());
+        let rx = if merge {
+            ship::merge_pr(dir, url)
+        } else {
+            ship::close_pr(dir, url)
+        };
+        self.landing.push((id, merge, rx));
+        if let Some(j) = self.store.job_mut(id) {
+            j.feed.push(store::Item::By(
+                Member::Shipper,
+                if merge {
+                    "Merging the pull request.".into()
+                } else {
+                    "Closing the pull request.".into()
+                },
+            ));
+        }
+        cx.notify();
+    }
+
+    /// Turns "merge when checks pass" on or off for a job's pull request.
+    pub(super) fn set_auto_merge(&mut self, id: u64, on: bool, cx: &mut Context<Self>) {
+        if let Some(j) = self.store.job_mut(id) {
+            j.auto_merge = on;
+        }
+        self.store.save();
+        cx.notify();
+    }
+
+    /// Shipper's side of the poll: steps while opening pull requests, a look at
+    /// open ones every half minute, and merges or closes coming back.
+    fn poll_ship(&mut self) {
+        let mut steps = Vec::new();
+        self.shipping.retain(|(id, rx)| loop {
+            match rx.try_recv() {
+                Ok(step) => {
+                    let end = !matches!(step, ship::Step::Did(_));
+                    steps.push((*id, step));
+                    if end {
+                        break false;
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => break true,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break false,
+            }
+        });
+        let mut look_now = false;
+        for (id, step) in steps {
+            let Some(j) = self.store.job_mut(id) else {
+                continue;
+            };
+            match step {
+                ship::Step::Did(what) => j.feed.push(store::Item::By(Member::Shipper, what)),
+                ship::Step::Opened(url) => {
+                    j.shipping = false;
+                    j.pr_number = url
+                        .rsplit('/')
+                        .next()
+                        .and_then(|n| n.parse().ok())
+                        .unwrap_or(0);
+                    j.pr = url.clone();
+                    j.pr_state = "OPEN".into();
+                    j.feed.push(store::Item::By(
+                        Member::Shipper,
+                        format!("Opened the pull request: {url}"),
+                    ));
+                    look_now = true;
+                }
+                ship::Step::Conflict(files) => {
+                    j.shipping = false;
+                    j.status = Status::Review;
+                    j.seen = false;
+                    j.feed.push(store::Item::Error(format!(
+                        "{} moved while this was waiting, and these files now clash: {}. Send it back and ask it to bring the branch up to date with {}.",
+                        j.base,
+                        files.join(", "),
+                        j.base
+                    )));
+                }
+                ship::Step::Failed(why) => {
+                    j.shipping = false;
+                    j.status = Status::Review;
+                    j.seen = false;
+                    j.feed.push(store::Item::Error(format!(
+                        "Shipper couldn't open the pull request: {why}"
+                    )));
+                }
+            }
+            self.store.save();
+        }
+        // A look at every open pull request every 30 seconds.
+        if look_now || self.watched.elapsed() > Duration::from_secs(30) {
+            self.watched = Instant::now();
+            let open: Vec<(u64, String, String)> = self
+                .store
+                .jobs
+                .iter()
+                .filter(|j| j.status == Status::Shipping && !j.pr.is_empty())
+                .map(|j| (j.id, j.folder.path.clone(), j.pr.clone()))
+                .collect();
+            for (id, dir, url) in open {
+                if !self.watching.iter().any(|(j, _)| *j == id) {
+                    self.watching.push((id, ship::watch(dir, url)));
+                }
+            }
+        }
+        let mut seen = Vec::new();
+        self.watching.retain(|(id, rx)| match rx.try_recv() {
+            Ok(pr) => {
+                seen.push((*id, pr));
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+        });
+        let mut merge_now = Vec::new();
+        let mut landed = Vec::new();
+        for (id, pr) in seen {
+            let Some(pr) = pr else { continue };
+            let busy = self.landing.iter().any(|(j, ..)| *j == id);
+            let Some(j) = self.store.job_mut(id) else {
+                continue;
+            };
+            j.pr_number = pr.number;
+            j.pr_line = ship::checks_line(&pr);
+            j.pr_state = pr.state.clone();
+            for name in &pr.failed {
+                if !j.pr_failed.contains(name) {
+                    j.pr_failed.push(name.clone());
+                    j.seen = false;
+                    j.feed.push(store::Item::By(
+                        Member::Shipper,
+                        format!("{name} failed on GitHub. Write below to send it back and fix it."),
+                    ));
+                }
+            }
+            match pr.state.as_str() {
+                "MERGED" => landed.push((id, true)),
+                "CLOSED" => landed.push((id, false)),
+                _ => {
+                    let green = pr.failed.is_empty() && pr.pending == 0;
+                    if j.auto_merge && green && pr.mergeable != "CONFLICTING" && !busy {
+                        merge_now.push(id);
+                    }
+                }
+            }
+        }
+        for id in merge_now {
+            if let Some(j) = self.store.job_mut(id) {
+                j.feed.push(store::Item::By(
+                    Member::Shipper,
+                    "Checks pass. Merging, as you asked.".into(),
+                ));
+                let (dir, url) = (j.folder.path.clone(), j.pr.clone());
+                self.landing.push((id, true, ship::merge_pr(dir, url)));
+            }
+        }
+        let mut came_back = Vec::new();
+        self.landing.retain(|(id, merge, rx)| match rx.try_recv() {
+            Ok(r) => {
+                came_back.push((*id, *merge, r));
+                false
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+        });
+        for (id, merge, r) in came_back {
+            match r {
+                Ok(()) => landed.push((id, merge)),
+                Err(why) => {
+                    if let Some(j) = self.store.job_mut(id) {
+                        j.feed
+                            .push(store::Item::Error(format!("GitHub said no: {why}")));
+                    }
+                }
+            }
+        }
+        for (id, merged) in landed {
+            let Some(job) = self.store.job(id).cloned() else {
+                continue;
+            };
+            if !matches!(job.status, Status::Shipping) {
+                continue;
+            }
+            // The branch lives on GitHub now (or is gone): the local copy can go.
+            work::discard(&job);
+            let msg = if merged {
+                format!(
+                    "Merged #{} into {}. Cleaned up the branch and worktree.",
+                    job.pr_number, job.base
+                )
+            } else {
+                format!(
+                    "Closed #{} without merging. Cleaned up the branch and worktree.",
+                    job.pr_number
+                )
+            };
+            if let Some(j) = self.store.job_mut(id) {
+                j.status = if merged {
+                    Status::Shipped
+                } else {
+                    Status::Discarded
+                };
+                j.pr_state = if merged { "MERGED" } else { "CLOSED" }.into();
+                j.worktree.clear();
+                j.shipped = msg.clone();
+                j.feed.push(store::Item::By(Member::Shipper, msg.clone()));
+            }
+            self.say(msg);
+            self.store.save();
+        }
     }
 
     pub(super) fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
@@ -1307,6 +1612,7 @@ impl Shell {
             self.saved = Instant::now();
             self.store.save();
         }
+        self.poll_ship();
         // Checker's runs of the checks coming back.
         let mut back = Vec::new();
         self.checking.retain(|(id, rx)| match rx.try_recv() {

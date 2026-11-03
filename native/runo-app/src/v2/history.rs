@@ -388,7 +388,7 @@ impl Shell {
                         .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
                     )
                     .when(j.status == Status::Review, |d| {
-                        let label = format!("Approve & merge into {}", j.base);
+                        let label = self.approve_label(j);
                         d.child(
                             ui::solid("inbox-approve", label)
                                 .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),

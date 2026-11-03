@@ -36,6 +36,8 @@ pub struct Store {
 pub struct Folder {
     pub name: String,
     pub path: String,
+    /// What Approve does here: "pr", "merge", or "" to decide from the remote.
+    pub ship: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +50,10 @@ pub enum Status {
     Interrupted,
     /// It changed files in its own worktree and waits for you to approve them.
     Review,
-    /// Approved: merged, or handed to Shipper for a pull request.
+    /// Approved in a GitHub project: Shipper has (or is opening) a pull request
+    /// and watches it.
+    Shipping,
+    /// Approved and landed: merged here, or its pull request merged.
     Shipped,
     /// You threw its changes away.
     Discarded,
@@ -63,6 +68,7 @@ impl Status {
             Status::Stopped => "Stopped by you",
             Status::Interrupted => "Interrupted",
             Status::Review => "Ready for review",
+            Status::Shipping => "Pull request open",
             Status::Shipped => "Shipped",
             Status::Discarded => "Discarded",
         }
@@ -86,6 +92,9 @@ pub enum Item {
     You(String),
     /// Runo speaking: a hint or a warning.
     Note(String),
+    /// Another bot on the crew speaking about this job, such as Shipper
+    /// reporting a step.
+    By(Member, String),
     Error(String),
 }
 
@@ -130,6 +139,19 @@ pub struct Job {
     /// What happened when it was approved: "Merged into main as 3f2a1c9", or the
     /// pull request's address.
     pub shipped: String,
+    /// Its pull request's address, once Shipper opened one.
+    pub pr: String,
+    pub pr_number: u64,
+    /// "Checks running: 3 of 5 done", from the last look at the pull request.
+    pub pr_line: String,
+    /// OPEN, MERGED or CLOSED.
+    pub pr_state: String,
+    /// Failed checks already reported, so each failure is told once.
+    pub pr_failed: Vec<String>,
+    /// Merge the pull request as soon as its checks pass.
+    pub auto_merge: bool,
+    /// Shipper is pushing and opening the pull request now.
+    pub shipping: bool,
 }
 
 /// One file a job changed.
@@ -170,6 +192,13 @@ impl Default for Job {
             checks: Vec::new(),
             checking: false,
             shipped: String::new(),
+            pr: String::new(),
+            pr_number: 0,
+            pr_line: String::new(),
+            pr_state: String::new(),
+            pr_failed: Vec::new(),
+            auto_merge: true,
+            shipping: false,
         }
     }
 }
@@ -345,6 +374,7 @@ impl Store {
                         .map(|p| Folder {
                             name: p.name.clone(),
                             path: p.path.clone(),
+                            ship: String::new(),
                         })
                         .collect(),
                     ..Default::default()
@@ -359,6 +389,13 @@ impl Store {
             }
             if j.checking {
                 j.checking = false;
+            }
+            // Runo closed while Shipper was opening the pull request.
+            if j.shipping {
+                j.shipping = false;
+                if j.pr.is_empty() && j.status == Status::Shipping {
+                    j.status = Status::Review;
+                }
             }
         }
         s.folders.retain(|f| std::path::Path::new(&f.path).is_dir());
@@ -402,7 +439,14 @@ impl Store {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| p.clone());
-        self.folders.insert(0, Folder { name, path: p });
+        self.folders.insert(
+            0,
+            Folder {
+                name,
+                path: p,
+                ship: String::new(),
+            },
+        );
         self.current = 0;
     }
 

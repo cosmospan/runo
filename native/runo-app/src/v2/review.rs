@@ -5,6 +5,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::data::Member;
+use super::ship;
 use super::store::{Job, Status};
 use super::ui::{self, c, ca};
 use super::work::{self, Verdict};
@@ -34,6 +35,9 @@ impl Shell {
                     .child(div().size(px(7.)).rounded_full().bg(c(ui::GREEN)))
                     .child(job.shipped.clone()),
             );
+        }
+        if job.status == Status::Shipping {
+            return Some(self.pr_card(job, cx));
         }
         if job.status != Status::Review || job.changes.is_empty() {
             return None;
@@ -269,8 +273,15 @@ impl Shell {
             }
         }
 
-        // The decision.
-        let base = job.base.clone();
+        // The decision. GitHub projects can switch to merging here, and back.
+        let label = self.approve_label(job);
+        let way = self.way(job);
+        let github = ship::remote_url(&job.folder.path).is_some_and(|u| ship::is_github(&u));
+        let switch = match way {
+            ship::Way::PullRequest => Some(("Merge here instead", ship::Way::Merge)),
+            ship::Way::Merge if github => Some(("Open a PR instead", ship::Way::PullRequest)),
+            ship::Way::Merge => None,
+        };
         let foot = div()
             .px(px(16.))
             .py(px(12.))
@@ -280,12 +291,21 @@ impl Shell {
             .border_t_1()
             .border_color(c(ui::LINE))
             .child(
-                ui::solid(
-                    ("approve", id as usize),
-                    format!("Approve & merge into {base}"),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
+                ui::solid(("approve", id as usize), label)
+                    .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
             )
+            .when_some(switch, |d, (words, to)| {
+                d.child(
+                    div()
+                        .id(("way", id as usize))
+                        .text_size(px(12.))
+                        .text_color(c(ui::MUTED))
+                        .cursor_pointer()
+                        .hover(|s| s.text_color(c(ui::INK)))
+                        .child(words)
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_way(id, to, cx))),
+                )
+            })
             .child(
                 div()
                     .flex_1()
@@ -315,6 +335,152 @@ impl Shell {
                 .child(foot),
         )
     }
+}
+
+impl Shell {
+    /// The pull request Shipper opened: its checks, auto-merge, and the buttons
+    /// to merge now or close it.
+    fn pr_card(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
+        let id = job.id;
+        let shipper = self.avatar(Member::Shipper, 22.);
+        let opening = job.pr.is_empty();
+        let failed = !job.pr_failed.is_empty() && job.pr_line.contains("failed");
+        let line_color = if opening {
+            ui::T_BLUE
+        } else if failed {
+            ui::T_RED
+        } else if job.pr_line.starts_with("All") {
+            ui::T_GREEN
+        } else {
+            ui::T_BLUE
+        };
+        let title = if opening {
+            "Opening the pull request".to_string()
+        } else if job.pr_number > 0 {
+            format!("Pull request #{}", job.pr_number)
+        } else {
+            "Pull request".to_string()
+        };
+        let url = job.pr.clone();
+        let auto = job.auto_merge;
+        let mut card = div()
+            .ml(px(40.))
+            .rounded(px(12.))
+            .bg(c(ui::PANEL))
+            .border_1()
+            .border_color(ca(0x14B8A6, 0.40))
+            .overflow_hidden()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .px(px(16.))
+                    .py(px(12.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .border_b_1()
+                    .border_color(c(ui::LINE))
+                    .child(shipper)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(title),
+                            )
+                            .child(div().text_size(px(12.)).text_color(c(line_color)).child(
+                                if opening {
+                                    "Squashing, catching up with the base and pushing".to_string()
+                                } else if job.pr_line.is_empty() {
+                                    "Looking at its checks".to_string()
+                                } else {
+                                    job.pr_line.clone()
+                                },
+                            )),
+                    )
+                    .when(!opening, |d| {
+                        d.child(
+                            ui::ghost(("pr-open", id as usize), "View on GitHub")
+                                .h(px(28.))
+                                .text_size(px(12.5))
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        )
+                    }),
+            );
+        if opening || (!failed && !job.pr_line.starts_with("All")) {
+            card = card.child(ui::sweep(0x14B8A6, 0.).h(px(2.)).rounded_none());
+        }
+        if !opening {
+            card = card.child(
+                div()
+                    .px(px(16.))
+                    .py(px(12.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .id(("auto", id as usize))
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .cursor_pointer()
+                            .child(toggle(auto))
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .text_color(c(ui::BODY))
+                                    .child("Merge when checks pass"),
+                            )
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.set_auto_merge(id, !auto, cx)
+                            })),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        ui::ghost(("pr-close", id as usize), "Close PR")
+                            .h(px(28.))
+                            .text_size(px(12.5))
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.land_pr(id, false, cx)),
+                            ),
+                    )
+                    .child(
+                        ui::solid(("pr-merge", id as usize), "Merge now")
+                            .h(px(28.))
+                            .text_size(px(12.5))
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.land_pr(id, true, cx)),
+                            ),
+                    ),
+            );
+        }
+        card
+    }
+}
+
+/// A small on/off switch.
+fn toggle(on: bool) -> Div {
+    div()
+        .w(px(30.))
+        .h(px(18.))
+        .flex_none()
+        .rounded_full()
+        .bg(c(if on { ui::GREEN } else { 0x2A2A33 }))
+        .relative()
+        .child(
+            div()
+                .absolute()
+                .top(px(2.))
+                .left(px(if on { 14. } else { 2. }))
+                .size(px(14.))
+                .rounded_full()
+                .bg(c(0xFFFFFF)),
+        )
 }
 
 fn branch_chip(name: &str) -> Div {

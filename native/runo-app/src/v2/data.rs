@@ -39,7 +39,12 @@ pub fn set_removed(removed: &[Member]) {
 }
 
 /// The crew a new person starts with; the rest can be added any time.
-pub const STARTER_CREW: [Member; 3] = [Member::Builder, Member::Fixer, Member::Explainer];
+pub const STARTER_CREW: [Member; 4] = [
+    Member::Builder,
+    Member::Fixer,
+    Member::Explainer,
+    Member::Shipper,
+];
 
 /// Makes `made` the bots the app knows about (on load, and after a change).
 pub fn set_made(made: &[Made]) {
@@ -86,12 +91,25 @@ pub enum Member {
     Fixer,
     Explainer,
     Keeper,
+    /// Owns git: opens pull requests, watches their checks, merges and cleans up.
+    Shipper,
     /// A bot the person made, by its id.
     Made(u16),
 }
 
 impl Member {
-    pub const CREW: [Member; 6] = [
+    pub const CREW: [Member; 7] = [
+        Member::Builder,
+        Member::Checker,
+        Member::Guard,
+        Member::Fixer,
+        Member::Explainer,
+        Member::Keeper,
+        Member::Shipper,
+    ];
+
+    /// The built-in bots whose kind of work a made bot can do.
+    pub const KINDS: [Member; 6] = [
         Member::Builder,
         Member::Checker,
         Member::Guard,
@@ -142,7 +160,9 @@ impl Member {
         if all.contains(&own) {
             return Some(own);
         }
-        all.into_iter().find(|m| m.mode() == mode)
+        // Shipper takes no jobs of its own: it ships what the others made.
+        all.into_iter()
+            .find(|m| *m != Member::Shipper && m.mode() == mode)
     }
 
     /// The built-in bot whose kind of work this one does (itself, for the six).
@@ -166,6 +186,7 @@ impl Member {
             Member::Fixer => "Fixer",
             Member::Explainer => "Explainer",
             Member::Keeper => "Keeper",
+            Member::Shipper => "Shipper",
         }
     }
 
@@ -178,6 +199,7 @@ impl Member {
             Member::Fixer => "Hunts the bug",
             Member::Explainer => "Plain words",
             Member::Keeper => "Tidies up",
+            Member::Shipper => "Opens and merges PRs",
         }
     }
 
@@ -199,6 +221,9 @@ impl Member {
                 "Ask anything about the code. It reads it and answers in plain words."
             }
             Member::Keeper => "Dependencies, flaky tests, dead code: the chores nobody gets to.",
+            Member::Shipper => {
+                "When you approve a job, it opens the pull request, watches the checks and merges."
+            }
         }
     }
 
@@ -236,12 +261,18 @@ impl Member {
                 "Is there dead code I can delete?",
                 "What would you tidy first?",
             ],
+            Member::Shipper => [
+                "Which branches are waiting to be merged?",
+                "What changed on main today?",
+                "Are there old branches I can delete?",
+            ],
         }
     }
 
     pub fn bot(self) -> Bot {
         match self {
             Member::Made(_) => self.like().bot(),
+            Member::Shipper => Bot::Keeper,
             Member::Builder => Bot::Builder,
             Member::Checker => Bot::Checker,
             Member::Guard => Bot::Guard,
@@ -254,6 +285,10 @@ impl Member {
     pub fn bubble(self) -> Bubble {
         match self {
             Member::Made(id) => made(id, |k| k.bubble).unwrap_or_else(|| self.like().bubble()),
+            Member::Shipper => Bubble {
+                tint: runo_holo::Tint::TEAL,
+                ..Member::Keeper.bot().bubble()
+            },
             _ => self.bot().bubble(),
         }
     }
@@ -268,6 +303,7 @@ impl Member {
             Member::Fixer => ui::RED,
             Member::Explainer => ui::BLUE,
             Member::Keeper => ui::VIOLET,
+            Member::Shipper => 0x14B8A6,
         }
     }
 
@@ -293,6 +329,7 @@ impl Member {
             Member::Fixer => "You are Fixer, a bot in Runo's crew that hunts bugs. Find the cause with evidence, fix it, and add a test that would have caught it.",
             Member::Explainer => "You are Explainer, a bot in Runo's crew. You answer questions about this codebase in plain words for people who may not code. Lead with the answer, then the evidence (files, numbers).",
             Member::Keeper => "You are Keeper, a bot in Runo's crew that tidies up: dependencies, flaky tests, dead code. Keep changes small and safe.",
+            Member::Shipper => "You are Shipper, the bot in Runo's crew that owns git: branches, pull requests, merges and releases. Answer about the repository's branches and history in plain words, and never push or change anything yourself when asked a question.",
         }
     }
 
@@ -305,6 +342,7 @@ impl Member {
             Member::Fixer => 4,
             Member::Explainer => 5,
             Member::Keeper => 6,
+            Member::Shipper => 7,
             Member::Made(id) => 100 + id as u64,
         }
     }
@@ -395,7 +433,7 @@ mod tests {
             look: [4, 2, 1, 0],
         }]);
         let all = Member::all();
-        assert_eq!(all.len(), 7);
+        assert_eq!(all.len(), Member::CREW.len() + 1);
         let scout = Member::Made(1);
         assert_eq!(scout.name(), "Scout");
         assert_eq!(scout.role(), "Checks the docs are current");
@@ -419,7 +457,7 @@ mod tests {
         assert_eq!(Member::doer_for(Mode::Test), None);
         set_removed(&[]);
         assert_eq!(Member::doer_for(Mode::Test), Some(Member::Checker));
-        assert_eq!(Member::all().len(), 6);
+        assert_eq!(Member::all().len(), Member::CREW.len());
         assert_eq!(Member::Made(1).name(), "Bot");
     }
 }

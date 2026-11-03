@@ -39,6 +39,8 @@ impl Tint {
     pub const RED: Tint = Tint([Rgb(0xFF9AA6), Rgb(0xF2364F), Rgb(0xC7B4FF)]);
     pub const BLUE: Tint = Tint([Rgb(0x9AD4FF), Rgb(0x1E95F0), Rgb(0x8EF0C0)]);
     pub const VIOLET: Tint = Tint([Rgb(0xC7B4FF), Rgb(0x7B4DF5), Rgb(0xFF9AA6)]);
+    /// Shipper's teal. Not in `ALL`, so saved looks keep their codes.
+    pub const TEAL: Tint = Tint([Rgb(0xB5F5EC), Rgb(0x14B8A6), Rgb(0xA5B4FC)]);
     pub const ALL: [Tint; 6] = [
         Tint::ORANGE,
         Tint::GREEN,

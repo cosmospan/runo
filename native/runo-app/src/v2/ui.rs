@@ -30,6 +30,7 @@ pub const T_BLUE: u32 = 0x86AEFF;
 pub const T_AMBER: u32 = 0xFBBF4A;
 pub const T_GREEN: u32 = 0x5FE0A4;
 pub const T_RED: u32 = 0xFF8292;
+#[allow(dead_code)]
 pub const T_VIOLET: u32 = 0xB9A2FF;
 pub const ORANGE: u32 = 0xFF6A2B;
 pub const GREEN: u32 = 0x1FC27A;

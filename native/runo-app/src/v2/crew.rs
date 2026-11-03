@@ -406,7 +406,7 @@ impl Shell {
                 )
             })
             .collect();
-        let likes = Member::CREW
+        let likes = Member::KINDS
             .into_iter()
             .map(|m| {
                 (

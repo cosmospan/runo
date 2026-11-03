@@ -71,7 +71,7 @@ impl Shell {
                 }
             }
             Status::Failed | Status::Review => Mood::NeedsYou,
-            Status::Shipped => Mood::Signature,
+            Status::Shipped | Status::Shipping => Mood::Signature,
             _ => Mood::Idle,
         };
         let hero = self.bot(who, mood, 132., Framing::Full);
@@ -83,6 +83,7 @@ impl Shell {
             Status::Interrupted => "was interrupted on",
             Status::Review => "finished, waiting for your review of",
             Status::Shipped => "shipped",
+            Status::Shipping => "handed to Shipper:",
             Status::Discarded => "had its changes discarded on",
         };
         let progress = job.progress();
@@ -190,7 +191,7 @@ impl Shell {
                     })
                     .when(job.status == Status::Review, |d| {
                         let id = job.id;
-                        let label = format!("Approve & merge into {}", job.base);
+                        let label = self.approve_label(job);
                         d.child(
                             ui::solid("approve-top", label)
                                 .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
@@ -356,6 +357,26 @@ impl Shell {
                     ),
                 ),
                 Item::Note(t) => feed.child(note_line(t)),
+                Item::By(by, t) => {
+                    let face = self.avatar(*by, 18.);
+                    feed.child(
+                        div()
+                            .ml(px(40.))
+                            .flex()
+                            .items_start()
+                            .gap(px(8.))
+                            .text_size(px(12.5))
+                            .line_height(px(18.))
+                            .child(face)
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(by.accent()))
+                                    .child(by.name()),
+                            )
+                            .child(div().flex_1().text_color(c(ui::BODY)).child(t.clone())),
+                    )
+                }
                 Item::Error(t) => feed.child(
                     div()
                         .ml(px(40.))
@@ -621,6 +642,11 @@ impl Shell {
                                     ago_phrase(job.ended.unwrap_or(job.started)),
                                 ),
                                 Status::Shipped => job.shipped.clone(),
+                                Status::Shipping => if job.pr.is_empty() {
+                                    "Shipper is pushing the branch and opening the pull request.".to_string()
+                                } else {
+                                    format!("Pull request open. {}", job.pr_line)
+                                },
                                 Status::Discarded => "Its changes were thrown away; your checkout never changed.".to_string(),
                                 _ => format!(
                                     "Ran for {}. Its last note says what went wrong; ask a follow-up to carry on.",

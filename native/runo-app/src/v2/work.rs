@@ -275,6 +275,7 @@ mod tests {
             folder: super::super::store::Folder {
                 name: "t".into(),
                 path: folder.clone(),
+                ship: String::new(),
             },
             branch: iso.branch.clone(),
             worktree: iso.worktree.clone(),
@@ -310,6 +311,7 @@ mod tests {
             folder: super::super::store::Folder {
                 name: "t".into(),
                 path: folder.clone(),
+                ship: String::new(),
             },
             branch: iso.branch.clone(),
             worktree: iso.worktree.clone(),
