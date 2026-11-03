@@ -47,11 +47,20 @@ impl Shell {
                 cx,
             );
         };
+        let drawer = self.term_drawer(&job, cx);
         div()
             .size_full()
             .flex()
-            .child(self.live_main(&job, cx))
-            .child(self.live_side(&job, cx))
+            .flex_col()
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(self.live_main(&job, cx))
+                    .child(self.live_side(&job, cx)),
+            )
+            .children(drawer)
             .into_any_element()
     }
 
@@ -269,6 +278,22 @@ impl Shell {
                             ui::ghost("stop", "Stop")
                                 .text_color(c(ui::RED))
                                 .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
+                        )
+                    })
+                    .map(|d| {
+                        let id = job.id;
+                        let open = self.term_open == Some(id);
+                        d.child(
+                            ui::ghost("terminal", if open { "Hide terminal" } else { "Terminal" })
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "A shell in this job's own branch (⌃`)",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.toggle_term(id, window, cx)
+                                })),
                         )
                     })
                     .when(!running, |d| {

@@ -9789,6 +9789,10 @@ fn main() {
     store::tighten_data_dir();
     // `runo --agent-host runo-turn <turn folder> <agent> <args…>`: a live turn's agent,
     // detached from the window (see harness::host).
+    // `runo v2 <command>`: the v2 crew from a terminal (`runo help`).
+    if args.get(1).map(String::as_str) == Some("v2") {
+        std::process::exit(v2::cli::main(&args[2..]));
+    }
     if args.get(1).map(String::as_str) == Some("--agent-host") {
         std::process::exit(harness::host::main(&args[2..]));
     }

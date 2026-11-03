@@ -9,6 +9,7 @@
 //! Runo v1 stays one click away on the rail while v2 grows.
 
 mod chat;
+pub mod cli;
 mod crew;
 mod data;
 mod demo;
@@ -25,6 +26,7 @@ mod review;
 mod ship;
 mod sidebar;
 mod store;
+mod term;
 mod today;
 mod trouble;
 mod ui;
@@ -479,6 +481,16 @@ pub struct Shell {
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
     splitting: bool,
+    /// Terminal drawers' shells, by job, and the job whose drawer is open.
+    terms: HashMap<u64, crate::pty::Shell>,
+    term_open: Option<u64>,
+    term_focus: FocusHandle,
+    term_focused: bool,
+    term_cols: u16,
+    /// The window's width, for fitting the terminal to it.
+    view_w: f32,
+    /// When the queue from `runo` in a terminal was last read.
+    queue_at: Instant,
     /// Goals Runo is splitting now.
     planning: Vec<(u64, std::sync::mpsc::Receiver<crate::agent::Event>)>,
     _subs: Vec<Subscription>,
@@ -756,6 +768,13 @@ impl Shell {
             ways: HashMap::new(),
             racing: 0,
             splitting: false,
+            terms: HashMap::new(),
+            term_open: None,
+            term_focus: cx.focus_handle(),
+            term_focused: false,
+            term_cols: 100,
+            view_w: 1280.,
+            queue_at: Instant::now(),
             planning: Vec::new(),
             _subs: subs,
             _pump: pump,
@@ -1406,6 +1425,77 @@ impl Shell {
         self.planning.retain(|(g, _)| *g != id);
         self.store.save();
         self.go(Place::Today, cx);
+    }
+
+    /// Jobs and decisions sent from `runo` in a terminal, once a second.
+    fn poll_queue(&mut self, cx: &mut Context<Self>) {
+        if self.queue_at.elapsed() < Duration::from_secs(1) || self.store.demo {
+            return;
+        }
+        self.queue_at = Instant::now();
+        for ask in cli::take_queue() {
+            match ask {
+                cli::Ask::New {
+                    text,
+                    mode,
+                    bot,
+                    dir,
+                } => {
+                    let folder = self.folder_for(&dir);
+                    let who = Member::all()
+                        .into_iter()
+                        .find(|m| m.name() == bot)
+                        .or_else(|| Member::doer_for(mode))
+                        .unwrap_or(Member::for_mode(mode));
+                    let text = if text.is_empty() {
+                        mode.default_job().unwrap_or("").to_string()
+                    } else {
+                        text
+                    };
+                    let job = self.make_job(who, mode, &text, folder, None, None, cx);
+                    self.say(format!(
+                        "{} took a job from the terminal: \u{201c}{}\u{201d}.",
+                        who.name(),
+                        job.title
+                    ));
+                    self.store.jobs.push(job);
+                    self.store.save();
+                }
+                cli::Ask::Approve { id } => self.approve(id, cx),
+                cli::Ask::Discard { id } => self.discard_job(id, cx),
+                cli::Ask::Stop { id } => self.stop_job(id, cx),
+            }
+            cx.notify();
+        }
+    }
+
+    /// The project a terminal's folder belongs to: a known one it's inside,
+    /// the project of a job's worktree it's in, or a new one.
+    fn folder_for(&mut self, dir: &str) -> store::Folder {
+        let inside = |root: &str| {
+            !root.is_empty() && std::path::Path::new(dir).starts_with(std::path::Path::new(root))
+        };
+        if let Some(j) = self.store.jobs.iter().find(|j| inside(&j.worktree)) {
+            return j.folder.clone();
+        }
+        if let Some(f) = self
+            .store
+            .folders
+            .iter()
+            .filter(|f| inside(&f.path))
+            .max_by_key(|f| f.path.len())
+        {
+            return f.clone();
+        }
+        // Added at the top: the folder you had picked moves down one.
+        let current = self.store.current;
+        let before = self.store.folders.len();
+        self.store.add_folder(std::path::PathBuf::from(dir));
+        let f = self.store.folder().cloned().unwrap_or_default();
+        if self.store.folders.len() > before && before > 0 {
+            self.store.current = current + 1;
+        }
+        f
     }
 
     /// Splits coming back, and running goals moving on.
@@ -2249,8 +2339,15 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::framestats::begin();
         self.scale = window.scale_factor();
+        self.view_w = f32::from(window.viewport_size().width);
+        self.term_focused = self.term_focus.is_focused(window);
+        if self.term_open.is_some() && window.is_window_active() {
+            // The shell's output arrives on its own thread: keep drawing it.
+            window.request_animation_frame();
+        }
         self.poll();
         self.poll_goals(cx);
+        self.poll_queue(cx);
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
@@ -2409,6 +2506,18 @@ impl Render for Shell {
                     if this.palette_key(key, window, cx) {
                         cx.stop_propagation();
                     }
+                    return;
+                }
+                // Ctrl+` opens and closes a job's terminal.
+                if m.control && key == "`" {
+                    if let Place::Live(id) = this.place {
+                        this.toggle_term(id, window, cx);
+                        cx.stop_propagation();
+                        return;
+                    }
+                }
+                // Control keys belong to the shell while the terminal has focus.
+                if this.term_focus.is_focused(window) && !m.platform {
                     return;
                 }
                 if !(m.platform || m.control) || m.shift || m.alt {
