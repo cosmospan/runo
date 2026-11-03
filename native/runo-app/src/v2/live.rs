@@ -110,7 +110,7 @@ impl Shell {
             .bg(linear_gradient(
                 180.,
                 linear_color_stop(ca(accent, 0.10), 0.0),
-                linear_color_stop(ca(0xFFFFFF, 0.0), 1.0),
+                linear_color_stop(ca(ui::PANEL, 0.0), 1.0),
             ))
             .child(div().flex_none().mt(px(-4.)).child(hero))
             .child(
@@ -226,7 +226,7 @@ impl Shell {
                 .px(px(14.))
                 .py(px(8.))
                 .rounded(px(14.))
-                .bg(ca(0xFFFFFF, 0.6))
+                .bg(ca(ui::PANEL, 0.6))
                 .border_1()
                 .border_color(c(ui::LINE))
                 .flex()
@@ -313,9 +313,9 @@ impl Shell {
                                     .px(px(18.))
                                     .py(px(13.))
                                     .rounded(px(16.))
-                                    .bg(ca(0xFFFFFF, 0.85))
+                                    .bg(ca(ui::PANEL, 0.85))
                                     .border_1()
-                                    .border_color(c(0xFFFFFF))
+                                    .border_color(c(ui::LINE))
                                     .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
@@ -331,8 +331,8 @@ impl Shell {
                             .px(px(16.))
                             .py(px(10.))
                             .rounded(px(16.))
-                            .bg(c(ui::INK))
-                            .text_color(c(0xFFFFFF))
+                            .bg(c(ui::FILL))
+                            .text_color(c(ui::ON_FILL))
                             .text_size(px(14.))
                             .line_height(px(20.))
                             .child(t.clone()),
@@ -350,7 +350,7 @@ impl Shell {
                         .border_color(ca(ui::RED, 0.25))
                         .text_size(px(13.5))
                         .line_height(px(20.))
-                        .text_color(c(0x9A1F30))
+                        .text_color(c(ui::T_RED))
                         .child(t.clone()),
                 ),
                 Item::Tool { .. } => feed,
@@ -538,7 +538,7 @@ impl Shell {
                     .py(px(5.))
                     .rounded(px(9.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xFFFFFF)))
+                    .hover(|s| s.bg(c(ui::HOVER)))
                     .child(
                         div()
                             .size(px(7.))
@@ -564,7 +564,7 @@ impl Shell {
             .overflow_y_scroll()
             .border_l_1()
             .border_color(c(ui::LINE))
-            .bg(ca(0xFFFFFF, 0.45))
+            .bg(ca(ui::PANEL, 0.45))
             .px(px(24.))
             .pt(px(if cfg!(target_os = "macos") { 30. } else { 24. }))
             .pb(px(24. + super::DOCK_ROOM))
@@ -672,7 +672,7 @@ fn chip(icon: IconName, text: String) -> Div {
         .rounded_full()
         .border_1()
         .border_color(c(ui::LINE))
-        .bg(c(0xFFFFFF))
+        .bg(c(ui::PANEL))
         .text_size(px(11.5))
         .child(Icon::new(icon).size(px(11.)).text_color(c(ui::MUTED)))
         .child(text)
@@ -707,9 +707,9 @@ pub(super) fn typing(now: f64) -> Div {
         .px(px(14.))
         .h(px(34.))
         .rounded(px(14.))
-        .bg(ca(0xFFFFFF, 0.85))
+        .bg(ca(ui::PANEL, 0.85))
         .border_1()
-        .border_color(c(0xFFFFFF))
+        .border_color(c(ui::LINE))
         .shadow(ui::lift())
         .flex()
         .items_center()

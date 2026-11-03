@@ -162,7 +162,7 @@ impl Shell {
                 );
             }
             if d.is_empty() {
-                col = col.child(div().w_full().h(px(2.)).rounded(px(1.)).bg(c(0xEDEDF0)));
+                col = col.child(div().w_full().h(px(2.)).rounded(px(1.)).bg(c(ui::RAISED)));
             }
             bars = bars.child(col);
         }
@@ -221,7 +221,7 @@ impl Shell {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .bg(c(0xFCFCFD))
+                .bg(c(ui::RAISED))
                 .border_b_1()
                 .border_color(c(ui::LINE))
                 .text_size(px(11.5))
@@ -252,7 +252,7 @@ impl Shell {
                     .items_center()
                     .gap(px(10.))
                     .border_b_1()
-                    .border_color(c(0xF2F2F4))
+                    .border_color(c(ui::LINE2))
                     .text_size(px(13.))
                     .child(
                         div()

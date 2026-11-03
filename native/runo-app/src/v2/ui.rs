@@ -4,15 +4,37 @@
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-pub const INK: u32 = 0x17151F;
-pub const BODY: u32 = 0x3A3C50;
-pub const MUTED: u32 = 0x6A6C80;
-pub const FAINT: u32 = 0x9A9CB0;
-pub const LINE: u32 = 0xE6E6E9;
+// The dark, Linear-style ground: the page, panels on it, and raised controls.
+pub const BG: u32 = 0x0D0D11;
+pub const PANEL: u32 = 0x121217;
+pub const RAISED: u32 = 0x18181F;
+pub const HOVER: u32 = 0x1E1E26;
+pub const PRESS: u32 = 0x26262F;
+// Text, brightest first.
+pub const INK: u32 = 0xE9E9EF;
+pub const BODY: u32 = 0xB9B9C4;
+pub const MUTED: u32 = 0x8B8B97;
+pub const FAINT: u32 = 0x5D5D69;
+// Hairlines: the usual one, a quieter one inside panels, a stronger one on hover.
+pub const LINE: u32 = 0x24242D;
+pub const LINE2: u32 = 0x1A1A21;
+pub const LINE_HI: u32 = 0x34343F;
+/// The primary button and other light fills, and the text that sits on them.
+pub const FILL: u32 = 0xFFFFFF;
+pub const ON_FILL: u32 = 0x0D0D11;
+/// Runo's own voice: its suggestions and the selected row.
+pub const RUNO: u32 = 0x7B4DF5;
+/// Status colours as text on the dark ground: blue running, amber waiting on
+/// you, green good, red broken.
+pub const T_BLUE: u32 = 0x86AEFF;
+pub const T_AMBER: u32 = 0xFBBF4A;
+pub const T_GREEN: u32 = 0x5FE0A4;
+pub const T_RED: u32 = 0xFF8292;
+pub const T_VIOLET: u32 = 0xB9A2FF;
 pub const ORANGE: u32 = 0xFF6A2B;
 pub const GREEN: u32 = 0x1FC27A;
-pub const AMBER: u32 = 0xF5A300;
-pub const BLUE: u32 = 0x1E95F0;
+pub const AMBER: u32 = 0xF59E0B;
+pub const BLUE: u32 = 0x3B82F6;
 pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
 pub const MONO: &str = "JetBrains Mono";
@@ -39,7 +61,7 @@ pub fn ca(hex: u32, a: f32) -> Hsla {
 /// A hairline shadow, for raised controls like the selected tab.
 pub fn lift() -> Vec<BoxShadow> {
     vec![BoxShadow {
-        color: ca(0x10101A, 0.06),
+        color: ca(0x000000, 0.35),
         offset: point(px(0.), px(1.)),
         blur_radius: px(2.),
         spread_radius: px(0.),
@@ -47,10 +69,10 @@ pub fn lift() -> Vec<BoxShadow> {
     }]
 }
 
-/// A white, softly lifted card.
+/// A panel on the dark ground, with a hairline edge.
 pub fn card() -> Div {
     div()
-        .bg(c(0xFFFFFF))
+        .bg(c(PANEL))
         .border_1()
         .border_color(c(LINE))
         .rounded(px(12.))
@@ -66,19 +88,19 @@ pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .items_center()
         .justify_center()
         .rounded(px(8.))
-        .bg(c(0xFFFFFF))
+        .bg(c(RAISED))
         .border_1()
         .border_color(c(LINE))
-        .text_size(px(13.5))
+        .text_size(px(13.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(INK))
         .cursor_pointer()
-        .hover(|s| s.bg(c(0xF3F4F9)).border_color(c(0xD8DAE6)))
-        .active(|s| s.bg(c(0xE9EBF3)))
+        .hover(|s| s.bg(c(HOVER)).border_color(c(LINE_HI)))
+        .active(|s| s.bg(c(PRESS)))
         .child(label.into())
 }
 
-/// The dark primary button, like "Use the fix".
+/// The light primary button, like "Approve & open PR".
 pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
@@ -89,13 +111,13 @@ pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .justify_center()
         .gap(px(8.))
         .rounded(px(8.))
-        .bg(c(0x17151F))
-        .text_size(px(13.5))
+        .bg(c(FILL))
+        .text_size(px(13.))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(0xFFFFFF))
+        .text_color(c(ON_FILL))
         .cursor_pointer()
-        .hover(|s| s.bg(c(0x2C2A38)))
-        .active(|s| s.bg(c(0x000000)))
+        .hover(|s| s.bg(c(0xDCDCE3)))
+        .active(|s| s.bg(c(0xC8C8D0)))
         .child(label.into())
 }
 
@@ -114,14 +136,16 @@ pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) 
         .cursor_pointer()
         .map(|d| {
             if on {
-                d.bg(c(INK)).text_color(c(0xFFFFFF))
-            } else {
-                d.bg(c(0xFFFFFF))
+                d.bg(c(HOVER))
                     .border_1()
-                    .border_color(c(LINE))
+                    .border_color(c(LINE_HI))
                     .text_color(c(INK))
-                    .hover(|s| s.bg(c(0xF3F4F9)))
-                    .active(|s| s.bg(c(0xE9EBF3)))
+            } else {
+                d.border_1()
+                    .border_color(c(LINE))
+                    .text_color(c(BODY))
+                    .hover(|s| s.bg(c(HOVER)).text_color(c(INK)))
+                    .active(|s| s.bg(c(PRESS)))
             }
         })
         .child(label.into())
@@ -151,18 +175,13 @@ pub fn status(color: u32, label: impl Into<SharedString>) -> Div {
 
 /// A thin progress bar.
 pub fn bar(frac: f32, color: u32) -> Div {
-    div()
-        .h(px(4.))
-        .w_full()
-        .rounded_full()
-        .bg(c(0xEEEFF5))
-        .child(
-            div()
-                .h_full()
-                .rounded_full()
-                .bg(c(color))
-                .w(relative(frac.clamp(0.0, 1.0))),
-        )
+    div().h(px(4.)).w_full().rounded_full().bg(c(RAISED)).child(
+        div()
+            .h_full()
+            .rounded_full()
+            .bg(c(color))
+            .w(relative(frac.clamp(0.0, 1.0))),
+    )
 }
 
 /// A thin bar with a soft segment sweeping across, for work with no known end.
@@ -176,7 +195,7 @@ pub fn sweep(color: u32, _phase: f32) -> Div {
         .h(px(4.))
         .w_full()
         .rounded_full()
-        .bg(c(0xEEEFF5))
+        .bg(c(RAISED))
         .relative()
         .overflow_hidden()
         .child(

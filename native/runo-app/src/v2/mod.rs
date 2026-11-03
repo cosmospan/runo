@@ -482,7 +482,7 @@ fn doze_after() -> Duration {
 pub(super) const DOCK_ROOM: f32 = 16.;
 
 /// The page ground: a quiet neutral grey under white surfaces.
-pub(super) const PAGE: u32 = 0xF6F6F7;
+pub(super) const PAGE: u32 = ui::BG;
 
 /// Width of one of Today's mode tabs plus the gap after it.
 const MODE_STEP: f32 = 78.;
@@ -1451,8 +1451,8 @@ impl Render for Shell {
                         .px(px(16.))
                         .py(px(10.))
                         .rounded_full()
-                        .bg(c(ui::INK))
-                        .text_color(c(0xFFFFFF))
+                        .bg(c(ui::FILL))
+                        .text_color(c(ui::ON_FILL))
                         .text_size(px(13.))
                         .shadow(ui::lift())
                         .child(text),
@@ -1578,6 +1578,15 @@ pub fn open_window(cx: &mut App) {
         ..Default::default()
     };
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
+        // v2 is dark throughout, so text boxes and menus from the kit follow.
+        gpui_kit::component::Theme::change(gpui_kit::component::ThemeMode::Dark, Some(window), cx);
+        gpui_kit::component::Theme::update(cx, |t| {
+            t.background = ui::c(ui::BG);
+            t.foreground = ui::c(ui::INK);
+            t.border = ui::c(ui::LINE);
+            t.input = ui::c(ui::LINE);
+            t.muted_foreground = ui::c(ui::MUTED);
+        });
         cx.new(|cx| Shell::new(window, cx))
     });
     // Come to the front when opened, not behind whatever had focus (the first

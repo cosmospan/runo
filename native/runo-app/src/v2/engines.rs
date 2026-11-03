@@ -40,15 +40,15 @@ fn choice(
         .cursor_pointer()
         .map(|d| {
             if on {
-                d.bg(c(ui::INK))
-                    .text_color(c(0xFFFFFF))
+                d.bg(c(ui::FILL))
+                    .text_color(c(ui::ON_FILL))
                     .font_weight(FontWeight::MEDIUM)
             } else {
                 d.border_1()
                     .border_color(c(ui::LINE))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .text_color(c(if ok { ui::INK } else { ui::FAINT }))
-                    .hover(|s| s.bg(c(0xF3F4F9)))
+                    .hover(|s| s.bg(c(ui::HOVER)))
             }
         })
         .child(label.into())
@@ -100,7 +100,7 @@ impl Shell {
                     .items_center()
                     .gap(px(12.))
                     .rounded(px(14.))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .border_1()
                     .map(|d| {
                         if on {
@@ -111,7 +111,7 @@ impl Shell {
                     })
                     .when(!ok, |d| d.opacity(0.55))
                     .cursor_pointer()
-                    .hover(|s| s.border_color(c(0xC9CBD8)))
+                    .hover(|s| s.border_color(c(ui::LINE_HI)))
                     .child(
                         div()
                             .size(px(32.))
@@ -151,8 +151,8 @@ impl Shell {
                             .px(px(8.))
                             .py(px(2.))
                             .rounded_full()
-                            .bg(c(ui::INK))
-                            .text_color(c(0xFFFFFF))
+                            .bg(c(ui::FILL))
+                            .text_color(c(ui::ON_FILL))
                             .text_size(px(10.5))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Default")

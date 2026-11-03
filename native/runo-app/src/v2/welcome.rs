@@ -61,11 +61,11 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::INK)).text_color(c(0xFFFFFF))
+                            d.bg(c(ui::FILL)).text_color(c(ui::ON_FILL))
                         } else if done {
-                            d.bg(ca(ui::GREEN, 0.12)).text_color(c(0x138A55))
+                            d.bg(ca(ui::GREEN, 0.12)).text_color(c(ui::T_GREEN))
                         } else {
-                            d.bg(ca(0xFFFFFF, 0.7)).text_color(c(ui::MUTED))
+                            d.bg(ca(ui::PANEL, 0.7)).text_color(c(ui::MUTED))
                         }
                     })
                     .child(if done {
@@ -174,8 +174,8 @@ impl Shell {
                     .h(px(34.))
                     .rounded_full()
                     .border_1()
-                    .border_color(c(if ok { 0xBFEBD3 } else { ui::LINE }))
-                    .bg(c(if ok { 0xF0FBF5 } else { 0xFFFFFF }))
+                    .border_color(c(if ok { 0x134733 } else { ui::LINE }))
+                    .bg(c(if ok { 0x0F251F } else { ui::PANEL }))
                     .text_size(px(13.))
                     .text_color(c(if ok { ui::INK } else { ui::FAINT }))
                     .child(if ok { "✓" } else { "○" })
@@ -232,7 +232,7 @@ impl Shell {
                     .rounded(px(12.))
                     .border_1()
                     .border_color(c(if on { ui::INK } else { ui::LINE }))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .cursor_pointer()
                     .child(
                         Icon::new(IconName::Folder)
@@ -310,7 +310,7 @@ impl Shell {
                     .bg(if on {
                         ca(who.accent(), 0.07)
                     } else {
-                        ca(0xFFFFFF, 0.8)
+                        ca(ui::PANEL, 0.8)
                     })
                     .cursor_pointer()
                     .on_hover(cx.listener(move |this, h: &bool, _, cx| this.hover_bot(who, *h, cx)))
@@ -342,7 +342,7 @@ impl Shell {
                             .items_center()
                             .justify_center()
                             .text_size(px(12.))
-                            .text_color(c(0xFFFFFF))
+                            .text_color(c(ui::ON_FILL))
                             .map(|d| {
                                 if on {
                                     d.bg(c(who.accent())).child("✓")

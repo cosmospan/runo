@@ -58,12 +58,12 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(0xFFFFFF))
+                            d.bg(c(ui::PANEL))
                                 .border_color(c(ui::LINE))
                                 .shadow(ui::lift())
                         } else {
                             d.border_color(gpui_kit::transparent_black())
-                                .hover(|s| s.bg(c(0xF4F4F6)))
+                                .hover(|s| s.bg(c(ui::HOVER)))
                         }
                     })
                     .child(div().flex_none().child(face))
@@ -147,7 +147,7 @@ impl Shell {
                                 div()
                                     .text_size(px(20.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Inbox"),
+                                    .child("Needs you"),
                             )
                             .child(
                                 div()
@@ -250,7 +250,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .border_b_1()
-                    .border_color(c(0xF2F2F4))
+                    .border_color(c(ui::LINE2))
                     .font_family(ui::MONO)
                     .text_size(px(12.))
                     .child(f.clone()),
@@ -355,7 +355,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .border_t_1()
                     .border_color(c(ui::LINE))
                     .child(
@@ -484,7 +484,7 @@ impl Shell {
                         .items_center()
                         .gap(px(8.))
                         .rounded(px(12.))
-                        .bg(c(0xFFFFFF))
+                        .bg(c(ui::PANEL))
                         .border_1()
                         .border_color(c(ui::LINE))
                         .child(

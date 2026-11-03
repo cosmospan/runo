@@ -43,11 +43,11 @@ impl Shell {
     pub(super) fn palette_entries(&self, query: &str) -> Vec<Entry> {
         let mut all = vec![];
         let places = [
-            (Place::Today, IconName::House, "Today", "⌘1"),
-            (Place::Inbox, IconName::Inbox, "Inbox", "⌘2"),
-            (Place::History, IconName::Clock, "Jobs", "⌘3"),
+            (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
+            (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
+            (Place::History, IconName::Clock, "All jobs", "⌘3"),
             (Place::Crew, IconName::Users, "Crew", "⌘5"),
-            (Place::Engines, IconName::Cpu, "Engines", "⌘6"),
+            (Place::Engines, IconName::Cpu, "Settings: Engines", "⌘6"),
             (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
         ];
         for (p, icon, label, key) in places {
@@ -228,7 +228,7 @@ impl Shell {
                 (None, Some(icon)) => div()
                     .size(px(26.))
                     .rounded(px(8.))
-                    .bg(c(if on { 0xFFFFFF } else { 0xF1F2F7 }))
+                    .bg(c(if on { ui::HOVER } else { ui::RAISED }))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -251,7 +251,7 @@ impl Shell {
                     .relative()
                     .left(px(6. * (1. - rk)))
                     .cursor_pointer()
-                    .when(on, |d| d.bg(c(0xF1F2F8)))
+                    .when(on, |d| d.bg(c(ui::RAISED)))
                     .on_mouse_move(cx.listener(move |this, _: &MouseMoveEvent, _, cx| {
                         if this.palette_sel != i {
                             this.palette_sel = i;
@@ -316,11 +316,11 @@ impl Shell {
                     .max_h(px(520.))
                     .opacity(k)
                     .rounded(px(20.))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .border_1()
                     .border_color(c(ui::LINE))
                     .shadow(vec![BoxShadow {
-                        color: ca(0x28285A, 0.30),
+                        color: ca(0x000000, 0.55),
                         offset: point(px(0.), px(30.)),
                         blur_radius: px(80.),
                         spread_radius: px(-6.),
@@ -356,7 +356,7 @@ impl Shell {
                                     .px(px(7.))
                                     .py(px(2.))
                                     .rounded(px(6.))
-                                    .bg(c(0xF1F2F7))
+                                    .bg(c(ui::RAISED))
                                     .font_family(ui::MONO)
                                     .text_size(px(10.))
                                     .text_color(c(ui::MUTED))
@@ -394,8 +394,8 @@ mod tests {
 
     #[test]
     fn every_word_must_match() {
-        assert!(matches("", "Go to Inbox", "⌘2"));
-        assert!(matches("inb", "Go to Inbox", "⌘2"));
+        assert!(matches("", "Go to Needs you", "⌘2"));
+        assert!(matches("nee", "Go to Needs you", "⌘2"));
         assert!(matches("chat fix", "Chat with Fixer", "Hunts the bug"));
         assert!(!matches("chat guard", "Chat with Fixer", "Hunts the bug"));
         assert!(matches("BUILD", "Build: give Builder a job", "New job"));

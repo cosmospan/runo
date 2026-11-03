@@ -6,18 +6,18 @@ use gpui_kit::*;
 use runo_holo::{Framing, Mood};
 
 use super::store::{self, Job, Status};
-use super::ui::{self, c};
+use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The table's tabs.
 const TABS: [&str; 3] = ["Active", "Needs you", "Finished"];
 
 /// Status colours: text, fill and edge of a pill.
-const RUN: (u32, u32, u32) = (0x2563EB, 0xEFF4FF, 0xDCE6FE);
-const ASK: (u32, u32, u32) = (0xB45309, 0xFFF7EB, 0xFDE7C7);
-const OK: (u32, u32, u32) = (0x15803D, 0xEFFBF3, 0xD3F2DE);
-const BAD: (u32, u32, u32) = (0xB91C1C, 0xFEF1F1, 0xFBD9D9);
-const GREY: (u32, u32, u32) = (0x52525B, 0xF4F4F5, 0xE4E4E7);
+const RUN: (u32, u32, u32) = (ui::T_BLUE, 0x131C2F, 0x1C325A);
+const ASK: (u32, u32, u32) = (ui::T_AMBER, 0x2B2010, 0x573B0F);
+const OK: (u32, u32, u32) = (ui::T_GREEN, 0x0F251F, 0x134733);
+const BAD: (u32, u32, u32) = (ui::T_RED, 0x2B1219, 0x561A25);
+const GREY: (u32, u32, u32) = (ui::BODY, 0x1E1E26, 0x2A2A33);
 
 impl Shell {
     /// Running, needs you, done today and what today cost.
@@ -53,7 +53,7 @@ impl Shell {
                     .flex_basis(px(0.))
                     .px(px(18.))
                     .py(px(14.))
-                    .when(!last, |d| d.border_r_1().border_color(c(0xEFEFF1)))
+                    .when(!last, |d| d.border_r_1().border_color(c(ui::LINE2)))
                     .child(
                         div()
                             .flex()
@@ -90,7 +90,7 @@ impl Shell {
         div()
             .w_full()
             .flex()
-            .bg(c(0xFFFFFF))
+            .bg(c(ui::PANEL))
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
@@ -102,14 +102,14 @@ impl Shell {
                 false,
             ))
             .child(cell(
-                Some(0xD97706),
+                Some(ui::T_AMBER),
                 "Needs you",
                 needs.len().to_string(),
                 oldest,
                 false,
             ))
             .child(cell(
-                Some(0x16A34A),
+                Some(ui::T_GREEN),
                 "Done today",
                 done.to_string(),
                 format!("{} today", today.len()),
@@ -175,7 +175,7 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(0xF4F4F5)).text_color(c(ui::INK))
+                            d.bg(c(ui::RAISED)).text_color(c(ui::INK))
                         } else {
                             d.text_color(c(ui::MUTED))
                                 .hover(|s| s.text_color(c(ui::INK)))
@@ -208,7 +208,7 @@ impl Shell {
         let table = self.job_table(&rows, false, tab, cx);
         div()
             .w_full()
-            .bg(c(0xFFFFFF))
+            .bg(c(ui::PANEL))
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
@@ -242,9 +242,9 @@ impl Shell {
                 .flex()
                 .items_center()
                 .gap(px(14.))
-                .bg(c(0xFCFCFD))
+                .bg(c(ui::RAISED))
                 .border_b_1()
-                .border_color(c(0xEFEFF1))
+                .border_color(c(ui::LINE2))
                 .text_size(px(11.5))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(ui::FAINT))
@@ -309,10 +309,10 @@ impl Shell {
                     .items_center()
                     .gap(px(14.))
                     .border_b_1()
-                    .border_color(c(0xF2F2F4))
+                    .border_color(c(ui::LINE2))
                     .text_size(px(13.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xF8F9FB)))
+                    .hover(|s| s.bg(c(ui::HOVER)))
                     .child(
                         div()
                             .flex_1()
@@ -438,7 +438,9 @@ impl Shell {
                             .text_color(c(ui::MUTED))
                             .child(when),
                     )
-                    .when(!wide && self.picked() == Some(id), |d| d.bg(c(0xF4F7FF)))
+                    .when(!wide && self.picked() == Some(id), |d| {
+                        d.bg(ca(ui::RUNO, 0.10))
+                    })
                     .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| {
                         if wide || e.click_count() > 1 {
                             this.go(Place::Live(id), cx);
@@ -568,7 +570,7 @@ impl Shell {
                 2 => div()
                     .size(px(14.))
                     .rounded_full()
-                    .bg(c(0x16A34A))
+                    .bg(c(ui::GREEN))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -584,7 +586,7 @@ impl Shell {
                     .size(px(14.))
                     .rounded_full()
                     .border_1()
-                    .border_color(c(0xD4D4D8)),
+                    .border_color(c(ui::LINE_HI)),
             };
             plan = plan.child(
                 div()
@@ -633,7 +635,7 @@ impl Shell {
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(c(0xFFFFFF))
+                .bg(c(ui::PANEL))
                 .border_l_1()
                 .border_color(c(ui::LINE))
                 .child(

@@ -122,7 +122,7 @@ impl Shell {
             .rounded(px(14.))
             .border_1()
             .border_color(c(ui::LINE))
-            .bg(c(0xFFFFFF))
+            .bg(c(ui::PANEL))
             .overflow_hidden()
             .flex()
             .flex_col()
@@ -137,7 +137,7 @@ impl Shell {
                     .bg(linear_gradient(
                         180.,
                         linear_color_stop(ca(who.accent(), 0.12), 0.0),
-                        linear_color_stop(ca(0xFFFFFF, 0.0), 1.0),
+                        linear_color_stop(ca(ui::PANEL, 0.0), 1.0),
                     ))
                     .child(div().flex_none().child(face))
                     .child(
@@ -178,7 +178,7 @@ impl Shell {
                     .flex()
                     .border_t_1()
                     .border_b_1()
-                    .border_color(c(0xF0F0F2))
+                    .border_color(c(ui::LINE2))
                     .child(stat("Jobs", jobs.len().to_string()))
                     .child(stat(
                         "Success",
@@ -277,7 +277,7 @@ impl Shell {
                     .py(px(8.))
                     .w(px(330.))
                     .rounded(px(18.))
-                    .bg(ca(0xFFFFFF, 0.7))
+                    .bg(ca(ui::PANEL, 0.7))
                     .border_1()
                     .border_color(c(ui::LINE))
                     .child(face)
@@ -362,7 +362,7 @@ impl Shell {
                     .size(px(28.))
                     .rounded_full()
                     .border_2()
-                    .border_color(c(if on { ui::INK } else { 0xFFFFFF }))
+                    .border_color(c(if on { ui::INK } else { ui::PANEL }))
                     .shadow(ui::lift())
                     .bg(linear_gradient(
                         135.,
@@ -431,7 +431,7 @@ impl Shell {
                     .h(px(280.))
                     .flex_none()
                     .rounded(px(20.))
-                    .bg(ca(0xFFFFFF, 0.6))
+                    .bg(ca(ui::PANEL, 0.6))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -513,7 +513,7 @@ fn field(
         .items_center()
         .gap(px(8.))
         .rounded(px(12.))
-        .bg(c(0xFFFFFF))
+        .bg(c(ui::PANEL))
         .border_1()
         .border_color(c(ui::LINE))
         .child(

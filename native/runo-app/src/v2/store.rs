@@ -27,6 +27,8 @@ pub struct Store {
     pub removed: Vec<Member>,
     /// The first-run walkthrough is done (or was skipped).
     pub set_up: bool,
+    /// Bots pinned near the top of the sidebar.
+    pub pinned: Vec<Member>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -79,10 +79,10 @@ impl Shell {
                     .rounded_full()
                     .border_1()
                     .border_color(c(ui::LINE))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .text_size(px(12.5))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xF6F7FB)))
+                    .hover(|s| s.bg(c(ui::HOVER)))
                     .child(
                         Icon::new(IconName::Cpu)
                             .size(px(13.))
@@ -122,8 +122,8 @@ impl Shell {
                             .px(px(16.))
                             .py(px(10.))
                             .rounded(px(16.))
-                            .bg(c(ui::INK))
-                            .text_color(c(0xFFFFFF))
+                            .bg(c(ui::FILL))
+                            .text_color(c(ui::ON_FILL))
                             .text_size(px(14.))
                             .line_height(px(20.))
                             .child(m.text.clone()),
@@ -147,9 +147,9 @@ impl Shell {
                                     .px(px(18.))
                                     .py(px(13.))
                                     .rounded(px(16.))
-                                    .bg(ca(0xFFFFFF, 0.85))
+                                    .bg(ca(ui::PANEL, 0.85))
                                     .border_1()
-                                    .border_color(c(0xFFFFFF))
+                                    .border_color(c(ui::LINE))
                                     .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
@@ -264,16 +264,16 @@ impl Shell {
                                     .id("chat-send")
                                     .size(px(36.))
                                     .rounded_full()
-                                    .bg(c(ui::INK))
+                                    .bg(c(ui::FILL))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(c(0x2C2A38)))
+                                    .hover(|s| s.bg(c(0xDCDCE3)))
                                     .child(
                                         Icon::new(IconName::ArrowUp)
                                             .size(px(15.))
-                                            .text_color(c(0xFFFFFF)),
+                                            .text_color(c(ui::ON_FILL)),
                                     )
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         let text =
@@ -306,12 +306,12 @@ impl Shell {
                     .flex()
                     .items_center()
                     .rounded_full()
-                    .bg(ca(0xFFFFFF, 0.75))
+                    .bg(ca(ui::PANEL, 0.75))
                     .border_1()
                     .border_color(c(ui::LINE))
                     .text_size(px(13.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xFFFFFF)))
+                    .hover(|s| s.bg(c(ui::HOVER)))
                     .child(q)
                     .on_click(cx.listener(move |this, _, _, cx| this.ask(who, q.to_string(), cx))),
             );

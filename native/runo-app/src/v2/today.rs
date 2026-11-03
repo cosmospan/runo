@@ -179,7 +179,7 @@ impl Shell {
             .p(px(3.))
             .gap(px(super::MODE_STEP - TAB))
             .rounded(px(12.))
-            .bg(c(0xF1F2F7))
+            .bg(c(ui::RAISED))
             .child(
                 div()
                     .absolute()
@@ -188,7 +188,7 @@ impl Shell {
                     .w(px(TAB))
                     .h(px(32.))
                     .rounded(px(9.))
-                    .bg(c(0xFFFFFF))
+                    .bg(c(ui::PANEL))
                     .shadow(ui::lift()),
             );
         // Only the kinds of work someone on the crew takes.
@@ -269,7 +269,7 @@ impl Shell {
                             .text_size(px(12.5))
                             .text_color(c(ui::MUTED))
                             .cursor_pointer()
-                            .hover(|s| s.bg(c(0xF6F7FB)).text_color(c(ui::INK)))
+                            .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
                             .child(face)
                             .child(format!("{} · {engine}", target.name()))
                             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
@@ -280,7 +280,7 @@ impl Shell {
                             .size(px(38.))
                             .rounded_full()
                             // Dark once there is something to send.
-                            .bg(c(if ready { accent } else { 0xD5D7E3 }))
+                            .bg(c(if ready { accent } else { 0x2A2A33 }))
                             .when(ready, |d| {
                                 d.shadow(vec![BoxShadow {
                                     color: ca(accent, 0.45),
@@ -316,7 +316,7 @@ impl Shell {
             .px(px(18.))
             .pt(px(18.))
             .pb(px(14.))
-            .bg(c(0xFFFFFF))
+            .bg(c(ui::PANEL))
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
@@ -357,7 +357,7 @@ impl Shell {
             }))
             .font_weight(FontWeight::SEMIBOLD)
             .cursor_pointer()
-            .hover(|s| s.bg(ca(0xFFFFFF, 0.8)))
+            .hover(|s| s.bg(c(ui::HOVER)))
             .child(
                 Icon::new(IconName::Folder)
                     .size(px(16.))
@@ -385,7 +385,7 @@ impl Shell {
                 .w(px(300.))
                 .p(px(6.))
                 .rounded(px(14.))
-                .bg(c(0xFFFFFF))
+                .bg(c(ui::PANEL))
                 .border_1()
                 .border_color(c(ui::LINE))
                 .shadow(ui::lift())
@@ -404,8 +404,8 @@ impl Shell {
                         .py(px(7.))
                         .rounded(px(9.))
                         .cursor_pointer()
-                        .when(on, |d| d.bg(c(0xF1F2F7)))
-                        .hover(|s| s.bg(c(0xF6F7FB)))
+                        .when(on, |d| d.bg(c(ui::RAISED)))
+                        .hover(|s| s.bg(c(ui::HOVER)))
                         .child(
                             div()
                                 .flex_1()
@@ -436,7 +436,7 @@ impl Shell {
                                 .justify_center()
                                 .invisible()
                                 .group_hover("folder-item", |s| s.visible())
-                                .hover(|s| s.bg(c(0xE7E8F0)))
+                                .hover(|s| s.bg(c(ui::HOVER)))
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "Remove from this list (the files stay)",
@@ -472,7 +472,7 @@ impl Shell {
                         .py(px(8.))
                         .rounded(px(9.))
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(0xF6F7FB)))
+                        .hover(|s| s.bg(c(ui::HOVER)))
                         .text_size(px(13.))
                         .child(Icon::new(IconName::Plus).size(px(14.)))
                         .child("Add a folder…")
@@ -508,8 +508,8 @@ fn how_it_works() -> impl IntoElement {
                 div()
                     .size(px(28.))
                     .rounded_full()
-                    .bg(c(ui::INK))
-                    .text_color(c(0xFFFFFF))
+                    .bg(c(ui::FILL))
+                    .text_color(c(ui::ON_FILL))
                     .flex()
                     .items_center()
                     .justify_center()
