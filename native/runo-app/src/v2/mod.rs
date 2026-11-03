@@ -11,6 +11,7 @@
 mod chat;
 mod crew;
 mod data;
+mod dock;
 mod engine;
 mod engines;
 mod history;
@@ -249,6 +250,11 @@ pub struct Shell {
     hover_at: Instant,
     /// The rail bot under the pointer, which shows its card.
     rail_hover: Option<Member>,
+    /// The dock's bot sizes as they ease, and whether any is still moving.
+    dock_sizes: HashMap<u64, f32>,
+    dock_moving: bool,
+    /// The soft colour wash behind every screen, drawn once.
+    backdrop: Arc<RenderImage>,
     /// The command palette (⌘K), its box, the picked row and when it opened.
     palette: bool,
     /// The window's own focus, so shortcuts work before any box is clicked.
@@ -309,6 +315,49 @@ fn doze_after() -> Duration {
         .and_then(|s| s.parse().ok())
         .unwrap_or(300);
     Duration::from_secs(secs)
+}
+
+/// Room kept at the bottom of every screen for the floating dock.
+pub(super) const DOCK_ROOM: f32 = 110.;
+
+/// The soft wash of colour behind the app: a few big, blurred tints on a pale
+/// base, drawn small once and stretched (it has no edges to blur).
+fn backdrop() -> Arc<RenderImage> {
+    let (w, h) = (160usize, 100usize);
+    // (x, y, radius, colour, strength), in the image's 0..1 space.
+    let blobs: [(f32, f32, f32, u32, f32); 5] = [
+        (0.05, 0.0, 0.55, 0xFFD3BC, 0.55),
+        (0.95, 0.08, 0.5, 0xDCCFFF, 0.5),
+        (0.75, 0.95, 0.55, 0xC9F0DF, 0.45),
+        (0.15, 0.9, 0.45, 0xCFE6FF, 0.45),
+        (0.5, 0.45, 0.4, 0xFFF1E0, 0.3),
+    ];
+    let base = [0xF5u8 as f32, 0xF5 as f32, 0xFA as f32];
+    let mut px = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        for x in 0..w {
+            let (u, v) = (x as f32 / (w - 1) as f32, y as f32 / (h - 1) as f32);
+            let mut col = base;
+            for (bx, by, r, rgb_hex, k) in blobs {
+                // Aspect-correct distance, so blobs stay round on a wide window.
+                let d = (((u - bx) * 1.6).powi(2) + (v - by).powi(2)).sqrt() / r;
+                let a = (1.0 - d).clamp(0.0, 1.0);
+                let a = a * a * (3.0 - 2.0 * a) * k;
+                let t = [
+                    ((rgb_hex >> 16) & 0xFF) as f32,
+                    ((rgb_hex >> 8) & 0xFF) as f32,
+                    (rgb_hex & 0xFF) as f32,
+                ];
+                for i in 0..3 {
+                    col[i] += (t[i] - col[i]) * a;
+                }
+            }
+            // BGRA, opaque.
+            px.extend_from_slice(&[col[2] as u8, col[1] as u8, col[0] as u8, 255]);
+        }
+    }
+    let buf = image::RgbaImage::from_raw(w as u32, h as u32, px).expect("backdrop size");
+    Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
 /// Width of one of Today's mode tabs plus the gap after it.
@@ -485,6 +534,9 @@ impl Shell {
             maker_like: Member::Checker,
             hover_at: Instant::now(),
             rail_hover: None,
+            dock_sizes: HashMap::new(),
+            dock_moving: false,
+            backdrop: backdrop(),
             palette: false,
             focus,
             focus_moved: Instant::now(),
@@ -1238,126 +1290,6 @@ impl Shell {
                     })),
             );
         }
-        // The crew takes the rail's spare height and clips gracefully in short windows.
-        let mut bots = div()
-            .flex_1()
-            .min_h_0()
-            .overflow_hidden()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(4.));
-        for who in Member::all() {
-            let on = place == Place::Chat(who)
-                || matches!(place, Place::Live(id) if self.store.job(id).is_some_and(|j| j.bot == who));
-            let mood = self.mood(who);
-            // Small and slow (a few frames a second), so the rail stays alive cheaply.
-            let face = self.bot(who, mood, 34., Framing::Bust);
-            let (_, dot) = self.status_of(who);
-            let busy = self.store.busy(who).map(|j| j.id);
-            bots = bots.child(
-                div()
-                    .id(("rail-bot", who.key() as usize))
-                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                        if *on {
-                            this.rail_hover = Some(who);
-                        } else if this.rail_hover == Some(who) {
-                            this.rail_hover = None;
-                        }
-                        this.hover_bot(who, *on, cx);
-                    }))
-                    .relative()
-                    .flex_none()
-                    .size(px(42.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(14.))
-                    .cursor_pointer()
-                    .when(on, |d| {
-                        d.border_2().border_color(c(ui::INK)).bg(c(0xFFFFFF))
-                    })
-                    // Hovered, a card slides out beside the rail: who, what it's
-                    // doing, and what a click does.
-                    .when(self.rail_hover == Some(who), |d| {
-                        let k = runo_holo::anim::spring(self.hover_at.elapsed().as_secs_f64(), 0.22)
-                            as f32;
-                        let (line, color) = self.status_of(who);
-                        let tip = if busy.is_some() {
-                            "Click to watch the job"
-                        } else {
-                            "Click to chat"
-                        };
-                        d.child(
-                            deferred(
-                                div()
-                                    .absolute()
-                                    .left(px(52. + 8. * (1. - k)))
-                                    .top(px(-6.))
-                                    .w(px(210.))
-                                    .opacity(k)
-                                    .p(px(12.))
-                                    .rounded(px(14.))
-                                    .bg(c(0xFFFFFF))
-                                    .border_1()
-                                    .border_color(c(ui::LINE))
-                                    .shadow(ui::lift())
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(3.))
-                                    .child(
-                                        div()
-                                            .text_size(px(14.))
-                                            .font_weight(FontWeight::BOLD)
-                                            .child(who.name()),
-                                    )
-                                    .child(ui::status(color, line))
-                                    .child(
-                                        div()
-                                            .mt(px(4.))
-                                            .text_size(px(11.))
-                                            .text_color(c(ui::FAINT))
-                                            .child(tip),
-                                    ),
-                            )
-                            .with_priority(2),
-                        )
-                    })
-                    .hover(|s| s.bg(c(0xFFFFFF)))
-                    .child(face)
-                    // A working bot's dot breathes: a soft ring swells and fades.
-                    .when(dot != ui::FAINT && busy.is_some() && self.motion, |d| {
-                        let p = runo_holo::anim::phase(self.now(), 1.6, 0.0) as f32;
-                        let r = 9. + 10. * p;
-                        d.child(
-                            div()
-                                .absolute()
-                                .bottom(px(9.5 - r / 2.))
-                                .right(px(9.5 - r / 2.))
-                                .size(px(r))
-                                .rounded_full()
-                                .bg(ca(dot, 0.35 * (1. - p))),
-                        )
-                    })
-                    .when(dot != ui::FAINT, |d| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .bottom(px(5.))
-                                .right(px(5.))
-                                .size(px(9.))
-                                .rounded_full()
-                                .border_2()
-                                .border_color(c(ui::RAIL))
-                                .bg(c(dot)),
-                        )
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let to = busy.map(Place::Live).unwrap_or(Place::Chat(who));
-                        this.go(to, cx);
-                    })),
-            );
-        }
         let nav_button = |id: &'static str, icon: IconName, on: bool, label: &'static str| {
             div()
                 .id(id)
@@ -1390,7 +1322,7 @@ impl Shell {
             .pt(px(if cfg!(target_os = "macos") { 46. } else { 20. }))
             .pb(px(16.))
             .gap(px(14.))
-            .bg(c(ui::RAIL))
+            .bg(ca(0xFFFFFF, 0.45))
             .border_r_1()
             .border_color(c(ui::LINE))
             // The top button finds anything: places, bots, jobs, folders (⌘K).
@@ -1418,8 +1350,7 @@ impl Shell {
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )
             .child(icons)
-            .child(div().w(px(32.)).h(px(1.)).bg(c(ui::LINE)))
-            .child(bots)
+            .child(div().flex_1())
             .child(
                 nav_button(
                     "nav-engines",
@@ -1482,6 +1413,7 @@ impl Render for Shell {
             || self.chat_at.elapsed() < Duration::from_millis(500)
             || self.nav_at.elapsed() < Duration::from_millis(600)
             || (self.hovered.is_some() && self.hover_at.elapsed() < Duration::from_millis(400))
+            || self.dock_moving
             || self
                 .toast
                 .as_ref()
@@ -1575,6 +1507,7 @@ impl Render for Shell {
                         .child(text),
                 )
         });
+        let setup = self.place == Place::Welcome;
         div()
             .size_full()
             .relative()
@@ -1638,20 +1571,31 @@ impl Render for Shell {
             }))
             .font_family("Geist")
             .text_color(c(ui::INK))
-            .bg(linear_gradient(
-                180.,
-                linear_color_stop(c(0xFBF6F3), 0.0),
-                linear_color_stop(c(0xF3F4FA), 0.35),
-            ))
-            // The walkthrough has the whole window; the rail comes after it.
-            .when(self.place != Place::Welcome, |d| d.child(self.rail(cx)))
+            .bg(c(0xF5F5FA))
+            // The colour wash, stretched under everything.
+            .child(img(self.backdrop.clone()).absolute().inset_0().size_full())
+            // The walkthrough has the whole window; the rail and dock come after it.
+            .when(!setup, |d| d.child(self.rail(cx)))
             .child(
                 div()
                     .flex_1()
                     .h_full()
                     .min_w_0()
+                    .relative()
                     .overflow_hidden()
-                    .child(body),
+                    .child(div().size_full().child(body))
+                    .when(!setup, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .bottom(px(14.))
+                                .left_0()
+                                .right_0()
+                                .flex()
+                                .justify_center()
+                                .child(self.dock(cx)),
+                        )
+                    }),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

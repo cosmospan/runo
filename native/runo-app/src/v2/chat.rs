@@ -347,46 +347,51 @@ impl Shell {
                     .child(body),
             )
             .child(
-                div().flex_none().px(px(24.)).pb(px(20.)).child(
-                    ui::card()
-                        .rounded(px(18.))
-                        .px(px(16.))
-                        .py(px(10.))
-                        .flex()
-                        .items_center()
-                        .gap(px(10.))
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_size(px(14.))
-                                .child(Input::new(&self.chat_input).appearance(false)),
-                        )
-                        .child(
-                            div()
-                                .id("chat-send")
-                                .size(px(36.))
-                                .rounded_full()
-                                .bg(c(ui::INK))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .hover(|s| s.bg(c(0x2C2A38)))
-                                .child(
-                                    Icon::new(IconName::ArrowUp)
-                                        .size(px(15.))
-                                        .text_color(c(0xFFFFFF)),
-                                )
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    let text = this.chat_input.read(cx).value().trim().to_string();
-                                    if !text.is_empty() {
-                                        this.chat_input
-                                            .update(cx, |i, cx| i.set_value("", window, cx));
-                                        this.ask(who, text, cx);
-                                    }
-                                })),
-                        ),
-                ),
+                div()
+                    .flex_none()
+                    .px(px(24.))
+                    .pb(px(super::DOCK_ROOM))
+                    .child(
+                        ui::card()
+                            .rounded(px(18.))
+                            .px(px(16.))
+                            .py(px(10.))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_size(px(14.))
+                                    .child(Input::new(&self.chat_input).appearance(false)),
+                            )
+                            .child(
+                                div()
+                                    .id("chat-send")
+                                    .size(px(36.))
+                                    .rounded_full()
+                                    .bg(c(ui::INK))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(c(0x2C2A38)))
+                                    .child(
+                                        Icon::new(IconName::ArrowUp)
+                                            .size(px(15.))
+                                            .text_color(c(0xFFFFFF)),
+                                    )
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        let text =
+                                            this.chat_input.read(cx).value().trim().to_string();
+                                        if !text.is_empty() {
+                                            this.chat_input
+                                                .update(cx, |i, cx| i.set_value("", window, cx));
+                                            this.ask(who, text, cx);
+                                        }
+                                    })),
+                            ),
+                    ),
             )
     }
 

@@ -410,29 +410,34 @@ impl Shell {
                     .child(feed),
             )
             .child(
-                div().flex_none().px(px(30.)).pb(px(20.)).pt(px(6.)).child(
-                    ui::card()
-                        .rounded(px(18.))
-                        .px(px(16.))
-                        .py(px(8.))
-                        .flex()
-                        .items_center()
-                        .gap(px(10.))
-                        .when(running, |d| d.opacity(0.6))
-                        .child(
-                            div().flex_1().text_size(px(14.)).child(
-                                Input::new(&self.live_input)
-                                    .appearance(false)
-                                    .disabled(running),
+                div()
+                    .flex_none()
+                    .px(px(30.))
+                    .pb(px(super::DOCK_ROOM))
+                    .pt(px(6.))
+                    .child(
+                        ui::card()
+                            .rounded(px(18.))
+                            .px(px(16.))
+                            .py(px(8.))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .when(running, |d| d.opacity(0.6))
+                            .child(
+                                div().flex_1().text_size(px(14.)).child(
+                                    Input::new(&self.live_input)
+                                        .appearance(false)
+                                        .disabled(running),
+                                ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::FAINT))
+                                    .child(input_hint),
                             ),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.))
-                                .text_color(c(ui::FAINT))
-                                .child(input_hint),
-                        ),
-                ),
+                    ),
             )
     }
 
@@ -562,7 +567,7 @@ impl Shell {
             .bg(ca(0xFFFFFF, 0.45))
             .px(px(24.))
             .pt(px(if cfg!(target_os = "macos") { 30. } else { 24. }))
-            .pb(px(24.))
+            .pb(px(24. + super::DOCK_ROOM))
             .flex()
             .flex_col()
             .gap(px(26.))

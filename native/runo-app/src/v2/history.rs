@@ -269,7 +269,7 @@ fn page(title: &'static str, line: String) -> Stateful<Div> {
         .overflow_y_scroll()
         .px(px(40.))
         .pt(px(if cfg!(target_os = "macos") { 40. } else { 30. }))
-        .pb(px(40.))
+        .pb(px(40. + super::DOCK_ROOM))
         .flex()
         .flex_col()
         .gap(px(18.))

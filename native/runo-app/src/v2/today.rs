@@ -53,6 +53,14 @@ fn full_name() -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// "MONDAY · 3 NOVEMBER".
+fn today_label() -> String {
+    chrono::Local::now()
+        .format("%A · %-d %B")
+        .to_string()
+        .to_uppercase()
+}
+
 fn greeting() -> String {
     use chrono::Timelike;
     let part = match chrono::Local::now().hour() {
@@ -69,89 +77,6 @@ fn greeting() -> String {
 
 impl Shell {
     pub(super) fn today(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        // The crew, a bot that waits on you bigger and in front.
-        // A bot that is working right now isn't waiting on anyone.
-        let waiting = Member::all().into_iter().find(|m| {
-            self.store.busy(*m).is_none()
-                && self
-                    .store
-                    .jobs
-                    .iter()
-                    .any(|j| j.bot == *m && j.needs_you() && j.status != Status::Done)
-        });
-        let mut row = div()
-            .flex_none()
-            .h(px(186.))
-            .flex()
-            .items_end()
-            .justify_center()
-            .gap(px(18.));
-        for who in Member::all() {
-            let asking = waiting == Some(who);
-            let mood = if asking {
-                Mood::NeedsYou
-            } else {
-                self.mood(who)
-            };
-            let size = if asking { 140. } else { 104. };
-            let face = self.bot(who, mood, size, Framing::Full);
-            let (line, color) = self.status_of(who);
-            let to = self.store.busy(who).map(|j| j.id).or_else(|| {
-                self.store
-                    .jobs
-                    .iter()
-                    .rev()
-                    .find(|j| j.bot == who && j.needs_you())
-                    .map(|j| j.id)
-            });
-            row = row.child(
-                div()
-                    .id(("crew-top", who.key() as usize))
-                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                        this.hover_bot(who, *on, cx);
-                    }))
-                    .relative()
-                    .w(px(size))
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .cursor_pointer()
-                    .when(asking, |d| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .top(px(-4.))
-                                .px(px(10.))
-                                .py(px(5.))
-                                .rounded(px(10.))
-                                .bg(c(ui::INK))
-                                .text_color(c(0xFFFFFF))
-                                .text_size(px(12.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child("Got a sec?"),
-                        )
-                    })
-                    .child(face)
-                    .child(
-                        div()
-                            .mt(px(-8.))
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::BOLD)
-                            .child(who.name()),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c(if color == ui::FAINT { ui::MUTED } else { color }))
-                            .when(color != ui::FAINT, |d| d.font_weight(FontWeight::MEDIUM))
-                            .child(line),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.go(to.map(Place::Live).unwrap_or(Place::Chat(who)), cx);
-                    })),
-            );
-        }
-
         let folder = self.store.folder().map(|f| f.name.clone());
         let running = self.store.running().count();
         let today_done = self
@@ -183,15 +108,29 @@ impl Shell {
             .flex_col()
             .items_center()
             .px(px(40.))
-            .pt(px(28.))
-            .pb(px(40.))
-            .child(ui::rise(div().child(row), self.stagger(0)))
+            .pt(px(if cfg!(target_os = "macos") { 92. } else { 76. }))
+            .pb(px(40. + super::DOCK_ROOM))
+            // The crew lives in the dock below; Today opens on the day and the box.
             .child(ui::rise(
                 div()
-                    .mt(px(14.))
-                    .text_size(px(48.))
+                    .px(px(12.))
+                    .py(px(5.))
+                    .rounded_full()
+                    .bg(ca(0xFFFFFF, 0.7))
+                    .border_1()
+                    .border_color(ca(0xFFFFFF, 0.9))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.))
+                    .text_color(c(ui::MUTED))
+                    .child(today_label()),
+                self.stagger(0),
+            ))
+            .child(ui::rise(
+                div()
+                    .mt(px(16.))
+                    .text_size(px(56.))
                     .font_weight(FontWeight::BOLD)
-                    .line_height(px(56.))
+                    .line_height(px(62.))
                     .child(greeting()),
                 self.stagger(1),
             ))
