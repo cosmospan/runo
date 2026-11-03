@@ -44,7 +44,7 @@ pub fn start(
     text: &str,
     follow_up: bool,
 ) -> Result<Runner, String> {
-    let (i, model) = engine::engine(st, job.bot);
+    let (i, model) = engine::for_job(st, job);
     let p = &agent::PROVIDERS[i];
     let opts = st.agent(p.id);
     if !agent::available(p.bin, &opts.binary) {
@@ -65,7 +65,7 @@ pub fn start(
     let mut sel: HashMap<String, String> = HashMap::new();
     sel.insert("mode".into(), mode.into());
     if !model.is_empty() {
-        sel.insert("model".into(), model);
+        sel.insert("model".into(), model.clone());
     }
     let resume = follow_up
         && job.agent == p.id
@@ -97,7 +97,7 @@ pub fn start(
     let (tx, rx) = channel();
     let handle = agent::run_agent(Target::Terminal(job.id), &spec, &dir, None, tx)?;
     job.agent = p.id.to_string();
-    job.engine = engine::label(st, job.bot);
+    job.engine = engine::label_of(i, &model);
     job.status = Status::Running;
     job.ended = None;
     job.seen = false;

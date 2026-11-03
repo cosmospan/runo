@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use super::store::{self, Job, Status};
 use super::ui::{self, c};
-use super::{Place, Shell};
+use super::Shell;
 
 impl Shell {
     /// Inbox: what needs you on the left, the picked item on the right with what
@@ -385,7 +385,7 @@ impl Shell {
                                 "Open job"
                             },
                         )
-                        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
                     )
                     .when(j.status == Status::Review, |d| {
                         let label = self.approve_label(j);

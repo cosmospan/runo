@@ -443,7 +443,7 @@ impl Shell {
                     })
                     .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| {
                         if wide || e.click_count() > 1 {
-                            this.go(Place::Live(id), cx);
+                            this.open_job(id, cx);
                         } else {
                             this.home_pick = Some(id);
                             cx.notify();
@@ -618,7 +618,7 @@ impl Shell {
             .child(
                 ui::ghost("insp-open", "Open job")
                     .flex_1()
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
             )
             .when(running, |d| {
                 d.child(

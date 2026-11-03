@@ -11,6 +11,7 @@
 mod chat;
 mod crew;
 mod data;
+mod demo;
 mod engine;
 mod engines;
 mod history;
@@ -18,6 +19,7 @@ mod home;
 mod jobs;
 mod live;
 mod palette;
+mod race;
 mod review;
 mod ship;
 mod sidebar;
@@ -51,6 +53,9 @@ pub enum Place {
     Crew,
     /// One job, by id.
     Live(u64),
+    /// The tries of one job on several engines, side by side, by the id of
+    /// its first try.
+    Race(u64),
     Engines,
     /// What the crew cost and did lately.
     Usage,
@@ -464,6 +469,8 @@ pub struct Shell {
     landing: Vec<(u64, bool, std::sync::mpsc::Receiver<Result<(), String>>)>,
     /// What Approve does in each folder, worked out once per folder.
     ways: HashMap<String, ship::Way>,
+    /// How many engines a job from Today's box races on: 0 or 1 is no race.
+    racing: usize,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -512,7 +519,7 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) => 2,
+        Place::History | Place::Live(_) | Place::Race(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Engines | Place::Usage | Place::Welcome => return None,
@@ -627,7 +634,11 @@ impl Shell {
         });
         // Learn which agents are installed and the models they offer.
         crate::caps::refresh();
-        let store = Store::load();
+        let store = if std::env::var_os("RUNO_V2_DEMO").is_some() {
+            demo::seed()
+        } else {
+            Store::load()
+        };
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
             Ok("chat") => Place::Chat(Member::Explainer),
@@ -635,6 +646,26 @@ impl Shell {
             Ok("history") => Place::History,
             Ok("engines") => Place::Engines,
             Ok("usage") => Place::Usage,
+            Ok("needs") => Place::Inbox,
+            Ok("jobs") => Place::Today,
+            Ok("race") => store
+                .jobs
+                .iter()
+                .find(|j| j.race != 0)
+                .map(|j| Place::Race(j.race))
+                .unwrap_or(Place::Today),
+            Ok("review") => store
+                .jobs
+                .iter()
+                .find(|j| j.status == Status::Review && j.race == 0)
+                .map(|j| Place::Live(j.id))
+                .unwrap_or(Place::Today),
+            Ok("pr") => store
+                .jobs
+                .iter()
+                .find(|j| j.status == Status::Shipping)
+                .map(|j| Place::Live(j.id))
+                .unwrap_or(Place::Today),
             Ok("live") => store
                 .jobs
                 .last()
@@ -707,6 +738,7 @@ impl Shell {
             watched: Instant::now() - Duration::from_secs(3600),
             landing: Vec::new(),
             ways: HashMap::new(),
+            racing: 0,
             _subs: subs,
             _pump: pump,
         }
@@ -732,7 +764,7 @@ impl Shell {
         while let Some(p) = self.trail.pop() {
             // Skip jobs that are gone and repeats of where we are.
             let ok = match p {
-                Place::Live(id) => self.store.job(id).is_some(),
+                Place::Live(id) | Place::Race(id) => self.store.job(id).is_some(),
                 _ => true,
             };
             if ok && p != self.place {
@@ -883,6 +915,10 @@ impl Shell {
             return;
         };
         let mode = self.mode;
+        if self.racing > 1 && mode.writes() {
+            self.start_race(doer, mode, text, folder, self.racing, cx);
+            return;
+        }
         self.start_job_in(doer, mode, text, folder, cx);
     }
 
@@ -1077,21 +1113,43 @@ impl Shell {
             self.go(Place::Live(id), cx);
             return;
         }
+        let job = self.make_job(bot, mode, &text, folder, None, cx);
+        let id = job.id;
+        self.store.jobs.push(job);
+        self.store.save();
+        self.go(Place::Live(id), cx);
+    }
+
+    /// A new job, on its own branch when it may change files, started on its
+    /// bot's engine, or on `pick` (an agent index) for a try in a race.
+    fn make_job(
+        &mut self,
+        bot: Member,
+        mode: Mode,
+        text: &str,
+        folder: store::Folder,
+        pick: Option<(usize, u64)>,
+        cx: &mut Context<Self>,
+    ) -> store::Job {
         self.store.next_id += 1;
         let mut job = store::Job {
             id: self.store.next_id,
             bot,
             mode,
-            title: text.clone(),
+            title: text.to_string(),
             folder,
             started: store::now(),
             seen: false,
             ..Default::default()
         };
+        if let Some((i, race)) = pick {
+            job.pick = crate::agent::PROVIDERS[i].id.to_string();
+            job.race = if race == 0 { job.id } else { race };
+        }
         // A job that may change files gets its own branch and worktree, so your
         // checkout stays as it is and its changes wait for your approval.
         if mode.writes() {
-            match work::isolate(&job.folder.path, &text, job.id) {
+            match work::isolate(&job.folder.path, text, job.id) {
                 Ok(Some(iso)) => {
                     job.feed.push(store::Item::Note(format!(
                         "Working on its own branch, {}, so your checkout stays as it is.",
@@ -1109,19 +1167,160 @@ impl Shell {
             }
         }
         let st = cx.global::<crate::settings::AppSettings>();
-        match jobs::start(st, &mut job, &text, false) {
+        match jobs::start(st, &mut job, text, false) {
             Ok(r) => self.runners.push(r),
             Err(why) => {
                 job.status = Status::Failed;
                 job.ended = Some(job.started);
-                job.engine = engine::label(st, bot);
+                let (i, model) = engine::for_job(st, &job);
+                job.engine = engine::label_of(i, &model);
                 job.feed.push(store::Item::Error(why));
             }
         }
-        let id = job.id;
-        self.store.jobs.push(job);
+        job
+    }
+
+    /// Races one job on up to `n` engines at once, each try on its own branch,
+    /// then shows them side by side so you can keep the best.
+    fn start_race(
+        &mut self,
+        bot: Member,
+        mode: Mode,
+        text: String,
+        folder: store::Folder,
+        n: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let engines = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            engine::race_engines(st, bot, n)
+        };
+        if engines.len() < 2 {
+            self.say("Only one engine is ready on this computer, so this runs once. Add another in Settings to race.");
+            self.start_job_in(bot, mode, text, folder, cx);
+            return;
+        }
+        let mut race = 0;
+        for i in engines {
+            let job = self.make_job(bot, mode, &text, folder.clone(), Some((i, race)), cx);
+            race = job.race;
+            self.store.jobs.push(job);
+        }
         self.store.save();
-        self.go(Place::Live(id), cx);
+        self.go(Place::Race(race), cx);
+    }
+
+    /// Starts the same job again on other engines, so it races the first try.
+    pub(super) fn race_it(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(first) = self.store.job(id).cloned() else {
+            return;
+        };
+        if !first.mode.writes() {
+            return;
+        }
+        let race = if first.race == 0 {
+            first.id
+        } else {
+            first.race
+        };
+        let taken: Vec<String> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.id == id || (j.race != 0 && j.race == race))
+            .map(|j| j.agent.clone())
+            .collect();
+        let engines: Vec<usize> = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            engine::race_engines(st, first.bot, 8)
+                .into_iter()
+                .filter(|i| !taken.iter().any(|t| t == crate::agent::PROVIDERS[*i].id))
+                .take(3usize.saturating_sub(taken.len()).max(1))
+                .collect()
+        };
+        if engines.is_empty() {
+            self.say("No other engine is ready on this computer. Add one in Settings to race.");
+            cx.notify();
+            return;
+        }
+        if let Some(j) = self.store.job_mut(id) {
+            j.race = race;
+            if j.pick.is_empty() {
+                j.pick = j.agent.clone();
+            }
+        }
+        for i in engines {
+            let job = self.make_job(
+                first.bot,
+                first.mode,
+                &first.title,
+                first.folder.clone(),
+                Some((i, race)),
+                cx,
+            );
+            self.store.jobs.push(job);
+        }
+        self.store.save();
+        self.go(Place::Race(race), cx);
+    }
+
+    /// The tries in a race, first one first.
+    pub(super) fn tries(&self, race: u64) -> Vec<store::Job> {
+        let mut v: Vec<_> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.race == race && race != 0)
+            .cloned()
+            .collect();
+        v.sort_by_key(|j| j.id);
+        v
+    }
+
+    /// Keeps one try of a race: approves it and throws the others away.
+    pub(super) fn keep_try(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(race) = self.store.job(id).map(|j| j.race) else {
+            return;
+        };
+        for other in self.tries(race) {
+            if other.id == id {
+                continue;
+            }
+            if let Some(pos) = self.runners.iter().position(|r| r.id == other.id) {
+                let mut r = self.runners.remove(pos);
+                r.stop();
+            }
+            self.checking.retain(|(j, _)| *j != other.id);
+            if matches!(
+                other.status,
+                Status::Shipped | Status::Shipping | Status::Discarded
+            ) {
+                continue;
+            }
+            work::discard(&other);
+            if let Some(j) = self.store.job_mut(other.id) {
+                j.status = Status::Discarded;
+                j.ended.get_or_insert_with(store::now);
+                j.worktree.clear();
+                j.seen = true;
+                j.feed.push(store::Item::Note(
+                    "Another try won the race, so this one was thrown away.".into(),
+                ));
+            }
+        }
+        self.approve_one(id, cx);
+        self.store.save();
+        cx.notify();
+    }
+
+    /// Opens a job: its race when it is one try in a race.
+    pub(super) fn open_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
+        if race != 0 && self.tries(race).len() > 1 {
+            self.go(Place::Race(race), cx);
+        } else {
+            self.go(Place::Live(id), cx);
+        }
     }
 
     /// More words for a job: while it runs they wait; once it's done they start a
@@ -1239,6 +1438,16 @@ impl Shell {
     /// Approves a job's changes: a pull request from Shipper on GitHub projects,
     /// otherwise merged into the branch it started from.
     pub(super) fn approve(&mut self, id: u64, cx: &mut Context<Self>) {
+        // Approving one try of a race keeps it and throws the others away.
+        let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
+        if race != 0 && self.tries(race).len() > 1 {
+            self.keep_try(id, cx);
+        } else {
+            self.approve_one(id, cx);
+        }
+    }
+
+    fn approve_one(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(job) = self.store.job(id).cloned() else {
             return;
         };
@@ -1862,6 +2071,7 @@ impl Render for Shell {
         let body = match self.place {
             Place::Today => self.today(cx),
             Place::Live(id) => self.live(id, cx),
+            Place::Race(id) => self.race(id, cx),
             Place::Crew => self.crew(cx),
             Place::Chat(who) => self.chat(who, cx),
             Place::Inbox => self.inbox(cx),

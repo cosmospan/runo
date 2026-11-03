@@ -256,6 +256,30 @@ impl Shell {
                     .gap(px(8.))
                     .child(modes)
                     .child(div().flex_1())
+                    .when(self.mode.writes(), |d| {
+                        let n = self.racing;
+                        let label = match n {
+                            2 | 3 => format!("Race {n} engines"),
+                            _ => "Race it".to_string(),
+                        };
+                        d.child(
+                            ui::pill("race-toggle", label, n > 1)
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "Run it on several engines at once and keep the best try",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.racing = match this.racing {
+                                        0 | 1 => 2,
+                                        2 => 3,
+                                        _ => 0,
+                                    };
+                                    cx.notify();
+                                })),
+                        )
+                    })
                     .child(
                         div()
                             .id("goes-to")

@@ -189,6 +189,42 @@ impl Shell {
                                 .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
                         )
                     })
+                    .map(|d| {
+                        let tries = if job.race == 0 {
+                            0
+                        } else {
+                            self.tries(job.race).len()
+                        };
+                        let id = job.id;
+                        if tries > 1 {
+                            let race = job.race;
+                            d.child(
+                                ui::ghost("compare", format!("Compare {tries} tries")).on_click(
+                                    cx.listener(move |this, _, _, cx| {
+                                        this.go(Place::Race(race), cx)
+                                    }),
+                                ),
+                            )
+                        } else if job.mode.writes()
+                            && !job.worktree.is_empty()
+                            && matches!(job.status, Status::Running | Status::Review)
+                        {
+                            d.child(
+                                ui::ghost("race-it", "Race it")
+                                    .tooltip(|window, cx| {
+                                        gpui_kit::component::tooltip::Tooltip::new(
+                                            "Try the same job on other engines and keep the best",
+                                        )
+                                        .build(window, cx)
+                                    })
+                                    .on_click(
+                                        cx.listener(move |this, _, _, cx| this.race_it(id, cx)),
+                                    ),
+                            )
+                        } else {
+                            d
+                        }
+                    })
                     .when(job.status == Status::Review, |d| {
                         let id = job.id;
                         let label = self.approve_label(job);

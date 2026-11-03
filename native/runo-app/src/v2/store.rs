@@ -29,6 +29,9 @@ pub struct Store {
     pub set_up: bool,
     /// Bots pinned near the top of the sidebar.
     pub pinned: Vec<Member>,
+    /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
+    #[serde(skip)]
+    pub demo: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -152,6 +155,13 @@ pub struct Job {
     pub auto_merge: bool,
     /// Shipper is pushing and opening the pull request now.
     pub shipping: bool,
+    /// The race this job is one try in: the id of its first try. 0 when it
+    /// isn't racing.
+    pub race: u64,
+    /// The engine this try runs on, when a race picked it: an agent id and a
+    /// model ("" for the agent's own). Empty means the bot's engine.
+    pub pick: String,
+    pub pick_model: String,
 }
 
 /// One file a job changed.
@@ -199,6 +209,9 @@ impl Default for Job {
             pr_failed: Vec::new(),
             auto_merge: true,
             shipping: false,
+            race: 0,
+            pick: String::new(),
+            pick_model: String::new(),
         }
     }
 }
@@ -412,6 +425,9 @@ impl Store {
     }
 
     pub fn save(&self) {
+        if self.demo {
+            return;
+        }
         let p = path();
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);

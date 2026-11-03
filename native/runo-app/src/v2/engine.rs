@@ -75,6 +75,48 @@ pub fn engine(st: &AppSettings, who: Member) -> (usize, String) {
     (i, model)
 }
 
+/// The engine a job runs on: the one its race picked, else its bot's.
+pub fn for_job(st: &AppSettings, job: &super::store::Job) -> (usize, String) {
+    if job.pick.is_empty() {
+        return engine(st, job.bot);
+    }
+    let i = index_of(st, &job.pick);
+    let model = if job.pick_model.is_empty() {
+        st.agent(agent::PROVIDERS[i].id).model_override
+    } else {
+        job.pick_model.clone()
+    };
+    (i, model)
+}
+
+/// The engines a race runs on: the bot's own first, then other engines that are
+/// ready on this computer, at most `n`.
+pub fn race_engines(st: &AppSettings, who: Member, n: usize) -> Vec<usize> {
+    let (own, _) = engine(st, who);
+    let mut out = vec![own];
+    let default = index_of(st, "");
+    // The default agent next, then the rest in the order Runo lists them.
+    let rest = std::iter::once(default).chain(0..agent::PROVIDERS.len());
+    for i in rest {
+        if out.len() >= n {
+            break;
+        }
+        if !out.contains(&i) && ready(st, i) {
+            out.push(i);
+        }
+    }
+    out
+}
+
+/// "Claude Code" or "Claude Code · opus" for an agent index and model.
+pub fn label_of(i: usize, model: &str) -> String {
+    let name = agent::PROVIDERS[i].name;
+    match crate::agent_pick::AgentPick::model_label(i, model) {
+        Some(m) => format!("{name} · {m}"),
+        None => name.to_string(),
+    }
+}
+
 /// "Claude Code" or "Claude Code · opus".
 pub fn label(st: &AppSettings, who: Member) -> String {
     let (i, model) = engine(st, who);

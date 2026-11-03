@@ -474,6 +474,10 @@ impl Shell {
                 Some(j) => format!("Jobs / #{id} {}", j.title),
                 None => format!("Jobs / #{id}"),
             },
+            Place::Race(id) => match self.store.job(id) {
+                Some(j) => format!("Jobs / Race / {}", j.title),
+                None => "Jobs / Race".into(),
+            },
             Place::Engines => "Settings / Engines".into(),
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
