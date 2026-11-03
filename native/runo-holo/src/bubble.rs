@@ -553,10 +553,14 @@ fn over(px: &mut [f32; 4], c: [f32; 3], a: f32) {
 }
 
 /// The part of the view box a framing shows: (x0, y0, side).
-fn view(framing: Framing) -> (f64, f64, f64) {
-    match framing {
-        Framing::Full => (14.0, 28.0, 172.0),
-        Framing::Bust => (40.0, 46.0, 120.0),
+/// Avatars sit tight around the bubble; a shielded bubble's ring is wider, so
+/// its square is too.
+fn view(framing: Framing, layout: Layout) -> (f64, f64, f64) {
+    match (framing, layout) {
+        (Framing::Full, Layout::Shield) => (8.0, 20.0, 184.0),
+        (Framing::Full, _) => (14.0, 28.0, 172.0),
+        (Framing::Bust, Layout::Shield) => (16.0, 26.0, 168.0),
+        (Framing::Bust, _) => (30.0, 26.0, 146.0),
     }
 }
 
@@ -634,7 +638,7 @@ impl BubbleRenderer {
     /// Draws `pose` at time `t`; premultiplied RGBA8, `size()` pixels square.
     pub fn draw(&mut self, pose: &Pose, t: f64, framing: Framing) -> &[u8] {
         let n = self.px as usize;
-        let (x0, y0, side) = view(framing);
+        let (x0, y0, side) = view(framing, pose.layout);
         let k = n as f64 / side;
         let view_xf = Affine::scale(k) * Affine::translate((-x0, -y0));
         let bot = body_xf(pose.sway, t);
@@ -647,7 +651,7 @@ impl BubbleRenderer {
                 ctx: &mut self.ctx,
                 xf: view_xf,
             };
-            face(&mut ink, pose, t, bot, small);
+            face(&mut ink, pose, t, bot, small, (x0, y0, side));
         }
         self.ctx.flush();
         let mut pix = Pixmap::new(self.px, self.px);
@@ -674,13 +678,30 @@ impl BubbleRenderer {
     /// The shadow, the shield ring and the glass body, per pixel.
     fn shade(&mut self, pose: &Pose, t: f64, framing: Framing, bot: Affine, small: bool) {
         let n = self.px as usize;
-        let (x0, y0, side) = view(framing);
+        let (x0, y0, side) = view(framing, pose.layout);
         let ps = (side / n as f64) as f32;
         let inv = bot.inverse();
         let ic = inv.as_coeffs().map(|v| v as f32);
+        // Drops that float out past the frame are held just inside it, so a
+        // tight avatar never shows one sliced off by its square edge.
+        let grow = bot.determinant().abs().sqrt();
+        let room = 3.0 + 2.0 * ps as f64;
         let cs: Vec<(f32, f32, f32)> = circles(pose.layout, t)
             .into_iter()
             .filter(|c| c.2 > 0.5)
+            .map(|(x, y, r)| {
+                let p = bot * vello_cpu::kurbo::Point::new(x as f64, y as f64);
+                let rr = r as f64 * grow + room;
+                let fit = |v: f64, lo: f64| {
+                    if rr * 2.0 >= side {
+                        v
+                    } else {
+                        v.clamp(lo + rr, lo + side - rr)
+                    }
+                };
+                let q = inv * vello_cpu::kurbo::Point::new(fit(p.x, x0), fit(p.y, y0));
+                (q.x as f32, q.y as f32, r)
+            })
             .collect();
         let bl = blobs(t);
         let tint = [
@@ -703,6 +724,7 @@ impl BubbleRenderer {
         let gsx = keys(gp, &[(0.0, 1.0), (0.5, 0.88), (1.0, 1.0)], SOFT) as f32;
         let ga = keys(gp, &[(0.0, 0.35), (0.5, 0.22), (1.0, 0.35)], SOFT) as f32;
         let strong = tint[1];
+        let ground = matches!(framing, Framing::Full);
         // Shield ring.
         let shield = pose.layout == Layout::Shield;
         let ring = |delay: f64| {
@@ -732,11 +754,12 @@ impl BubbleRenderer {
                 let vx = x0 as f32 + (px as f32 + 0.5) * ps;
                 let vy = y0 as f32 + (py as f32 + 0.5) * ps;
                 let mut p = [0.0f32; 4];
-                // Shadow (stays on the ground while the bot moves).
+                // Shadow (stays on the ground while the bot moves). Avatars have
+                // no ground, so none there.
                 let dx = (vx - 100.0) / (48.0 * gsx + 5.0);
                 let dy = (vy - 186.0) / 9.0;
                 let q = dx * dx + dy * dy;
-                if q < 4.0 {
+                if ground && q < 4.0 {
                     over(&mut p, strong, ga * (-q * 1.6).exp());
                 }
                 // Bot space.
@@ -846,7 +869,7 @@ impl BubbleRenderer {
 }
 
 /// Eyes, mouth, cheeks, highlights and the props around the bot.
-fn face(ink: &mut Ink, pose: &Pose, t: f64, bot: Affine, small: bool) {
+fn face(ink: &mut Ink, pose: &Pose, t: f64, bot: Affine, small: bool, frame: (f64, f64, f64)) {
     // Highlight arc and the small glint dot.
     let hl = kf(t, 5.0, 0.0, &[(0.0, 0.9), (0.5, 0.5), (1.0, 0.9)]);
     ink.stroke(&svg("M64 98A38 38 0 0 1 84 72"), bot, 4.5, WHITE, hl);
@@ -867,8 +890,18 @@ fn face(ink: &mut Ink, pose: &Pose, t: f64, bot: Affine, small: bool) {
         return;
     }
     let strong = pose.tint.strong();
+    // Sparkles and badges sit just inside the frame, however tight it is.
+    let (fx, fy, side) = frame;
+    let inside = |v: f64, lo: f64, room: f64| v.clamp(lo + room, lo + side - room);
+    // A badge drawn about (160, 62) moved so its overshoot stays in frame.
+    let badge = Affine::translate((
+        inside(160.0, fx, 18.0) - 160.0,
+        inside(62.0, fy, 24.0) - 62.0,
+    ));
     if pose.sparks {
+        let inside = |v: f64, lo: f64| inside(v, lo, 11.0);
         for (x, y, d) in [(26.0, 60.0, 0.0), (176.0, 50.0, 0.6), (172.0, 150.0, 1.2)] {
+            let (x, y) = (inside(x, fx), inside(y, fy));
             let p = phase(t, 2.0, d);
             let s = keys(p, &[(0.0, 0.2), (0.4, 1.1), (0.7, 0.8), (1.0, 0.2)], SOFT);
             let r = keys(p, &[(0.0, 0.0), (0.4, 45.0), (0.7, 90.0), (1.0, 0.0)], SOFT);
@@ -888,14 +921,14 @@ fn face(ink: &mut Ink, pose: &Pose, t: f64, bot: Affine, small: bool) {
             0.0,
             &[(0.0, 0.0), (0.5, 0.0), (0.62, 1.2), (0.7, 1.0), (1.0, 1.0)],
         );
-        let at = about((160.0, 64.0), Affine::scale(s.max(0.001)));
+        let at = badge * about((160.0, 64.0), Affine::scale(s.max(0.001)));
         ink.fill(&Circle::new((160.0, 64.0), 13.0), at, strong, 1.0);
         ink.stroke(&svg("M154 64.4l4.2 4.2l7.4-8"), at, 3.0, WHITE, 1.0);
     }
     if pose.ask {
         let y = kf(t, 2.4, 0.0, &[(0.0, 0.0), (0.5, -5.0), (1.0, 0.0)]);
         let s = kf(t, 1.8, 0.0, &[(0.0, 1.0), (0.5, 1.12), (1.0, 1.0)]);
-        let at = Affine::translate((0.0, y));
+        let at = badge * Affine::translate((0.0, y));
         ink.fill(
             &Circle::new((160.0, 62.0), 13.0),
             at * about((160.0, 62.0), Affine::scale(s)),
@@ -1272,6 +1305,39 @@ mod tests {
                     let mut r = BubbleRenderer::new(64);
                     let px = r.draw(&b.pose(mood), 1.3, Framing::Full);
                     assert!(cover(px) > 300, "{b:?} {mood:?}");
+                }
+            }
+        }
+    }
+
+    /// Nothing solid reaches the frame's edge: no bubble, drop or prop is cut
+    /// off, in any shape, mood or moment, at avatar or hero size.
+    #[test]
+    fn nothing_is_cut_off_at_the_edge() {
+        for framing in [Framing::Bust, Framing::Full] {
+            for n in [32usize, 96] {
+                for (i, layout) in Bubble::LAYOUTS.into_iter().enumerate() {
+                    let b = Bubble {
+                        tint: Tint::ALL[i % Tint::ALL.len()],
+                        layout,
+                        eyes: Bubble::EYES[i],
+                        sway: Bubble::SWAYS[i % 5],
+                    };
+                    let mut r = BubbleRenderer::new(n as u16);
+                    for k in 0..120 {
+                        let mood = Mood::ALL[k % Mood::ALL.len()];
+                        let px = r.draw(&b.pose(mood), k as f64 * 0.173, framing);
+                        let (edge, at) = (0..n)
+                            .flat_map(|j| [(0, j), (n - 1, j), (j, 0), (j, n - 1)])
+                            .map(|(x, y)| (px[(y * n + x) * 4 + 3], (x, y)))
+                            .max()
+                            .unwrap();
+                        assert!(
+                            edge < 40,
+                            "{framing:?} {n}px layout {i} {mood:?} t={}: alpha {edge} at {at:?}",
+                            k as f64 * 0.173
+                        );
+                    }
                 }
             }
         }

@@ -18,6 +18,10 @@ All notable changes to Runo are documented here.
 - Crew cards are compact: the bot, what it's doing, its jobs, success rate and spend, the engine it runs on, and Chat and Give a job.
 - Engines has the same plain heading as every other page.
 
+### Fixed
+
+- Bubbles are no longer cut off at the edge of their square. Builder's ears and floating drop on Home, and the tops of Builder and Checker in the sidebar, were sliced off. Avatars now frame the whole bot. Floating drops, sparkles and badges stay inside the frame, Guard's shield gets a little more room, and avatars no longer draw a ground shadow.
+
 ## [2.0.0-alpha.3] - 2026-11-03
 
 ### Changed
