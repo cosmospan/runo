@@ -14,6 +14,7 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod goal;
 mod history;
 mod home;
 mod jobs;
@@ -57,6 +58,8 @@ pub enum Place {
     /// The tries of one job on several engines, side by side, by the id of
     /// its first try.
     Race(u64),
+    /// A goal split into jobs.
+    Goal(u64),
     Engines,
     /// What the crew cost and did lately.
     Usage,
@@ -474,6 +477,10 @@ pub struct Shell {
     ways: HashMap<String, ship::Way>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
     racing: usize,
+    /// A job from Today's box is a goal to split into jobs.
+    splitting: bool,
+    /// Goals Runo is splitting now.
+    planning: Vec<(u64, std::sync::mpsc::Receiver<crate::agent::Event>)>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -522,7 +529,7 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) | Place::Race(_) => 2,
+        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Engines | Place::Usage | Place::Welcome => return None,
@@ -650,6 +657,11 @@ impl Shell {
             Ok("engines") => Place::Engines,
             Ok("usage") => Place::Usage,
             Ok("needs") => Place::Inbox,
+            Ok("goal") => store
+                .goals
+                .first()
+                .map(|g| Place::Goal(g.id))
+                .unwrap_or(Place::Today),
             Ok("jobs") => Place::Today,
             Ok("race") => store
                 .jobs
@@ -743,6 +755,8 @@ impl Shell {
             landing: Vec::new(),
             ways: HashMap::new(),
             racing: 0,
+            splitting: false,
+            planning: Vec::new(),
             _subs: subs,
             _pump: pump,
         }
@@ -769,6 +783,7 @@ impl Shell {
             // Skip jobs that are gone and repeats of where we are.
             let ok = match p {
                 Place::Live(id) | Place::Race(id) => self.store.job(id).is_some(),
+                Place::Goal(id) => self.store.goals.iter().any(|g| g.id == id),
                 _ => true,
             };
             if ok && p != self.place {
@@ -919,6 +934,10 @@ impl Shell {
             return;
         };
         let mode = self.mode;
+        if self.splitting && mode.writes() {
+            self.begin_goal(text, folder, cx);
+            return;
+        }
         if self.racing > 1 && mode.writes() {
             self.start_race(doer, mode, text, folder, self.racing, cx);
             return;
@@ -1177,7 +1196,7 @@ impl Shell {
             self.go(Place::Live(id), cx);
             return;
         }
-        let job = self.make_job(bot, mode, &text, folder, None, cx);
+        let job = self.make_job(bot, mode, &text, folder, None, None, cx);
         let id = job.id;
         self.store.jobs.push(job);
         self.store.save();
@@ -1193,6 +1212,7 @@ impl Shell {
         text: &str,
         folder: store::Folder,
         pick: Option<(usize, u64)>,
+        part: Option<(u64, String)>,
         cx: &mut Context<Self>,
     ) -> store::Job {
         self.store.next_id += 1;
@@ -1206,6 +1226,10 @@ impl Shell {
             seen: false,
             ..Default::default()
         };
+        if let Some((goal, context)) = part {
+            job.goal = goal;
+            job.context = context;
+        }
         if let Some((i, race)) = pick {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
             job.race = if race == 0 { job.id } else { race };
@@ -1266,7 +1290,7 @@ impl Shell {
         }
         let mut race = 0;
         for i in engines {
-            let job = self.make_job(bot, mode, &text, folder.clone(), Some((i, race)), cx);
+            let job = self.make_job(bot, mode, &text, folder.clone(), Some((i, race)), None, cx);
             race = job.race;
             self.store.jobs.push(job);
         }
@@ -1320,12 +1344,173 @@ impl Shell {
                 &first.title,
                 first.folder.clone(),
                 Some((i, race)),
+                None,
                 cx,
             );
             self.store.jobs.push(job);
         }
         self.store.save();
         self.go(Place::Race(race), cx);
+    }
+
+    /// Has Runo split a goal into jobs, then shows the split to look over.
+    fn begin_goal(&mut self, text: String, folder: store::Folder, cx: &mut Context<Self>) {
+        self.store.next_id += 1;
+        let id = self.store.next_id;
+        let mut g = goal::Goal {
+            id,
+            text: text.clone(),
+            folder: folder.clone(),
+            started: store::now(),
+            ..Default::default()
+        };
+        let st = cx.global::<crate::settings::AppSettings>();
+        match goal::plan(st, &folder, &text) {
+            Ok(rx) => self.planning.push((id, rx)),
+            Err(why) => {
+                g.state = goal::State::Failed;
+                g.note = why;
+            }
+        }
+        self.store.goals.push(g);
+        self.store.save();
+        self.go(Place::Goal(id), cx);
+    }
+
+    /// Starts a goal's jobs, the first one now.
+    pub(super) fn start_goal(&mut self, id: u64, cx: &mut Context<Self>) {
+        if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
+            g.state = goal::State::Running;
+        }
+        self.advance_goals(cx);
+        self.store.save();
+        cx.notify();
+    }
+
+    /// Goes on past a job that stopped.
+    pub(super) fn skip_step(&mut self, id: u64, cx: &mut Context<Self>) {
+        let jobs = self.store.jobs.clone();
+        if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
+            if let Some(k) = g.current(&jobs) {
+                g.steps[k].skipped = true;
+            }
+            g.state = goal::State::Running;
+        }
+        self.advance_goals(cx);
+        self.store.save();
+        cx.notify();
+    }
+
+    pub(super) fn drop_goal(&mut self, id: u64, cx: &mut Context<Self>) {
+        self.store.goals.retain(|g| g.id != id);
+        self.planning.retain(|(g, _)| *g != id);
+        self.store.save();
+        self.go(Place::Today, cx);
+    }
+
+    /// Splits coming back, and running goals moving on.
+    fn poll_goals(&mut self, cx: &mut Context<Self>) {
+        let mut back = Vec::new();
+        self.planning.retain(|(id, rx)| match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => {
+                back.push((*id, r));
+                false
+            }
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => true,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                back.push((*id, Err("it stopped before answering".into())));
+                false
+            }
+        });
+        for (id, r) in back {
+            if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
+                match r.map(|t| goal::parse_split(&crate::agent::strip_ansi(&t))) {
+                    Ok(steps) if !steps.is_empty() => {
+                        g.steps = steps;
+                        g.state = goal::State::Ready;
+                    }
+                    Ok(_) => {
+                        g.state = goal::State::Failed;
+                        g.note = "Runo couldn't split this into jobs. Say it another way, or run it as one job.".into();
+                    }
+                    Err(why) => {
+                        g.state = goal::State::Failed;
+                        let first = why
+                            .lines()
+                            .rev()
+                            .find(|l| !l.trim().is_empty())
+                            .unwrap_or("")
+                            .trim()
+                            .to_string();
+                        g.note = format!("Runo couldn't split this into jobs: {first}");
+                    }
+                }
+            }
+            self.store.save();
+        }
+        if self
+            .store
+            .goals
+            .iter()
+            .any(|g| g.state == goal::State::Running)
+        {
+            self.advance_goals(cx);
+        }
+    }
+
+    /// Starts the next job of each running goal once the one before it shipped,
+    /// and pauses a goal whose job stopped.
+    fn advance_goals(&mut self, cx: &mut Context<Self>) {
+        let mut start = Vec::new();
+        let jobs = self.store.jobs.clone();
+        let mut said = Vec::new();
+        for g in &mut self.store.goals {
+            if g.state != goal::State::Running {
+                continue;
+            }
+            match g.current(&jobs) {
+                None => {
+                    g.state = goal::State::Done;
+                    said.push(format!("Goal done: \u{201c}{}\u{201d}.", g.text));
+                }
+                Some(k) if g.steps[k].job == 0 => start.push((g.id, k)),
+                Some(k) => {
+                    if jobs
+                        .iter()
+                        .find(|j| j.id == g.steps[k].job)
+                        .is_some_and(goal::step_stuck)
+                    {
+                        g.state = goal::State::Paused;
+                    }
+                }
+            }
+        }
+        for m in said {
+            self.say(m);
+        }
+        for (gid, k) in start {
+            let Some(g) = self.store.goals.iter().find(|g| g.id == gid).cloned() else {
+                continue;
+            };
+            let step = g.steps[k].clone();
+            let bot = Member::doer_for(step.mode).unwrap_or(Member::for_mode(step.mode));
+            let part = Some((gid, goal::context(&g, k)));
+            let job = self.make_job(
+                bot,
+                step.mode,
+                &step.title,
+                g.folder.clone(),
+                None,
+                part,
+                cx,
+            );
+            let jid = job.id;
+            self.store.jobs.push(job);
+            if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == gid) {
+                g.steps[k].job = jid;
+            }
+            self.store.save();
+        }
     }
 
     /// The tries in a race, first one first.
@@ -2065,6 +2250,7 @@ impl Render for Shell {
         crate::framestats::begin();
         self.scale = window.scale_factor();
         self.poll();
+        self.poll_goals(cx);
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
@@ -2149,6 +2335,7 @@ impl Render for Shell {
             Place::Today => self.today(cx),
             Place::Live(id) => self.live(id, cx),
             Place::Race(id) => self.race(id, cx),
+            Place::Goal(id) => self.goal_page(id, cx),
             Place::Crew => self.crew(cx),
             Place::Chat(who) => self.chat(who, cx),
             Place::Inbox => self.inbox(cx),

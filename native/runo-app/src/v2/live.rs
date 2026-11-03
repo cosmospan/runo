@@ -189,6 +189,22 @@ impl Shell {
                                 .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
                         )
                     })
+                    .when(job.goal != 0, |d| {
+                        let gid = job.goal;
+                        let label = self
+                            .store
+                            .goals
+                            .iter()
+                            .find(|g| g.id == gid)
+                            .and_then(|g| {
+                                let k = g.steps.iter().position(|s| s.job == job.id)?;
+                                Some(format!("Part {} of {}", k + 1, g.steps.len()))
+                            })
+                            .unwrap_or_else(|| "Goal".into());
+                        d.child(ui::ghost("to-goal", label).on_click(
+                            cx.listener(move |this, _, _, cx| this.go(Place::Goal(gid), cx)),
+                        ))
+                    })
                     .map(|d| {
                         let tries = if job.race == 0 {
                             0

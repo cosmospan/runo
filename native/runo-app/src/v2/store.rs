@@ -29,6 +29,8 @@ pub struct Store {
     pub set_up: bool,
     /// Bots pinned near the top of the sidebar.
     pub pinned: Vec<Member>,
+    /// Goals split into jobs.
+    pub goals: Vec<super::goal::Goal>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
@@ -164,6 +166,9 @@ pub struct Job {
     pub pick_model: String,
     /// Files that clash with the base branch, when approving it stopped on them.
     pub conflict: Vec<String>,
+    /// The goal this job is one part of, and what the bot is told about it.
+    pub goal: u64,
+    pub context: String,
 }
 
 /// One file a job changed.
@@ -215,6 +220,8 @@ impl Default for Job {
             pick: String::new(),
             pick_model: String::new(),
             conflict: Vec::new(),
+            goal: 0,
+            context: String::new(),
         }
     }
 }

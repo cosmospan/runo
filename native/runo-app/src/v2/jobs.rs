@@ -31,8 +31,13 @@ fn prompt(job: &Job, text: &str, follow_up: bool) -> String {
         Mode::Ask | Mode::Review => "Read the code to be sure, and don't change any files.",
         _ => "Make the change in this folder. Keep a short todo list as you work.",
     };
+    let part = if job.context.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n\n", job.context)
+    };
     format!(
-        "{}\n\n{rules} When you finish, end with two or three plain sentences for someone who may not code: what you found or changed, and how to check it.\n\nThe job: {text}",
+        "{}\n\n{part}{rules} When you finish, end with two or three plain sentences for someone who may not code: what you found or changed, and how to check it.\n\nThe job: {text}",
         job.bot.persona()
     )
 }

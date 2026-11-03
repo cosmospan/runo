@@ -361,9 +361,12 @@ impl Member {
 }
 
 /// What kind of job the person is handing over.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Mode {
     Ask,
+    #[default]
     Build,
     Fix,
     Review,

@@ -3,6 +3,7 @@
 //! bigger than the sidebar shows. It is never saved.
 
 use super::data::{Made, Member, Mode};
+use super::goal::{Goal, State, Step};
 use super::store::{now, Changed, Folder, Item, Job, Said, Status, Store};
 use crate::proof::CheckRun;
 
@@ -332,8 +333,11 @@ pub fn seed() -> Store {
             Said::note("Explainer is reading the code."),
         ],
     );
+    for j in jobs.iter_mut().filter(|j| j.id == 1 || j.id == 3) {
+        j.goal = 21;
+    }
     Store {
-        folders: vec![folder],
+        folders: vec![folder.clone()],
         current: 0,
         jobs,
         chats,
@@ -342,6 +346,65 @@ pub fn seed() -> Store {
         removed: Vec::new(),
         set_up: true,
         pinned: vec![Member::Made(2)],
+        goals: vec![
+            Goal {
+                id: 20,
+                text: "Let customers save their cart and come back to it".into(),
+                folder: folder.clone(),
+                state: State::Ready,
+                started: t - 60,
+                steps: vec![
+                    Step {
+                        mode: Mode::Build,
+                        title: "Store carts for signed-in customers".into(),
+                        ..Default::default()
+                    },
+                    Step {
+                        mode: Mode::Build,
+                        title: "Restore the saved cart on sign-in".into(),
+                        ..Default::default()
+                    },
+                    Step {
+                        mode: Mode::Test,
+                        title: "Cover saving and restoring carts with tests".into(),
+                        ..Default::default()
+                    },
+                    Step {
+                        mode: Mode::Review,
+                        title: "Check carts can't be read by other customers".into(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+            Goal {
+                id: 21,
+                text: "Order history for customers".into(),
+                folder: folder.clone(),
+                state: State::Running,
+                started: t - 90_000,
+                steps: vec![
+                    Step {
+                        mode: Mode::Fix,
+                        title: "Fix the coupon field on mobile".into(),
+                        job: 1,
+                        ..Default::default()
+                    },
+                    Step {
+                        mode: Mode::Build,
+                        title: "Add order history page".into(),
+                        job: 3,
+                        ..Default::default()
+                    },
+                    Step {
+                        mode: Mode::Test,
+                        title: "Test the order history page".into(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+        ],
         demo: true,
     }
 }

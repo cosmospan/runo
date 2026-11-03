@@ -485,6 +485,10 @@ impl Shell {
                 Some(j) => format!("Jobs / Race / {}", j.title),
                 None => "Jobs / Race".into(),
             },
+            Place::Goal(id) => match self.store.goals.iter().find(|g| g.id == id) {
+                Some(g) => format!("Jobs / Goal / {}", g.text),
+                None => "Jobs / Goal".into(),
+            },
             Place::Engines => "Settings / Engines".into(),
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),

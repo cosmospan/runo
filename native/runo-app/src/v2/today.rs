@@ -150,6 +150,7 @@ impl Shell {
                         .flex()
                         .flex_col()
                         .gap(px(20.))
+                        .children(self.goals_strip(cx))
                         .child(self.kpis())
                         .child(self.jobs_table(cx))
                         .into_any_element()
@@ -263,6 +264,25 @@ impl Shell {
                     .child(modes)
                     .child(div().flex_1())
                     .when(self.mode.writes(), |d| {
+                        let on = self.splitting;
+                        d.child(
+                            ui::pill("split-toggle", "Split into jobs", on)
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "For a bigger goal: Runo splits it into a few jobs that run one after another",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.splitting = !this.splitting;
+                                    if this.splitting {
+                                        this.racing = 0;
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                    })
+                    .when(self.mode.writes(), |d| {
                         let n = self.racing;
                         let label = match n {
                             2 | 3 => format!("Race {n} engines"),
@@ -282,6 +302,9 @@ impl Shell {
                                         2 => 3,
                                         _ => 0,
                                     };
+                                    if this.racing > 1 {
+                                        this.splitting = false;
+                                    }
                                     cx.notify();
                                 })),
                         )
