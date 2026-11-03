@@ -232,7 +232,7 @@ impl Shell {
                             .text_color(c(ui::MUTED))
                             .on_click(cx.listener(move |this, _, _, cx| this.remove_made(who, cx)))
                     } else {
-                        ui::ghost(("crew-hide", who.key() as usize), "Take off crew")
+                        ui::ghost(("crew-remove-own", who.key() as usize), "Remove")
                             .text_color(c(ui::MUTED))
                             .on_click(
                                 cx.listener(move |this, _, _, cx| this.set_on_crew(who, false, cx)),
@@ -298,7 +298,7 @@ impl Shell {
                     div()
                         .text_size(px(15.))
                         .font_weight(FontWeight::BOLD)
-                        .child("More bots you can add"),
+                        .child("Add a bot"),
                 )
                 .child(row),
         )

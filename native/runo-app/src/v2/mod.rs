@@ -732,7 +732,8 @@ impl Shell {
         cx.notify();
     }
 
-    /// Puts a built-in bot on the crew or takes it off. Its history stays.
+    /// Adds a built-in bot to the crew, or removes it (with its chat; its past
+    /// jobs stay in History).
     fn set_on_crew(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
         if who.is_made() {
             return;
@@ -742,22 +743,30 @@ impl Shell {
             cx.notify();
             return;
         }
-        self.store.hidden.retain(|m| *m != who);
-        if !on {
-            self.store.hidden.push(who);
+        if !on && self.store.busy(who).is_some() {
+            self.say(format!("{} is working. Stop the job first.", who.name()));
+            cx.notify();
+            return;
         }
-        data::set_hidden(&self.store.hidden);
+        if !on {
+            self.store.chats.remove(&who);
+            if self.target == Some(who) {
+                self.target = None;
+            }
+        }
+        self.store.removed.retain(|m| *m != who);
+        if !on {
+            self.store.removed.push(who);
+        }
+        data::set_removed(&self.store.removed);
         self.store.save();
         if !on && self.place == Place::Chat(who) {
             self.place = Place::Crew;
         }
         self.say(if on {
-            format!("{} joined the crew.", who.name())
+            format!("Added {} to your crew.", who.name())
         } else {
-            format!(
-                "{} is off the crew. Add it back any time on Crew.",
-                who.name()
-            )
+            format!("Removed {} from your crew.", who.name())
         });
         cx.notify();
     }

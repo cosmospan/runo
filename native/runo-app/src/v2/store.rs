@@ -22,8 +22,9 @@ pub struct Store {
     pub next_id: u64,
     /// Bots the person made in the maker on Crew.
     pub made: Vec<super::data::Made>,
-    /// Built-in bots left out of the crew.
-    pub hidden: Vec<Member>,
+    /// Built-in bots removed from the crew (or never added).
+    #[serde(alias = "hidden")]
+    pub removed: Vec<Member>,
     /// The first-run walkthrough is done (or was skipped).
     pub set_up: bool,
 }
@@ -297,7 +298,7 @@ impl Store {
             s.set_up = true;
         }
         super::data::set_made(&s.made);
-        super::data::set_hidden(&s.hidden);
+        super::data::set_removed(&s.removed);
         if s.current >= s.folders.len() {
             s.current = 0;
         }

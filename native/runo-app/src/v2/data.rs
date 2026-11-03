@@ -30,12 +30,12 @@ struct Kept {
 
 static MADE: RwLock<Vec<Kept>> = RwLock::new(Vec::new());
 
-/// Built-in bots the person left out of their crew.
-static HIDDEN: RwLock<Vec<Member>> = RwLock::new(Vec::new());
+/// Built-in bots the person removed from their crew (or didn't add).
+static REMOVED: RwLock<Vec<Member>> = RwLock::new(Vec::new());
 
-/// Sets which built-in bots are left out of the crew.
-pub fn set_hidden(hidden: &[Member]) {
-    *HIDDEN.write().unwrap_or_else(|e| e.into_inner()) = hidden.to_vec();
+/// Sets which built-in bots are not on the crew.
+pub fn set_removed(removed: &[Member]) {
+    *REMOVED.write().unwrap_or_else(|e| e.into_inner()) = removed.to_vec();
 }
 
 /// The crew a new person starts with; the rest can be added any time.
@@ -102,10 +102,10 @@ impl Member {
 
     /// The person's crew: the built-in bots they kept, then the ones they made.
     pub fn all() -> Vec<Member> {
-        let hidden = HIDDEN.read().unwrap_or_else(|e| e.into_inner());
+        let removed = REMOVED.read().unwrap_or_else(|e| e.into_inner());
         Member::everyone()
             .into_iter()
-            .filter(|m| !hidden.contains(m))
+            .filter(|m| !removed.contains(m))
             .collect()
     }
 
@@ -120,7 +120,7 @@ impl Member {
 
     /// Whether this bot is in the person's crew.
     pub fn on_crew(self) -> bool {
-        !HIDDEN
+        !REMOVED
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .contains(&self)
@@ -419,13 +419,13 @@ mod tests {
             look: [4, 2, 1, 0],
         }]);
         assert_eq!(Member::Made(1).name(), "Scout 2");
-        // Hiding Checker: Scout takes its Test jobs.
-        set_hidden(&[Member::Checker]);
+        // Removing Checker: Scout takes its Test jobs.
+        set_removed(&[Member::Checker]);
         assert_eq!(Member::doer_for(Mode::Test), Some(Member::Made(1)));
         assert!(!Member::Checker.on_crew());
         set_made(&[]);
         assert_eq!(Member::doer_for(Mode::Test), None);
-        set_hidden(&[]);
+        set_removed(&[]);
         assert_eq!(Member::doer_for(Mode::Test), Some(Member::Checker));
         assert_eq!(Member::all().len(), 6);
         assert_eq!(Member::Made(1).name(), "Bot");

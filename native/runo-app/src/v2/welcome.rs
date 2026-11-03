@@ -18,11 +18,11 @@ const FIRST_QUESTION: &str = "What does this project do, in plain words?";
 impl Shell {
     /// Ends the walkthrough with the crew picked so far.
     pub(super) fn finish_setup(&mut self, _cx: &mut Context<Self>) {
-        self.store.hidden = Member::CREW
+        self.store.removed = Member::CREW
             .into_iter()
             .filter(|m| !self.setup_crew.contains(m))
             .collect();
-        data::set_hidden(&self.store.hidden);
+        data::set_removed(&self.store.removed);
         self.store.set_up = true;
         self.store.save();
         self.trail.clear();
