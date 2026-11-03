@@ -127,10 +127,6 @@ pub struct Pose {
     /// The light sweep across the bubble: for hover and for moments worth
     /// marking (a job done), not all the time.
     pub shine: bool,
-    /// The crystal Quanta takes, from the bot's signature eyes.
-    pub form: crate::quanta::Form,
-    /// The crystallised prop Quanta carries.
-    pub kit: crate::quanta::Kit,
 }
 
 impl Bubble {
@@ -204,10 +200,7 @@ impl Bubble {
             Eyes::Smile => Mouth::Open,
             _ => Mouth::Grin,
         };
-        let (form, kit) = crate::quanta::home(self.eyes);
         let base = Pose {
-            form,
-            kit,
             tint: self.tint,
             layout: self.layout,
             eyes: self.eyes,
@@ -563,7 +556,7 @@ fn over(px: &mut [f32; 4], c: [f32; 3], a: f32) {
 fn view(framing: Framing) -> (f64, f64, f64) {
     match framing {
         Framing::Full => (14.0, 28.0, 172.0),
-        Framing::Bust => (34.0, 40.0, 132.0),
+        Framing::Bust => (40.0, 46.0, 120.0),
     }
 }
 
@@ -781,7 +774,10 @@ impl BubbleRenderer {
                     if cov > 0.0 {
                         // The inside: faint white, colour blobs, the film, the shine.
                         let mut q = [0.0f32; 4];
-                        over(&mut q, [1.0; 3], 0.2);
+                        // A light tint under everything, so the body reads as
+                        // colour, not as white glass, on a pale window.
+                        over(&mut q, [1.0; 3], 0.12);
+                        over(&mut q, tint[0], 0.5);
                         if !small {
                             for b in &bl {
                                 let e = ((bx - b.0).powi(2) + (by - b.1).powi(2)).sqrt() - b.2;
@@ -819,11 +815,18 @@ impl BubbleRenderer {
                         }
                         // White inner edge, then the rainbow rim.
                         let depth = -d;
-                        let edge = 0.75 * (1.0 - smoothstep(1.0, 9.0, depth));
+                        let edge = 0.5 * (1.0 - smoothstep(2.0, 9.0, depth));
                         over(&mut q, [1.0; 3], edge);
                         let rim = ((1.8 - depth) / ps + 0.5).clamp(0.0, 1.0);
                         if rim > 0.0 {
                             over(&mut q, f, rim);
+                        }
+                        // A crisp outline in the bot's own colour, at least a
+                        // pixel wide, so the bubble keeps its edge on white.
+                        let line = (1.6f32).max(ps * 1.1);
+                        let o = ((line - depth) / ps + 0.5).clamp(0.0, 1.0);
+                        if o > 0.0 {
+                            over(&mut q, strong, 0.55 * o);
                         }
                         // Masked by the body's coverage, over what is below.
                         let k = 1.0 - q[3] * cov;

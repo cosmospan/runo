@@ -238,7 +238,7 @@ impl Shell {
             } else if m.note {
                 div().child(note_line(&m.text))
             } else {
-                let face = self.avatar(who, 28.);
+                let face = self.avatar(who, 34.);
                 div().child(
                     div().flex().gap(px(12.)).child(face).child(
                         div()

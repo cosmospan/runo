@@ -304,7 +304,7 @@ impl Shell {
                     if t.is_empty() {
                         feed
                     } else {
-                        let face = self.avatar(who, 28.);
+                        let face = self.avatar(who, 32.);
                         feed.child(
                             div().flex().gap(px(12.)).child(face).child(
                                 div()

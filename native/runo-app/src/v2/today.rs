@@ -162,7 +162,7 @@ impl Shell {
         let target = self.doer();
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
-        let face = self.avatar(target, 22.);
+        let face = self.avatar(target, 26.);
         let accent = target.accent();
         // The white highlight glides under the tabs as the mode changes.
         let x = self.mode_x();
@@ -535,7 +535,7 @@ impl Shell {
             needs_card = needs_card.child(empty_line("Nothing is waiting on you."));
         }
         for j in &needs {
-            let face = self.avatar(j.bot, 26.);
+            let face = self.avatar(j.bot, 34.);
             let (word, color) = match j.status {
                 Status::Done => ("Done · have a look", ui::GREEN),
                 Status::Failed => ("Stopped with a problem", ui::RED),
@@ -549,7 +549,7 @@ impl Shell {
                 work_card.child(empty_line("No one is working. Hand them something above."));
         }
         for j in &running {
-            let face = self.bot(j.bot, Mood::Working, 26., Framing::Bust);
+            let face = self.bot(j.bot, Mood::Working, 34., Framing::Bust);
             let frac = j
                 .progress()
                 .map(|(d, n)| self.glide_bar(j.id, d as f32 / n.max(1) as f32));
@@ -569,7 +569,7 @@ impl Shell {
             done_card = done_card.child(empty_line("Finished jobs land here."));
         }
         for j in &finished {
-            let face = self.avatar(j.bot, 26.);
+            let face = self.avatar(j.bot, 34.);
             let when = match store::ago(j.ended.unwrap_or(j.started)).as_str() {
                 "just now" => format!("just now · {}", j.bot.name()),
                 a => format!("{a} ago · {}", j.bot.name()),

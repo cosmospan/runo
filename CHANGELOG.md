@@ -4,6 +4,19 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.2] - 2026-11-03
+
+### Changed
+
+- The crew is back to the bubble bots; the crystal look from alpha.1 is gone.
+- Bubbles are easier to see on the pale window: richer colour inside and a crisp outline in each bot's own colour, even at avatar size.
+- The dock has its own strip at the bottom of the window instead of floating over the page, so it never covers a card, a reply or the chat box. Its bots are bigger (66 px at rest, 94 px under the pointer).
+- Bots in job lists, chats and Live are bigger, and avatars are framed tighter around the bubble.
+
+### Fixed
+
+- Runo no longer reads the whole Claude Code program (about 300 MB) and every recent session log into memory at launch, which caused a 1 GB spike and much of the startup CPU. The model list is scanned in small pieces once per Claude Code update, and only the end of each log is read. Peak memory at launch is now under 50 MB.
+
 ## [2.0.0-alpha.1] - 2026-11-03
 
 The first early build of Runo v2, published as a prerelease. The in-app updater on the 0.5 line never offers it.

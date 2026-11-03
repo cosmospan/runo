@@ -32,7 +32,7 @@ use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::{QuantaRenderer, Framing, Mood, Pose};
+use runo_holo::{BubbleRenderer, Framing, Mood, Pose};
 
 use data::{Member, Mode};
 use store::{Said, Status, Store};
@@ -61,7 +61,7 @@ pub enum Place {
 struct Holos {
     frame: u64,
     images: HashMap<(Pose, u32, bool), Frame>,
-    renderers: HashMap<u16, QuantaRenderer>,
+    renderers: HashMap<u16, BubbleRenderer>,
     /// The fastest rate any bot drawn this frame needed, so the clock can slow
     /// down on screens with only small bots.
     asked: u32,
@@ -89,8 +89,8 @@ struct Frame {
     image: Arc<RenderImage>,
 }
 
-/// Frames a second while anything moves: Quanta is cheap enough to draw at the
-/// display's rate, so motion is never stepped.
+/// Frames a second while anything moves: the painters draw at the display's
+/// rate, so motion is never stepped.
 const FPS: f64 = 60.0;
 
 /// Frames a second for a bot this many logical pixels tall.
@@ -208,7 +208,7 @@ impl Holos {
         let r = self
             .renderers
             .entry(device)
-            .or_insert_with(|| QuantaRenderer::new(device));
+            .or_insert_with(|| BubbleRenderer::new(device));
         let image = to_image(r.draw(&pose, at, framing), device);
         self.spent += began.elapsed();
         self.images.insert(
@@ -279,7 +279,7 @@ fn painter() -> (Painters, std::sync::mpsc::Receiver<Painted>) {
         let _ = std::thread::Builder::new()
             .name(format!("runo-bots-{i}"))
             .spawn(move || {
-                let mut renderers: HashMap<u16, QuantaRenderer> = HashMap::new();
+                let mut renderers: HashMap<u16, BubbleRenderer> = HashMap::new();
                 while let Ok(first) = asks.recv() {
                     let mut todo: Vec<Paint> = vec![first];
                     todo.extend(asks.try_iter());
@@ -291,7 +291,7 @@ fn painter() -> (Painters, std::sync::mpsc::Receiver<Painted>) {
                     for (_, p) in newest {
                         let r = renderers
                             .entry(p.device)
-                            .or_insert_with(|| QuantaRenderer::new(p.device));
+                            .or_insert_with(|| BubbleRenderer::new(p.device));
                         let image = to_image(r.draw(&p.pose, p.at, p.framing), p.device);
                         if done
                             .send(Painted {
@@ -477,8 +477,13 @@ fn doze_after() -> Duration {
     Duration::from_secs(secs)
 }
 
-/// Room kept at the bottom of every screen for the floating dock.
-pub(super) const DOCK_ROOM: f32 = 110.;
+/// Extra room at the bottom of a page. The dock has its own strip now, so
+/// pages no longer pad themselves around it.
+pub(super) const DOCK_ROOM: f32 = 0.;
+
+/// The height of the dock's strip under every page: the bar at rest and its
+/// margin. A bot grown under the pointer rises out of it for a moment.
+const DOCK_STRIP: f32 = 108.;
 
 /// The soft wash of colour behind the app: a few big, blurred tints on a pale
 /// base, drawn small once and stretched (it has no edges to blur).
@@ -1764,18 +1769,29 @@ impl Render for Shell {
                     .flex_1()
                     .h_full()
                     .min_w_0()
-                    .relative()
-                    .overflow_hidden()
-                    .child(div().size_full().child(body))
+                    .flex()
+                    .flex_col()
+                    // The page above, the crew below: the dock has a strip of
+                    // its own, so it never sits on top of a card or a reply.
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .w_full()
+                            .relative()
+                            .overflow_hidden()
+                            .child(div().size_full().child(body)),
+                    )
                     .when(!setup, |d| {
                         d.child(
                             div()
-                                .absolute()
-                                .bottom(px(14.))
-                                .left_0()
-                                .right_0()
+                                .flex_none()
+                                .h(px(DOCK_STRIP))
+                                .w_full()
                                 .flex()
+                                .items_end()
                                 .justify_center()
+                                .pb(px(12.))
                                 .child(self.dock(cx)),
                         )
                     }),

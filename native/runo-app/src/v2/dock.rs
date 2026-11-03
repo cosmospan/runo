@@ -13,9 +13,9 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// A bot's size in the dock at rest, under the pointer, and beside it.
-const REST: f32 = 54.;
-const NEAR: f32 = 64.;
-const UNDER: f32 = 78.;
+const REST: f32 = 66.;
+const NEAR: f32 = 78.;
+const UNDER: f32 = 94.;
 
 impl Shell {
     /// Eases a dock slot toward its size; returns the size to draw now.
