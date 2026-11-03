@@ -171,6 +171,9 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          # A tag like v2.0.0-alpha.1 is a prerelease: the in-app updater skips it,
+          # so people on the stable line are never moved to it.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   linux:
     # The oldest supported Ubuntu, so the binary runs on older glibc too.
@@ -266,6 +269,9 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          # A tag like v2.0.0-alpha.1 is a prerelease: the in-app updater skips it,
+          # so people on the stable line are never moved to it.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   windows:
     runs-on: windows-latest
@@ -329,6 +335,9 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          # A tag like v2.0.0-alpha.1 is a prerelease: the in-app updater skips it,
+          # so people on the stable line are never moved to it.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   checksums:
     # Lists the SHA-256 of every file in the release in SHA256SUMS, signed with the
