@@ -206,7 +206,7 @@ impl Member {
     /// One line on what to hand this bot, for empty chats and the crew cards.
     pub fn pitch(self) -> &'static str {
         match self {
-            Member::Made(_) => self.like().pitch(),
+            Member::Made(_) => self.role(),
             Member::Builder => {
                 "Give it a feature in a sentence. It plans, writes the code and the tests."
             }

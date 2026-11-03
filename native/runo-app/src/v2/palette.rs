@@ -20,6 +20,15 @@ pub enum Act {
     Folder(usize),
     AddFolder,
     V1,
+    /// Approve the job waiting for review.
+    Approve(u64),
+    /// Try the job on other engines too.
+    Race(u64),
+    /// Open the job's terminal.
+    Terminal(u64),
+    /// A new job raced on several engines, or a goal split into jobs.
+    NewRace,
+    NewGoal,
 }
 
 pub struct Entry {
@@ -46,6 +55,12 @@ impl Shell {
             (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
             (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
             (Place::History, IconName::Clock, "All jobs", "⌘3"),
+            (
+                Place::Chat(self.last_chat()),
+                IconName::MessageCircle,
+                "Chat",
+                "⌘4",
+            ),
             (Place::Crew, IconName::Users, "Crew", "⌘5"),
             (Place::Engines, IconName::Cpu, "Settings: Engines", "⌘6"),
             (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
@@ -68,6 +83,53 @@ impl Shell {
                 act: Act::Go(Place::Chat(who)),
             });
         }
+        // What you can do to the job in front of you.
+        if let Place::Live(id) | Place::Race(id) = self.place {
+            if let Some(j) = self.store.job(id) {
+                if j.status == Status::Review {
+                    all.push(Entry {
+                        label: format!("Approve \u{201c}{}\u{201d}", j.title),
+                        hint: "This job".into(),
+                        icon: Some(IconName::Check),
+                        bot: None,
+                        act: Act::Approve(id),
+                    });
+                }
+                if j.mode.writes()
+                    && j.race == 0
+                    && matches!(j.status, Status::Running | Status::Review)
+                {
+                    all.push(Entry {
+                        label: "Race it on other engines".into(),
+                        hint: "This job".into(),
+                        icon: Some(IconName::Zap),
+                        bot: None,
+                        act: Act::Race(id),
+                    });
+                }
+                all.push(Entry {
+                    label: "Open the terminal in its branch".into(),
+                    hint: "This job · ⌃`".into(),
+                    icon: Some(IconName::SquareTerminal),
+                    bot: None,
+                    act: Act::Terminal(id),
+                });
+            }
+        }
+        all.push(Entry {
+            label: "New job, raced on several engines".into(),
+            hint: "New job".into(),
+            icon: Some(IconName::Zap),
+            bot: None,
+            act: Act::NewRace,
+        });
+        all.push(Entry {
+            label: "New goal, split into jobs".into(),
+            hint: "New job".into(),
+            icon: Some(IconName::ListTodo),
+            bot: None,
+            act: Act::NewGoal,
+        });
         for mode in Mode::ALL.into_iter().filter(|m| *m != Mode::Ask) {
             let Some(who) = Member::doer_for(mode) else {
                 continue;
@@ -165,6 +227,31 @@ impl Shell {
             }
             Act::AddFolder => self.pick_folder(cx),
             Act::V1 => cx.defer(crate::open_main_window),
+            Act::Approve(id) => self.approve(id, cx),
+            Act::Race(id) => self.race_it(id, cx),
+            Act::Terminal(id) => {
+                if self.place != Place::Live(id) {
+                    self.go(Place::Live(id), cx);
+                }
+                if self.term_open != Some(id) {
+                    self.toggle_term(id, window, cx);
+                }
+            }
+            Act::NewRace | Act::NewGoal => {
+                if act == Act::NewRace {
+                    self.racing = 2;
+                    self.splitting = false;
+                } else {
+                    self.splitting = true;
+                    self.racing = 0;
+                }
+                if !self.mode.writes() {
+                    self.set_mode(Mode::Build, window, cx);
+                }
+                self.go(Place::Today, cx);
+                self.composer.update(cx, |i, cx| i.focus(window, cx));
+                self.focus_moved = std::time::Instant::now();
+            }
         }
         cx.notify();
     }

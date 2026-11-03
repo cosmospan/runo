@@ -334,9 +334,14 @@ impl Shell {
                 .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
         );
         if can_keep {
-            foot = foot.child(
+            let failing = v == Verdict::Fail;
+            let keep = if failing {
+                ui::ghost(("try-keep", id as usize), "Keep anyway").text_color(c(ui::T_RED))
+            } else {
                 ui::solid(("try-keep", id as usize), "Keep this one")
-                    .flex_1()
+            };
+            foot = foot.child(
+                keep.flex_1()
                     .on_click(cx.listener(move |this, _, _, cx| this.keep_try(id, cx))),
             );
         }
@@ -369,12 +374,13 @@ impl Shell {
                                 j.engine.clone()
                             }),
                     )
-                    .child(
-                        div()
-                            .size(px(7.))
-                            .rounded_full()
-                            .bg(c(status_color(j.status))),
-                    ),
+                    .child(div().size(px(7.)).rounded_full().bg(c(
+                        if j.status == Status::Running {
+                            ui::BLUE
+                        } else {
+                            status_color(j.status)
+                        },
+                    ))),
             )
             .child(home::pill(&word, tint))
             .child(tags)

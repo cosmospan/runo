@@ -14,9 +14,8 @@ impl Shell {
     pub(super) fn inbox(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let jobs: Vec<Job> = self
             .store
-            .jobs
-            .iter()
-            .rev()
+            .listed()
+            .into_iter()
             .filter(|j| j.needs_you())
             .cloned()
             .collect();
@@ -32,7 +31,15 @@ impl Shell {
             .filter(|id| jobs.iter().any(|j| j.id == *id))
             .unwrap_or(jobs[0].id);
         let count = jobs.len();
-        let problems = jobs.iter().filter(|j| j.status != Status::Done).count();
+        let problems = jobs
+            .iter()
+            .filter(|j| {
+                matches!(
+                    j.status,
+                    Status::Failed | Status::Stopped | Status::Interrupted
+                )
+            })
+            .count();
 
         let mut list = div()
             .id("inbox-list")
@@ -155,8 +162,10 @@ impl Shell {
                                     .text_size(px(12.5))
                                     .text_color(c(ui::MUTED))
                                     .child(match problems {
-                                        0 => format!("{count} to review"),
-                                        p => format!("{count} to review · {p} stopped early"),
+                                        0 => format!("{count} waiting on you"),
+                                        p => {
+                                            format!("{} to look at · {p} stopped early", count - p)
+                                        }
                                     }),
                             ),
                     )
@@ -390,10 +399,7 @@ impl Shell {
                     )
                     .when(j.status == Status::Review, |d| {
                         let label = self.approve_label(j);
-                        d.child(
-                            ui::solid("inbox-approve", label)
-                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
-                        )
+                        d.child(self.approve_button("inbox-approve", j, label, cx))
                     })
                     .when(j.status != Status::Review, |d| {
                         d.child(
@@ -437,9 +443,8 @@ impl Shell {
         let query = self.history_input.read(cx).value().to_lowercase();
         let jobs: Vec<Job> = self
             .store
-            .jobs
-            .iter()
-            .rev()
+            .listed()
+            .into_iter()
             .filter(|j| {
                 let hay = format!(
                     "{} {} {} {}",

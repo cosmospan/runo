@@ -15,6 +15,25 @@ use super::Shell;
 const DIFF_LINES: usize = 400;
 
 impl Shell {
+    /// Approve, as the main button; with failing checks it steps back to an
+    /// outline button that says so.
+    pub(super) fn approve_button(
+        &mut self,
+        key: impl Into<ElementId>,
+        job: &Job,
+        label: String,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let id = job.id;
+        let failing = !job.checking && work::verdict(&job.checks, false).1 == Verdict::Fail;
+        let b = if failing {
+            ui::ghost(key, "Approve anyway").text_color(c(ui::T_RED))
+        } else {
+            ui::solid(key, label)
+        };
+        b.on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx)))
+    }
+
     /// The review card at the end of a job's feed, once it has changes.
     pub(super) fn review_card(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
         if job.status == Status::Shipped && !job.shipped.is_empty() {
@@ -290,10 +309,7 @@ impl Shell {
             .gap(px(8.))
             .border_t_1()
             .border_color(c(ui::LINE))
-            .child(
-                ui::solid(("approve", id as usize), label)
-                    .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
-            )
+            .child(self.approve_button(("approve", id as usize), job, label, cx))
             .when_some(switch, |d, (words, to)| {
                 d.child(
                     div()
@@ -513,7 +529,7 @@ fn diff_view(diff: &str) -> Div {
             div()
                 .px(px(16.))
                 .text_color(c(ui::FAINT))
-                .child("No text changes to show (a binary file, or only its mode changed)."),
+                .child("Couldn't show this file's changes here. Open the folder to look at it."),
         );
     }
     for l in lines.iter().take(DIFF_LINES) {

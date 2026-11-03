@@ -259,6 +259,7 @@ impl Shell {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap(px(8.))
                     .child(modes)
@@ -266,7 +267,7 @@ impl Shell {
                     .when(self.mode.writes(), |d| {
                         let on = self.splitting;
                         d.child(
-                            ui::pill("split-toggle", "Split into jobs", on)
+                            ui::pill("split-toggle", "Split", on)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "For a bigger goal: Runo splits it into a few jobs that run one after another",
@@ -285,8 +286,8 @@ impl Shell {
                     .when(self.mode.writes(), |d| {
                         let n = self.racing;
                         let label = match n {
-                            2 | 3 => format!("Race {n} engines"),
-                            _ => "Race it".to_string(),
+                            2 | 3 => format!("Race \u{d7}{n}"),
+                            _ => "Race".to_string(),
                         };
                         d.child(
                             ui::pill("race-toggle", label, n > 1)
@@ -324,7 +325,13 @@ impl Shell {
                             .cursor_pointer()
                             .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
                             .child(face)
-                            .child(format!("{} · {engine}", target.name()))
+                            .child(target.name())
+                            .tooltip(move |window, cx| {
+                                gpui_kit::component::tooltip::Tooltip::new(format!(
+                                    "Runs on {engine}. Click to change it."
+                                ))
+                                .build(window, cx)
+                            })
                             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
                     )
                     .child(

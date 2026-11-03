@@ -476,6 +476,30 @@ impl Store {
         self.current = 0;
     }
 
+    /// Jobs newest first, with each race shown once: by the try that matters
+    /// most now (kept, then waiting for review, then still working).
+    pub fn listed(&self) -> Vec<&Job> {
+        let rank = |j: &Job| match j.status {
+            Status::Shipping | Status::Shipped => 0,
+            Status::Review => 1,
+            Status::Running => 2,
+            Status::Done => 3,
+            _ => 4,
+        };
+        let mut face: HashMap<u64, &Job> = HashMap::new();
+        for j in self.jobs.iter().filter(|j| j.race != 0) {
+            let e = face.entry(j.race).or_insert(j);
+            if (rank(j), j.id) < (rank(e), e.id) {
+                *e = j;
+            }
+        }
+        self.jobs
+            .iter()
+            .rev()
+            .filter(|j| j.race == 0 || face.get(&j.race).is_some_and(|f| f.id == j.id))
+            .collect()
+    }
+
     pub fn job(&self, id: u64) -> Option<&Job> {
         self.jobs.iter().find(|j| j.id == id)
     }

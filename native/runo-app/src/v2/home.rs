@@ -28,12 +28,23 @@ impl Shell {
             .collect();
         let running: Vec<&Job> = self.store.running().collect();
         let needs: Vec<&Job> = self.store.jobs.iter().filter(|j| j.needs_you()).collect();
-        let done = today.iter().filter(|j| j.status == Status::Done).count();
+        let done = today
+            .iter()
+            .filter(|j| matches!(j.status, Status::Done | Status::Shipped))
+            .count();
+        let ended = today.iter().filter(|j| j.ended.is_some()).count();
         let spend: f64 = today.iter().filter_map(|j| cost(&j.summary)).sum::<f64>() + 0.0;
-        let who = running
-            .first()
-            .map(|j| j.bot.name().to_string())
-            .unwrap_or_else(|| "nobody busy".into());
+        let mut names: Vec<&str> = Vec::new();
+        for j in &running {
+            if !names.contains(&j.bot.name()) {
+                names.push(j.bot.name());
+            }
+        }
+        let who = match names.len() {
+            0 => "nobody busy".to_string(),
+            1..=2 => names.join(", "),
+            n => format!("{}, {} and {} more", names[0], names[1], n - 2),
+        };
         let oldest = needs
             .iter()
             .map(|j| j.ended.unwrap_or(j.started))
@@ -109,7 +120,7 @@ impl Shell {
                 Some(ui::T_GREEN),
                 "Done today",
                 done.to_string(),
-                format!("{} today", today.len()),
+                format!("of {ended} finished"),
                 false,
             ))
             .child(cell(
@@ -126,25 +137,22 @@ impl Shell {
     pub(super) fn jobs_table(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let needs: Vec<Job> = self
             .store
-            .jobs
-            .iter()
-            .rev()
+            .listed()
+            .into_iter()
             .filter(|j| j.needs_you())
             .cloned()
             .collect();
         let going: Vec<Job> = self
             .store
-            .jobs
-            .iter()
-            .rev()
+            .listed()
+            .into_iter()
             .filter(|j| !j.needs_you() && matches!(j.status, Status::Running | Status::Shipping))
             .cloned()
             .collect();
         let done: Vec<Job> = self
             .store
-            .jobs
-            .iter()
-            .rev()
+            .listed()
+            .into_iter()
             .filter(|j| !j.needs_you() && !matches!(j.status, Status::Running | Status::Shipping))
             .take(8)
             .cloned()
@@ -288,7 +296,14 @@ impl Shell {
                     d as f32 / n.max(1) as f32
                 }
             });
-            let sub = if running {
+            let tries = if j.race == 0 {
+                0
+            } else {
+                self.tries(j.race).len()
+            };
+            let sub = if tries > 1 {
+                format!("Race of {tries} engines · {}", j.folder.name)
+            } else if running {
                 j.doing()
             } else {
                 format!("#{} · {}", j.id, j.folder.name)

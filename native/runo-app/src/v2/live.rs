@@ -90,7 +90,7 @@ impl Shell {
             Status::Failed => "stopped on",
             Status::Stopped => "was stopped on",
             Status::Interrupted => "was interrupted on",
-            Status::Review => "finished, waiting for your review of",
+            Status::Review => "is waiting for your review, on",
             Status::Shipped => "shipped",
             Status::Shipping => "handed to Shipper:",
             Status::Discarded => "had its changes discarded on",
@@ -137,6 +137,7 @@ impl Shell {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap(px(6.))
                             .text_size(px(13.))
@@ -183,9 +184,12 @@ impl Shell {
             )
             .child(
                 div()
-                    .flex_none()
+                    .flex_shrink_0()
+                    .max_w(px(440.))
                     .pt(px(16.))
                     .flex()
+                    .flex_wrap()
+                    .justify_end()
                     .gap(px(8.))
                     .when(!self.trail.is_empty(), |d| {
                         d.child(
@@ -251,12 +255,8 @@ impl Shell {
                         }
                     })
                     .when(job.status == Status::Review, |d| {
-                        let id = job.id;
                         let label = self.approve_label(job);
-                        d.child(
-                            ui::solid("approve-top", label)
-                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
-                        )
+                        d.child(self.approve_button("approve-top", job, label, cx))
                     })
                     .when(
                         !running
@@ -603,8 +603,14 @@ impl Shell {
                     ),
             );
         }
+        // What it changed on its branch, once known; else the files it touched.
+        let touched: Vec<String> = if job.changes.is_empty() {
+            job.files.clone()
+        } else {
+            job.changes.iter().map(|c| c.path.clone()).collect()
+        };
         let mut files = div().flex().flex_col().gap(px(6.));
-        if job.files.is_empty() {
+        if touched.is_empty() {
             files = files.child(div().text_size(px(12.5)).text_color(c(ui::FAINT)).child(
                 if job.mode.writes() {
                     "Nothing changed yet."
@@ -613,7 +619,7 @@ impl Shell {
                 },
             ));
         }
-        for f in job.files.iter().take(14) {
+        for f in touched.iter().take(14) {
             files = files.child(
                 div()
                     .flex()
@@ -635,16 +641,15 @@ impl Shell {
                     ),
             );
         }
-        if job.files.len() > 14 {
-            files = files.child(note_line(&format!("and {} more", job.files.len() - 14)));
+        if touched.len() > 14 {
+            files = files.child(note_line(&format!("and {} more", touched.len() - 14)));
         }
         let color = status_color(job.status);
         let others: Vec<_> = self
             .store
-            .jobs
-            .iter()
-            .rev()
-            .filter(|j| j.id != job.id && j.bot == job.bot)
+            .listed()
+            .into_iter()
+            .filter(|j| j.id != job.id && j.bot == job.bot && (j.race == 0 || j.race != job.race))
             .take(3)
             .map(|j| (j.id, j.title.clone(), j.status))
             .collect();
