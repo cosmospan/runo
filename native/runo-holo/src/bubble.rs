@@ -171,6 +171,28 @@ impl Bubble {
         }
     }
 
+    /// The bubble as four small numbers (colour, bubbles, eyes, motion), for saving.
+    pub fn code(self) -> [u8; 4] {
+        let at = |i: Option<usize>| i.unwrap_or(0) as u8;
+        [
+            at(Tint::ALL.iter().position(|t| *t == self.tint)),
+            at(Self::LAYOUTS.iter().position(|l| *l == self.layout)),
+            at(Self::EYES.iter().position(|e| *e == self.eyes)),
+            at(Self::SWAYS.iter().position(|w| *w == self.sway)),
+        ]
+    }
+
+    /// A bubble back from [`Bubble::code`]; out-of-range numbers fall back to the first choice.
+    pub fn from_code(c: [u8; 4]) -> Bubble {
+        let pick = |n: u8, len: usize| (n as usize).min(len - 1);
+        Bubble {
+            tint: Tint::ALL[pick(c[0], Tint::ALL.len())],
+            layout: Self::LAYOUTS[pick(c[1], Self::LAYOUTS.len())],
+            eyes: Self::EYES[pick(c[2], Self::EYES.len())],
+            sway: Self::SWAYS[pick(c[3], Self::SWAYS.len())],
+        }
+    }
+
     pub fn pose(self, mood: Mood) -> Pose {
         let mouth = match self.eyes {
             Eyes::Lens | Eyes::Sleepy => Mouth::Small,
@@ -1251,6 +1273,15 @@ mod tests {
         let mut r = BubbleRenderer::new(64);
         let a = r.draw(&b, 0.0, Framing::Full).to_vec();
         assert_ne!(a, r.draw(&b, 0.5, Framing::Full));
+    }
+
+    #[test]
+    fn code_round_trips() {
+        for seed in 0..50 {
+            let b = Bubble::from_seed(seed);
+            assert_eq!(Bubble::from_code(b.code()), b);
+        }
+        assert_eq!(Bubble::from_code([99, 99, 99, 99]).code(), [5, 5, 5, 4]);
     }
 
     #[test]

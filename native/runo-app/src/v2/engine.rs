@@ -16,7 +16,11 @@ use super::data::Member;
 
 /// The settings key for a bot.
 pub fn bot_key(who: Member) -> String {
-    who.name().to_lowercase()
+    match who {
+        // By id, so renaming a made bot keeps its engine.
+        Member::Made(id) => format!("made-{id}"),
+        _ => who.name().to_lowercase(),
+    }
 }
 
 /// The company behind an agent, so the challenger can be from another one.

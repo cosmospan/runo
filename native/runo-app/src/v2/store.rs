@@ -16,8 +16,16 @@ pub struct Store {
     /// The folder new jobs and questions go to, by index into `folders`.
     pub current: usize,
     pub jobs: Vec<Job>,
+    /// Saved as a list of pairs: a made bot can't be a JSON object key.
+    #[serde(with = "chat_list")]
     pub chats: HashMap<Member, Vec<Said>>,
     pub next_id: u64,
+    /// Bots the person made in the maker on Crew.
+    pub made: Vec<super::data::Made>,
+    /// Built-in bots left out of the crew.
+    pub hidden: Vec<Member>,
+    /// The first-run walkthrough is done (or was skipped).
+    pub set_up: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -208,6 +216,40 @@ impl Said {
     }
 }
 
+mod chat_list {
+    use std::collections::HashMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{Member, Said};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Saved {
+        Pairs(Vec<(Member, Vec<Said>)>),
+        // Stores from before made bots: a map keyed by the bot's name.
+        Map(HashMap<Member, Vec<Said>>),
+    }
+
+    pub fn serialize<S: Serializer>(
+        m: &HashMap<Member, Vec<Said>>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        let mut v: Vec<(&Member, &Vec<Said>)> = m.iter().collect();
+        v.sort_by_key(|(k, _)| k.key());
+        v.serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<HashMap<Member, Vec<Said>>, D::Error> {
+        Ok(match Saved::deserialize(d)? {
+            Saved::Pairs(v) => v.into_iter().collect(),
+            Saved::Map(m) => m,
+        })
+    }
+}
+
 pub fn now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -250,6 +292,12 @@ impl Store {
             }
         }
         s.folders.retain(|f| std::path::Path::new(&f.path).is_dir());
+        // People who used v2 before the walkthrough existed don't need it.
+        if !s.set_up && (!s.jobs.is_empty() || !s.chats.is_empty()) {
+            s.set_up = true;
+        }
+        super::data::set_made(&s.made);
+        super::data::set_hidden(&s.hidden);
         if s.current >= s.folders.len() {
             s.current = 0;
         }
@@ -327,5 +375,31 @@ pub fn span(s: u64) -> String {
         0..=59 => format!("{s}s"),
         60..=3599 => format!("{}m {:02}s", s / 60, s % 60),
         _ => format!("{}h {}m", s / 3600, (s % 3600) / 60),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chats_with_made_bots_save_and_load() {
+        let mut s = Store::default();
+        s.chats
+            .insert(Member::Explainer, vec![Said::mine("hi".into())]);
+        s.chats
+            .insert(Member::Made(3), vec![Said::mine("yo".into())]);
+        let text = serde_json::to_string(&s).unwrap();
+        let back: Store = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.chat(Member::Made(3))[0].text, "yo");
+        assert_eq!(back.chat(Member::Explainer)[0].text, "hi");
+    }
+
+    #[test]
+    fn old_stores_still_load() {
+        let old = r#"{"chats":{"Explainer":[{"mine":true,"text":"hi"}]},"next_id":4}"#;
+        let back: Store = serde_json::from_str(old).unwrap();
+        assert_eq!(back.chat(Member::Explainer)[0].text, "hi");
+        assert_eq!(back.next_id, 4);
     }
 }

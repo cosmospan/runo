@@ -14,16 +14,6 @@ use super::engine::{self, vendor};
 use super::ui::{self, c, ca, space};
 use super::Shell;
 
-/// The bots whose engine can be picked: the six from Runo.
-const BOTS: [Member; 6] = [
-    Member::Builder,
-    Member::Checker,
-    Member::Guard,
-    Member::Fixer,
-    Member::Explainer,
-    Member::Keeper,
-];
-
 fn save(cx: &mut App, f: impl FnOnce(&mut AppSettings)) {
     cx.update_global::<AppSettings, _>(|st, _| {
         f(st);
@@ -194,7 +184,7 @@ impl Shell {
 
         // Each bot's engine and model.
         let mut rows = div().mt(px(space::M)).flex().flex_col();
-        for (n, who) in BOTS.into_iter().enumerate() {
+        for (n, who) in Member::all().into_iter().enumerate() {
             let own = st
                 .bot_engines
                 .get(&engine::bot_key(who))

@@ -51,7 +51,7 @@ type Choice = (String, bool, Box<dyn Fn(&mut Shell)>);
 impl Shell {
     pub(super) fn crew(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let mut grid = div().flex().flex_wrap().gap(px(16.));
-        for (i, who) in Member::CREW.into_iter().enumerate() {
+        for (i, who) in Member::all().into_iter().enumerate() {
             let k = self.stagger(i + 1);
             grid = grid.child(ui::rise(self.crew_card(who, cx), k));
         }
@@ -79,6 +79,7 @@ impl Shell {
                     ),
             )
             .child(grid)
+            .children(self.bench(cx))
             .child(ui::rise(div().child(self.maker_card(cx)), self.stagger(8)))
             .into_any_element()
     }
@@ -101,10 +102,7 @@ impl Shell {
             ),
             (d, a) => format!("{d} done · {a} asked"),
         };
-        let mode = Mode::ALL
-            .into_iter()
-            .find(|m| Member::for_mode(*m) == who)
-            .unwrap_or(Mode::Ask);
+        let mode = who.mode();
         div()
             .id(("crew-card", who.key() as usize))
             .on_hover(cx.listener(move |this, on: &bool, _, cx| {
@@ -217,6 +215,7 @@ impl Shell {
                             )
                             .on_click(cx.listener(
                                 move |this, _, window, cx| {
+                                    this.target = Some(who);
                                     this.set_mode(mode, window, cx);
                                     this.go(Place::Today, cx);
                                     this.say(format!(
@@ -226,8 +225,83 @@ impl Shell {
                                 },
                             )),
                         )
+                    })
+                    .child(div().flex_1())
+                    .child(if who.is_made() {
+                        ui::ghost(("crew-remove", who.key() as usize), "Remove")
+                            .text_color(c(ui::MUTED))
+                            .on_click(cx.listener(move |this, _, _, cx| this.remove_made(who, cx)))
+                    } else {
+                        ui::ghost(("crew-hide", who.key() as usize), "Take off crew")
+                            .text_color(c(ui::MUTED))
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.set_on_crew(who, false, cx)),
+                            )
                     }),
             )
+    }
+
+    /// Built-in bots not on the crew, each one click from joining.
+    fn bench(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let off: Vec<Member> = Member::CREW.into_iter().filter(|m| !m.on_crew()).collect();
+        if off.is_empty() {
+            return None;
+        }
+        let mut row = div().flex().flex_wrap().gap(px(12.));
+        for who in off {
+            let face = self.bot(who, Mood::Asleep, 56., Framing::Bust);
+            row = row.child(
+                div()
+                    .id(("bench", who.key() as usize))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .pl(px(8.))
+                    .pr(px(14.))
+                    .py(px(8.))
+                    .w(px(330.))
+                    .rounded(px(18.))
+                    .bg(ca(0xFFFFFF, 0.7))
+                    .border_1()
+                    .border_color(c(ui::LINE))
+                    .child(face)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(who.name()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::MUTED))
+                                    .child(who.role()),
+                            ),
+                    )
+                    .child(
+                        ui::ghost(("bench-add", who.key() as usize), "Add").on_click(
+                            cx.listener(move |this, _, _, cx| this.set_on_crew(who, true, cx)),
+                        ),
+                    ),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(
+                    div()
+                        .text_size(px(15.))
+                        .font_weight(FontWeight::BOLD)
+                        .child("More bots you can add"),
+                )
+                .child(row),
+        )
     }
 
     fn maker_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -316,6 +390,17 @@ impl Shell {
                 )
             })
             .collect();
+        let likes = Member::CREW
+            .into_iter()
+            .map(|m| {
+                (
+                    m.name().to_string(),
+                    self.maker_like == m,
+                    Box::new(move |s: &mut Shell| s.maker_like = m) as Box<dyn Fn(&mut Shell)>,
+                )
+            })
+            .collect();
+        let like = row("Works like", likes, "mk-like", cx);
         let layouts = row("Bubbles", layouts, "mk-lay", cx);
         let eyes = row("Eyes", eyes, "mk-eye", cx);
         let sways = row("Motion", sways, "mk-sway", cx);
@@ -354,7 +439,7 @@ impl Shell {
                                     .flex_1()
                                     .text_size(px(12.5))
                                     .text_color(c(ui::MUTED))
-                                    .child("Four choices, about a thousand combinations, all of them on brand. Saving your own bot comes next."),
+                                    .child("Pick a look, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
                             .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
                                 this.maker = Bubble::from_seed(this.clock.elapsed().as_nanos() as u64);
@@ -379,7 +464,55 @@ impl Shell {
                     )
                     .child(layouts)
                     .child(eyes)
-                    .child(sways),
+                    .child(sways)
+                    .child(like)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(field("NAME", &self.maker_name, 180.))
+                            .child(field("ITS JOB", &self.maker_role, 0.))
+                            .child(
+                                ui::solid("maker-save", "Add to crew")
+                                    .on_click(cx.listener(|this, _, window, cx| this.save_made(window, cx))),
+                            ),
+                    ),
             )
     }
+}
+
+/// A labelled text box in the maker.
+fn field(
+    label: &'static str,
+    input: &Entity<gpui_kit::component::input::InputState>,
+    w: f32,
+) -> Div {
+    div()
+        .when(w > 0., |d| d.w(px(w)).flex_none())
+        .when(w == 0., |d| d.flex_1().min_w_0())
+        .h(px(38.))
+        .px(px(12.))
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .rounded(px(12.))
+        .bg(c(0xFFFFFF))
+        .border_1()
+        .border_color(c(ui::LINE))
+        .child(
+            div()
+                .flex_none()
+                .font_family(ui::MONO)
+                .text_size(px(9.5))
+                .text_color(c(ui::FAINT))
+                .child(label),
+        )
+        .child(
+            div().flex_1().min_w_0().text_size(px(13.)).child(
+                gpui_kit::component::input::Input::new(input)
+                    .appearance(false)
+                    .bordered(false),
+            ),
+        )
 }

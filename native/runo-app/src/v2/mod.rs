@@ -20,6 +20,7 @@ mod palette;
 mod store;
 mod today;
 mod ui;
+mod welcome;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,6 +48,8 @@ pub enum Place {
     /// One job, by id.
     Live(u64),
     Engines,
+    /// The first-run walkthrough.
+    Welcome,
 }
 
 /// The crew's frames, drawn once a tick and shared by every place that shows the
@@ -226,11 +229,23 @@ pub struct Shell {
     /// Redraws a second the screen needs: 30 with a big bot or an entrance
     /// playing, fewer with only small bots, a trickle when nothing moves.
     rate: Arc<std::sync::atomic::AtomicU32>,
+    /// Nobody has touched the app for a while and nothing is running: the crew
+    /// holds still and the window stops redrawing until the pointer moves.
+    dozing: Arc<std::sync::atomic::AtomicBool>,
     /// The last mouse move or key press. Left alone for a while, the crew keeps
     /// moving at half the frame rate.
     touched: Instant,
     /// The bot under the pointer: it gets the light sweep.
     hovered: Option<Member>,
+    /// The maker's name and job boxes, and the built-in bot its work is like.
+    maker_name: Entity<InputState>,
+    maker_role: Entity<InputState>,
+    maker_like: Member,
+    /// The walkthrough's step and the crew picked in it.
+    setup_step: usize,
+    setup_crew: Vec<Member>,
+    /// A made bot chosen for Today's next job (its mode must match).
+    target: Option<Member>,
     hover_at: Instant,
     /// The rail bot under the pointer, which shows its card.
     rail_hover: Option<Member>,
@@ -266,6 +281,36 @@ pub struct Shell {
     _pump: Task<()>,
 }
 
+/// The folders behind dropped paths: a folder itself, or the folder a file is in,
+/// each once.
+fn folders_from(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    for p in paths {
+        let dir = if p.is_dir() {
+            p.clone()
+        } else {
+            match p.parent() {
+                Some(d) if d.is_dir() => d.to_path_buf(),
+                _ => continue,
+            }
+        };
+        if !out.contains(&dir) {
+            out.push(dir);
+        }
+    }
+    out
+}
+
+/// How long the app waits, untouched, before the crew dozes (five minutes;
+/// `RUNO_DOZE_SECS` shortens it for testing).
+fn doze_after() -> Duration {
+    let secs = std::env::var("RUNO_DOZE_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(300);
+    Duration::from_secs(secs)
+}
+
 /// Width of one of Today's mode tabs plus the gap after it.
 const MODE_STEP: f32 = 66.;
 
@@ -277,7 +322,7 @@ fn nav_slot(place: Place) -> Option<f32> {
         Place::History | Place::Live(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Engines => return None,
+        Place::Engines | Place::Welcome => return None,
     };
     Some(i as f32 * 46.)
 }
@@ -299,6 +344,9 @@ impl Shell {
         });
         let focus = cx.focus_handle();
         focus.focus(window, cx);
+        let maker_name = cx.new(|cx| InputState::new(window, cx).placeholder("Scout"));
+        let maker_role =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Checks the docs match the code"));
         let history_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Search jobs, bots, folders…"));
         let subs = vec![
@@ -347,7 +395,27 @@ impl Shell {
         let active = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let rate = Arc::new(std::sync::atomic::AtomicU32::new(FPS as u32));
         let (seen, wanted) = (active.clone(), rate.clone());
+        let dozing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let asleep = dozing.clone();
+        let mut slept = 0u32;
         let pump = cx.spawn(async move |this, cx| loop {
+            // Dozing (nobody around, nothing running): no redraws at all, apart from
+            // one every half minute so times like "4m ago" stay true.
+            if asleep.load(std::sync::atomic::Ordering::Relaxed) {
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+                slept += 1;
+                if slept < 60 {
+                    continue;
+                }
+                slept = 0;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+                continue;
+            }
+            slept = 0;
             let front = seen.load(std::sync::atomic::Ordering::Relaxed);
             let want = wanted
                 .load(std::sync::atomic::Ordering::Relaxed)
@@ -378,6 +446,8 @@ impl Shell {
                 .last()
                 .map(|j| Place::Live(j.id))
                 .unwrap_or(Place::Today),
+            Ok("welcome") => Place::Welcome,
+            _ if !store.set_up => Place::Welcome,
             _ => Place::Today,
         };
         Shell {
@@ -404,8 +474,15 @@ impl Shell {
             motion: true,
             active,
             rate,
+            dozing,
             touched: Instant::now(),
             hovered: None,
+            target: None,
+            setup_step: 0,
+            setup_crew: data::STARTER_CREW.to_vec(),
+            maker_name,
+            maker_role,
+            maker_like: Member::Checker,
             hover_at: Instant::now(),
             rail_hover: None,
             palette: false,
@@ -483,7 +560,12 @@ impl Shell {
 
     /// Where Today's mode highlight is now, in pixels from the first tab.
     fn mode_x(&self) -> f32 {
-        let to = Mode::ALL.iter().position(|m| *m == self.mode).unwrap_or(0) as f32 * MODE_STEP;
+        let to = Mode::ALL
+            .into_iter()
+            .filter(|m| Member::doer_for(*m).is_some())
+            .position(|m| m == self.mode)
+            .unwrap_or(0) as f32
+            * MODE_STEP;
         let k = runo_holo::anim::spring(self.mode_at.elapsed().as_secs_f64(), 0.3) as f32;
         self.mode_from + (to - self.mode_from) * k
     }
@@ -587,13 +669,155 @@ impl Shell {
             self.pick_folder(cx);
             return;
         }
+        let doer = self.doer();
         if self.mode == Mode::Ask {
-            self.go(Place::Chat(Member::Explainer), cx);
-            self.ask(Member::Explainer, text, cx);
+            self.go(Place::Chat(doer), cx);
+            self.ask(doer, text, cx);
             return;
         }
+        let Some(folder) = self.store.folder().cloned() else {
+            return;
+        };
         let mode = self.mode;
-        self.start_job(mode, text, cx);
+        self.start_job_in(doer, mode, text, folder, cx);
+    }
+
+    /// The bot a job from Today's box goes to: a made bot picked for it, else the
+    /// crew member for the mode.
+    fn doer(&self) -> Member {
+        self.target
+            .filter(|t| t.mode() == self.mode && Member::all().contains(t))
+            .or_else(|| Member::doer_for(self.mode))
+            .unwrap_or(Member::for_mode(self.mode))
+    }
+
+    /// Adds the bot in the maker to the crew.
+    fn save_made(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let name = self.maker_name.read(cx).value().trim().to_string();
+        let role = self.maker_role.read(cx).value().trim().to_string();
+        if name.is_empty() {
+            self.say("Give your bot a name first.");
+            cx.notify();
+            return;
+        }
+        if Member::all()
+            .iter()
+            .any(|m| m.name().eq_ignore_ascii_case(&name))
+        {
+            self.say(format!("There's already a bot called {name}."));
+            cx.notify();
+            return;
+        }
+        let id = self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+        let like = self.maker_like;
+        let role = if role.is_empty() {
+            like.role().to_string()
+        } else {
+            role
+        };
+        self.store.made.push(data::Made {
+            id,
+            name: name.clone(),
+            role,
+            like,
+            look: self.maker.code(),
+        });
+        data::set_made(&self.store.made);
+        self.store.save();
+        for input in [&self.maker_name, &self.maker_role] {
+            input.update(cx, |i, cx| i.set_value("", window, cx));
+        }
+        self.entered = Instant::now();
+        self.say(format!("{name} joined the crew."));
+        cx.notify();
+    }
+
+    /// Puts a built-in bot on the crew or takes it off. Its history stays.
+    fn set_on_crew(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
+        if who.is_made() {
+            return;
+        }
+        if !on && Member::all().len() <= 1 {
+            self.say("Keep at least one bot on the crew.");
+            cx.notify();
+            return;
+        }
+        self.store.hidden.retain(|m| *m != who);
+        if !on {
+            self.store.hidden.push(who);
+        }
+        data::set_hidden(&self.store.hidden);
+        self.store.save();
+        if !on && self.place == Place::Chat(who) {
+            self.place = Place::Crew;
+        }
+        self.say(if on {
+            format!("{} joined the crew.", who.name())
+        } else {
+            format!(
+                "{} is off the crew. Add it back any time on Crew.",
+                who.name()
+            )
+        });
+        cx.notify();
+    }
+
+    /// Takes a made bot off the crew. Its past jobs stay in History.
+    fn remove_made(&mut self, who: Member, cx: &mut Context<Self>) {
+        let Member::Made(id) = who else { return };
+        if self.store.busy(who).is_some() {
+            self.say(format!("{} is working. Stop the job first.", who.name()));
+            cx.notify();
+            return;
+        }
+        let name = who.name();
+        self.store.made.retain(|m| m.id != id);
+        self.store.chats.remove(&who);
+        data::set_made(&self.store.made);
+        if self.target == Some(who) {
+            self.target = None;
+        }
+        if self.place == Place::Chat(who) {
+            self.place = Place::Crew;
+        }
+        self.store.save();
+        self.say(format!("{name} left the crew."));
+        cx.notify();
+    }
+
+    /// The person is back: the crew wakes up.
+    fn wake(&mut self, cx: &mut Context<Self>) {
+        self.touched = Instant::now();
+        if self
+            .dozing
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            cx.notify();
+        }
+    }
+
+    /// Folders dropped on the window join the list; the last one becomes current.
+    fn drop_paths(&mut self, paths: &[std::path::PathBuf], cx: &mut Context<Self>) {
+        let mut added = Vec::new();
+        for dir in folders_from(paths) {
+            self.store.add_folder(dir);
+            if let Some(f) = self.store.folder() {
+                added.push(f.name.clone());
+            }
+        }
+        if added.is_empty() {
+            return;
+        }
+        self.store.save();
+        self.say(match added.as_slice() {
+            [one] => format!("The crew now works in {one}."),
+            many => format!(
+                "Added {} folders. The crew now works in {}.",
+                many.len(),
+                many.last().cloned().unwrap_or_default()
+            ),
+        });
+        cx.notify();
     }
 
     /// Takes a folder off the crew's list. Its files and past jobs stay.
@@ -619,25 +843,18 @@ impl Shell {
     /// Starts a stopped or failed job over, as a new job in the same folder.
     fn retry_job(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(j) = self.store.job(id) else { return };
-        let (mode, title, folder) = (j.mode, j.title.clone(), j.folder.clone());
-        self.start_job_in(mode, title, folder, cx);
-    }
-
-    fn start_job(&mut self, mode: Mode, text: String, cx: &mut Context<Self>) {
-        let Some(folder) = self.store.folder().cloned() else {
-            return;
-        };
-        self.start_job_in(mode, text, folder, cx);
+        let (bot, mode, title, folder) = (j.bot, j.mode, j.title.clone(), j.folder.clone());
+        self.start_job_in(bot, mode, title, folder, cx);
     }
 
     fn start_job_in(
         &mut self,
+        bot: Member,
         mode: Mode,
         text: String,
         folder: store::Folder,
         cx: &mut Context<Self>,
     ) {
-        let bot = Member::for_mode(mode);
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
             self.say(format!(
@@ -786,7 +1003,7 @@ impl Shell {
         if !finished.is_empty() {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
-                if let Some(j) = self.store.job(*id) {
+                if let Some(j) = self.store.job(*id).cloned() {
                     if self.place != Place::Live(*id) {
                         let msg = match j.status {
                             Status::Done => {
@@ -794,7 +1011,15 @@ impl Shell {
                             }
                             _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
                         };
-                        self.say(msg);
+                        self.say(msg.clone());
+                    }
+                    // Runo is behind other windows: tell the person on the desktop.
+                    if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
+                        let title = match j.status {
+                            Status::Done => format!("{} finished", j.bot.name()),
+                            _ => format!("{} stopped", j.bot.name()),
+                        };
+                        crate::settings::notify(&title, &j.title);
                     }
                 }
             }
@@ -875,11 +1100,10 @@ impl Shell {
     }
 
     fn pose_img(&mut self, pose: Pose, size: f32, framing: Framing) -> Img {
-        // With motion off, every bot holds one calm pose.
-        let t = if self.motion { self.now() } else { 2.0 };
-        let image = self
-            .holos
-            .image(pose, size, framing, t, self.scale, self.motion);
+        // With motion off, or while dozing, every bot holds one calm pose.
+        let moving = self.motion && !self.dozing.load(std::sync::atomic::Ordering::Relaxed);
+        let t = if moving { self.now() } else { 2.0 };
+        let image = self.holos.image(pose, size, framing, t, self.scale, moving);
         img(image).size(px(size)).flex_none()
     }
 
@@ -1014,7 +1238,7 @@ impl Shell {
             .flex_col()
             .items_center()
             .gap(px(4.));
-        for who in Member::CREW {
+        for who in Member::all() {
             let on = place == Place::Chat(who)
                 || matches!(place, Place::Live(id) if self.store.job(id).is_some_and(|j| j.bot == who));
             let mood = self.mood(who);
@@ -1217,7 +1441,7 @@ impl Shell {
 
     /// The bot whose chat was open last, else Explainer.
     fn last_chat(&self) -> Member {
-        Member::CREW
+        Member::all()
             .into_iter()
             .max_by_key(|m| {
                 (
@@ -1271,8 +1495,28 @@ impl Render for Shell {
             want
         };
         self.rate.store(want, std::sync::atomic::Ordering::Relaxed);
+        // Five minutes with nobody around and nothing running: doze.
+        let doze = self.motion
+            && idle > doze_after()
+            && !working
+            && !self.palette
+            && self
+                .toast
+                .as_ref()
+                .is_none_or(|(_, at)| at.elapsed() > Duration::from_secs(4));
+        self.dozing
+            .store(doze, std::sync::atomic::Ordering::Relaxed);
         self.holos.begin(window, cx);
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
+        // The mode in Today's box must have a bot on the crew to take it.
+        if Member::doer_for(self.mode).is_none() {
+            if let Some(m) = Mode::ALL
+                .into_iter()
+                .find(|m| Member::doer_for(*m).is_some())
+            {
+                self.set_mode(m, window, cx);
+            }
+        }
         let body = match self.place {
             Place::Today => self.today(cx),
             Place::Live(id) => self.live(id, cx),
@@ -1281,6 +1525,7 @@ impl Render for Shell {
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
             Place::Engines => self.engines(cx),
+            Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
         let k = runo_holo::anim::spring(self.entered.elapsed().as_secs_f64(), 0.32) as f32;
@@ -1326,11 +1571,16 @@ impl Render for Shell {
             .relative()
             .flex()
             .track_focus(&self.focus)
-            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, _| {
-                this.touched = Instant::now();
+            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
+                this.wake(cx);
             }))
-            .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, _| {
-                this.touched = Instant::now();
+            .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, cx| {
+                this.wake(cx);
+            }))
+            // Drop a folder (or a file in it) anywhere on the window to work in it.
+            .drag_over::<ExternalPaths>(|style, _, _, _| style.bg(ca(ui::ORANGE, 0.06)))
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.drop_paths(paths.paths(), cx);
             }))
             // ⌘1…⌘6 (Ctrl on Linux and Windows) jump between places, even from a text box;
             // ⌘K opens the palette and ⌘[ goes back.
@@ -1384,7 +1634,8 @@ impl Render for Shell {
                 linear_color_stop(c(0xFBF6F3), 0.0),
                 linear_color_stop(c(0xF3F4FA), 0.35),
             ))
-            .child(self.rail(cx))
+            // The walkthrough has the whole window; the rail comes after it.
+            .when(self.place != Place::Welcome, |d| d.child(self.rail(cx)))
             .child(
                 div()
                     .flex_1()
@@ -1423,4 +1674,24 @@ pub fn open_window(cx: &mut App) {
         let _ = handle.update(cx, |_, window, _| window.activate_window());
     }
     cx.activate(true);
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::folders_from;
+
+    #[test]
+    fn dropped_files_mean_their_folder() {
+        let dir = std::env::temp_dir().join(format!("runo-drop-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "x").unwrap();
+        let got = folders_from(&[
+            dir.join("a.txt"),
+            dir.clone(),
+            dir.join("sub"),
+            dir.join("missing/nope.txt"),
+        ]);
+        assert_eq!(got, vec![dir.clone(), dir.join("sub")]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

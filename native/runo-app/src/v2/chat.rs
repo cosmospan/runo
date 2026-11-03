@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
 
-use super::data::{Member, Mode};
+use super::data::Member;
 use super::live::{note_line, plain, typing};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
@@ -25,7 +25,7 @@ impl Shell {
 
     fn chat_list(&mut self, selected: Member, cx: &mut Context<Self>) -> impl IntoElement {
         let mut list = div().mt(px(16.)).flex().flex_col().gap(px(4.));
-        for (i, who) in Member::CREW.into_iter().enumerate() {
+        for (i, who) in Member::all().into_iter().enumerate() {
             let on = selected == who;
             let mood = self.mood(who);
             let face = if mood == Mood::Signature && !on {
@@ -296,22 +296,21 @@ impl Shell {
                     ),
             );
         }
-        if !log.is_empty() && !thinking && who != Member::Explainer {
-            // Turn the conversation into work.
-            let mode = match who {
-                Member::Fixer => Mode::Fix,
-                Member::Checker => Mode::Test,
-                Member::Guard => Mode::Review,
-                Member::Keeper => Mode::Tidy,
-                _ => Mode::Build,
-            };
+        if !log.is_empty() && !thinking && who.like() != Member::Explainer {
+            // Turn the conversation into work: a made bot takes the job itself.
+            let mode = who.mode();
             let last_q = log.iter().rev().find(|m| m.mine).map(|m| m.text.clone());
             if let Some(q) = last_q {
-                let doer = Member::for_mode(mode);
+                let doer = if who.is_made() {
+                    who
+                } else {
+                    Member::for_mode(mode)
+                };
                 body = body.child(div().ml(px(40.)).flex().gap(px(8.)).child(
                     ui::ghost("hand-off", format!("Make it a job for {}", doer.name())).on_click(
                         cx.listener(move |this, _, window, cx| {
                             this.set_mode(mode, window, cx);
+                            this.target = Some(doer);
                             this.composer
                                 .update(cx, |i, cx| i.set_value(q.clone(), window, cx));
                             this.go(Place::Today, cx);

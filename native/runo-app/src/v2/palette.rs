@@ -58,7 +58,7 @@ impl Shell {
                 act: Act::Go(p),
             });
         }
-        for who in Member::CREW {
+        for who in Member::all() {
             all.push(Entry {
                 label: format!("Chat with {}", who.name()),
                 hint: who.role().into(),
@@ -68,7 +68,9 @@ impl Shell {
             });
         }
         for mode in Mode::ALL.into_iter().filter(|m| *m != Mode::Ask) {
-            let who = Member::for_mode(mode);
+            let Some(who) = Member::doer_for(mode) else {
+                continue;
+            };
             all.push(Entry {
                 label: format!("{}: give {} a job", mode.label(), who.name()),
                 hint: "New job".into(),

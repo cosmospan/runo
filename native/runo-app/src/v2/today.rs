@@ -71,7 +71,7 @@ impl Shell {
     pub(super) fn today(&mut self, cx: &mut Context<Self>) -> AnyElement {
         // The crew, a bot that waits on you bigger and in front.
         // A bot that is working right now isn't waiting on anyone.
-        let waiting = Member::CREW.into_iter().find(|m| {
+        let waiting = Member::all().into_iter().find(|m| {
             self.store.busy(*m).is_none()
                 && self
                     .store
@@ -86,7 +86,7 @@ impl Shell {
             .items_end()
             .justify_center()
             .gap(px(18.));
-        for who in Member::CREW {
+        for who in Member::all() {
             let asking = waiting == Some(who);
             let mood = if asking {
                 Mood::NeedsYou
@@ -231,7 +231,7 @@ impl Shell {
     }
 
     fn composer_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let target = Member::for_mode(self.mode);
+        let target = self.doer();
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 22.);
@@ -256,7 +256,12 @@ impl Shell {
                     .bg(c(0xFFFFFF))
                     .shadow(ui::lift()),
             );
-        for (i, m) in Mode::ALL.into_iter().enumerate() {
+        // Only the kinds of work someone on the crew takes.
+        let shown: Vec<Mode> = Mode::ALL
+            .into_iter()
+            .filter(|m| Member::doer_for(*m).is_some())
+            .collect();
+        for (i, m) in shown.iter().copied().enumerate() {
             let on = self.mode == m;
             modes = modes.child(
                 div()
@@ -279,6 +284,7 @@ impl Shell {
                     })
                     .child(m.label())
                     .on_click(cx.listener(move |this, _, window, cx| {
+                        this.target = None;
                         this.set_mode(m, window, cx);
                         this.composer.update(cx, |i, cx| i.focus(window, cx));
                     })),
@@ -509,8 +515,15 @@ impl Shell {
             .gap(px(8.))
             .justify_center()
             .max_w(px(900.));
-        for (i, (mode, text)) in data::STARTERS.into_iter().enumerate() {
-            let face = self.avatar(Member::for_mode(mode), 20.);
+        for (i, (mode, text)) in data::STARTERS
+            .into_iter()
+            .filter(|(m, _)| Member::doer_for(*m).is_some())
+            .enumerate()
+        {
+            let face = self.avatar(
+                Member::doer_for(mode).unwrap_or(Member::for_mode(mode)),
+                20.,
+            );
             row = row.child(
                 div()
                     .id(("starter", i))
