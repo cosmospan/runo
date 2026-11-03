@@ -55,8 +55,9 @@ pub enum Place {
 
 /// The crew's frames, drawn once a tick and shared by every place that shows the
 /// same bot at the same size. Small bots move less, so they get fewer ticks: a 24 px
-/// avatar redraws 10 times a second, a big one 30. A frame is kept until its bot's
-/// next tick, so a still bot (motion off) is drawn once and never again.
+/// avatar redraws 10 times a second, a big lively one 30. New frames are drawn on
+/// the painter thread while the last one stays on screen, so the window itself
+/// never waits for a bot. A still bot (motion off) is drawn once and never again.
 struct Holos {
     frame: u64,
     images: HashMap<(Pose, u32, bool), Frame>,
@@ -67,6 +68,10 @@ struct Holos {
     /// Replaced frames, released at the start of the next window frame, once the
     /// new ones have painted.
     retired: Vec<Arc<RenderImage>>,
+    /// Frames asked of the painter and not back yet, one per bot at most.
+    pending: std::collections::HashSet<Slot>,
+    painter: std::sync::mpsc::Sender<Paint>,
+    painted: std::sync::mpsc::Receiver<Painted>,
 }
 
 struct Frame {
@@ -89,16 +94,22 @@ fn fps_for(size: f32, pose: &Pose) -> u32 {
         || pose.shine
         || matches!(pose.layout, Layout::Think | Layout::Busy | Layout::Splash);
     match (lively, size >= 90.0, size >= 40.0) {
-        (true, true, _) => 24,
-        (true, false, true) => 15,
-        (false, true, _) => 12,
-        _ => 8,
+        (true, true, _) => 30,
+        (true, false, true) => 24,
+        (true, false, false) => 15,
+        (false, true, _) => 20,
+        (false, false, true) => 15,
+        _ => 10,
     }
 }
 
 impl Holos {
     fn new() -> Self {
+        let (painter, painted) = painter();
         Holos {
+            pending: Default::default(),
+            painter,
+            painted,
             frame: 0,
             images: HashMap::new(),
             renderers: HashMap::new(),
@@ -113,6 +124,7 @@ impl Holos {
         self.frame += 1;
         let frame = self.frame;
         self.asked = 0;
+        self.collect();
         for old in self.retired.drain(..) {
             cx.drop_image(old, Some(window));
         }
@@ -147,53 +159,130 @@ impl Holos {
         }
         let frame = self.frame;
         let slot = (pose, device as u32, bust);
+        // A frame on screen already: keep showing it, and have the painter draw
+        // the next one off the main thread, so the window never waits on a bot.
         if let Some(f) = self.images.get_mut(&slot) {
             f.used = frame;
-            if f.tick == tick {
-                return f.image.clone();
+            if f.tick != tick && self.pending.insert(slot) {
+                let at = if moving { tick as f64 / fps as f64 } else { t };
+                let _ = self.painter.send(Paint {
+                    slot,
+                    tick,
+                    at,
+                    pose,
+                    device,
+                    framing,
+                });
             }
+            return f.image.clone();
         }
+        // A bot's first frame is drawn right away, so it never shows up blank.
         let r = self
             .renderers
             .entry(device)
             .or_insert_with(|| BubbleRenderer::new(device));
-        // Draw at the tick's own time, so every size stays in step.
         let at = if moving { tick as f64 / fps as f64 } else { t };
-        let premul = r.draw(&pose, at, framing);
-        // Straight-alpha BGRA, as GPUI's image path expects.
-        let mut px = Vec::with_capacity(premul.len());
-        for p in premul.as_chunks::<4>().0 {
-            let a = p[3];
-            let un = |v: u8| {
-                if a == 0 {
-                    0
-                } else {
-                    ((v as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8
-                }
-            };
-            px.extend_from_slice(&[un(p[2]), un(p[1]), un(p[0]), a]);
-        }
-        let buf = image::RgbaImage::from_raw(device as u32, device as u32, px).expect("frame size");
-        let image = Arc::new(RenderImage::new(vec![image::Frame::new(buf)]));
-        match self.images.get_mut(&slot) {
-            Some(f) => {
-                self.retired
-                    .push(std::mem::replace(&mut f.image, image.clone()));
-                f.tick = tick;
-            }
-            None => {
-                self.images.insert(
-                    slot,
-                    Frame {
-                        tick,
-                        used: frame,
-                        image: image.clone(),
-                    },
-                );
-            }
-        }
+        let image = to_image(r.draw(&pose, at, framing), device);
+        self.images.insert(
+            slot,
+            Frame {
+                tick,
+                used: frame,
+                image: image.clone(),
+            },
+        );
         image
     }
+
+    /// Takes the frames the painter has finished, in place of the ones showing.
+    fn collect(&mut self) {
+        while let Ok(done) = self.painted.try_recv() {
+            self.pending.remove(&done.slot);
+            if let Some(f) = self.images.get_mut(&done.slot) {
+                self.retired
+                    .push(std::mem::replace(&mut f.image, done.image));
+                f.tick = done.tick;
+            }
+        }
+    }
+}
+
+type Slot = (Pose, u32, bool);
+
+/// A bot frame for the painter to draw.
+struct Paint {
+    slot: Slot,
+    tick: u64,
+    at: f64,
+    pose: Pose,
+    device: u16,
+    framing: Framing,
+}
+
+struct Painted {
+    slot: Slot,
+    tick: u64,
+    image: Arc<RenderImage>,
+}
+
+/// The painter: a thread that draws bot frames, so the window's own frames
+/// stay quick. When it falls behind, only the newest ask for each bot is drawn.
+fn painter() -> (
+    std::sync::mpsc::Sender<Paint>,
+    std::sync::mpsc::Receiver<Painted>,
+) {
+    let (ask, asks) = std::sync::mpsc::channel::<Paint>();
+    let (done, dones) = std::sync::mpsc::channel::<Painted>();
+    let _ = std::thread::Builder::new()
+        .name("runo-bots".into())
+        .spawn(move || {
+            let mut renderers: HashMap<u16, BubbleRenderer> = HashMap::new();
+            while let Ok(first) = asks.recv() {
+                let mut todo: Vec<Paint> = vec![first];
+                todo.extend(asks.try_iter());
+                // The newest ask per bot wins.
+                let mut newest: HashMap<Slot, Paint> = HashMap::new();
+                for p in todo {
+                    newest.insert(p.slot, p);
+                }
+                for (_, p) in newest {
+                    let r = renderers
+                        .entry(p.device)
+                        .or_insert_with(|| BubbleRenderer::new(p.device));
+                    let image = to_image(r.draw(&p.pose, p.at, p.framing), p.device);
+                    if done
+                        .send(Painted {
+                            slot: p.slot,
+                            tick: p.tick,
+                            image,
+                        })
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+        });
+    (ask, dones)
+}
+
+/// A drawn bot (premultiplied RGBA) as an image GPUI can paint.
+fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
+    // Straight-alpha BGRA, as GPUI's image path expects.
+    let mut px = Vec::with_capacity(premul.len());
+    for p in premul.as_chunks::<4>().0 {
+        let a = p[3];
+        let un = |v: u8| {
+            if a == 0 {
+                0
+            } else {
+                ((v as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8
+            }
+        };
+        px.extend_from_slice(&[un(p[2]), un(p[1]), un(p[0]), a]);
+    }
+    let buf = image::RgbaImage::from_raw(device as u32, device as u32, px).expect("frame size");
+    Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
 /// The v2 window's root.
@@ -1397,6 +1486,7 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::framestats::begin();
         self.scale = window.scale_factor();
         self.poll();
         // A box that had focus may be gone (a new place opened): take focus back,
@@ -1423,7 +1513,15 @@ impl Render for Shell {
         // Nobody at the keyboard: the crew slows down, then nearly stops.
         let idle = self.touched.elapsed();
         let working = self.asking.is_some() || !self.runners.is_empty();
+        // While something on screen is gliding, draw every frame the display
+        // shows (60 or 120 a second), not on the crew's slower clock.
+        if busy && self.motion {
+            window.request_animation_frame();
+        }
         let want = if busy {
+            FPS as u32
+        } else if working && idle < Duration::from_secs(20) {
+            // Progress sweeps and breathing dots stay smooth while you watch.
             FPS as u32
         } else if working {
             self.holos.asked.max(4)
@@ -1431,9 +1529,9 @@ impl Render for Shell {
             self.holos.asked.max(2)
         };
         let want = if idle > Duration::from_secs(120) {
-            want.min(4)
-        } else if idle > Duration::from_secs(20) {
             want.min(8)
+        } else if idle > Duration::from_secs(20) {
+            want.min(15)
         } else {
             want
         };
@@ -1510,7 +1608,7 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
-        div()
+        let root = div()
             .size_full()
             .relative()
             .flex()
@@ -1602,6 +1700,14 @@ impl Render for Shell {
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.
             .when(self.palette, |d| d.child(self.palette_view(cx)))
+            // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
+            .child(
+                canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
+                    .absolute()
+                    .size_0(),
+            );
+        crate::framestats::rendered();
+        root
     }
 }
 
@@ -1619,6 +1725,9 @@ pub fn open_window(cx: &mut App) {
             traffic_light_position: Some(point(px(16.), px(16.))),
         }),
         app_id: Some("runo".into()),
+        // Solid: the colour wash is drawn by the app, so there's nothing to see
+        // through, and blending what's behind the window costs every frame.
+        window_background: WindowBackgroundAppearance::Opaque,
         ..Default::default()
     };
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
