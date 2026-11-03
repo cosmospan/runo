@@ -50,15 +50,63 @@ type Choice = (String, bool, Box<dyn Fn(&mut Shell)>);
 
 impl Shell {
     pub(super) fn crew(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let mut grid = div().flex().flex_wrap().gap(px(16.));
-        for (i, who) in Member::all().into_iter().enumerate() {
-            let k = self.stagger(i + 1);
-            grid = grid.child(ui::rise(self.crew_card(who, cx), k));
+        let all = Member::all();
+        let n = all.len();
+        let busy = self.store.running().count();
+        let mut list = div()
+            .w_full()
+            .bg(c(ui::PANEL))
+            .border_1()
+            .border_color(c(ui::LINE))
+            .rounded(px(12.))
+            .overflow_hidden()
+            .child(
+                div()
+                    .h(px(34.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(14.))
+                    .border_b_1()
+                    .border_color(c(ui::LINE2))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(ui::FAINT))
+                    .child(div().flex_1().min_w_0().child("Bot"))
+                    .child(div().w(px(120.)).flex_none().child("Status"))
+                    .child(div().w(px(170.)).flex_none().child("Engine"))
+                    .child(
+                        div()
+                            .w(px(50.))
+                            .flex_none()
+                            .flex()
+                            .justify_end()
+                            .child("Jobs"),
+                    )
+                    .child(
+                        div()
+                            .w(px(64.))
+                            .flex_none()
+                            .flex()
+                            .justify_end()
+                            .child("Success"),
+                    )
+                    .child(
+                        div()
+                            .w(px(64.))
+                            .flex_none()
+                            .flex()
+                            .justify_end()
+                            .child("Spend"),
+                    )
+                    .child(div().w(px(250.)).flex_none()),
+            );
+        for who in all {
+            list = list.child(self.crew_row(who, cx));
         }
-        div()
-            .id("crew")
-            .size_full()
-            .overflow_y_scroll()
+        let page = div()
+            .w_full()
+            .max_w(px(1160.))
             .px(px(28.))
             .pt(px(24.))
             .pb(px(40. + super::DOCK_ROOM))
@@ -68,170 +116,226 @@ impl Shell {
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(div().text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child("Crew"))
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .text_color(c(ui::MUTED))
-                            .child("Six bots, each good at one kind of work. Each runs on the engine you pick for it."),
-                    ),
-            )
-            .child(grid)
-            .children(self.bench(cx))
-            .child(ui::rise(div().child(self.maker_card(cx)), self.stagger(8)))
-            .into_any_element()
-    }
-
-    fn crew_card(&mut self, who: Member, cx: &mut Context<Self>) -> Stateful<Div> {
-        let mood = self.mood(who);
-        let face = self.bot(who, mood, 64., Framing::Bust);
-        let (status, color) = self.status_of(who);
-        let jobs: Vec<_> = self.store.jobs.iter().filter(|j| j.bot == who).collect();
-        let done = jobs.iter().filter(|j| j.status == Status::Done).count();
-        let ended = jobs.iter().filter(|j| j.status != Status::Running).count();
-        let spend: f64 = jobs
-            .iter()
-            .filter_map(|j| super::home::cost(&j.summary))
-            .sum::<f64>()
-            + 0.0;
-        let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
-        let mode = who.mode();
-        let stat = |k: &'static str, v: String| {
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(div().text_size(px(11.)).text_color(c(ui::FAINT)).child(k))
-                .child(
-                    div()
-                        .mt(px(2.))
-                        .text_size(px(16.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(v),
-                )
-        };
-        div()
-            .id(("crew-card", who.key() as usize))
-            .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                this.hover_bot(who, *on, cx);
-            }))
-            .flex_grow(1.)
-            .flex_basis(px(300.))
-            .max_w(px(440.))
-            .rounded(px(14.))
-            .border_1()
-            .border_color(c(ui::LINE))
-            .bg(c(ui::PANEL))
-            .overflow_hidden()
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .px(px(18.))
-                    .pt(px(16.))
-                    .pb(px(14.))
-                    .flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .bg(linear_gradient(
-                        180.,
-                        linear_color_stop(ca(who.accent(), 0.12), 0.0),
-                        linear_color_stop(ca(ui::PANEL, 0.0), 1.0),
-                    ))
-                    .child(div().flex_none().child(face))
+                    .items_end()
+                    .gap(px(12.))
                     .child(
                         div()
                             .flex_1()
-                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(16.))
+                                    .text_size(px(22.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child(who.name()),
+                                    .child("Crew"),
                             )
                             .child(
                                 div()
-                                    .mt(px(2.))
-                                    .text_size(px(12.5))
+                                    .text_size(px(13.5))
                                     .text_color(c(ui::MUTED))
-                                    .child(who.role()),
+                                    .child(format!(
+                                        "{n} {} on your crew, {busy} working now. Each one runs on the engine you pick for it, and you can add as many as you like.",
+                                        if n == 1 { "bot" } else { "bots" }
+                                    )),
                             ),
                     )
-                    .when(color != ui::FAINT, |d| {
-                        d.child(div().flex_none().child(ui::status(color, status)))
-                    }),
+                    .child(
+                        ui::solid("crew-make", "Make a bot").on_click(cx.listener(|this, _, _, cx| {
+                            this.maker_open = !this.maker_open;
+                            cx.notify();
+                        })),
+                    ),
             )
+            .when(self.maker_open, |d| {
+                d.child(ui::rise(div().child(self.maker_card(cx)), self.stagger(1)))
+            })
+            .child(list)
+            .children(self.bench(cx));
+        div()
+            .id("crew")
+            .size_full()
+            .overflow_y_scroll()
+            .child(page)
+            .into_any_element()
+    }
+
+    fn crew_row(&mut self, who: Member, cx: &mut Context<Self>) -> Stateful<Div> {
+        let mood = self.mood(who);
+        let face = self.bot(who, mood, 34., Framing::Bust);
+        let (status, color) = self.status_of(who);
+        let jobs: Vec<_> = self.store.jobs.iter().filter(|j| j.bot == who).collect();
+        let done = jobs
+            .iter()
+            .filter(|j| matches!(j.status, Status::Done | Status::Shipped))
+            .count();
+        let ended = jobs
+            .iter()
+            .filter(|j| {
+                !matches!(
+                    j.status,
+                    Status::Running | Status::Review | Status::Shipping
+                )
+            })
+            .count();
+        let spend: f64 = jobs
+            .iter()
+            .filter_map(|j| super::home::cost(&j.summary))
+            .sum::<f64>();
+        let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
+        let mode = who.mode();
+        let pinned = self.store.pinned.contains(&who);
+        let num = |w: f32, v: String| {
+            div()
+                .w(px(w))
+                .flex_none()
+                .flex()
+                .justify_end()
+                .font_family(ui::MONO)
+                .text_size(px(12.))
+                .text_color(c(if v == "\u{2014}" { ui::FAINT } else { ui::INK }))
+                .child(v)
+        };
+        let small = |id: (&'static str, usize), label: &'static str| {
+            div()
+                .id(id)
+                .px(px(8.))
+                .h(px(26.))
+                .flex()
+                .items_center()
+                .rounded(px(6.))
+                .text_size(px(12.))
+                .text_color(c(ui::MUTED))
+                .cursor_pointer()
+                .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                .child(label)
+        };
+        let key = who.key() as usize;
+        div()
+            .id(("crew-row", key))
+            .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                this.hover_bot(who, *on, cx);
+            }))
+            .h(px(58.))
+            .px(px(16.))
+            .flex()
+            .items_center()
+            .gap(px(14.))
+            .border_b_1()
+            .border_color(c(ui::LINE2))
+            .hover(|s| s.bg(c(ui::HOVER)))
             .child(
                 div()
-                    .px(px(18.))
-                    .text_size(px(12.5))
-                    .line_height(px(18.))
-                    .text_color(c(ui::BODY))
-                    .child(who.pitch()),
-            )
-            .child(
-                div()
-                    .mx(px(18.))
-                    .mt(px(14.))
-                    .py(px(12.))
-                    .flex()
-                    .border_t_1()
-                    .border_b_1()
-                    .border_color(c(ui::LINE2))
-                    .child(stat("Jobs", jobs.len().to_string()))
-                    .child(stat(
-                        "Success",
-                        if ended == 0 {
-                            "—".into()
-                        } else {
-                            format!("{}%", done * 100 / ended)
-                        },
-                    ))
-                    .child(stat(
-                        "Spend",
-                        if spend == 0. {
-                            "—".into()
-                        } else {
-                            format!("${spend:.2}")
-                        },
-                    )),
-            )
-            .child(
-                div()
-                    .px(px(18.))
-                    .py(px(12.))
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(12.))
+                    .child(div().flex_none().child(face))
                     .child(
                         div()
-                            .flex_1()
                             .min_w_0()
-                            .truncate()
-                            .text_size(px(11.5))
-                            .text_color(c(ui::FAINT))
-                            .child(engine),
-                    )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::INK))
+                                    .child(who.name())
+                                    .when(pinned, |d| {
+                                        d.child(
+                                            div()
+                                                .text_size(px(10.5))
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(c(ui::FAINT))
+                                                .child("PINNED"),
+                                        )
+                                    }),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::MUTED))
+                                    .truncate()
+                                    .child(who.role()),
+                            ),
+                    ),
+            )
+            .child(div().w(px(120.)).flex_none().child(ui::status(
+                if color == ui::FAINT { ui::MUTED } else { color },
+                status,
+            )))
+            .child(
+                div()
+                    .id(("crew-engine", key))
+                    .w(px(170.))
+                    .flex_none()
+                    .truncate()
+                    .text_size(px(12.))
+                    .text_color(c(ui::BODY))
+                    .cursor_pointer()
+                    .hover(|s| s.text_color(c(ui::INK)))
+                    .child(engine)
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+            )
+            .child(num(
+                50.,
+                if jobs.is_empty() {
+                    "\u{2014}".into()
+                } else {
+                    jobs.len().to_string()
+                },
+            ))
+            .child(num(
+                64.,
+                if ended == 0 {
+                    "\u{2014}".into()
+                } else {
+                    format!("{}%", done * 100 / ended)
+                },
+            ))
+            .child(num(
+                64.,
+                if spend == 0. {
+                    "\u{2014}".into()
+                } else {
+                    format!("${spend:.2}")
+                },
+            ))
+            .child(
+                div()
+                    .w(px(250.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_end()
+                    .gap(px(2.))
                     .child(
-                        div()
-                            .id(("crew-remove", who.key() as usize))
-                            .px(px(6.))
-                            .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
-                            .cursor_pointer()
-                            .hover(|s| s.text_color(c(ui::RED)))
-                            .child("Remove")
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if who.is_made() {
-                                    this.remove_made(who, cx)
+                        small(("crew-pin", key), if pinned { "Unpin" } else { "Pin" }).on_click(
+                            cx.listener(move |this, _, _, cx| {
+                                if let Some(i) = this.store.pinned.iter().position(|m| *m == who) {
+                                    this.store.pinned.remove(i);
                                 } else {
-                                    this.set_on_crew(who, false, cx)
+                                    this.store.pinned.push(who);
                                 }
-                            })),
+                                this.store.save();
+                                cx.notify();
+                            }),
+                        ),
                     )
+                    .child(small(("crew-remove", key), "Remove").on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            if who.is_made() {
+                                this.remove_made(who, cx)
+                            } else {
+                                this.set_on_crew(who, false, cx)
+                            }
+                        },
+                    )))
                     .child(
-                        ui::ghost(("crew-chat", who.key() as usize), "Chat")
+                        ui::ghost(("crew-chat", key), "Chat")
                             .h(px(28.))
                             .text_size(px(12.5))
                             .on_click(
@@ -240,7 +344,7 @@ impl Shell {
                     )
                     .when(mode != Mode::Ask, |d| {
                         d.child(
-                            ui::solid(("crew-job", who.key() as usize), "Give a job")
+                            ui::solid(("crew-job", key), "Give a job")
                                 .h(px(28.))
                                 .text_size(px(12.5))
                                 .on_click(cx.listener(move |this, _, window, cx| {

@@ -414,8 +414,10 @@ pub struct Shell {
     maker_like: Member,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
-    /// Home's table tab: active, needs you or finished.
+    /// Groups folded shut on Jobs, one bit each: needs you, in progress, done.
     home_tab: u8,
+    /// The bot maker is open on Crew.
+    maker_open: bool,
     /// The job Home's inspector shows; the newest active one when unset.
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
@@ -705,6 +707,7 @@ impl Shell {
             target: None,
             setup_step: 0,
             home_tab: 0,
+            maker_open: false,
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),

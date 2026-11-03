@@ -6,7 +6,6 @@ use gpui_kit::component::input::Textarea;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::Framing;
 
 use super::data::{Member, Mode};
 use super::store::{self, Status};
@@ -122,9 +121,21 @@ impl Shell {
                     .gap(px(2.))
                     .child(
                         div()
-                            .text_size(px(24.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(greeting()),
+                            .flex()
+                            .items_baseline()
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .text_size(px(22.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Jobs"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .text_color(c(ui::FAINT))
+                                    .child(greeting()),
+                            ),
                     )
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
@@ -143,7 +154,7 @@ impl Shell {
                         .child(self.jobs_table(cx))
                         .into_any_element()
                 } else {
-                    how_it_works().into_any_element()
+                    self.jobs_table(cx).into_any_element()
                 }),
                 self.stagger(2),
             ));
@@ -198,8 +209,6 @@ impl Shell {
             .collect();
         for (i, m) in shown.iter().copied().enumerate() {
             let on = self.mode == m;
-            let who = Member::doer_for(m).unwrap_or(Member::for_mode(m));
-            let mini = self.avatar(who, 16.);
             modes = modes.child(
                 div()
                     .id(("mode", i))
@@ -209,7 +218,6 @@ impl Shell {
                     .items_center()
                     .justify_center()
                     .gap(px(5.))
-                    .child(div().when(!on, |d| d.opacity(0.75)).child(mini))
                     .rounded(px(9.))
                     .text_size(px(13.))
                     .cursor_pointer()
@@ -230,8 +238,6 @@ impl Shell {
             );
         }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
-        let mood = self.mood(target);
-        let hero = self.bot(target, mood, 76., Framing::Bust);
         let box_ = div()
             .flex_1()
             .min_w_0()
@@ -344,22 +350,6 @@ impl Shell {
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
-            .child(
-                div()
-                    .w(px(92.))
-                    .flex_none()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(hero)
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c(ui::MUTED))
-                            .child(target.name()),
-                    ),
-            )
             .child(box_)
     }
 
@@ -516,65 +506,4 @@ fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
     } else {
         many
     }
-}
-
-/// The first-run card: what happens when you hand the crew a job.
-fn how_it_works() -> impl IntoElement {
-    let step = |n: &'static str, title: &'static str, line: &'static str| {
-        div()
-            .flex_1()
-            .flex_basis(px(0.))
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .gap(px(6.))
-            .child(
-                div()
-                    .size(px(28.))
-                    .rounded_full()
-                    .bg(c(ui::FILL))
-                    .text_color(c(ui::ON_FILL))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::BOLD)
-                    .child(n),
-            )
-            .child(
-                div()
-                    .mt(px(4.))
-                    .text_size(px(15.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(title),
-            )
-            .child(
-                div()
-                    .text_size(px(13.))
-                    .line_height(px(19.))
-                    .text_color(c(ui::MUTED))
-                    .child(line),
-            )
-    };
-    ui::card()
-        .mt(px(40.))
-        .w(px(840.))
-        .p(px(26.))
-        .flex()
-        .gap(px(28.))
-        .child(step(
-            "1",
-            "Pick a folder",
-            "Any project on this computer. The crew only works inside it.",
-        ))
-        .child(step(
-            "2",
-            "Say what you want",
-            "Build, fix, review or test. Each kind goes to the bot that does it best.",
-        ))
-        .child(step(
-            "3",
-            "Watch, then check",
-            "Follow along live. It tells you in plain words what changed and how to try it.",
-        ))
 }

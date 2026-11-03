@@ -162,7 +162,7 @@ impl Shell {
                 );
             }
             if d.is_empty() {
-                col = col.child(div().w_full().h(px(2.)).rounded(px(1.)).bg(c(ui::RAISED)));
+                col = col.child(div().w_full().h(px(2.)).rounded(px(1.)).bg(c(ui::LINE_HI)));
             }
             bars = bars.child(col);
         }

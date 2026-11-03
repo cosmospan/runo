@@ -197,7 +197,8 @@ impl Shell {
         let (shown, more) = self.sidebar_crew();
         for who in shown {
             let mood = self.mood(who);
-            let face = self.bot(who, mood, 30., Framing::Bust);
+            let size = if busy_now(self, who) { 30. } else { 24. };
+            let face = self.bot(who, mood, size, Framing::Bust);
             let busy = self
                 .store
                 .busy(who)
@@ -267,17 +268,20 @@ impl Shell {
                                     .truncate()
                                     .child(who.name()),
                             )
-                            .child(
-                                div()
-                                    .text_size(px(11.5))
-                                    .text_color(c(if asking && busy.is_none() {
-                                        ui::T_AMBER
-                                    } else {
-                                        ui::MUTED
-                                    }))
-                                    .truncate()
-                                    .child(line),
-                            )
+                            // Idle bots take one line, so a big crew stays short.
+                            .when(busy.is_some() || asking, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(if asking && busy.is_none() {
+                                            ui::T_AMBER
+                                        } else {
+                                            ui::MUTED
+                                        }))
+                                        .truncate()
+                                        .child(line),
+                                )
+                            })
                             .map(|d| match bar {
                                 Some((true, f)) => {
                                     d.child(div().mt(px(5.)).child(ui::bar(f, ui::BLUE).h(px(3.))))
@@ -452,7 +456,10 @@ impl Shell {
                     .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
                     .child(Icon::new(IconName::Plus).size(px(15.)))
                     .child("Add a bot")
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.maker_open = true;
+                        this.go(Place::Crew, cx)
+                    })),
             )
             .child(foot)
     }
@@ -597,6 +604,12 @@ fn store_today_cost(store: &super::store::Store) -> f64 {
 
 /// How many bots the sidebar lists before folding the rest into "+N more".
 pub(super) const SIDEBAR_BOTS: usize = 6;
+
+/// Whether a bot is working or waiting on you, so its sidebar row shows a
+/// second line.
+fn busy_now(sh: &Shell, who: Member) -> bool {
+    sh.store.busy(who).is_some() || sh.store.jobs.iter().any(|j| j.bot == who && j.needs_you())
+}
 
 /// The order the sidebar lists bots in: working first, then the ones waiting on
 /// you, then pinned bots, then the rest of the crew as you arranged it.

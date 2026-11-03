@@ -9,9 +9,6 @@ use super::store::{self, Job, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
-/// The table's tabs.
-const TABS: [&str; 3] = ["Active", "Needs you", "Finished"];
-
 /// Status colours: text, fill and edge of a pill.
 const RUN: (u32, u32, u32) = (ui::T_BLUE, 0x131C2F, 0x1C325A);
 const ASK: (u32, u32, u32) = (ui::T_AMBER, 0x2B2010, 0x573B0F);
@@ -124,97 +121,125 @@ impl Shell {
             ))
     }
 
-    /// Jobs as a table: active, waiting on you, or finished.
+    /// Jobs grouped the way you act on them: what needs you, what's in
+    /// progress, and what finished lately.
     pub(super) fn jobs_table(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let tab = (self.home_tab as usize).min(TABS.len() - 1);
-        let active = |j: &Job| j.status == Status::Running || j.needs_you();
-        let counts = [
-            self.store.jobs.iter().filter(|j| active(j)).count(),
-            self.store.jobs.iter().filter(|j| j.needs_you()).count(),
-            self.store
-                .jobs
-                .iter()
-                .filter(|j| j.status == Status::Done && !j.needs_you())
-                .count(),
-        ];
-        let rows: Vec<Job> = self
+        let needs: Vec<Job> = self
             .store
             .jobs
             .iter()
             .rev()
-            .filter(|j| match tab {
-                0 => active(j),
-                1 => j.needs_you(),
-                _ => j.status == Status::Done && !j.needs_you(),
-            })
+            .filter(|j| j.needs_you())
+            .cloned()
+            .collect();
+        let going: Vec<Job> = self
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .filter(|j| !j.needs_you() && matches!(j.status, Status::Running | Status::Shipping))
+            .cloned()
+            .collect();
+        let done: Vec<Job> = self
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .filter(|j| !j.needs_you() && !matches!(j.status, Status::Running | Status::Shipping))
             .take(8)
             .cloned()
             .collect();
-
-        let mut tabs = div()
-            .h(px(46.))
-            .px(px(14.))
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .border_b_1()
-            .border_color(c(ui::LINE));
-        for (i, label) in TABS.into_iter().enumerate() {
-            let on = i == tab;
-            tabs = tabs.child(
-                div()
-                    .id(("home-tab", i))
-                    .h(px(28.))
-                    .px(px(10.))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .rounded(px(6.))
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .cursor_pointer()
-                    .map(|d| {
-                        if on {
-                            d.bg(c(ui::RAISED)).text_color(c(ui::INK))
-                        } else {
-                            d.text_color(c(ui::MUTED))
-                                .hover(|s| s.text_color(c(ui::INK)))
-                        }
-                    })
-                    .child(label)
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(c(ui::FAINT))
-                            .child(counts[i].to_string()),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.home_tab = i as u8;
-                        cx.notify();
-                    })),
-            );
-        }
-        tabs = tabs.child(div().flex_1()).child(
-            div()
-                .id("home-all")
-                .text_size(px(13.))
-                .text_color(c(ui::MUTED))
-                .cursor_pointer()
-                .hover(|s| s.text_color(c(ui::INK)))
-                .child("View all jobs →")
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
-        );
-
-        let table = self.job_table(&rows, false, tab, cx);
-        div()
+        let mut list = div()
             .w_full()
             .bg(c(ui::PANEL))
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
             .overflow_hidden()
-            .child(tabs)
-            .child(table)
+            .child(table_head(false));
+        for (key, label, color, rows, empty) in [
+            (
+                0usize,
+                "Needs you",
+                ui::AMBER,
+                needs,
+                "Nothing is waiting on you.",
+            ),
+            (
+                1,
+                "In progress",
+                ui::BLUE,
+                going,
+                "Nothing is running. Describe a job above to start one.",
+            ),
+            (2, "Done", ui::GREEN, done, ""),
+        ] {
+            if rows.is_empty() && empty.is_empty() {
+                continue;
+            }
+            let shut = self.home_tab & (1 << key) != 0;
+            list = list.child(
+                div()
+                    .id(("home-group", key))
+                    .h(px(34.))
+                    .px(px(14.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .bg(c(ui::RAISED))
+                    .border_b_1()
+                    .border_color(c(ui::LINE2))
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .child(
+                        div()
+                            .w(px(10.))
+                            .text_color(c(ui::FAINT))
+                            .text_size(px(10.))
+                            .child(if shut { "\u{25b8}" } else { "\u{25be}" }),
+                    )
+                    .child(div().size(px(8.)).rounded_full().bg(c(color)))
+                    .child(div().text_color(c(ui::INK)).child(label))
+                    .child(div().text_color(c(ui::FAINT)).child(rows.len().to_string()))
+                    .when(key == 2, |d| {
+                        d.child(div().flex_1()).child(
+                            div()
+                                .id("home-all")
+                                .text_color(c(ui::MUTED))
+                                .hover(|s| s.text_color(c(ui::INK)))
+                                .child("All jobs \u{2192}")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.go(Place::History, cx)
+                                })),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.home_tab ^= 1 << key;
+                        cx.notify();
+                    })),
+            );
+            if shut {
+                continue;
+            }
+            if rows.is_empty() {
+                list = list.child(
+                    div()
+                        .px(px(14.))
+                        .py(px(16.))
+                        .border_b_1()
+                        .border_color(c(ui::LINE2))
+                        .text_size(px(13.))
+                        .text_color(c(ui::FAINT))
+                        .child(empty),
+                );
+            } else {
+                list = list.child(self.job_rows(&rows, false, cx));
+            }
+        }
+        list
     }
 
     /// The jobs table's header and rows. `wide` adds engine, time and cost, for
@@ -226,40 +251,7 @@ impl Shell {
         tab: usize,
         cx: &mut Context<Self>,
     ) -> Div {
-        let head = |label: &'static str, w: Option<f32>, right: bool| {
-            div()
-                .map(|d| match w {
-                    Some(w) => d.w(px(w)).flex_none(),
-                    None => d.flex_1().min_w_0(),
-                })
-                .when(right, |d| d.flex().justify_end())
-                .child(label)
-        };
-        let mut table = div().flex().flex_col().child(
-            div()
-                .h(px(34.))
-                .px(px(14.))
-                .flex()
-                .items_center()
-                .gap(px(14.))
-                .bg(c(ui::RAISED))
-                .border_b_1()
-                .border_color(c(ui::LINE2))
-                .text_size(px(11.5))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(ui::FAINT))
-                .child(head("Job", None, false))
-                .child(head("Bot", Some(120.), false))
-                .child(head("Status", Some(150.), false))
-                .child(head("Progress", Some(120.), false))
-                .when(wide, |d| {
-                    d.child(head("Engine", Some(130.), false))
-                        .child(head("Time", Some(64.), true))
-                        .child(head("Cost", Some(60.), true))
-                })
-                .child(head("Files", Some(52.), true))
-                .child(head("Updated", Some(64.), true)),
-        );
+        let mut table = div().flex().flex_col().child(table_head(wide));
         if rows.is_empty() {
             table = table.child(
                 div()
@@ -274,6 +266,12 @@ impl Shell {
                     }),
             );
         }
+        table.child(self.job_rows(rows, wide, cx))
+    }
+
+    /// One row per job.
+    pub(super) fn job_rows(&mut self, rows: &[Job], wide: bool, cx: &mut Context<Self>) -> Div {
+        let mut table = div().flex().flex_col();
         for j in rows {
             let running = j.status == Status::Running;
             let face = if running {
@@ -300,6 +298,11 @@ impl Shell {
                 a => a.to_string(),
             };
             let id = j.id;
+            let files = if j.changes.is_empty() {
+                j.files.len()
+            } else {
+                j.changes.len()
+            };
             table = table.child(
                 div()
                     .id(("home-row", id as usize))
@@ -418,15 +421,11 @@ impl Shell {
                             .justify_end()
                             .font_family(ui::MONO)
                             .text_size(px(11.5))
-                            .text_color(c(if j.files.is_empty() {
-                                ui::FAINT
-                            } else {
-                                ui::INK
-                            }))
-                            .child(if j.files.is_empty() {
+                            .text_color(c(if files == 0 { ui::FAINT } else { ui::INK }))
+                            .child(if files == 0 {
                                 "—".to_string()
                             } else {
-                                j.files.len().to_string()
+                                files.to_string()
                             }),
                     )
                     .child(
@@ -693,6 +692,41 @@ impl Shell {
 }
 
 /// A job's status as a word and pill colours.
+/// The jobs table's column names.
+fn table_head(wide: bool) -> Div {
+    let head = |label: &'static str, w: Option<f32>, right: bool| {
+        div()
+            .map(|d| match w {
+                Some(w) => d.w(px(w)).flex_none(),
+                None => d.flex_1().min_w_0(),
+            })
+            .when(right, |d| d.flex().justify_end())
+            .child(label)
+    };
+    div()
+        .h(px(34.))
+        .px(px(14.))
+        .flex()
+        .items_center()
+        .gap(px(14.))
+        .border_b_1()
+        .border_color(c(ui::LINE2))
+        .text_size(px(11.5))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(ui::FAINT))
+        .child(head("Job", None, false))
+        .child(head("Bot", Some(120.), false))
+        .child(head("Status", Some(150.), false))
+        .child(head("Progress", Some(120.), false))
+        .when(wide, |d| {
+            d.child(head("Engine", Some(130.), false))
+                .child(head("Time", Some(64.), true))
+                .child(head("Cost", Some(60.), true))
+        })
+        .child(head("Files", Some(52.), true))
+        .child(head("Updated", Some(64.), true))
+}
+
 pub(super) fn status_of(j: &Job) -> (String, (u32, u32, u32)) {
     match j.status {
         Status::Running => ("Running".to_string(), RUN),
