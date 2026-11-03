@@ -467,7 +467,7 @@ impl Shell {
             })
             .cloned()
             .collect();
-        let total = self.store.jobs.len();
+        let total = self.store.listed().len();
         let list = if jobs.is_empty() {
             div()
                 .py(px(20.))

@@ -51,38 +51,6 @@ pub fn matches(query: &str, label: &str, hint: &str) -> bool {
 impl Shell {
     pub(super) fn palette_entries(&self, query: &str) -> Vec<Entry> {
         let mut all = vec![];
-        let places = [
-            (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
-            (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
-            (Place::History, IconName::Clock, "All jobs", "⌘3"),
-            (
-                Place::Chat(self.last_chat()),
-                IconName::MessageCircle,
-                "Chat",
-                "⌘4",
-            ),
-            (Place::Crew, IconName::Users, "Crew", "⌘5"),
-            (Place::Engines, IconName::Cpu, "Settings: Engines", "⌘6"),
-            (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
-        ];
-        for (p, icon, label, key) in places {
-            all.push(Entry {
-                label: format!("Go to {label}"),
-                hint: key.into(),
-                icon: Some(icon),
-                bot: None,
-                act: Act::Go(p),
-            });
-        }
-        for who in Member::all() {
-            all.push(Entry {
-                label: format!("Chat with {}", who.name()),
-                hint: who.role().into(),
-                icon: None,
-                bot: Some(who),
-                act: Act::Go(Place::Chat(who)),
-            });
-        }
         // What you can do to the job in front of you.
         if let Place::Live(id) | Place::Race(id) = self.place {
             if let Some(j) = self.store.job(id) {
@@ -115,6 +83,38 @@ impl Shell {
                     act: Act::Terminal(id),
                 });
             }
+        }
+        let places = [
+            (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
+            (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
+            (Place::History, IconName::Clock, "All jobs", "⌘3"),
+            (
+                Place::Chat(self.last_chat()),
+                IconName::MessageCircle,
+                "Chat",
+                "⌘4",
+            ),
+            (Place::Crew, IconName::Users, "Crew", "⌘5"),
+            (Place::Engines, IconName::Cpu, "Settings: Engines", "⌘6"),
+            (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
+        ];
+        for (p, icon, label, key) in places {
+            all.push(Entry {
+                label: format!("Go to {label}"),
+                hint: key.into(),
+                icon: Some(icon),
+                bot: None,
+                act: Act::Go(p),
+            });
+        }
+        for who in Member::all() {
+            all.push(Entry {
+                label: format!("Chat with {}", who.name()),
+                hint: who.role().into(),
+                icon: None,
+                bot: Some(who),
+                act: Act::Go(Place::Chat(who)),
+            });
         }
         all.push(Entry {
             label: "New job, raced on several engines".into(),

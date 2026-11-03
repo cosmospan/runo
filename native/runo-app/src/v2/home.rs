@@ -27,7 +27,12 @@ impl Shell {
             .filter(|j| store::now().saturating_sub(j.ended.unwrap_or(j.started)) < day)
             .collect();
         let running: Vec<&Job> = self.store.running().collect();
-        let needs: Vec<&Job> = self.store.jobs.iter().filter(|j| j.needs_you()).collect();
+        let needs: Vec<&Job> = self
+            .store
+            .listed()
+            .into_iter()
+            .filter(|j| j.needs_you())
+            .collect();
         let done = today
             .iter()
             .filter(|j| matches!(j.status, Status::Done | Status::Shipped))

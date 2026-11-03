@@ -108,6 +108,9 @@ impl Shell {
         }
         self.term_open = Some(id);
         window.focus(&self.term_focus, cx);
+        // The drawer isn't drawn yet: focus it again once it is.
+        let h = self.term_focus.clone();
+        window.on_next_frame(move |window, cx| window.focus(&h, cx));
         cx.notify();
     }
 

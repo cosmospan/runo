@@ -2321,7 +2321,11 @@ impl Shell {
     }
 
     fn inbox_count(&self) -> usize {
-        self.store.jobs.iter().filter(|j| j.needs_you()).count()
+        self.store
+            .listed()
+            .into_iter()
+            .filter(|j| j.needs_you())
+            .count()
     }
 
     /// The bot whose chat was open last, else Explainer.

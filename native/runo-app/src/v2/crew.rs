@@ -234,7 +234,9 @@ impl Shell {
                     .child(div().flex_none().child(face))
                     .child(
                         div()
+                            .flex_1()
                             .min_w_0()
+                            .overflow_hidden()
                             .child(
                                 div()
                                     .flex()
@@ -263,10 +265,18 @@ impl Shell {
                             ),
                     ),
             )
-            .child(div().w(px(120.)).flex_none().child(ui::status(
-                if color == ui::FAINT { ui::MUTED } else { color },
-                status,
-            )))
+            .child(
+                div()
+                    .w(px(120.))
+                    .flex_none()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .child(if color == ui::FAINT {
+                        ui::status(ui::FAINT, "Idle")
+                    } else {
+                        ui::status(color, status)
+                    }),
+            )
             .child(
                 div()
                     .id(("crew-engine", key))
@@ -342,6 +352,8 @@ impl Shell {
                                 cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx)),
                             ),
                     )
+                    // Keeps the columns lined up for bots that only answer.
+                    .when(mode == Mode::Ask, |d| d.child(div().w(px(84.)).flex_none()))
                     .when(mode != Mode::Ask, |d| {
                         d.child(
                             ui::solid(("crew-job", key), "Give a job")

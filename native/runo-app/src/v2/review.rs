@@ -26,6 +26,20 @@ impl Shell {
     ) -> Stateful<Div> {
         let id = job.id;
         let failing = !job.checking && work::verdict(&job.checks, false).1 == Verdict::Fail;
+        if !job.conflict.is_empty() {
+            return div()
+                .id(key)
+                .px(px(14.))
+                .h(px(32.))
+                .flex()
+                .items_center()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(c(ui::LINE))
+                .text_size(px(13.))
+                .text_color(c(ui::FAINT))
+                .child("Fix the clash first");
+        }
         let b = if failing {
             ui::ghost(key, "Approve anyway").text_color(c(ui::T_RED))
         } else {

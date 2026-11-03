@@ -105,7 +105,10 @@ impl Shell {
         if let Some((d, n)) = progress {
             meta.insert(
                 0,
-                format!("step {} of {n}", (d + usize::from(running)).min(n)),
+                format!(
+                    "step {} of {n}",
+                    (d + usize::from(job.plan.iter().any(|s| s.1 == 1))).min(n)
+                ),
             );
         }
         if !job.summary.is_empty() {
@@ -115,6 +118,7 @@ impl Shell {
         let header = div()
             .flex_none()
             .flex()
+            .flex_wrap()
             .gap(px(14.))
             .px(px(30.))
             .pt(px(if cfg!(target_os = "macos") { 22. } else { 14. }))
@@ -130,7 +134,7 @@ impl Shell {
             .child(
                 div()
                     .flex_1()
-                    .min_w_0()
+                    .min_w(px(420.))
                     .pt(px(14.))
                     .flex()
                     .flex_col()
@@ -734,6 +738,10 @@ impl Shell {
                                     format!("Pull request open. {}", job.pr_line)
                                 },
                                 Status::Discarded => "Its changes were thrown away; your checkout never changed.".to_string(),
+                                Status::Stopped => format!(
+                                    "You stopped it after {}. It can carry on from where it was.",
+                                    store::span(job.seconds())
+                                ),
                                 _ => format!(
                                     "Ran for {}. Its last note says what went wrong; ask a follow-up to carry on.",
                                     store::span(job.seconds())
