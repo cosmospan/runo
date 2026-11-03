@@ -424,6 +424,8 @@ pub struct Shell {
     home_tab: u8,
     /// The bot maker is open on Crew.
     maker_open: bool,
+    /// The agent picked on Engines.
+    engine_sel: Option<usize>,
     /// The job Home's inspector shows; the newest active one when unset.
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
@@ -733,6 +735,7 @@ impl Shell {
             setup_step: 0,
             home_tab: 0,
             maker_open: false,
+            engine_sel: None,
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),

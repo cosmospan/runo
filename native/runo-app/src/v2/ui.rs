@@ -41,6 +41,7 @@ pub const RED: u32 = 0xF2364F;
 pub const MONO: &str = "JetBrains Mono";
 
 /// The spacing scale every screen keeps to, in pixels.
+#[allow(dead_code)]
 pub mod space {
     pub const S: f32 = 8.;
     pub const SM: f32 = 12.;

@@ -42,38 +42,92 @@ impl Shell {
             2 => self.welcome_crew(cx).into_any_element(),
             _ => self.welcome_first(cx).into_any_element(),
         };
-        // Step dots.
-        let mut dots = div().flex().items_center().gap(px(8.));
+        // The steps down the left, each with where it stands.
+        let ready = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            (0..crate::agent::PROVIDERS.len())
+                .filter(|&i| super::engine::ready(st, i))
+                .count()
+        };
+        let notes = [
+            match ready {
+                0 => "None found yet".to_string(),
+                1 => "1 agent ready".to_string(),
+                n => format!("{n} agents ready"),
+            },
+            self.store
+                .folder()
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| "Not picked yet".into()),
+            format!("{} bots", self.setup_crew.len()),
+            "Ask it about the project".to_string(),
+        ];
+        let mut steps = div().flex().flex_col().gap(px(4.));
         for (i, name) in STEPS.into_iter().enumerate() {
             let done = i < step;
             let on = i == step;
-            dots = dots.child(
+            steps = steps.child(
                 div()
                     .id(("setup-dot", i))
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .px(px(10.))
-                    .h(px(28.))
-                    .rounded_full()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
+                    .gap(px(12.))
+                    .px(px(12.))
+                    .py(px(10.))
+                    .rounded(px(10.))
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::FILL)).text_color(c(ui::ON_FILL))
-                        } else if done {
-                            d.bg(ca(ui::GREEN, 0.12)).text_color(c(ui::T_GREEN))
+                            d.bg(c(ui::HOVER))
                         } else {
-                            d.bg(ca(ui::PANEL, 0.7)).text_color(c(ui::MUTED))
+                            d.hover(|s| s.bg(c(ui::HOVER)))
                         }
                     })
-                    .child(if done {
-                        "✓".to_string()
-                    } else {
-                        format!("{}", i + 1)
-                    })
-                    .child(name)
+                    .child(
+                        div()
+                            .size(px(24.))
+                            .flex_none()
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .map(|d| {
+                                if on {
+                                    d.bg(c(ui::FILL)).text_color(c(ui::ON_FILL))
+                                } else if done {
+                                    d.bg(ca(ui::GREEN, 0.16)).text_color(c(ui::T_GREEN))
+                                } else {
+                                    d.border_1()
+                                        .border_color(c(ui::LINE_HI))
+                                        .text_color(c(ui::MUTED))
+                                }
+                            })
+                            .child(if done {
+                                "\u{2713}".to_string()
+                            } else {
+                                format!("{}", i + 1)
+                            }),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(if on || done { ui::INK } else { ui::BODY }))
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::MUTED))
+                                    .truncate()
+                                    .child(notes[i].clone()),
+                            ),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| this.setup_step(i, cx))),
             );
         }
@@ -94,54 +148,93 @@ impl Shell {
                     this.setup_step(step + 1, cx)
                 }))
         });
-        div()
-            .id("welcome")
-            .size_full()
-            .overflow_y_scroll()
+        let mark = self.bot(Member::Builder, Mood::Signature, 56., Framing::Bust);
+        let left = div()
+            .w(px(320.))
+            .flex_none()
+            .h_full()
+            .bg(c(ui::PANEL))
+            .border_r_1()
+            .border_color(c(ui::LINE))
+            .px(px(24.))
+            .pt(px(if cfg!(target_os = "macos") { 48. } else { 28. }))
+            .pb(px(24.))
             .flex()
             .flex_col()
-            .items_center()
-            .px(px(40.))
-            .pt(px(if cfg!(target_os = "macos") { 48. } else { 32. }))
-            .pb(px(40.))
+            .gap(px(22.))
             .child(
                 div()
-                    .w_full()
-                    .max_w(px(860.))
                     .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(dots)
+                    .flex_col()
+                    .gap(px(10.))
+                    .child(mark)
                     .child(
                         div()
-                            .id("setup-skip")
-                            .text_size(px(12.5))
+                            .text_size(px(20.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::INK))
+                            .child("Set up your crew"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .line_height(px(19.))
                             .text_color(c(ui::MUTED))
-                            .cursor_pointer()
-                            .hover(|s| s.text_color(c(ui::INK)))
-                            .child("Skip setup")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.finish_setup(cx);
-                                this.go(Place::Today, cx);
-                            })),
+                            .child("Four short steps. Every one can be changed later, and you can skip them all."),
                     ),
             )
-            .child(ui::rise(
-                div().w_full().max_w(px(860.)).mt(px(28.)).child(body),
-                self.stagger(0),
-            ))
+            .child(steps)
+            .child(div().flex_1())
             .child(
                 div()
-                    .w_full()
-                    .max_w(px(860.))
-                    .mt(px(26.))
+                    .id("setup-skip")
+                    .text_size(px(12.5))
+                    .text_color(c(ui::MUTED))
+                    .cursor_pointer()
+                    .hover(|s| s.text_color(c(ui::INK)))
+                    .child("Skip setup and go to Jobs")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.finish_setup(cx);
+                        this.go(Place::Today, cx);
+                    })),
+            );
+        let right = div()
+            .id("welcome")
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .overflow_y_scroll()
+            .child(
+                div()
+                    .min_h_full()
                     .flex()
+                    .flex_col()
+                    .justify_center()
                     .items_center()
-                    .gap(px(10.))
-                    .children(back)
-                    .child(div().flex_1())
-                    .children(next),
-            )
+                    .px(px(40.))
+                    .py(px(40.))
+                    .child(ui::rise(
+                        div().w_full().max_w(px(760.)).child(body),
+                        self.stagger(0),
+                    ))
+                    .child(
+                        div()
+                            .w_full()
+                            .max_w(px(760.))
+                            .mt(px(22.))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .children(back)
+                            .child(div().flex_1())
+                            .children(next),
+                    ),
+            );
+        div()
+            .size_full()
+            .flex()
+            .child(left)
+            .child(right)
             .into_any_element()
     }
 

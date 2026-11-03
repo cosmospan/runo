@@ -3,7 +3,6 @@
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::Mood;
 
 use crate::agent;
 use crate::agent_pick::AgentPick;
@@ -81,229 +80,12 @@ impl Shell {
             .collect();
         let default_i = engine::index_of(&st, "");
 
-        // Every agent Runo knows, and which are on this computer.
-        let mut tiles = div()
-            .mt(px(space::M))
-            .grid()
-            .grid_cols(4)
-            .gap(px(space::SM));
-        for (i, p) in agent::PROVIDERS.iter().enumerate() {
-            let ok = ready.contains(&i);
-            let on = i == default_i;
-            let id = p.id;
-            tiles = tiles.child(
-                div()
-                    .id(("agent-tile", i))
-                    .h(px(64.))
-                    .px(px(14.))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .rounded(px(14.))
-                    .bg(c(ui::PANEL))
-                    .border_1()
-                    .map(|d| {
-                        if on {
-                            d.border_2().border_color(c(ui::INK))
-                        } else {
-                            d.border_color(c(ui::LINE))
-                        }
-                    })
-                    .when(!ok, |d| d.opacity(0.55))
-                    .cursor_pointer()
-                    .hover(|s| s.border_color(c(ui::LINE_HI)))
-                    .child(
-                        div()
-                            .size(px(32.))
-                            .flex_none()
-                            .rounded(px(10.))
-                            .bg(ca(p.color, 0.14))
-                            .text_color(c(p.color))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(15.))
-                            .font_weight(FontWeight::BOLD)
-                            .child(p.mark),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_size(px(14.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .truncate()
-                                    .child(p.name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.5))
-                                    .text_color(c(ui::MUTED))
-                                    .child(vendor(p.id)),
-                            ),
-                    )
-                    .child(if on {
-                        div()
-                            .px(px(8.))
-                            .py(px(2.))
-                            .rounded_full()
-                            .bg(c(ui::FILL))
-                            .text_color(c(ui::ON_FILL))
-                            .text_size(px(10.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Default")
-                    } else if ok {
-                        ui::status(ui::GREEN, "Ready")
-                    } else {
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c(ui::FAINT))
-                            .child("Not installed")
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if ok {
-                            save(cx, |st| st.default_provider = id.to_string());
-                            this.say(format!(
-                                "New jobs now run on {} unless a bot has its own engine.",
-                                agent::provider(id).name
-                            ));
-                        } else {
-                            this.say(format!(
-                                "{} isn't installed. Install its CLI, then it shows as Ready.",
-                                agent::provider(id).name
-                            ));
-                        }
-                        cx.notify();
-                    })),
-            );
-        }
-
-        // Each bot's engine and model.
-        let mut rows = div().mt(px(space::M)).flex().flex_col();
-        for (n, who) in Member::all().into_iter().enumerate() {
-            let own = st
-                .bot_engines
-                .get(&engine::bot_key(who))
-                .cloned()
-                .unwrap_or_default();
-            let (i, model) = engine::engine(&st, who);
-            let face = self.bot(who, Mood::Idle, 40., runo_holo::Framing::Bust);
-            let mut agents = div().flex().flex_wrap().gap(px(6.));
-            agents = agents.child(
-                choice(
-                    ("bot-def", n),
-                    format!("Default · {}", agent::PROVIDERS[default_i].name),
-                    own.agent.is_empty(),
-                    true,
-                )
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    save(cx, |st| engine::set(st, who, BotEngine::default()));
-                    cx.notify();
-                })),
-            );
-            for &j in &ready {
-                let p = &agent::PROVIDERS[j];
-                let id = p.id;
-                agents = agents.child(
-                    choice(("bot-agent", n * 100 + j), p.name, own.agent == id, true).on_click(
-                        cx.listener(move |_, _, _, cx| {
-                            save(cx, |st| {
-                                engine::set(
-                                    st,
-                                    who,
-                                    BotEngine {
-                                        agent: id.to_string(),
-                                        model: String::new(),
-                                    },
-                                )
-                            });
-                            cx.notify();
-                        }),
-                    ),
-                );
-            }
-            let mut models = div().flex().flex_wrap().gap(px(6.));
-            for (k, m) in AgentPick::models(i).into_iter().take(7).enumerate() {
-                let value = m.value.clone();
-                let agent_id = agent::PROVIDERS[i].id.to_string();
-                models = models.child(
-                    choice(
-                        ("bot-model", n * 100 + k),
-                        m.label.clone(),
-                        model == m.value,
-                        true,
-                    )
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        let (agent_id, value) = (agent_id.clone(), value.clone());
-                        save(cx, |st| {
-                            engine::set(
-                                st,
-                                who,
-                                BotEngine {
-                                    agent: agent_id,
-                                    model: value,
-                                },
-                            )
-                        });
-                        cx.notify();
-                    })),
-                );
-            }
-            rows = rows.child(
-                div()
-                    .flex()
-                    .gap(px(space::M))
-                    .py(px(space::M))
-                    .when(n > 0, |d| d.border_t_1().border_color(c(ui::LINE)))
-                    .child(
-                        div()
-                            .w(px(200.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .child(face)
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .child(
-                                        div()
-                                            .text_size(px(14.))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(who.name()),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(12.))
-                                            .text_color(c(ui::MUTED))
-                                            .child(who.role()),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(8.))
-                            .child(agents)
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(ui::caption("MODEL"))
-                                    .child(models),
-                            ),
-                    ),
-            );
-        }
+        let sel = self
+            .engine_sel
+            .filter(|i| *i < agent::PROVIDERS.len())
+            .unwrap_or(default_i);
+        let list = self.engine_list(&st, &ready, default_i, sel, cx);
+        let detail = self.engine_detail(&st, &ready, default_i, sel, cx);
 
         // Runo's own thinking: shaping jobs, and a second opinion.
         let brain_i = crate::assistant::assistant_provider(&st);
@@ -412,40 +194,421 @@ impl Shell {
             .id("engines")
             .size_full()
             .overflow_y_scroll()
-            .px(px(28.))
-            .pt(px(24.))
-            .pb(px(space::XL + super::DOCK_ROOM))
-            .flex()
-            .flex_col()
-            .gap(px(space::L))
             .child(
                 div()
-                    .child(div().text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child("Engines"))
+                    .w_full()
+                    .max_w(px(1160.))
+                    .px(px(28.))
+                    .pt(px(24.))
+                    .pb(px(space::XL + super::DOCK_ROOM))
+                    .flex()
+                    .flex_col()
+                    .gap(px(space::L))
                     .child(
                         div()
-                            .mt(px(6.))
-                            .text_size(px(14.))
-                            .text_color(c(ui::MUTED))
-                            .child("Every bot works through a coding agent you already use. Give each its own, or let them all follow the default."),
-                    ),
-            )
-            .child(
-                ui::card()
-                    .p(px(space::L))
-                    .child(section("Agents on this computer", "Tap one that's ready to make it the default."))
+                            .child(div().text_size(px(22.)).font_weight(FontWeight::SEMIBOLD).child("Engines"))
+                            .child(
+                                div()
+                                    .mt(px(6.))
+                                    .text_size(px(13.5))
+                                    .text_color(c(ui::MUTED))
+                                    .child("Every bot works through a coding agent you already use. Pick one to see which bots run on it."),
+                            ),
+                    )
                     .when(none_ready, |d| {
                         d.child(
                             div()
-                                .mt(px(space::S))
                                 .text_size(px(13.))
-                                .text_color(c(ui::AMBER))
-                                .child("None of the agents' CLIs were found. Install one (for example Claude Code or Codex) and reopen Runo."),
+                                .text_color(c(ui::T_AMBER))
+                                .child("None of the agents' command-line tools were found. Install one (for example Claude Code or Codex) and it shows up here."),
                         )
                     })
-                    .child(tiles),
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(space::M))
+                            .items_start()
+                            .child(list)
+                            .child(detail),
+                    )
+                    .child(brain),
             )
-            .child(ui::card().p(px(space::L)).child(section("Each bot", "Which agent and model a bot works with. Changes apply to its next job.")).child(rows))
-            .child(brain)
             .into_any_element()
+    }
+
+    /// Every agent Runo knows: the ones on this computer first.
+    fn engine_list(
+        &mut self,
+        st: &AppSettings,
+        ready: &[usize],
+        default_i: usize,
+        sel: usize,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let mut list = ui::card()
+            .w(px(300.))
+            .flex_none()
+            .overflow_hidden()
+            .flex()
+            .flex_col();
+        let missing: Vec<usize> = (0..agent::PROVIDERS.len())
+            .filter(|i| !ready.contains(i))
+            .collect();
+        for (title, group) in [
+            ("On this computer", ready.to_vec()),
+            ("Not installed", missing),
+        ] {
+            if group.is_empty() {
+                continue;
+            }
+            list = list.child(
+                div()
+                    .h(px(32.))
+                    .px(px(14.))
+                    .flex()
+                    .items_center()
+                    .bg(c(ui::RAISED))
+                    .border_b_1()
+                    .border_color(c(ui::LINE2))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(ui::MUTED))
+                    .child(title),
+            );
+            for i in group {
+                let p = &agent::PROVIDERS[i];
+                let ok = ready.contains(&i);
+                let bots = Member::all()
+                    .into_iter()
+                    .filter(|m| engine::engine(st, *m).0 == i)
+                    .count();
+                list = list.child(
+                    div()
+                        .id(("engine-row", i))
+                        .h(px(48.))
+                        .px(px(14.))
+                        .flex()
+                        .items_center()
+                        .gap(px(10.))
+                        .border_b_1()
+                        .border_color(c(ui::LINE2))
+                        .cursor_pointer()
+                        .map(|d| {
+                            if i == sel {
+                                d.bg(c(ui::HOVER))
+                            } else {
+                                d.hover(|s| s.bg(c(ui::HOVER)))
+                            }
+                        })
+                        .child(
+                            div()
+                                .size(px(26.))
+                                .flex_none()
+                                .rounded(px(8.))
+                                .bg(ca(p.color, if ok { 0.18 } else { 0.08 }))
+                                .text_color(c(if ok { p.color } else { ui::MUTED }))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(12.5))
+                                .font_weight(FontWeight::BOLD)
+                                .child(p.mark),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(c(if ok { ui::INK } else { ui::BODY }))
+                                        .truncate()
+                                        .child(p.name),
+                                )
+                                .child(div().text_size(px(11.5)).text_color(c(ui::MUTED)).child(
+                                    if ok && bots > 0 {
+                                        format!(
+                                            "{} \u{b7} {bots} {}",
+                                            vendor(p.id),
+                                            if bots == 1 { "bot" } else { "bots" }
+                                        )
+                                    } else {
+                                        vendor(p.id).to_string()
+                                    },
+                                )),
+                        )
+                        .child(if i == default_i && ok {
+                            div()
+                                .px(px(7.))
+                                .py(px(1.))
+                                .rounded_full()
+                                .border_1()
+                                .border_color(c(ui::LINE_HI))
+                                .text_size(px(10.5))
+                                .text_color(c(ui::INK))
+                                .child("Default")
+                        } else if ok {
+                            div().size(px(7.)).rounded_full().bg(c(ui::GREEN))
+                        } else {
+                            div()
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.engine_sel = Some(i);
+                            cx.notify();
+                        })),
+                );
+            }
+        }
+        list
+    }
+
+    /// One agent: whether it's here, how to get it, and the bots on it.
+    fn engine_detail(
+        &mut self,
+        st: &AppSettings,
+        ready: &[usize],
+        default_i: usize,
+        sel: usize,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let p = &agent::PROVIDERS[sel];
+        let ok = ready.contains(&sel);
+        let id = p.id;
+        let spent: f64 = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.agent == id && super::store::now().saturating_sub(j.started) < 86_400)
+            .filter_map(|j| super::home::cost(&j.summary))
+            .sum();
+        let jobs = self.store.jobs.iter().filter(|j| j.agent == id).count();
+        let mut head = div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .child(
+                div()
+                    .size(px(40.))
+                    .flex_none()
+                    .rounded(px(12.))
+                    .bg(ca(p.color, 0.18))
+                    .text_color(c(p.color))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(18.))
+                    .font_weight(FontWeight::BOLD)
+                    .child(p.mark),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(
+                        div()
+                            .text_size(px(17.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(p.name),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::MUTED))
+                            .child(format!(
+                                "{} \u{b7} {} \u{b7} {jobs} jobs \u{b7} ${spent:.2} today",
+                                vendor(id),
+                                if ok { "ready" } else { "not installed" }
+                            )),
+                    ),
+            );
+        if ok && sel != default_i {
+            head = head.child(
+                ui::solid("engine-default", "Make default").on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        save(cx, |st| st.default_provider = id.to_string());
+                        this.say(format!(
+                            "New jobs now run on {} unless a bot has its own engine.",
+                            agent::provider(id).name
+                        ));
+                        cx.notify();
+                    },
+                )),
+            );
+        } else if ok {
+            head = head.child(ui::status(ui::GREEN, "Default for new jobs"));
+        }
+        let mut body = ui::card()
+            .flex_1()
+            .min_w_0()
+            .p(px(space::L))
+            .flex()
+            .flex_col()
+            .gap(px(space::M))
+            .child(head);
+        if !ok {
+            let install = crate::registry::spec(id).and_then(|s| {
+                s.install
+                    .npm
+                    .as_ref()
+                    .map(|n| format!("npm install -g {n}"))
+                    .or_else(|| {
+                        if cfg!(windows) {
+                            s.install.windows.clone()
+                        } else {
+                            s.install.unix.clone()
+                        }
+                    })
+            });
+            body = body.child(
+                div()
+                    .text_size(px(13.))
+                    .text_color(c(ui::BODY))
+                    .child(format!("{} isn't on this computer. Install its command-line tool, sign in once, and it shows as ready here.", p.name)),
+            );
+            if let Some(cmd) = install {
+                let copy = cmd.clone();
+                body = body.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .px(px(12.))
+                                .py(px(8.))
+                                .rounded(px(8.))
+                                .bg(c(ui::BG))
+                                .border_1()
+                                .border_color(c(ui::LINE))
+                                .font_family(ui::MONO)
+                                .text_size(px(12.))
+                                .truncate()
+                                .child(cmd),
+                        )
+                        .child(ui::ghost("engine-copy", "Copy").on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
+                                this.say("Copied. Paste it in a terminal.");
+                                cx.notify();
+                            },
+                        ))),
+                );
+            }
+            return body;
+        }
+        // The bots on this engine, each with its model; and the rest, one click
+        // from moving over.
+        let models = AgentPick::models(sel);
+        let mut on = div().flex().flex_col();
+        let mut off = div().flex().flex_wrap().gap(px(6.));
+        let mut any_off = false;
+        for (n, who) in Member::all().into_iter().enumerate() {
+            let own = st
+                .bot_engines
+                .get(&engine::bot_key(who))
+                .cloned()
+                .unwrap_or_default();
+            let (i, model) = engine::engine(st, who);
+            if i != sel {
+                any_off = true;
+                off = off.child(
+                    choice(("engine-move", n), format!("+ {}", who.name()), false, true).on_click(
+                        cx.listener(move |_, _, _, cx| {
+                            save(cx, |st| {
+                                engine::set(
+                                    st,
+                                    who,
+                                    BotEngine {
+                                        agent: id.to_string(),
+                                        model: String::new(),
+                                    },
+                                )
+                            });
+                            cx.notify();
+                        }),
+                    ),
+                );
+                continue;
+            }
+            let face = self.avatar(who, 26.);
+            let mut picks = div().flex().flex_wrap().gap(px(6.));
+            for (k, m) in models.iter().take(6).enumerate() {
+                let value = m.value.clone();
+                picks = picks.child(
+                    choice(
+                        ("engine-model", n * 100 + k),
+                        m.label.clone(),
+                        model == m.value,
+                        true,
+                    )
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        let value = value.clone();
+                        save(cx, |st| {
+                            engine::set(
+                                st,
+                                who,
+                                BotEngine {
+                                    agent: id.to_string(),
+                                    model: value,
+                                },
+                            )
+                        });
+                        cx.notify();
+                    })),
+                );
+            }
+            on = on.child(
+                div()
+                    .py(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .border_t_1()
+                    .border_color(c(ui::LINE2))
+                    .child(face)
+                    .child(
+                        div()
+                            .w(px(130.))
+                            .flex_none()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(who.name()),
+                            )
+                            .child(div().text_size(px(11.5)).text_color(c(ui::FAINT)).child(
+                                if own.agent.is_empty() {
+                                    "follows the default"
+                                } else {
+                                    "its own pick"
+                                },
+                            )),
+                    )
+                    .child(div().flex_1().min_w_0().child(picks))
+                    .when(!own.agent.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .id(("engine-reset", n))
+                                .text_size(px(12.))
+                                .text_color(c(ui::MUTED))
+                                .cursor_pointer()
+                                .hover(|s| s.text_color(c(ui::INK)))
+                                .child("Use default")
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    save(cx, |st| engine::set(st, who, BotEngine::default()));
+                                    cx.notify();
+                                })),
+                        )
+                    }),
+            );
+        }
+        body = body.child(ui::caption("BOTS ON THIS ENGINE")).child(on);
+        if any_off {
+            body = body.child(ui::caption("MOVE A BOT HERE")).child(off);
+        }
+        body
     }
 }
