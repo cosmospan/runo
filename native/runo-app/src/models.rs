@@ -61,6 +61,63 @@ pub(crate) fn claude_ids_in(text: &[u8]) -> Vec<String> {
     found
 }
 
+/// The model ids in a file, read 4 MB at a time so a 300 MB binary never sits
+/// in memory whole. Each chunk is cut after its last byte that can't be part of
+/// an id, so an id split across two reads is still found whole.
+pub(crate) fn claude_ids_in_file(path: &Path) -> std::io::Result<Vec<String>> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = vec![0u8; 4 << 20];
+    let mut keep = 0usize;
+    let mut found: Vec<String> = Vec::new();
+    loop {
+        let n = f.read(&mut buf[keep..])?;
+        let end = keep + n;
+        let last = n == 0;
+        let cut = if last {
+            end
+        } else {
+            buf[..end]
+                .iter()
+                .rposition(|b| !(b.is_ascii_alphanumeric() || *b == b'-'))
+                .map(|i| i + 1)
+                .unwrap_or(end)
+        };
+        for id in claude_ids_in(&buf[..cut]) {
+            if !found.contains(&id) {
+                found.push(id);
+            }
+        }
+        if last {
+            return Ok(found);
+        }
+        // Carry the unfinished word over; a run of id bytes this long isn't an id.
+        let rest = end - cut;
+        keep = if rest <= 256 {
+            buf.copy_within(cut..end, 0);
+            rest
+        } else {
+            0
+        };
+    }
+}
+
+/// The last `max` bytes of a file, from the start of a line.
+fn read_tail(path: &Path, max: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path)?;
+    let len = f.metadata()?.len();
+    let from = len.saturating_sub(max);
+    f.seek(SeekFrom::Start(from))?;
+    let mut out = Vec::with_capacity((len - from) as usize);
+    f.read_to_end(&mut out)?;
+    if from > 0 {
+        let start = out.iter().position(|b| *b == b'\n').map_or(out.len(), |i| i + 1);
+        out.drain(..start);
+    }
+    Ok(out)
+}
+
 /// What Claude Code's `/model` command prints: the default model's name and the aliases.
 pub(crate) fn parse_model_command(text: &str) -> (String, Vec<String>) {
     let default = text
@@ -210,7 +267,9 @@ pub(crate) fn claude_used_ids(home: &Path) -> Vec<String> {
     files.sort_by_key(|f| std::cmp::Reverse(f.0));
     let mut ids = Vec::new();
     for (_, path) in files.into_iter().take(40) {
-        if let Ok(bytes) = std::fs::read(&path) {
+        // The end of each session is enough to see its model, and keeps a long
+        // history from being read whole at every launch.
+        if let Ok(bytes) = read_tail(&path, 256 << 10) {
             for line in bytes.split(|b| *b == b'\n') {
                 // Only the model that answered, not ids mentioned in text.
                 if let Some(at) = find(line, b"\"model\":\"claude-") {
@@ -354,6 +413,24 @@ pub(crate) fn help_model_choices(help: &str) -> Vec<ModelInfo> {
 mod tests {
     use super::*;
     use std::prelude::v1::test;
+
+    #[test]
+    fn ids_split_across_reads_are_found_whole() {
+        let dir = std::env::temp_dir().join(format!("runo-ids-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bin");
+        // An id that straddles the 4 MB read boundary, and one well inside.
+        let id = b"claude-opus-15-25";
+        let mut bytes = vec![0u8; (4 << 20) - 14];
+        bytes.extend_from_slice(id);
+        bytes.extend_from_slice(&[0u8; 100]);
+        bytes.extend_from_slice(b" claude-sonnet-4-5 ");
+        std::fs::write(&path, &bytes).unwrap();
+        let found = claude_ids_in_file(&path).unwrap();
+        assert_eq!(found, claude_ids_in(&bytes));
+        assert!(found.iter().any(|f| f == "claude-opus-15-25"), "{found:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn claude_menu_shows_versions() {

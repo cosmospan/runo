@@ -353,8 +353,7 @@ fn claude(bin: &str) -> Caps {
     let known = crate::updater::resolve(bin)
         .and_then(|p| std::fs::canonicalize(p).ok())
         .filter(|p| p.metadata().is_ok_and(|m| m.len() < 600 << 20))
-        .and_then(|p| std::fs::read(p).ok())
-        .map(|bytes| crate::models::claude_ids_in(&bytes))
+        .map(|p| known_ids(&p))
         .unwrap_or_default();
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -368,6 +367,35 @@ fn claude(bin: &str) -> Caps {
     }
     caps.default_model = default;
     caps
+}
+
+/// The model ids inside a Claude Code binary. Scanning it means reading a few
+/// hundred MB, so the answer is kept next to Runo's data, keyed by the binary's
+/// path, size and time, and the scan only runs again after Claude Code updates.
+fn known_ids(bin: &std::path::Path) -> Vec<String> {
+    let key = bin
+        .metadata()
+        .map(|m| {
+            let at = m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            format!("{}\t{}\t{}", bin.display(), m.len(), at)
+        })
+        .unwrap_or_default();
+    let cache = crate::store::data_dir().join("claude-model-ids.txt");
+    if let Ok(text) = std::fs::read_to_string(&cache) {
+        let mut lines = text.lines();
+        if lines.next() == Some(key.as_str()) {
+            return lines.map(str::to_string).collect();
+        }
+    }
+    let ids = crate::models::claude_ids_in_file(bin).unwrap_or_default();
+    if !ids.is_empty() {
+        let _ = std::fs::write(&cache, format!("{key}\n{}", ids.join("\n")));
+    }
+    ids
 }
 
 /// Run a CLI for a short answer, outside any agent session, giving up after `limit`.
