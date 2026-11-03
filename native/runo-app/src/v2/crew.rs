@@ -94,7 +94,8 @@ impl Shell {
         let spend: f64 = jobs
             .iter()
             .filter_map(|j| super::home::cost(&j.summary))
-            .sum();
+            .sum::<f64>()
+            + 0.0;
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
         let mode = who.mode();
         let stat = |k: &'static str, v: String| {

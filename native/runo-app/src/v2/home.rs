@@ -32,7 +32,7 @@ impl Shell {
         let running: Vec<&Job> = self.store.running().collect();
         let needs: Vec<&Job> = self.store.jobs.iter().filter(|j| j.needs_you()).collect();
         let done = today.iter().filter(|j| j.status == Status::Done).count();
-        let spend: f64 = today.iter().filter_map(|j| cost(&j.summary)).sum();
+        let spend: f64 = today.iter().filter_map(|j| cost(&j.summary)).sum::<f64>() + 0.0;
         let who = running
             .first()
             .map(|j| j.bot.name().to_string())

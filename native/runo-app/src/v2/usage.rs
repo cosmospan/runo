@@ -30,7 +30,7 @@ impl Shell {
             .filter(|j| now.saturating_sub(j.started) < DAYS as u64 * 86_400)
             .cloned()
             .collect();
-        let spend: f64 = recent.iter().filter_map(|j| cost(&j.summary)).sum();
+        let spend: f64 = recent.iter().filter_map(|j| cost(&j.summary)).sum::<f64>() + 0.0;
         let ended = recent
             .iter()
             .filter(|j| j.status != Status::Running)
