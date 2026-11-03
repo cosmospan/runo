@@ -4,6 +4,20 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.1] - 2026-11-03
+
+The first early build of Runo v2, published as a prerelease. The in-app updater on the 0.5 line never offers it.
+
+### Added
+
+- Runo v2's new window opens by default, with Today, Inbox, History, Crew, chats with each bot and live job views. Set `RUNO_V1=1` to open the classic window, which is also one click away on the rail.
+- Quanta, the new crew: each bot is a lit 3D crystal with its own shape and a crystal prop. Builder is a cube with a hard hat, Checker a shard with a lens, Guard a gem with a shield, Fixer a pyramid with a wrench, Explainer an orb with a book and Keeper a diamond with a broom. Each has faces and motion for idle, thinking, working, done, needs you and asleep.
+
+### Changed
+
+- Bots animate at 60 frames a second, timed to the display's refresh. Frames are drawn on two or three background threads, and a window frame spends at most 5 ms on newly shown bots, so startup no longer stutters.
+- Tags with a hyphen (like `v2.0.0-alpha.1`) are published as prereleases.
+
 ## [0.5.13] - 2026-10-27
 
 ### Added
