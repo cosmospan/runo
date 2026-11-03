@@ -127,6 +127,10 @@ pub struct Pose {
     /// The light sweep across the bubble: for hover and for moments worth
     /// marking (a job done), not all the time.
     pub shine: bool,
+    /// The crystal Quanta takes, from the bot's signature eyes.
+    pub form: crate::quanta::Form,
+    /// The crystallised prop Quanta carries.
+    pub kit: crate::quanta::Kit,
 }
 
 impl Bubble {
@@ -200,7 +204,10 @@ impl Bubble {
             Eyes::Smile => Mouth::Open,
             _ => Mouth::Grin,
         };
+        let (form, kit) = crate::quanta::home(self.eyes);
         let base = Pose {
+            form,
+            kit,
             tint: self.tint,
             layout: self.layout,
             eyes: self.eyes,
@@ -291,7 +298,7 @@ fn kfe(t: f64, dur: f64, delay: f64, ks: &[(f64, f64)], e: Ease) -> f64 {
 }
 
 /// The sway and breath of the whole bot, as a transform in view-box units.
-fn body_xf(sway: Sway, t: f64) -> Affine {
+pub(crate) fn body_xf(sway: Sway, t: f64) -> Affine {
     let c = (100.0, 110.0);
     let around = |a: Affine| Affine::translate(c) * a * Affine::translate((-c.0, -c.1));
     let m = match sway {

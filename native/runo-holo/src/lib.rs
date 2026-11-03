@@ -16,9 +16,11 @@ pub mod anim;
 pub mod bubble;
 pub mod draw;
 pub mod look;
+pub mod quanta;
 
 pub use bubble::{Bubble, BubbleRenderer, Eyes, Layout, Pose, Sway, Tint};
 pub use draw::Detail;
+pub use quanta::{Form, Kit, QuantaRenderer};
 pub use look::{custom, Bot, Eye, Look, Mood, Motion, Mouth, Palette, Props, Rgb, Shape};
 
 use vello_cpu::kurbo::Affine;
