@@ -381,14 +381,6 @@ impl Mode {
     }
 }
 
-/// Starter jobs on an empty Today, one per kind of work.
-pub const STARTERS: [(Mode, &str); 4] = [
-    (Mode::Ask, "What does this project do, in plain words?"),
-    (Mode::Review, "Review my uncommitted changes"),
-    (Mode::Test, "Run the test suite and report what fails"),
-    (Mode::Tidy, "Find the most useful small cleanup and do it"),
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;

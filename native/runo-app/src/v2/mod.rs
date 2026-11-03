@@ -361,7 +361,7 @@ fn backdrop() -> Arc<RenderImage> {
 }
 
 /// Width of one of Today's mode tabs plus the gap after it.
-const MODE_STEP: f32 = 66.;
+const MODE_STEP: f32 = 78.;
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
@@ -1332,12 +1332,14 @@ impl Shell {
                     .flex_none()
                     .size(px(40.))
                     .rounded(px(12.))
-                    .bg(c(ui::INK))
+                    .bg(ca(0xFFFFFF, 0.7))
+                    .border_1()
+                    .border_color(c(ui::LINE))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0x2C2A38)))
+                    .hover(|s| s.bg(c(0xFFFFFF)))
                     .tooltip(|window, cx| {
                         gpui_kit::component::tooltip::Tooltip::new("Find anything (⌘K)")
                             .build(window, cx)
@@ -1345,7 +1347,7 @@ impl Shell {
                     .child(
                         Icon::new(IconName::Search)
                             .size(px(17.))
-                            .text_color(c(0xFFFFFF)),
+                            .text_color(c(ui::INK)),
                     )
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )

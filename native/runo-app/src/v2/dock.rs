@@ -85,6 +85,7 @@ impl Shell {
                 (p.is_some(), self.glide_bar(id, to))
             });
             let asking = dot == ui::AMBER;
+            let next_up = place == Place::Today && who == self.doer();
             let k = runo_holo::anim::spring(self.hover_at.elapsed().as_secs_f64(), 0.2) as f32;
             bar = bar.child(
                 div()
@@ -194,6 +195,13 @@ impl Shell {
                                 None if here => {
                                     d.child(div().size(px(5.)).rounded_full().bg(c(ui::INK)))
                                 }
+                                None if next_up => d.child(
+                                    div()
+                                        .w(px(14.))
+                                        .h(px(4.))
+                                        .rounded_full()
+                                        .bg(c(who.accent())),
+                                ),
                                 None => d,
                             }),
                     )

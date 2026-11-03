@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
 
-use super::data::{self, Member, Mode};
+use super::data::{Member, Mode};
 use super::store::{self, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
@@ -53,13 +53,8 @@ fn full_name() -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// "MONDAY · 3 NOVEMBER".
-fn today_label() -> String {
-    chrono::Local::now()
-        .format("%A · %-d %B")
-        .to_string()
-        .to_uppercase()
-}
+/// A mode tab's width: the bot's face and the word.
+const TAB: f32 = 76.;
 
 fn greeting() -> String {
     use chrono::Timelike;
@@ -89,59 +84,48 @@ impl Shell {
                         .is_some_and(|e| store::now().saturating_sub(e) < 86_400)
             })
             .count();
-        let sub = match (&folder, running, today_done) {
-            (None, ..) => "Pick a folder and hand the crew its first job.".to_string(),
-            (Some(f), 0, 0) => format!("The crew is ready. What should we do in {f}?"),
-            (Some(f), 0, d) => format!(
-                "{d} {} finished today in {f}. Nothing is running.",
-                plural(d, "job", "jobs")
+        // The line under the greeting carries the folder picker in its words.
+        let lead = match (&folder, running, today_done) {
+            (None, ..) => "Pick a folder to start:".to_string(),
+            (Some(_), 0, 0) => "What should we do in".to_string(),
+            (Some(_), 0, d) => format!("{d} {} done today. What next in", plural(d, "job", "jobs")),
+            (Some(_), r, _) => format!(
+                "{r} {} running. What else in",
+                plural(r, "job is", "jobs are")
             ),
-            (Some(f), r, _) => format!("{r} {} running in {f}.", plural(r, "job is", "jobs are")),
         };
+        let sub = div()
+            .mt(px(10.))
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .text_size(px(17.))
+            .text_color(c(ui::MUTED))
+            .child(lead)
+            .child(self.folder_picker(cx));
         let has_jobs = !self.store.jobs.is_empty();
 
-        div()
-            .id("today")
-            .size_full()
-            .overflow_y_scroll()
+        // The group sits in the middle of the space above the dock, and
+        // scrolls when the window is too short for it.
+        let page = div()
+            .w_full()
+            .min_h_full()
             .flex()
             .flex_col()
             .items_center()
+            .justify_center()
             .px(px(40.))
-            .pt(px(if cfg!(target_os = "macos") { 92. } else { 76. }))
-            .pb(px(40. + super::DOCK_ROOM))
-            // The crew lives in the dock below; Today opens on the day and the box.
+            .pt(px(if cfg!(target_os = "macos") { 64. } else { 40. }))
+            .pb(px(28. + super::DOCK_ROOM))
             .child(ui::rise(
                 div()
-                    .px(px(12.))
-                    .py(px(5.))
-                    .rounded_full()
-                    .bg(ca(0xFFFFFF, 0.7))
-                    .border_1()
-                    .border_color(ca(0xFFFFFF, 0.9))
-                    .font_family(ui::MONO)
-                    .text_size(px(11.))
-                    .text_color(c(ui::MUTED))
-                    .child(today_label()),
+                    .text_size(px(52.))
+                    .font_weight(FontWeight::BOLD)
+                    .line_height(px(58.))
+                    .child(greeting()),
                 self.stagger(0),
             ))
-            .child(ui::rise(
-                div()
-                    .mt(px(16.))
-                    .text_size(px(56.))
-                    .font_weight(FontWeight::BOLD)
-                    .line_height(px(62.))
-                    .child(greeting()),
-                self.stagger(1),
-            ))
-            .child(ui::rise(
-                div()
-                    .mt(px(6.))
-                    .text_size(px(15.))
-                    .text_color(c(ui::MUTED))
-                    .child(sub),
-                self.stagger(2),
-            ))
+            .child(ui::rise(sub, self.stagger(1)))
             .child(ui::rise(
                 div()
                     .w_full()
@@ -165,7 +149,12 @@ impl Shell {
                     how_it_works().into_any_element()
                 }),
                 self.stagger(5),
-            ))
+            ));
+        div()
+            .id("today")
+            .size_full()
+            .overflow_y_scroll()
+            .child(page)
             .into_any_element()
     }
 
@@ -174,6 +163,7 @@ impl Shell {
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 22.);
+        let accent = target.accent();
         // The white highlight glides under the tabs as the mode changes.
         let x = self.mode_x();
         let mut modes = div()
@@ -181,7 +171,7 @@ impl Shell {
             .flex()
             .items_center()
             .p(px(3.))
-            .gap(px(super::MODE_STEP - 64.))
+            .gap(px(super::MODE_STEP - TAB))
             .rounded(px(12.))
             .bg(c(0xF1F2F7))
             .child(
@@ -189,8 +179,8 @@ impl Shell {
                     .absolute()
                     .top(px(3.))
                     .left(px(3. + x))
-                    .w(px(64.))
-                    .h(px(30.))
+                    .w(px(TAB))
+                    .h(px(32.))
                     .rounded(px(9.))
                     .bg(c(0xFFFFFF))
                     .shadow(ui::lift()),
@@ -202,14 +192,18 @@ impl Shell {
             .collect();
         for (i, m) in shown.iter().copied().enumerate() {
             let on = self.mode == m;
+            let who = Member::doer_for(m).unwrap_or(Member::for_mode(m));
+            let mini = self.avatar(who, 16.);
             modes = modes.child(
                 div()
                     .id(("mode", i))
-                    .w(px(64.))
-                    .h(px(30.))
+                    .w(px(TAB))
+                    .h(px(32.))
                     .flex()
                     .items_center()
                     .justify_center()
+                    .gap(px(5.))
+                    .child(div().when(!on, |d| d.opacity(0.75)).child(mini))
                     .rounded(px(9.))
                     .text_size(px(13.))
                     .cursor_pointer()
@@ -230,35 +224,117 @@ impl Shell {
             );
         }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
+        ui::card()
+            .mt(px(30.))
+            .w(px(840.))
+            .rounded(px(24.))
+            .px(px(22.))
+            .pt(px(20.))
+            .pb(px(14.))
+            .flex()
+            .flex_col()
+            .gap(px(14.))
+            .child(
+                div()
+                    .min_h(px(78.))
+                    .text_size(px(17.))
+                    .line_height(px(26.))
+                    .child(
+                        Textarea::new(&self.composer)
+                            .appearance(false)
+                            .bordered(false),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(modes)
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .id("goes-to")
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .pl(px(6.))
+                            .pr(px(12.))
+                            .h(px(32.))
+                            .rounded_full()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::MUTED))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(c(0xF6F7FB)).text_color(c(ui::INK)))
+                            .child(face)
+                            .child(format!("{} · {engine}", target.name()))
+                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                    )
+                    .child(
+                        div()
+                            .id("send")
+                            .size(px(38.))
+                            .rounded_full()
+                            // Dark once there is something to send.
+                            .bg(c(if ready { accent } else { 0xD5D7E3 }))
+                            .when(ready, |d| {
+                                d.shadow(vec![BoxShadow {
+                                    color: ca(accent, 0.45),
+                                    offset: point(px(0.), px(6.)),
+                                    blur_radius: px(16.),
+                                    spread_radius: px(-2.),
+                                    inset: false,
+                                }])
+                            })
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .when(ready, |d| d.hover(|s| s.opacity(0.9)))
+                            .active(|s| s.opacity(0.8))
+                            .child(
+                                Icon::new(IconName::ArrowUp)
+                                    .size(px(16.))
+                                    .text_color(c(0xFFFFFF)),
+                            )
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let text = this.composer.read(cx).value().trim().to_string();
+                                this.composer
+                                    .update(cx, |i, cx| i.set_value("", window, cx));
+                                this.hand_over(text, cx);
+                            })),
+                    ),
+            )
+    }
+
+    /// The folder the crew works in, as words in a sentence you can click.
+    fn folder_picker(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let folder = self.store.folder().map(|f| f.name.clone());
         let folder_chip = div()
             .id("folder")
             .flex()
             .items_center()
             .gap(px(6.))
-            .px(px(11.))
-            .h(px(32.))
-            .rounded_full()
-            .border_1()
-            .border_color(c(if folder.is_some() {
-                ui::LINE
+            .px(px(8.))
+            .h(px(30.))
+            .rounded(px(9.))
+            .text_color(c(if folder.is_some() {
+                ui::INK
             } else {
                 ui::ORANGE
             }))
-            .bg(c(0xFFFFFF))
-            .text_size(px(13.))
-            .font_weight(FontWeight::MEDIUM)
+            .font_weight(FontWeight::SEMIBOLD)
             .cursor_pointer()
-            .hover(|s| s.bg(c(0xF6F7FB)))
+            .hover(|s| s.bg(ca(0xFFFFFF, 0.8)))
             .child(
                 Icon::new(IconName::Folder)
-                    .size(px(14.))
+                    .size(px(16.))
                     .text_color(c(ui::MUTED)),
             )
             .child(folder.clone().unwrap_or_else(|| "Pick a folder".into()))
             .child(
                 Icon::new(IconName::ChevronDown)
-                    .size(px(12.))
+                    .size(px(14.))
                     .text_color(c(ui::FAINT)),
             )
             .on_click(cx.listener(|this, _, _, cx| {
@@ -371,121 +447,61 @@ impl Shell {
                         .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
                 )
         });
-        ui::card()
-            .mt(px(26.))
-            .w(px(840.))
-            .px(px(20.))
-            .pt(px(16.))
-            .pb(px(14.))
-            .flex()
-            .flex_col()
-            .gap(px(14.))
-            .child(
-                div().text_size(px(16.)).line_height(px(24.)).child(
-                    Textarea::new(&self.composer)
-                        .appearance(false)
-                        .bordered(false),
-                ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .relative()
-                            .child(folder_chip)
-                            .children(menu.map(|m| deferred(m).with_priority(1))),
-                    )
-                    .child(modes)
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .id("goes-to")
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .pl(px(6.))
-                            .pr(px(12.))
-                            .h(px(32.))
-                            .rounded_full()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(c(0xF6F7FB)).text_color(c(ui::INK)))
-                            .child(face)
-                            .child(format!("{} · {engine}", target.name()))
-                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
-                    )
-                    .child(
-                        div()
-                            .id("send")
-                            .size(px(38.))
-                            .rounded_full()
-                            // Dark once there is something to send.
-                            .bg(c(if ready { ui::INK } else { 0xD5D7E3 }))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .when(ready, |d| d.hover(|s| s.bg(c(0x2C2A38))))
-                            .active(|s| s.bg(c(0x000000)))
-                            .child(
-                                Icon::new(IconName::ArrowUp)
-                                    .size(px(16.))
-                                    .text_color(c(0xFFFFFF)),
-                            )
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                let text = this.composer.read(cx).value().trim().to_string();
-                                this.composer
-                                    .update(cx, |i, cx| i.set_value("", window, cx));
-                                this.hand_over(text, cx);
-                            })),
-                    ),
-            )
+        div()
+            .relative()
+            .child(folder_chip)
+            .children(menu.map(|m| deferred(m).with_priority(1)))
     }
 
+    /// Up to three things to ask the bot that would take the job, in one
+    /// row under the box. They follow the tab, and go once you start typing.
     fn starters(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let who = self.doer();
+        let typing = !self.composer.read(cx).value().trim().is_empty();
         let mut row = div()
-            .mt(px(14.))
+            .mt(px(12.))
+            .w(px(840.))
+            .h(px(34.))
             .flex()
             .flex_wrap()
             .gap(px(8.))
-            .justify_center()
-            .max_w(px(900.));
-        for (i, (mode, text)) in data::STARTERS
-            .into_iter()
-            .filter(|(m, _)| Member::doer_for(*m).is_some())
-            .enumerate()
-        {
-            let face = self.avatar(
-                Member::doer_for(mode).unwrap_or(Member::for_mode(mode)),
-                20.,
-            );
+            // Only what fits on one line; the rest wraps out of sight.
+            .overflow_hidden();
+        if typing {
+            return row;
+        }
+        let mode = self.mode;
+        let picks: Vec<&'static str> = match mode.default_job() {
+            Some(job) => std::iter::once(job)
+                .chain(who.starters().into_iter().take(2))
+                .collect(),
+            None => who.starters().to_vec(),
+        };
+        for (i, text) in picks.into_iter().enumerate() {
             row = row.child(
                 div()
                     .id(("starter", i))
+                    .flex_none()
                     .flex()
                     .items_center()
-                    .gap(px(7.))
-                    .pl(px(8.))
-                    .pr(px(13.))
+                    .px(px(13.))
                     .h(px(34.))
                     .rounded_full()
-                    .bg(ca(0xFFFFFF, 0.7))
+                    .bg(ca(0xFFFFFF, 0.6))
                     .border_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(ca(0xFFFFFF, 0.9))
                     .text_size(px(13.))
                     .text_color(c(ui::BODY))
                     .cursor_pointer()
                     .hover(|s| s.bg(c(0xFFFFFF)).text_color(c(ui::INK)))
-                    .child(face)
+                    .active(|s| s.bg(c(0xF1F2F7)))
                     .child(text)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.set_mode(mode, window, cx);
                         this.composer
                             .update(cx, |i, cx| i.set_value(text, window, cx));
+                        this.composer.update(cx, |i, cx| i.focus(window, cx));
+                        this.focus_moved = std::time::Instant::now();
                         cx.notify();
                     })),
             );
