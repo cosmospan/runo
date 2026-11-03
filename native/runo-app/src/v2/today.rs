@@ -129,7 +129,10 @@ impl Shell {
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
             ))
-            .child(ui::rise(div().w_full().child(self.composer_card(cx)), self.stagger(1)))
+            .child(ui::rise(
+                div().w_full().child(self.composer_card(cx)),
+                self.stagger(1),
+            ))
             .child(ui::rise(
                 div().w_full().child(if has_jobs {
                     div()
@@ -144,11 +147,20 @@ impl Shell {
                 }),
                 self.stagger(2),
             ));
+        let inspector = if has_jobs { self.inspector(cx) } else { None };
         div()
-            .id("today")
             .size_full()
-            .overflow_y_scroll()
-            .child(page)
+            .flex()
+            .child(
+                div()
+                    .id("today")
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .overflow_y_scroll()
+                    .child(page),
+            )
+            .children(inspector)
             .into_any_element()
     }
 
@@ -472,7 +484,6 @@ impl Shell {
             .child(folder_chip)
             .children(menu.map(|m| deferred(m).with_priority(1)))
     }
-
 }
 
 fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {

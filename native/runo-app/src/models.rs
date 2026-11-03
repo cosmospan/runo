@@ -112,7 +112,10 @@ fn read_tail(path: &Path, max: u64) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::with_capacity((len - from) as usize);
     f.read_to_end(&mut out)?;
     if from > 0 {
-        let start = out.iter().position(|b| *b == b'\n').map_or(out.len(), |i| i + 1);
+        let start = out
+            .iter()
+            .position(|b| *b == b'\n')
+            .map_or(out.len(), |i| i + 1);
         out.drain(..start);
     }
     Ok(out)

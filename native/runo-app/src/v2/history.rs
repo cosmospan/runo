@@ -4,12 +4,13 @@
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::live::status_color;
 use super::store::{self, Job, Status};
 use super::ui::{self, c};
 use super::{Place, Shell};
 
 impl Shell {
+    /// Inbox: what needs you on the left, the picked item on the right with what
+    /// the bot said, what it changed, and what you can do about it.
     pub(super) fn inbox(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let jobs: Vec<Job> = self
             .store
@@ -26,28 +27,371 @@ impl Shell {
                 cx,
             );
         }
+        let pick = self
+            .inbox_pick
+            .filter(|id| jobs.iter().any(|j| j.id == *id))
+            .unwrap_or(jobs[0].id);
         let count = jobs.len();
-        let list = self.job_list(&jobs, cx);
-        page(
-            "Inbox",
-            format!(
-                "{count} {} for you to look at.",
-                if count == 1 { "thing" } else { "things" }
+        let problems = jobs.iter().filter(|j| j.status != Status::Done).count();
+
+        let mut list = div()
+            .id("inbox-list")
+            .flex_1()
+            .overflow_y_scroll()
+            .p(px(8.))
+            .flex()
+            .flex_col()
+            .gap(px(4.));
+        for j in &jobs {
+            let id = j.id;
+            let on = id == pick;
+            let face = self.avatar(j.bot, 30.);
+            let (word, tone) = super::home::status_of(j);
+            list = list.child(
+                div()
+                    .id(("inbox", id as usize))
+                    .flex()
+                    .gap(px(12.))
+                    .p(px(12.))
+                    .rounded(px(10.))
+                    .border_1()
+                    .cursor_pointer()
+                    .map(|d| {
+                        if on {
+                            d.bg(c(0xFFFFFF))
+                                .border_color(c(ui::LINE))
+                                .shadow(ui::lift())
+                        } else {
+                            d.border_color(gpui_kit::transparent_black())
+                                .hover(|s| s.bg(c(0xF4F4F6)))
+                        }
+                    })
+                    .child(div().flex_none().child(face))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .truncate()
+                                            .text_size(px(13.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child(j.title.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_none()
+                                            .text_size(px(11.))
+                                            .text_color(c(ui::FAINT))
+                                            .child(store::ago(j.ended.unwrap_or(j.started))),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::MUTED))
+                                    .truncate()
+                                    .child(format!(
+                                        "{} · #{} · {}",
+                                        j.bot.name(),
+                                        id,
+                                        j.folder.name
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .mt(px(4.))
+                                    .flex()
+                                    .child(super::home::pill(&word, tone)),
+                            ),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.inbox_pick = Some(id);
+                        cx.notify();
+                    })),
+            );
+        }
+
+        let left = div()
+            .w(px(380.))
+            .flex_none()
+            .h_full()
+            .flex()
+            .flex_col()
+            .border_r_1()
+            .border_color(c(ui::LINE))
+            .child(
+                div()
+                    .px(px(20.))
+                    .pt(px(20.))
+                    .pb(px(14.))
+                    .flex()
+                    .items_end()
+                    .gap(px(10.))
+                    .border_b_1()
+                    .border_color(c(ui::LINE))
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_size(px(20.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Inbox"),
+                            )
+                            .child(
+                                div()
+                                    .mt(px(2.))
+                                    .text_size(px(12.5))
+                                    .text_color(c(ui::MUTED))
+                                    .child(match problems {
+                                        0 => format!("{count} to review"),
+                                        p => format!("{count} to review · {p} stopped early"),
+                                    }),
+                            ),
+                    )
+                    .child(
+                        ui::ghost("mark-all", "Mark all seen")
+                            .h(px(28.))
+                            .text_size(px(12.5))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                for j in &mut this.store.jobs {
+                                    if j.status != Status::Running {
+                                        j.seen = true;
+                                    }
+                                }
+                                this.store.save();
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(list);
+
+        let j = jobs
+            .iter()
+            .find(|j| j.id == pick)
+            .cloned()
+            .unwrap_or_else(|| jobs[0].clone());
+        let right = self.inbox_detail(&j, cx);
+        div()
+            .size_full()
+            .flex()
+            .child(left)
+            .child(right)
+            .into_any_element()
+    }
+
+    fn inbox_detail(&mut self, j: &Job, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = j.id;
+        let face = self.bot(j.bot, runo_holo::Mood::Idle, 56., runo_holo::Framing::Bust);
+        let headline = match j.status {
+            Status::Done if j.files.is_empty() => format!("{} finished", j.bot.name()),
+            Status::Done => format!(
+                "{} changed {} {}",
+                j.bot.name(),
+                j.files.len(),
+                if j.files.len() == 1 { "file" } else { "files" }
             ),
-        )
-        .child(div().flex().justify_end().child(
-            ui::ghost("mark-all", "Mark all as seen").on_click(cx.listener(|this, _, _, cx| {
-                for j in &mut this.store.jobs {
-                    if j.status != Status::Running {
-                        j.seen = true;
-                    }
-                }
-                this.store.save();
-                cx.notify();
-            })),
-        ))
-        .child(list)
-        .into_any_element()
+            Status::Failed => format!("{} hit a problem", j.bot.name()),
+            _ => format!("{} stopped before the end", j.bot.name()),
+        };
+        let said = j
+            .last_words()
+            .map(super::live::plain)
+            .unwrap_or_else(|| "No reply was kept for this job.".into());
+        let mut said_lines = div().flex().flex_col().gap(px(8.));
+        for para in said.split("\n\n").filter(|p| !p.trim().is_empty()).take(6) {
+            said_lines = said_lines.child(div().child(para.trim().to_string()));
+        }
+        let mut files = ui::card().overflow_hidden().child(
+            div()
+                .h(px(40.))
+                .px(px(16.))
+                .flex()
+                .items_center()
+                .border_b_1()
+                .border_color(c(ui::LINE))
+                .text_size(px(12.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("Files changed")
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .font_weight(FontWeight::NORMAL)
+                        .text_color(c(ui::FAINT))
+                        .child(j.files.len().to_string()),
+                ),
+        );
+        if j.files.is_empty() {
+            files = files.child(
+                div()
+                    .px(px(16.))
+                    .py(px(14.))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::FAINT))
+                    .child("Nothing was changed."),
+            );
+        }
+        for f in j.files.iter().take(12) {
+            files = files.child(
+                div()
+                    .h(px(34.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .border_b_1()
+                    .border_color(c(0xF2F2F4))
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .child(f.clone()),
+            );
+        }
+        let mut plan = div().flex().flex_col().gap(px(7.));
+        for (s, state) in &j.plan {
+            plan = plan.child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .text_size(px(12.5))
+                    .text_color(c(if *state == 2 { ui::BODY } else { ui::FAINT }))
+                    .child(if *state == 2 { "✓" } else { "·" })
+                    .child(s.clone()),
+            );
+        }
+        div()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .id("inbox-detail")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .px(px(28.))
+                    .pt(px(24.))
+                    .pb(px(24.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(16.))
+                    .child(
+                        div().flex().items_center().gap(px(16.)).child(face).child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .text_size(px(18.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(headline),
+                                )
+                                .child(
+                                    div()
+                                        .mt(px(3.))
+                                        .text_size(px(12.5))
+                                        .text_color(c(ui::MUTED))
+                                        .truncate()
+                                        .child(format!(
+                                            "{} · Job #{id} · {}{}",
+                                            j.title,
+                                            if j.engine.is_empty() {
+                                                "—"
+                                            } else {
+                                                &j.engine
+                                            },
+                                            if j.summary.is_empty() {
+                                                String::new()
+                                            } else {
+                                                format!(" · {}", j.summary)
+                                            }
+                                        )),
+                                ),
+                        ),
+                    )
+                    .child(
+                        ui::card()
+                            .px(px(18.))
+                            .py(px(14.))
+                            .text_size(px(13.5))
+                            .line_height(px(21.))
+                            .text_color(c(ui::BODY))
+                            .child(said_lines),
+                    )
+                    .child(files)
+                    .when(!j.plan.is_empty(), |d| {
+                        d.child(
+                            ui::card()
+                                .px(px(18.))
+                                .py(px(14.))
+                                .flex()
+                                .flex_col()
+                                .gap(px(10.))
+                                .child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(ui::FAINT))
+                                        .child("PLAN"),
+                                )
+                                .child(plan),
+                        )
+                    }),
+            )
+            .child(
+                div()
+                    .h(px(60.))
+                    .px(px(28.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .bg(c(0xFFFFFF))
+                    .border_t_1()
+                    .border_color(c(ui::LINE))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::MUTED))
+                            .child(match j.status {
+                                Status::Done => "Look it over, then mark it seen or ask for more.",
+                                _ => "Open the job to see where it stopped, or ask it to carry on.",
+                            }),
+                    )
+                    .child(
+                        ui::ghost(
+                            "inbox-open",
+                            if j.status == Status::Done {
+                                "Ask for changes"
+                            } else {
+                                "Open job"
+                            },
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+                    )
+                    .child(
+                        ui::solid("inbox-seen", "Mark as seen").on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                if let Some(j) = this.store.jobs.iter_mut().find(|j| j.id == id) {
+                                    j.seen = true;
+                                }
+                                this.inbox_pick = None;
+                                this.store.save();
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            )
     }
 
     pub(super) fn history(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -112,7 +456,10 @@ impl Shell {
                 })
                 .into_any_element()
         } else {
-            self.job_list(&jobs, cx).into_any_element()
+            ui::card()
+                .overflow_hidden()
+                .child(self.job_table(&jobs, true, 0, cx))
+                .into_any_element()
         };
         page(
             "Jobs",
@@ -156,109 +503,6 @@ impl Shell {
         )
         .child(list)
         .into_any_element()
-    }
-
-    fn job_list(&mut self, jobs: &[Job], cx: &mut Context<Self>) -> impl IntoElement {
-        let mut list = ui::card().p(px(8.)).flex().flex_col();
-        for (n, j) in jobs.iter().enumerate() {
-            let face = self.avatar(j.bot, 34.);
-            let id = j.id;
-            let color = status_color(j.status);
-            let when = match store::ago(j.started).as_str() {
-                "just now" => "just now".to_string(),
-                a => format!("{a} ago"),
-            };
-            let detail = match j.status {
-                Status::Running => j.doing(),
-                _ => j
-                    .last_words()
-                    .map(|t| {
-                        super::live::plain(t)
-                            .lines()
-                            .last()
-                            .unwrap_or("")
-                            .to_string()
-                    })
-                    .unwrap_or_default(),
-            };
-            let k = self.stagger(n + 1);
-            list = list
-                .when(n > 0, |d| {
-                    d.child(div().mx(px(14.)).h(px(1.)).bg(c(ui::LINE)))
-                })
-                .child(
-                    div()
-                        .id(("hist", id as usize))
-                        .flex()
-                        .items_center()
-                        .gap(px(14.))
-                        .px(px(14.))
-                        .py(px(12.))
-                        .rounded(px(14.))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(c(0xF6F7FB)))
-                        .child(face)
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .gap(px(3.))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(8.))
-                                        .child(
-                                            div()
-                                                .text_size(px(14.))
-                                                .font_weight(FontWeight::SEMIBOLD)
-                                                .truncate()
-                                                .child(j.title.clone()),
-                                        )
-                                        .when(!j.seen && j.status != Status::Running, |d| {
-                                            d.child(
-                                                div()
-                                                    .flex_none()
-                                                    .size(px(7.))
-                                                    .rounded_full()
-                                                    .bg(c(ui::ORANGE)),
-                                            )
-                                        }),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(12.))
-                                        .text_color(c(ui::MUTED))
-                                        .truncate()
-                                        .child(if detail.is_empty() {
-                                            j.mode.label().to_string()
-                                        } else {
-                                            detail
-                                        }),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex_none()
-                                .w(px(220.))
-                                .flex()
-                                .flex_col()
-                                .items_end()
-                                .gap(px(3.))
-                                .child(ui::status(color, j.status.label()))
-                                .child(div().text_size(px(11.5)).text_color(c(ui::FAINT)).child(
-                                    format!("{} · {} · {when}", j.bot.name(), j.folder.name),
-                                )),
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
-                        .opacity(k)
-                        .relative()
-                        .top(px(8. * (1. - k))),
-                );
-        }
-        list
     }
 }
 

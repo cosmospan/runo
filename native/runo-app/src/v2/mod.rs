@@ -11,17 +11,18 @@
 mod chat;
 mod crew;
 mod data;
-mod home;
-mod sidebar;
 mod engine;
 mod engines;
 mod history;
+mod home;
 mod jobs;
 mod live;
 mod palette;
+mod sidebar;
 mod store;
 mod today;
 mod ui;
+mod usage;
 mod welcome;
 
 use std::collections::HashMap;
@@ -48,6 +49,8 @@ pub enum Place {
     /// One job, by id.
     Live(u64),
     Engines,
+    /// What the crew cost and did lately.
+    Usage,
     /// The first-run walkthrough.
     Welcome,
 }
@@ -405,6 +408,10 @@ pub struct Shell {
     setup_step: usize,
     /// Home's table tab: active, needs you or finished.
     home_tab: u8,
+    /// The job Home's inspector shows; the newest active one when unset.
+    home_pick: Option<u64>,
+    /// The Inbox item open on the right.
+    inbox_pick: Option<u64>,
     setup_crew: Vec<Member>,
     /// A made bot chosen for Today's next job (its mode must match).
     target: Option<Member>,
@@ -488,7 +495,7 @@ fn nav_slot(place: Place) -> Option<f32> {
         Place::History | Place::Live(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Engines | Place::Welcome => return None,
+        Place::Engines | Place::Usage | Place::Welcome => return None,
     };
     Some(i as f32 * 46.)
 }
@@ -607,6 +614,7 @@ impl Shell {
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Engines,
+            Ok("usage") => Place::Usage,
             Ok("live") => store
                 .jobs
                 .last()
@@ -646,6 +654,8 @@ impl Shell {
             target: None,
             setup_step: 0,
             home_tab: 0,
+            home_pick: None,
+            inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             maker_name,
             maker_role,
@@ -1087,7 +1097,7 @@ impl Shell {
         cx.notify();
     }
 
-    fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
+    pub(super) fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
         if let Some(r) = self.runners.iter_mut().find(|r| r.id == id) {
             r.stop();
         }
@@ -1406,6 +1416,7 @@ impl Render for Shell {
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
             Place::Engines => self.engines(cx),
+            Place::Usage => self.usage(cx),
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
@@ -1504,6 +1515,7 @@ impl Render for Shell {
                     "4" => Place::Chat(this.last_chat()),
                     "5" => Place::Crew,
                     "6" => Place::Engines,
+                    "7" => Place::Usage,
                     _ => return,
                 };
                 this.go(to, cx);

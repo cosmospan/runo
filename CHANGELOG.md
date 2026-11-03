@@ -4,6 +4,20 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.4] - 2026-11-03
+
+### Added
+
+- Home has an inspector down the right: the picked job's bot, status, engine, folder, files and cost, and its plan step by step, with Open job and Stop. Click a row in the table to pick it; double-click to open it.
+- A Usage page (in the sidebar, or ⌘7): spend, jobs, success rate and time at work over the last 30 days, a per-day chart split by bot, and a table for each bot.
+
+### Changed
+
+- Inbox is a two-pane view: what needs you on the left, and on the right what the bot said, the files it changed and its plan, with Mark as seen and Ask for changes.
+- Jobs is a full table with each job's bot, status, progress, engine, time, cost, files and last update.
+- Crew cards are compact: the bot, what it's doing, its jobs, success rate and spend, the engine it runs on, and Chat and Give a job.
+- Engines has the same plain heading as every other page.
+
 ## [2.0.0-alpha.3] - 2026-11-03
 
 ### Changed

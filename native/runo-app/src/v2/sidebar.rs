@@ -55,7 +55,13 @@ impl Shell {
                     .text_size(px(13.))
                     .font_weight(FontWeight::BOLD)
                     .text_color(c(0xFFFFFF))
-                    .child(name.chars().next().unwrap_or('R').to_uppercase().to_string()),
+                    .child(
+                        name.chars()
+                            .next()
+                            .unwrap_or('R')
+                            .to_uppercase()
+                            .to_string(),
+                    ),
             )
             .child(
                 div()
@@ -126,8 +132,7 @@ impl Shell {
                             .border_color(c(ui::LINE))
                             .text_color(c(ui::INK))
                     } else {
-                        d.text_color(c(0x3F3F46))
-                            .hover(|s| s.bg(c(0xF2F2F4)))
+                        d.text_color(c(0x3F3F46)).hover(|s| s.bg(c(0xF2F2F4)))
                     }
                 })
                 .child(Icon::new(icon).size(px(16.)))
@@ -159,9 +164,14 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
             )
             .child(
-                row("side-inbox", IconName::Inbox, "Inbox", place == Place::Inbox)
-                    .when(inbox > 0, |d| d.child(count(inbox, true)))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
+                row(
+                    "side-inbox",
+                    IconName::Inbox,
+                    "Inbox",
+                    place == Place::Inbox,
+                )
+                .when(inbox > 0, |d| d.child(count(inbox, true)))
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
             )
             .child(
                 row(
@@ -174,16 +184,25 @@ impl Shell {
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
             )
             .child(
-                row("side-chats", IconName::MessageSquare, "Chats", on_chat).on_click(
-                    cx.listener(|this, _, _, cx| {
+                row("side-chats", IconName::MessageSquare, "Chats", on_chat).on_click(cx.listener(
+                    |this, _, _, cx| {
                         let to = Place::Chat(this.last_chat());
                         this.go(to, cx)
-                    }),
-                ),
+                    },
+                )),
             )
             .child(
                 row("side-crew", IconName::Users, "Crew", place == Place::Crew)
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+            )
+            .child(
+                row(
+                    "side-usage",
+                    IconName::ChartColumn,
+                    "Usage",
+                    place == Place::Usage,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
         // The crew: every bot, what it's doing, and where clicking takes you.
@@ -282,7 +301,13 @@ impl Shell {
                             }),
                     )
                     .when(bar.is_none(), |d| {
-                        d.child(div().size(px(7.)).flex_none().rounded_full().bg(c(dot_color)))
+                        d.child(
+                            div()
+                                .size(px(7.))
+                                .flex_none()
+                                .rounded_full()
+                                .bg(c(dot_color)),
+                        )
                     })
                     .on_click(cx.listener(move |this, _, _, cx| this.go(to, cx))),
             );
@@ -310,8 +335,13 @@ impl Shell {
             .flex_col()
             .gap(px(2.))
             .child(
-                row("side-engines", IconName::Cpu, "Engines", place == Place::Engines)
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                row(
+                    "side-engines",
+                    IconName::Cpu,
+                    "Engines",
+                    place == Place::Engines,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
             )
             .child(
                 row("side-v1", IconName::PanelLeft, "Open Runo v1", false)
@@ -377,6 +407,7 @@ impl Shell {
                 None => format!("Jobs / #{id}"),
             },
             Place::Engines => "Engines".into(),
+            Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
         };
         let running = self.store.running().count();

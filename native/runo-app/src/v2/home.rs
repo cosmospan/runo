@@ -1,4 +1,5 @@
-//! Home's working half: a strip of numbers and the jobs table.
+//! Home's working half: a strip of numbers, the jobs table and the inspector
+//! for the job picked in it.
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -45,41 +46,47 @@ impl Shell {
                 a => format!("oldest {a}"),
             })
             .unwrap_or_else(|| "all clear".into());
-        let cell = |dot: Option<u32>, label: &'static str, value: String, note: String, last: bool| {
-            div()
-                .flex_1()
-                .flex_basis(px(0.))
-                .px(px(18.))
-                .py(px(14.))
-                .when(!last, |d| d.border_r_1().border_color(c(0xEFEFF1)))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::MUTED))
-                        .when_some(dot, |d, col| {
-                            d.child(div().size(px(7.)).rounded_full().bg(c(col)))
-                        })
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .mt(px(4.))
-                        .flex()
-                        .items_baseline()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .text_size(px(22.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(value),
-                        )
-                        .child(div().text_size(px(12.)).text_color(c(ui::FAINT)).child(note)),
-                )
-        };
+        let cell =
+            |dot: Option<u32>, label: &'static str, value: String, note: String, last: bool| {
+                div()
+                    .flex_1()
+                    .flex_basis(px(0.))
+                    .px(px(18.))
+                    .py(px(14.))
+                    .when(!last, |d| d.border_r_1().border_color(c(0xEFEFF1)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(ui::MUTED))
+                            .when_some(dot, |d, col| {
+                                d.child(div().size(px(7.)).rounded_full().bg(c(col)))
+                            })
+                            .child(label),
+                    )
+                    .child(
+                        div()
+                            .mt(px(4.))
+                            .flex()
+                            .items_baseline()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .text_size(px(22.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(value),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::FAINT))
+                                    .child(note),
+                            ),
+                    )
+            };
         div()
             .w_full()
             .flex()
@@ -87,8 +94,20 @@ impl Shell {
             .border_1()
             .border_color(c(ui::LINE))
             .rounded(px(12.))
-            .child(cell(Some(RUN.0), "Running", running.len().to_string(), who, false))
-            .child(cell(Some(0xD97706), "Needs you", needs.len().to_string(), oldest, false))
+            .child(cell(
+                Some(RUN.0),
+                "Running",
+                running.len().to_string(),
+                who,
+                false,
+            ))
+            .child(cell(
+                Some(0xD97706),
+                "Needs you",
+                needs.len().to_string(),
+                oldest,
+                false,
+            ))
             .child(cell(
                 Some(0x16A34A),
                 "Done today",
@@ -186,6 +205,27 @@ impl Shell {
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
         );
 
+        let table = self.job_table(&rows, false, tab, cx);
+        div()
+            .w_full()
+            .bg(c(0xFFFFFF))
+            .border_1()
+            .border_color(c(ui::LINE))
+            .rounded(px(12.))
+            .overflow_hidden()
+            .child(tabs)
+            .child(table)
+    }
+
+    /// The jobs table's header and rows. `wide` adds engine, time and cost, for
+    /// the Jobs page; on Home a click picks the row for the inspector.
+    pub(super) fn job_table(
+        &mut self,
+        rows: &[Job],
+        wide: bool,
+        tab: usize,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let head = |label: &'static str, w: Option<f32>, right: bool| {
             div()
                 .map(|d| match w {
@@ -212,6 +252,11 @@ impl Shell {
                 .child(head("Bot", Some(120.), false))
                 .child(head("Status", Some(150.), false))
                 .child(head("Progress", Some(120.), false))
+                .when(wide, |d| {
+                    d.child(head("Engine", Some(130.), false))
+                        .child(head("Time", Some(64.), true))
+                        .child(head("Cost", Some(60.), true))
+                })
                 .child(head("Files", Some(52.), true))
                 .child(head("Updated", Some(64.), true)),
         );
@@ -229,21 +274,14 @@ impl Shell {
                     }),
             );
         }
-        for j in &rows {
+        for j in rows {
             let running = j.status == Status::Running;
             let face = if running {
                 self.bot(j.bot, Mood::Working, 22., Framing::Bust)
             } else {
                 self.avatar(j.bot, 22.)
             };
-            let (word, tone) = match j.status {
-                Status::Running => ("Running".to_string(), RUN),
-                Status::Done if j.needs_you() => ("Ready to review".to_string(), ASK),
-                Status::Done => ("Done".to_string(), OK),
-                Status::Failed => ("Failed".to_string(), BAD),
-                Status::Interrupted => ("Interrupted".to_string(), ASK),
-                s => (s.label().to_string(), GREY),
-            };
+            let (word, tone) = status_of(j);
             let progress = j.progress();
             let frac = progress.map(|(d, n)| {
                 if running {
@@ -304,7 +342,13 @@ impl Shell {
                             .child(face)
                             .child(j.bot.name()),
                     )
-                    .child(div().w(px(150.)).flex_none().flex().child(pill(&word, tone)))
+                    .child(
+                        div()
+                            .w(px(150.))
+                            .flex_none()
+                            .flex()
+                            .child(pill(&word, tone)),
+                    )
                     .child(
                         div()
                             .w(px(120.))
@@ -324,6 +368,48 @@ impl Shell {
                                 _ => d.text_color(c(ui::FAINT)).child("—"),
                             }),
                     )
+                    .when(wide, |d| {
+                        let secs = j.seconds();
+                        d.child(
+                            div()
+                                .w(px(130.))
+                                .flex_none()
+                                .truncate()
+                                .text_size(px(12.))
+                                .text_color(c(ui::MUTED))
+                                .child(j.engine.split(" · ").next().unwrap_or("—").to_string()),
+                        )
+                        .child(
+                            div()
+                                .w(px(64.))
+                                .flex_none()
+                                .flex()
+                                .justify_end()
+                                .font_family(ui::MONO)
+                                .text_size(px(11.5))
+                                .text_color(c(ui::MUTED))
+                                .child(if secs == 0 {
+                                    "—".to_string()
+                                } else if secs >= 60 {
+                                    format!("{}m {:02}s", secs / 60, secs % 60)
+                                } else {
+                                    format!("{secs}s")
+                                }),
+                        )
+                        .child(
+                            div()
+                                .w(px(60.))
+                                .flex_none()
+                                .flex()
+                                .justify_end()
+                                .font_family(ui::MONO)
+                                .text_size(px(11.5))
+                                .child(
+                                    cost(&j.summary)
+                                        .map_or("—".to_string(), |c| format!("${c:.2}")),
+                                ),
+                        )
+                    })
                     .child(
                         div()
                             .w(px(52.))
@@ -352,23 +438,272 @@ impl Shell {
                             .text_color(c(ui::MUTED))
                             .child(when),
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+                    .when(!wide && self.picked() == Some(id), |d| d.bg(c(0xF4F7FF)))
+                    .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| {
+                        if wide || e.click_count() > 1 {
+                            this.go(Place::Live(id), cx);
+                        } else {
+                            this.home_pick = Some(id);
+                            cx.notify();
+                        }
+                    })),
             );
         }
-        div()
-            .w_full()
-            .bg(c(0xFFFFFF))
-            .border_1()
+        table
+    }
+}
+
+impl Shell {
+    /// The job the inspector shows: the one picked, else the newest running or
+    /// waiting job, else the newest one.
+    pub(super) fn picked(&self) -> Option<u64> {
+        let jobs = &self.store.jobs;
+        self.home_pick
+            .filter(|id| jobs.iter().any(|j| j.id == *id))
+            .or_else(|| {
+                jobs.iter()
+                    .rev()
+                    .find(|j| j.status == Status::Running || j.needs_you())
+                    .or(jobs.last())
+                    .map(|j| j.id)
+            })
+    }
+
+    /// A panel down the right of Home: the picked job's bot, facts and plan.
+    pub(super) fn inspector(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let id = self.picked()?;
+        let j = self.store.jobs.iter().find(|j| j.id == id)?.clone();
+        let running = j.status == Status::Running;
+        let face = self.bot(
+            j.bot,
+            if running { Mood::Working } else { Mood::Idle },
+            64.,
+            Framing::Bust,
+        );
+        let (word, tone) = status_of(&j);
+        let step = j
+            .progress()
+            .map(|(d, n)| format!("Step {} of {n}", (d + 1).min(n)));
+        let fact = |k: &'static str, v: AnyElement| {
+            div()
+                .flex()
+                .items_center()
+                .min_h(px(24.))
+                .text_size(px(12.5))
+                .child(
+                    div()
+                        .w(px(86.))
+                        .flex_none()
+                        .text_color(c(ui::FAINT))
+                        .child(k),
+                )
+                .child(div().flex_1().min_w_0().truncate().child(v))
+        };
+        let text = |s: String| div().child(s).into_any_element();
+        let mut facts = div()
+            .px(px(18.))
+            .py(px(14.))
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .border_b_1()
             .border_color(c(ui::LINE))
-            .rounded(px(12.))
-            .overflow_hidden()
-            .child(tabs)
-            .child(table)
+            .child(fact(
+                "Status",
+                div()
+                    .flex()
+                    .child(pill(&step.filter(|_| running).unwrap_or(word), tone))
+                    .into_any_element(),
+            ))
+            .child(fact(
+                "Engine",
+                text(if j.engine.is_empty() {
+                    "—".into()
+                } else {
+                    j.engine.clone()
+                }),
+            ))
+            .child(fact("Folder", text(j.folder.name.clone())))
+            .child(fact("Started", text(store::ago(j.started))));
+        if !j.files.is_empty() {
+            facts = facts.child(fact(
+                "Files",
+                div()
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .child(match j.files.len() {
+                        1 => j.files[0].clone(),
+                        n => format!("{} +{}", j.files[0], n - 1),
+                    })
+                    .into_any_element(),
+            ));
+        }
+        if let Some(cost) = cost(&j.summary) {
+            facts = facts.child(fact("Cost", text(format!("${cost:.2}"))));
+        }
+
+        let mut plan = div()
+            .px(px(18.))
+            .py(px(14.))
+            .flex()
+            .flex_col()
+            .gap(px(9.))
+            .child(
+                div()
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::FAINT))
+                    .child("PLAN"),
+            );
+        if j.plan.is_empty() {
+            plan = plan.child(div().text_size(px(12.5)).text_color(c(ui::MUTED)).child(
+                match j.last_words() {
+                    Some(w) => w.lines().next().unwrap_or(w).to_string(),
+                    None => j.doing(),
+                },
+            ));
+        }
+        for (s, state) in &j.plan {
+            let mark = match state {
+                2 => div()
+                    .size(px(14.))
+                    .rounded_full()
+                    .bg(c(0x16A34A))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(9.))
+                    .text_color(c(0xFFFFFF))
+                    .child("✓"),
+                1 => div()
+                    .size(px(14.))
+                    .rounded_full()
+                    .border_4()
+                    .border_color(c(j.bot.accent())),
+                _ => div()
+                    .size(px(14.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(c(0xD4D4D8)),
+            };
+            plan = plan.child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(9.))
+                    .text_size(px(12.5))
+                    .child(div().mt(px(1.)).flex_none().child(mark))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .map(|d| match state {
+                                1 => d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::INK)),
+                                2 => d.text_color(c(ui::BODY)),
+                                _ => d.text_color(c(ui::MUTED)),
+                            })
+                            .child(s.clone()),
+                    ),
+            );
+        }
+
+        let foot = div()
+            .p(px(14.))
+            .flex()
+            .gap(px(8.))
+            .border_t_1()
+            .border_color(c(ui::LINE))
+            .child(
+                ui::ghost("insp-open", "Open job")
+                    .flex_1()
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx))),
+            )
+            .when(running, |d| {
+                d.child(
+                    ui::ghost("insp-stop", "Stop")
+                        .flex_1()
+                        .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
+                )
+            });
+
+        Some(
+            div()
+                .w(px(316.))
+                .flex_none()
+                .h_full()
+                .flex()
+                .flex_col()
+                .bg(c(0xFFFFFF))
+                .border_l_1()
+                .border_color(c(ui::LINE))
+                .child(
+                    div()
+                        .h(px(44.))
+                        .px(px(18.))
+                        .flex()
+                        .items_center()
+                        .text_size(px(12.5))
+                        .text_color(c(ui::MUTED))
+                        .child(format!("Job #{id}")),
+                )
+                .child(
+                    div()
+                        .px(px(18.))
+                        .pb(px(14.))
+                        .flex()
+                        .items_center()
+                        .gap(px(14.))
+                        .border_b_1()
+                        .border_color(c(ui::LINE))
+                        .child(face)
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(
+                                    div()
+                                        .text_size(px(15.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .line_height(px(20.))
+                                        .child(j.title.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .mt(px(3.))
+                                        .text_size(px(12.))
+                                        .text_color(c(ui::MUTED))
+                                        .child(j.bot.name()),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("insp-body")
+                        .flex_1()
+                        .overflow_y_scroll()
+                        .child(facts)
+                        .child(plan),
+                )
+                .child(foot)
+                .into_any_element(),
+        )
+    }
+}
+
+/// A job's status as a word and pill colours.
+pub(super) fn status_of(j: &Job) -> (String, (u32, u32, u32)) {
+    match j.status {
+        Status::Running => ("Running".to_string(), RUN),
+        Status::Done if j.needs_you() => ("Ready to review".to_string(), ASK),
+        Status::Done => ("Done".to_string(), OK),
+        Status::Failed => ("Failed".to_string(), BAD),
+        Status::Interrupted => ("Interrupted".to_string(), ASK),
+        s => (s.label().to_string(), GREY),
     }
 }
 
 /// A status pill: a dot and a word on a tinted ground.
-fn pill(word: &str, (text, fill, edge): (u32, u32, u32)) -> Div {
+pub(super) fn pill(word: &str, (text, fill, edge): (u32, u32, u32)) -> Div {
     div()
         .h(px(22.))
         .px(px(8.))
@@ -387,7 +722,7 @@ fn pill(word: &str, (text, fill, edge): (u32, u32, u32)) -> Div {
 }
 
 /// The dollars in a summary like "12s · 3 turns · $0.04".
-fn cost(summary: &str) -> Option<f64> {
+pub(super) fn cost(summary: &str) -> Option<f64> {
     summary
         .split('·')
         .map(str::trim)

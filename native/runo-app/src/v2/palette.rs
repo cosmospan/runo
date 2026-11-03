@@ -48,6 +48,7 @@ impl Shell {
             (Place::History, IconName::Clock, "Jobs", "⌘3"),
             (Place::Crew, IconName::Users, "Crew", "⌘5"),
             (Place::Engines, IconName::Cpu, "Engines", "⌘6"),
+            (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
         ];
         for (p, icon, label, key) in places {
             all.push(Entry {
