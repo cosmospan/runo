@@ -108,6 +108,15 @@ pub fn race_engines(st: &AppSettings, who: Member, n: usize) -> Vec<usize> {
     out
 }
 
+/// Another engine ready on this computer for a job whose own engine can't run
+/// it now: the default agent first, then the rest.
+pub fn fallback(st: &AppSettings, job: &super::store::Job) -> Option<usize> {
+    let (own, _) = for_job(st, job);
+    race_engines(st, job.bot, 8)
+        .into_iter()
+        .find(|i| *i != own && agent::PROVIDERS[*i].id != job.agent)
+}
+
 /// "Claude Code" or "Claude Code · opus" for an agent index and model.
 pub fn label_of(i: usize, model: &str) -> String {
     let name = agent::PROVIDERS[i].name;

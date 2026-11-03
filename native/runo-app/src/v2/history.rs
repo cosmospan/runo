@@ -330,6 +330,7 @@ impl Shell {
                             .text_color(c(ui::BODY))
                             .child(said_lines),
                     )
+                    .children(self.trouble_card(j, cx).map(|t| t.ml(px(0.))))
                     .map(|d| match review.take() {
                         Some(card) => d.child(card.ml(px(0.))),
                         None => d.child(files),

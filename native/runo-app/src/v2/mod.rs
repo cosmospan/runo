@@ -25,6 +25,7 @@ mod ship;
 mod sidebar;
 mod store;
 mod today;
+mod trouble;
 mod ui;
 mod usage;
 mod welcome;
@@ -1094,9 +1095,69 @@ impl Shell {
 
     /// Starts a stopped or failed job over, as a new job in the same folder.
     fn retry_job(&mut self, id: u64, cx: &mut Context<Self>) {
-        let Some(j) = self.store.job(id) else { return };
-        let (bot, mode, title, folder) = (j.bot, j.mode, j.title.clone(), j.folder.clone());
-        self.start_job_in(bot, mode, title, folder, cx);
+        self.rerun(id, None, cx);
+    }
+
+    /// Runs a job again from the start, in the same branch, on its own engine or
+    /// on `pick` (an agent index) when its own can't run it now.
+    pub(super) fn rerun(&mut self, id: u64, pick: Option<usize>, cx: &mut Context<Self>) {
+        let st = cx.global::<crate::settings::AppSettings>().clone();
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
+        if job.status == Status::Running {
+            return;
+        }
+        if let Some(i) = pick {
+            job.pick = crate::agent::PROVIDERS[i].id.to_string();
+            job.pick_model.clear();
+        }
+        let (i, model) = engine::for_job(&st, job);
+        job.feed.push(store::Item::Note(format!(
+            "Starting again on {}.",
+            engine::label_of(i, &model)
+        )));
+        job.conflict.clear();
+        let text = if job.worktree.is_empty() {
+            job.title.clone()
+        } else {
+            format!(
+                "{}\n\nAn earlier run may have left work in the files. Check what is already done before redoing it.",
+                job.title
+            )
+        };
+        match jobs::start(&st, job, &text, false) {
+            Ok(r) => self.runners.push(r),
+            Err(why) => {
+                job.status = Status::Failed;
+                job.feed.push(store::Item::Error(why));
+            }
+        }
+        self.store.save();
+        self.go(Place::Live(id), cx);
+    }
+
+    /// A stopped or interrupted job picks up where it was.
+    pub(super) fn carry_on(&mut self, id: u64, cx: &mut Context<Self>) {
+        self.follow_up(
+            id,
+            "Carry on from where you stopped. Check what is already done in the files first."
+                .into(),
+            cx,
+        );
+    }
+
+    /// Hands a branch that clashes with its base back to its bot to bring up to
+    /// date; it comes back for review when it's done.
+    pub(super) fn resolve(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        let text = trouble::resolve_prompt(job);
+        if let Some(j) = self.store.job_mut(id) {
+            j.conflict.clear();
+        }
+        self.follow_up(id, text, cx);
     }
 
     fn start_job_in(
@@ -1485,9 +1546,19 @@ impl Shell {
                 self.say(msg);
             }
             Err(why) => {
+                let files = trouble::conflict_files(&why);
                 if let Some(j) = self.store.job_mut(id) {
-                    j.feed
-                        .push(store::Item::Error(format!("Couldn't merge it: {why}")));
+                    if files.is_empty() {
+                        j.feed
+                            .push(store::Item::Error(format!("Couldn't merge it: {why}")));
+                    } else {
+                        j.feed.push(store::Item::Note(format!(
+                            "{} moved on and {} now clash, so nothing was merged.",
+                            j.base,
+                            files.join(", ")
+                        )));
+                        j.conflict = files;
+                    }
                 }
                 self.say("Couldn't merge it. The reason is on the job.");
             }
@@ -1595,12 +1666,15 @@ impl Shell {
                     j.shipping = false;
                     j.status = Status::Review;
                     j.seen = false;
-                    j.feed.push(store::Item::Error(format!(
-                        "{} moved while this was waiting, and these files now clash: {}. Send it back and ask it to bring the branch up to date with {}.",
-                        j.base,
-                        files.join(", "),
-                        j.base
-                    )));
+                    j.feed.push(store::Item::By(
+                        Member::Shipper,
+                        format!(
+                            "{} moved while this was waiting, and {} now clash with it, so I stopped before pushing.",
+                            j.base,
+                            files.join(", ")
+                        ),
+                    ));
+                    j.conflict = files;
                 }
                 ship::Step::Failed(why) => {
                     j.shipping = false;

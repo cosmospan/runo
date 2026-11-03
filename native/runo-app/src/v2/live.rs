@@ -235,6 +235,7 @@ impl Shell {
                     })
                     .when(
                         !running
+                            && super::trouble::trouble(job).is_none()
                             && !matches!(
                                 job.status,
                                 Status::Done | Status::Review | Status::Shipped
@@ -431,6 +432,9 @@ impl Shell {
             };
         }
         feed = flush(feed, &mut tools);
+        if let Some(card) = self.trouble_card(job, cx) {
+            feed = feed.child(card);
+        }
         if let Some(card) = self.review_card(job, cx) {
             feed = feed.child(card);
         }

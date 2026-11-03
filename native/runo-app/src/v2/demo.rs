@@ -227,6 +227,53 @@ pub fn seed() -> Store {
         jobs.push(j);
     }
 
+    // Its base moved and two files clash.
+    let mut j = base(
+        9,
+        Member::Builder,
+        Mode::Build,
+        "Add gift cards",
+        3_000,
+        420,
+    );
+    j.status = Status::Review;
+    j.seen = false;
+    j.changes = vec![
+        change("src/checkout/total.ts", "M", 18, 6),
+        change("src/cart/summary.tsx", "M", 25, 2),
+    ];
+    j.checks = vec![check("npm test", true, 40)];
+    j.conflict = vec![
+        "src/checkout/total.ts".into(),
+        "src/cart/summary.tsx".into(),
+    ];
+    j.feed = vec![
+        Item::Text("Gift cards can be added at checkout and come off the total.".into()),
+        Item::Note("main moved on and src/checkout/total.ts, src/cart/summary.tsx now clash, so nothing was merged.".into()),
+    ];
+    jobs.push(j);
+
+    // Stopped by you halfway.
+    let mut j = base(
+        10,
+        Member::Keeper,
+        Mode::Tidy,
+        "Remove the old analytics code",
+        4_000,
+        95,
+    );
+    j.status = Status::Stopped;
+    j.plan = vec![
+        ("Find the old tracker".into(), 2),
+        ("Remove its calls".into(), 1),
+        ("Run the tests".into(), 0),
+    ];
+    j.feed = vec![
+        tool("Search for track(", "search", 1),
+        tool("Edit src/app.tsx", "edit", 1),
+    ];
+    jobs.push(j);
+
     // Working now: the last job, so RUNO_V2_PLACE=live opens it.
     let mut j = base(
         8,
@@ -290,7 +337,7 @@ pub fn seed() -> Store {
         current: 0,
         jobs,
         chats,
-        next_id: 8,
+        next_id: 11,
         made,
         removed: Vec::new(),
         set_up: true,

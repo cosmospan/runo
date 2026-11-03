@@ -162,6 +162,8 @@ pub struct Job {
     /// model ("" for the agent's own). Empty means the bot's engine.
     pub pick: String,
     pub pick_model: String,
+    /// Files that clash with the base branch, when approving it stopped on them.
+    pub conflict: Vec<String>,
 }
 
 /// One file a job changed.
@@ -212,6 +214,7 @@ impl Default for Job {
             race: 0,
             pick: String::new(),
             pick_model: String::new(),
+            conflict: Vec::new(),
         }
     }
 }
