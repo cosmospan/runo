@@ -18,6 +18,11 @@ proposal for the base model, the data, where training runs and what it costs.
 | `train_lora.py` | Fine-tunes the base model with LoRA on the examples. |
 | `requirements.txt` | Python packages for the two scripts. |
 
+## Free, in the cloud
+
+Open `colab.ipynb` in Google Colab, pick the free T4 GPU, and Run all. It
+trains, scores the model on the fixed test set and hands you the GGUF file.
+
 ## On a Mac, in one go
 
 `./training/mac.sh` does every step below, with no API key, with MLX: data,

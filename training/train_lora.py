@@ -2,8 +2,8 @@
 
     python train_lora.py --data synth.jsonl mine.jsonl --out fin-lora
 
-A 0.8B model with LoRA fits on one 16 GB GPU (a free Colab or Kaggle T4
-works, slowly). On a Mac, MLX-LM's `mlx_lm.lora` does the same job with the
+A 0.8B model with LoRA fits on one 16 GB GPU; a free Colab or Kaggle T4
+works (see colab.ipynb). On a Mac, MLX-LM's `mlx_lm.lora` does the same job with the
 same JSONL files.
 """
 
@@ -28,9 +28,19 @@ def main() -> None:
     tok = AutoTokenizer.from_pretrained(args.base)
     model = AutoModelForCausalLM.from_pretrained(
         args.base,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        torch_dtype=torch.bfloat16
+        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        else torch.float32,
     )
     data = load_dataset("json", data_files=args.data, split="train").shuffle(seed=7)
+    # Prompt (instructions + the person's words) and completion (Fin's answer),
+    # so only the answer is learned.
+    data = data.map(
+        lambda r: {"prompt": r["messages"][:-1], "completion": r["messages"][-1:]},
+        remove_columns=["messages"],
+    )
+    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    fp16 = torch.cuda.is_available() and not bf16
 
     trainer = SFTTrainer(
         model=model,
@@ -53,10 +63,10 @@ def main() -> None:
             warmup_ratio=0.05,
             logging_steps=20,
             save_strategy="epoch",
-            # Learn the answers, not the instructions.
-            assistant_only_loss=True,
+            completion_only_loss=True,
             max_length=1024,
-            bf16=torch.cuda.is_available(),
+            bf16=bf16,
+            fp16=fp16,
         ),
     )
     trainer.train()
