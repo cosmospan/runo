@@ -443,6 +443,9 @@ pub struct Shell {
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
     setup_crew: Vec<Member>,
+    /// Sample jobs are showing, picked from the Start here page; the real
+    /// store comes back when they're put away.
+    sampling: bool,
     /// A made bot chosen for Today's next job (its mode must match).
     target: Option<Member>,
     hover_at: Instant,
@@ -759,6 +762,7 @@ impl Shell {
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),
+            sampling: false,
             maker_name,
             maker_role,
             maker_like: Member::Checker,
@@ -1233,6 +1237,9 @@ impl Shell {
         folder: store::Folder,
         cx: &mut Context<Self>,
     ) {
+        if self.sample_guard(cx) {
+            return;
+        }
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
             self.say(format!(
@@ -1347,6 +1354,9 @@ impl Shell {
 
     /// Starts the same job again on other engines, so it races the first try.
     pub(super) fn race_it(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
         let Some(first) = self.store.job(id).cloned() else {
             return;
         };
@@ -1805,6 +1815,9 @@ impl Shell {
     /// Approves a job's changes: a pull request from Shipper on GitHub projects,
     /// otherwise merged into the branch it started from.
     pub(super) fn approve(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
         // Approving one try of a race keeps it and throws the others away.
         let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
         if race != 0 && self.tries(race).len() > 1 {
@@ -1872,6 +1885,9 @@ impl Shell {
 
     /// Throws a job's changes away, with its branch and worktree.
     pub(super) fn discard_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
         let Some(job) = self.store.job(id).cloned() else {
             return;
         };
@@ -2114,6 +2130,9 @@ impl Shell {
     }
 
     pub(super) fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
         if let Some(r) = self.runners.iter_mut().find(|r| r.id == id) {
             r.stop();
         }
@@ -2122,6 +2141,9 @@ impl Shell {
 
     /// Asks `who` for real, on its own engine, in the current folder.
     fn ask(&mut self, who: Member, text: String, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
         let history: Vec<(bool, String)> = self
             .store
             .chat(who)

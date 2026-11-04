@@ -141,6 +141,7 @@ impl Shell {
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
             ))
+            .children(self.sample_banner(cx))
             .child(ui::rise(
                 div().w_full().child(self.composer_card(cx)),
                 self.stagger(1),

@@ -11,7 +11,7 @@ use runo_holo::{Framing, Mood};
 
 use super::data::{Member, Mode};
 use super::store::Step;
-use super::ui::{self, c};
+use super::ui::{self, c, ca};
 use super::Shell;
 
 /// First jobs worth trying: the mode, a name for the card, what it does, and
@@ -56,30 +56,45 @@ impl Shell {
     /// the tools that otherwise only show up once there's work.
     pub(super) fn start_here(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let face = self.bot(Member::Builder, Mood::Signature, 72., Framing::Full);
-        let hello = div()
-            .flex()
-            .items_center()
-            .gap(px(16.))
-            .child(face)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .text_size(px(18.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Your crew is ready."),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.5))
-                            .line_height(px(20.))
-                            .text_color(c(ui::MUTED))
-                            .child("Tell it what you want in plain words in the box above. Each job runs on its own branch, and nothing lands in your code until you approve it."),
-                    ),
-            );
+        let engine_ok = self.step_is_done(Step::Engine, cx);
+        let folder_ok = self.store.folder().is_some();
+        let (title, words) = match (engine_ok, folder_ok) {
+            (true, true) => (
+                "Your crew is ready.",
+                "Tell it what you want in plain words in the box above. Each job runs on its own branch, and nothing lands in your code until you approve it.",
+            ),
+            (false, true) => (
+                "One thing first: a coding agent.",
+                "The crew does its work through a coding agent installed on this computer. Install one below, sign in to it once, and you're ready.",
+            ),
+            (true, false) => (
+                "One thing first: your project.",
+                "Pick the folder with your code. The crew works on its own copy of it, so your files stay as they are until you approve a change.",
+            ),
+            (false, false) => (
+                "Two things first.",
+                "The crew needs a coding agent on this computer and a project folder to work in. Both take a minute.",
+            ),
+        };
+        let hello = div().flex().items_center().gap(px(16.)).child(face).child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .text_size(px(18.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.5))
+                        .line_height(px(20.))
+                        .text_color(c(ui::MUTED))
+                        .child(words),
+                ),
+        );
 
         let mut starters = div().flex().gap(px(10.));
         for (i, (mode, name, what, text)) in STARTERS.into_iter().enumerate() {
@@ -231,17 +246,28 @@ impl Shell {
                 .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             );
 
+        let ready = engine_ok && folder_ok;
+        let setup = (!ready).then(|| {
+            div()
+                .flex()
+                .gap(px(10.))
+                .when(!engine_ok, |d| d.child(self.install_card(cx)))
+                .when(!folder_ok, |d| d.child(folder_card(cx)))
+        });
         div()
             .w_full()
             .flex()
             .flex_col()
             .gap(px(22.))
             .child(hello)
+            .children(setup)
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(10.))
+                    // Waiting on setup, the first jobs stay in view but quiet.
+                    .when(!ready, |d| d.opacity(0.45))
                     .child(label("Try a first job"))
                     .child(starters),
             )
@@ -253,7 +279,202 @@ impl Shell {
                     .child(label("What you can do"))
                     .child(tools),
             )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::MUTED))
+                    .child("Not ready to start?")
+                    .child(
+                        div()
+                            .id("start-sample")
+                            .text_color(c(ui::INK))
+                            .underline()
+                            .cursor_pointer()
+                            .child("Look around with sample jobs first")
+                            .on_click(cx.listener(|this, _, _, cx| this.sample_jobs(true, cx))),
+                    ),
+            )
             .into_any_element()
+    }
+
+    /// Swaps in a made-up store so every screen has something on it, or puts
+    /// it away and brings the real one back. The sample store is never saved.
+    pub(super) fn sample_jobs(&mut self, on: bool, cx: &mut Context<Self>) {
+        if on == self.sampling {
+            return;
+        }
+        self.sampling = on;
+        self.term_open = None;
+        self.home_pick = None;
+        self.inbox_pick = None;
+        self.store = if on {
+            super::demo::seed()
+        } else {
+            super::store::Store::load()
+        };
+        self.go(super::Place::Today, cx);
+        self.say(if on {
+            "These are sample jobs. Nothing here is real or saved."
+        } else {
+            "Back to your own project."
+        });
+        cx.notify();
+    }
+
+    /// Nothing real runs on sample jobs: true (and a word on why) while they're
+    /// showing.
+    pub(super) fn sample_guard(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.sampling {
+            return false;
+        }
+        self.say("Nothing runs while sample jobs are showing. Press Back to my project first.");
+        cx.notify();
+        true
+    }
+
+    /// The strip over Jobs while sample jobs are showing.
+    pub(super) fn sample_banner(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.sampling {
+            return None;
+        }
+        Some(
+            div()
+                .w_full()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .px(px(14.))
+                .py(px(10.))
+                .rounded(px(10.))
+                .bg(ca(ui::AMBER, 0.10))
+                .border_1()
+                .border_color(ca(ui::AMBER, 0.35))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(13.))
+                        .child("You're looking at sample jobs. Click around: nothing here is real, and nothing is saved."),
+                )
+                .child(
+                    ui::solid("sample-off", "Back to my project")
+                        .on_click(cx.listener(|this, _, _, cx| this.sample_jobs(false, cx))),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// How to install a coding agent, for when none is found.
+    fn install_card(&mut self, cx: &mut Context<Self>) -> Div {
+        let mut rows = div().flex().flex_col().gap(px(8.));
+        for (n, id) in ["claude", "codex", "gemini"].into_iter().enumerate() {
+            let Some(p) = crate::agent::PROVIDERS.iter().find(|p| p.id == id) else {
+                continue;
+            };
+            let Some(cmd) = crate::registry::spec(id).and_then(|s| {
+                s.install
+                    .npm
+                    .as_ref()
+                    .map(|n| format!("npm install -g {n}"))
+                    .or_else(|| {
+                        if cfg!(windows) {
+                            s.install.windows.clone()
+                        } else {
+                            s.install.unix.clone()
+                        }
+                    })
+            }) else {
+                continue;
+            };
+            let copy = cmd.clone();
+            let run = cmd.clone();
+            let has_folder = self.store.folder().is_some();
+            rows = rows.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .w(px(92.))
+                            .flex_none()
+                            .text_size(px(12.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(p.name),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .px(px(10.))
+                            .py(px(6.))
+                            .rounded(px(7.))
+                            .bg(c(ui::BG))
+                            .border_1()
+                            .border_color(c(ui::LINE))
+                            .font_family(ui::MONO)
+                            .text_size(px(11.5))
+                            .truncate()
+                            .child(cmd),
+                    )
+                    .child(ui::ghost(("install-copy", n), "Copy").on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
+                            this.say("Copied. Paste it in a terminal, then sign in once.");
+                            cx.notify();
+                        },
+                    )))
+                    .when(has_folder, |d| {
+                        d.child(
+                            ui::ghost(("install-run", n), "Run it").on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    let id = super::term::project_id(this.store.current);
+                                    this.term_run(id, &run, window, cx);
+                                },
+                            )),
+                        )
+                    }),
+            );
+        }
+        ui::card()
+            .flex_1()
+            .min_w_0()
+            .p(px(16.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(Icon::new(IconName::Cpu).size(px(16.)).text_color(c(ui::AMBER)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Install a coding agent"),
+                    )
+                    .child(ui::ghost("install-recheck", "Check again").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            crate::caps::refresh();
+                            this.say("Looking for coding agents…");
+                            cx.notify();
+                        },
+                    ))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .line_height(px(18.))
+                    .text_color(c(ui::MUTED))
+                    .child("Any one is enough. Claude Code is the one most people start with. After it installs, run it once in a terminal to sign in."),
+            )
+            .child(rows)
     }
 
     /// Whether a getting-started step is done, counting the engine check the
@@ -435,4 +656,56 @@ fn label(text: &'static str) -> Div {
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(ui::FAINT))
         .child(text)
+}
+
+/// Where to pick the project folder, for when none is picked yet.
+fn folder_card(cx: &mut Context<Shell>) -> Div {
+    ui::card()
+        .flex_1()
+        .min_w_0()
+        .p(px(16.))
+        .flex()
+        .flex_col()
+        .gap(px(12.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .child(Icon::new(IconName::Folder).size(px(16.)).text_color(c(ui::AMBER)))
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child("Pick your project folder"),
+                ),
+        )
+        .child(
+            div()
+                .text_size(px(12.5))
+                .line_height(px(18.))
+                .text_color(c(ui::MUTED))
+                .child("The folder with your code, usually a git repository. You can also drop a folder anywhere on this window."),
+        )
+        .child(
+            div().flex().child(
+                ui::solid("start-folder", "Choose a folder…")
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+            ),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::STARTERS;
+
+    #[test]
+    fn starters_cover_reading_fixing_and_building() {
+        let modes: Vec<_> = STARTERS.iter().map(|s| s.0).collect();
+        assert_eq!(
+            modes,
+            vec![super::Mode::Ask, super::Mode::Fix, super::Mode::Build]
+        );
+        assert!(STARTERS.iter().all(|s| !s.3.is_empty()));
+    }
 }
