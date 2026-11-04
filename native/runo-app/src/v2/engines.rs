@@ -376,6 +376,7 @@ impl Shell {
         let ok = ready.contains(&sel);
         let id = p.id;
         let spent: f64 = self
+            .crew
             .store
             .jobs
             .iter()
@@ -383,7 +384,13 @@ impl Shell {
             .filter_map(|j| super::home::cost(&j.summary))
             .sum::<f64>()
             + 0.0;
-        let jobs = self.store.jobs.iter().filter(|j| j.agent == id).count();
+        let jobs = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.agent == id)
+            .count();
         let mut head = div()
             .flex()
             .items_center()

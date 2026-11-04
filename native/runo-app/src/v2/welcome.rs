@@ -18,13 +18,13 @@ const STEPS: [&str; 2] = ["Engines", "Folder"];
 impl Shell {
     /// Ends the walkthrough with the crew picked so far.
     pub(super) fn finish_setup(&mut self, _cx: &mut Context<Self>) {
-        self.store.removed = Member::CREW
+        self.crew.store.removed = Member::CREW
             .into_iter()
             .filter(|m| !self.setup_crew.contains(m))
             .collect();
-        data::set_removed(&self.store.removed);
-        self.store.set_up = true;
-        self.store.save();
+        data::set_removed(&self.crew.store.removed);
+        self.crew.store.set_up = true;
+        self.crew.store.save();
         self.trail.clear();
     }
 
@@ -53,7 +53,8 @@ impl Shell {
                 1 => "1 agent ready".to_string(),
                 n => format!("{n} agents ready"),
             },
-            self.store
+            self.crew
+                .store
                 .folder()
                 .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Not picked yet".into()),
@@ -305,8 +306,8 @@ impl Shell {
     fn welcome_folder(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let hero = self.bot(Member::Keeper, Mood::Idle, 150., Framing::Full);
         let mut list = div().flex().flex_col().gap(px(6.));
-        let current = self.store.current;
-        for (i, f) in self.store.folders.iter().enumerate().take(5) {
+        let current = self.crew.store.current;
+        for (i, f) in self.crew.store.folders.iter().enumerate().take(5) {
             let on = i == current;
             list = list.child(
                 div()
@@ -346,13 +347,13 @@ impl Shell {
                     )
                     .when(on, |d| d.child(div().text_color(c(ui::GREEN)).child("✓")))
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.store.current = i;
-                        this.store.save();
+                        this.crew.store.current = i;
+                        this.crew.store.save();
                         cx.notify();
                     })),
             );
         }
-        let words = if self.store.folders.is_empty() {
+        let words = if self.crew.store.folders.is_empty() {
             "Pick the project the crew should work in. You can add more folders later, or drop one onto the window."
         } else {
             "The crew works in one project folder at a time. Pick one here, or add another. You can switch any time from Jobs."

@@ -21,13 +21,15 @@ impl Shell {
     pub(super) fn kpis(&mut self) -> impl IntoElement {
         let day = 86_400;
         let today: Vec<&Job> = self
+            .crew
             .store
             .jobs
             .iter()
             .filter(|j| store::now().saturating_sub(j.ended.unwrap_or(j.started)) < day)
             .collect();
-        let running: Vec<&Job> = self.store.running().collect();
+        let running: Vec<&Job> = self.crew.store.running().collect();
         let needs: Vec<&Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -141,6 +143,7 @@ impl Shell {
     /// progress, and what finished lately.
     pub(super) fn jobs_table(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let needs: Vec<Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -148,6 +151,7 @@ impl Shell {
             .cloned()
             .collect();
         let going: Vec<Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -155,6 +159,7 @@ impl Shell {
             .cloned()
             .collect();
         let done: Vec<Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -478,7 +483,7 @@ impl Shell {
     /// The job the inspector shows: the one picked, else the newest running or
     /// waiting job, else the newest one.
     pub(super) fn picked(&self) -> Option<u64> {
-        let jobs = &self.store.jobs;
+        let jobs = &self.crew.store.jobs;
         self.home_pick
             .filter(|id| jobs.iter().any(|j| j.id == *id))
             .or_else(|| {
@@ -493,7 +498,7 @@ impl Shell {
     /// A panel down the right of Home: the picked job's bot, facts and plan.
     pub(super) fn inspector(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let id = self.picked()?;
-        let j = self.store.jobs.iter().find(|j| j.id == id)?.clone();
+        let j = self.crew.store.jobs.iter().find(|j| j.id == id)?.clone();
         let running = j.status == Status::Running;
         let face = self.bot(
             j.bot,

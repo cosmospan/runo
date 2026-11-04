@@ -37,7 +37,7 @@ impl Shell {
             Framing::Full,
         );
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
-        let log = self.store.chat(who).to_vec();
+        let log = self.crew.store.chat(who).to_vec();
         let header = div()
             .flex_none()
             .flex()
@@ -97,8 +97,8 @@ impl Shell {
             .when(!log.is_empty(), |d| {
                 d.child(ui::ghost("chat-clear", "Clear").on_click(cx.listener(
                     move |this, _, _, cx| {
-                        this.store.chats.remove(&who);
-                        this.store.save();
+                        this.crew.store.chats.remove(&who);
+                        this.crew.store.save();
                         cx.notify();
                     },
                 )))
@@ -174,6 +174,7 @@ impl Shell {
         }
         if thinking {
             let secs = self
+                .crew
                 .asking
                 .as_ref()
                 .map(|a| a.started.elapsed().as_secs())
