@@ -1,4 +1,4 @@
-"""Render Squad Code's app icon (Fin in coral glass on a night tile) from runo.svg for every platform.
+"""Render Squad Code's app icon (Fin waving over an editor page, flat) from runo.svg for every platform.
 
 Run from this folder: python3 build.py (needs cairosvg and Pillow).
 
@@ -14,7 +14,7 @@ import cairosvg
 from PIL import Image
 
 SVG = open("runo.svg").read()
-# Below 48px Fin's fins turn to mush, so small sizes use the plain hex and visor.
+# Below 48px the editor page and fins turn to mush, so small sizes use Fin's plain hex, visor and eyes.
 SMALL = open("runo-small.svg").read()
 # The tile spans 100..924 of the 1024 canvas (shadow aside); this crops to it for full-bleed sizes.
 FLAT = SVG.replace('viewBox="0 0 1024 1024"', 'viewBox="96 96 832 832"')
