@@ -70,10 +70,13 @@ PY
 step "Fine-tune with LoRA (MLX)"
 if [ ! -d "$WORK/adapters" ]; then
   TRAIN_N=$(wc -l < "$WORK/data/train.jsonl")
-  ITERS=$(( TRAIN_N * 2 / 8 ))   # about 2 epochs at batch size 8
+  # Macs with 8 GB of memory train in smaller batches, with checkpointing.
+  RAM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+  if [ "$RAM_GB" -le 8 ]; then BATCH="${BATCH:-2}"; else BATCH="${BATCH:-8}"; fi
+  ITERS=$(( TRAIN_N * 2 / BATCH ))   # about 2 epochs
   mlx_lm.lora --model "$BASE" --train --data "$WORK/data" \
-    --batch-size 8 --iters "$ITERS" --learning-rate 1e-4 \
-    --mask-prompt --adapter-path "$WORK/adapters"
+    --batch-size "$BATCH" --iters "$ITERS" --learning-rate 1e-4 \
+    --grad-checkpoint --mask-prompt --adapter-path "$WORK/adapters"
 fi
 
 step "Merge the adapter into the model"
@@ -87,6 +90,7 @@ if [ ! -s "$WORK/fin-q4_k_m.gguf" ]; then
   pip install -q -r "$WORK/llama.cpp/requirements/requirements-convert_hf_to_gguf.txt"
   python "$WORK/llama.cpp/convert_hf_to_gguf.py" "$WORK/fused" --outfile "$WORK/fin-f16.gguf" --outtype f16
   llama-quantize "$WORK/fin-f16.gguf" "$WORK/fin-q4_k_m.gguf" Q4_K_M
+  rm -f "$WORK/fin-f16.gguf"
 fi
 ls -lh "$WORK/fin-q4_k_m.gguf"
 
