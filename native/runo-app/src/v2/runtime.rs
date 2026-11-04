@@ -138,6 +138,24 @@ impl Runtime {
         pick: Option<(usize, u64)>,
         part: Option<(u64, String)>,
     ) -> store::Job {
+        self.make_placed_job(st, bot, mode, text, folder, pick, part)
+            .0
+    }
+
+    /// [`Runtime::make_job`], with where the intelligence layer placed it. A
+    /// client that can send jobs to a server starts it there when the
+    /// placement's site is `Site::Server`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn make_placed_job(
+        &mut self,
+        st: &AppSettings,
+        bot: Member,
+        mode: Mode,
+        text: &str,
+        folder: store::Folder,
+        pick: Option<(usize, u64)>,
+        part: Option<(u64, String)>,
+    ) -> (store::Job, brain::place::Placement) {
         self.store.next_id += 1;
         let mut job = store::Job {
             id: self.store.next_id,
@@ -171,7 +189,7 @@ impl Runtime {
             &self.sites,
         );
         if !placed.why.is_empty() {
-            job.feed.push(store::Item::Note(placed.why));
+            job.feed.push(store::Item::Note(placed.why.clone()));
         }
         // A job that may change files gets its own branch and worktree, so your
         // checkout stays as it is and its changes wait for your approval.
@@ -203,7 +221,7 @@ impl Runtime {
                 job.feed.push(store::Item::Error(why));
             }
         }
-        job
+        (job, placed)
     }
 
     /// Races one job on up to `n` engines at once, each try on its own branch.
