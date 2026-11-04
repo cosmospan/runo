@@ -9785,6 +9785,7 @@ fn main() {
     }
     // Every other mode may start agents or answer them: give it this launch's approval
     // key, and keep Runo's data folder private.
+    store::adopt_runo_data();
     approvals::init_key();
     store::tighten_data_dir();
     // `runo --agent-host runo-turn <turn folder> <agent> <args…>`: a live turn's agent,
@@ -9920,12 +9921,12 @@ fn open_session_from_notification(id: u64, cx: &mut App) {
 /// shortcuts.
 fn app_menus() -> Vec<Menu> {
     vec![
-        Menu::new("Runo").items([
+        Menu::new("Squad Code").items([
             MenuItem::action("Settings…", OpenSettings),
             MenuItem::action("Check for Updates…", CheckForUpdates),
             MenuItem::action("Take the tour", ShowTour),
             MenuItem::separator(),
-            MenuItem::action("Quit Runo", Quit),
+            MenuItem::action("Quit Squad Code", Quit),
         ]),
         Menu::new("File").items([
             MenuItem::action("New session", NewSession),

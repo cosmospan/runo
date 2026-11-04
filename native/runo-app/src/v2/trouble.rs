@@ -174,7 +174,7 @@ impl Shell {
             ),
             Trouble::Interrupted => (
                 ui::MUTED,
-                "Runo closed while this was running".into(),
+                "Squad Code closed while this was running".into(),
                 "It can carry on from where it was, or start over.".into(),
             ),
             Trouble::Failed(why) => (

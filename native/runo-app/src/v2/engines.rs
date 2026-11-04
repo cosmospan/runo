@@ -1,5 +1,5 @@
-//! Engines: which coding agent and model each bot runs on, and the models Runo
-//! itself thinks with. Choices are saved to Runo's settings straight away.
+//! Engines: which coding agent and model each bot runs on, and the models Squad Code
+//! itself thinks with. Choices are saved to Squad Code's settings straight away.
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
@@ -87,7 +87,7 @@ impl Shell {
         let list = self.engine_list(&st, &ready, default_i, sel, cx);
         let detail = self.engine_detail(&st, &ready, default_i, sel, cx);
 
-        // Runo's own thinking: shaping jobs, and a second opinion.
+        // Squad Code's own thinking: shaping jobs, and a second opinion.
         let brain_i = crate::assistant::assistant_provider(&st);
         let mut brain_agents = div().flex().flex_wrap().gap(px(6.));
         for &j in &ready {
@@ -160,7 +160,7 @@ impl Shell {
             .flex()
             .flex_col()
             .gap(px(space::M))
-            .child(section("Runo's own thinking", "The model calls Runo makes itself, apart from the coding agents doing the work."))
+            .child(section("Squad Code's own thinking", "The model calls Squad Code makes itself, apart from the coding agents doing the work."))
             .child(
                 div()
                     .flex()
@@ -236,7 +236,7 @@ impl Shell {
             .into_any_element()
     }
 
-    /// Every agent Runo knows: the ones on this computer first.
+    /// Every agent Squad Code knows: the ones on this computer first.
     fn engine_list(
         &mut self,
         st: &AppSettings,

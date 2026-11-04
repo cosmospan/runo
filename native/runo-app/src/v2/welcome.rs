@@ -285,7 +285,7 @@ impl Shell {
         };
         card_with(
             hero,
-            "Welcome to Runo",
+            "Welcome to Squad Code",
             words,
             div()
                 .flex()

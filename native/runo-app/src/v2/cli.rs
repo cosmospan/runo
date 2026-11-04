@@ -1,4 +1,4 @@
-//! `runo`: the crew from a terminal. Reading commands (ls, show) read the
+//! `squad`: the crew from a terminal. Reading commands (ls, show) read the
 //! saved store; the rest (new, approve, discard, stop) go in a queue the open
 //! app picks up within a second, so it stays the one place jobs run.
 
@@ -66,20 +66,20 @@ fn push(ask: &Ask) -> Result<(), String> {
     writeln!(f, "{line}").map_err(|e| e.to_string())
 }
 
-const HELP: &str = "runo: hand the crew jobs from a terminal.
+const HELP: &str = "squad: hand the crew jobs from a terminal.
 
-  runo ls                    jobs, newest first
-  runo show <id>             one job: where it stands and what it changed
-  runo new <words...>        a Build job in this folder
-  runo fix|test|tidy|review <words...>
+  squad ls                    jobs, newest first
+  squad show <id>             one job: where it stands and what it changed
+  squad new <words...>        a Build job in this folder
+  squad fix|test|tidy|review <words...>
                              a job of that kind
-  runo new --bot <name> <words...>
+  squad new --bot <name> <words...>
                              a job for one bot
-  runo approve <id>          approve a job waiting for review
-  runo discard <id>          throw a job's changes away
-  runo stop <id>             stop a running job
+  squad approve <id>          approve a job waiting for review
+  squad discard <id>          throw a job's changes away
+  squad stop <id>             stop a running job
 
-Jobs run in the Runo app, which picks these up while it's open.";
+Jobs run in the Squad Code app, which picks these up while it's open.";
 
 /// One line per job for `ls`.
 pub fn line(j: &Job) -> String {
@@ -123,7 +123,7 @@ pub fn parse_new(mode: Mode, args: &[String]) -> Result<(Mode, String, String), 
     }
     let text = words.join(" ").trim().to_string();
     if text.is_empty() && mode.default_job().is_none() {
-        return Err("Say what the job is: runo new <words...>".into());
+        return Err("Say what the job is: squad new <words...>".into());
     }
     Ok((mode, bot, text))
 }
@@ -134,7 +134,7 @@ pub fn main(args: &[String]) -> i32 {
         args.get(1)
             .map(|s| s.trim_start_matches('#'))
             .and_then(|s| s.parse().ok())
-            .ok_or_else(|| format!("usage: runo {cmd} <job id>"))
+            .ok_or_else(|| format!("usage: squad {cmd} <job id>"))
     };
     let result: Result<String, String> = match cmd {
         "ls" | "list" => {
@@ -195,7 +195,7 @@ pub fn main(args: &[String]) -> i32 {
                     bot,
                     dir,
                 })?;
-                Ok("Handed to the crew. It shows up in Runo in a moment.".into())
+                Ok("Handed to the crew. It shows up in Squad Code in a moment.".into())
             })
         }
         "approve" => {
@@ -207,7 +207,7 @@ pub fn main(args: &[String]) -> i32 {
         "stop" => id().and_then(|id| push(&Ask::Stop { id }).map(|_| format!("Stopping #{id}."))),
         "help" | "-h" | "--help" => Ok(HELP.into()),
         other => Err(format!(
-            "runo doesn't know \u{201c}{other}\u{201d}.\n\n{HELP}"
+            "squad doesn't know \u{201c}{other}\u{201d}.\n\n{HELP}"
         )),
     };
     match result {

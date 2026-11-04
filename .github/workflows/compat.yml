@@ -43,7 +43,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build Runo
+      - name: Build Squad Code
         run: cargo build -p runo
 
       - uses: actions/setup-node@v4
@@ -77,7 +77,7 @@ jobs:
         id: check
         run: |
           set +e
-          target/debug/Runo --check-agents --report compat.json --since last.json > summary.md
+          target/debug/SquadCode --check-agents --report compat.json --since last.json > summary.md
           echo "code=$?" >> "$GITHUB_OUTPUT"
           cat summary.md >> "$GITHUB_STEP_SUMMARY"
           cat summary.md

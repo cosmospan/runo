@@ -129,7 +129,7 @@ pub fn pr_body(job: &Job) -> String {
     }
     let (a, r) = job.lines();
     body.push_str(&format!(
-        "{} files changed, +{a} \u{2212}{r}. Made by {} and opened by Shipper in Runo.\n",
+        "{} files changed, +{a} \u{2212}{r}. Made by {} and opened by Shipper in Squad Code.\n",
         job.changes.len(),
         job.bot.name()
     ));

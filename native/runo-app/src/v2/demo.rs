@@ -56,7 +56,7 @@ pub fn seed() -> Store {
         agent: "claude".into(),
         started: t - ago,
         ended: Some(t - ago + secs),
-        branch: format!("runo/demo-{id}"),
+        branch: format!("squad/demo-{id}"),
         base: "main".into(),
         seen: true,
         summary: format!("{secs}s \u{b7} 9 turns \u{b7} $0.{:02}", 10 + id * 3),
@@ -125,7 +125,10 @@ pub fn seed() -> Store {
         Item::Text("I added an order history page under Account.".into()),
         Item::By(Member::Shipper, "Approved. Opening a pull request.".into()),
         Item::By(Member::Shipper, "Squashed 4 commits into one".into()),
-        Item::By(Member::Shipper, "Pushed runo/add-order-history-page".into()),
+        Item::By(
+            Member::Shipper,
+            "Pushed squad/add-order-history-page".into(),
+        ),
     ];
     jobs.push(j);
 
@@ -151,7 +154,7 @@ pub fn seed() -> Store {
         ("Add a test".into(), 2),
     ];
     j.feed = vec![
-        Item::Note("Working on its own branch, runo/stop-double-charges-retry, so your checkout stays as it is.".into()),
+        Item::Note("Working on its own branch, squad/stop-double-charges-retry, so your checkout stays as it is.".into()),
         tool("Read src/checkout/pay.ts", "read", 1),
         tool("Edit src/checkout/pay.ts", "edit", 1),
         tool("Run npm test", "bash", 1),

@@ -270,7 +270,7 @@ impl Shell {
                             ui::pill("split-toggle", "Split", on)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
-                                        "For a bigger goal: Runo splits it into a few jobs that run one after another",
+                                        "For a bigger goal: Squad Code splits it into a few jobs that run one after another",
                                     )
                                     .build(window, cx)
                                 })

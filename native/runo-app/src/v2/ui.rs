@@ -22,7 +22,7 @@ pub const LINE_HI: u32 = 0x34343F;
 /// The primary button and other light fills, and the text that sits on them.
 pub const FILL: u32 = 0xFFFFFF;
 pub const ON_FILL: u32 = 0x0D0D11;
-/// Runo's own voice: its suggestions and the selected row.
+/// Squad Code's own voice: its suggestions and the selected row.
 pub const RUNO: u32 = 0x7B4DF5;
 /// Status colours as text on the dark ground: blue running, amber waiting on
 /// you, green good, red broken.

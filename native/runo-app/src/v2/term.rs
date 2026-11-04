@@ -1,6 +1,6 @@
 //! The terminal drawer: a real shell at the bottom of a job, opened in the
 //! job's own worktree, so you can poke at its branch (run it, test it, look at
-//! git) without touching your checkout. `runo` works in it too, for driving the
+//! git) without touching your checkout. `squad` works in it too, for driving the
 //! crew from the keyboard.
 
 use std::path::PathBuf;
@@ -22,18 +22,18 @@ pub const ROWS: u16 = 14;
 /// Width of one column, near enough for a monospace face at FONT.
 const CELL: f32 = FONT * 0.6;
 
-/// A folder with a `runo` command in it, put first on the drawer's PATH so
-/// typing `runo` drives this app's crew.
+/// A folder with a `squad` command in it, put first on the drawer's PATH so
+/// typing `squad` drives this app's crew.
 fn shim_dir() -> Option<PathBuf> {
     let dir = crate::store::data_dir().join("bin");
     std::fs::create_dir_all(&dir).ok()?;
     let exe = std::env::current_exe().ok()?;
     if cfg!(windows) {
-        let file = dir.join("runo.cmd");
+        let file = dir.join("squad.cmd");
         let text = format!("@echo off\r\n\"{}\" v2 %*\r\n", exe.display());
         std::fs::write(file, text).ok()?;
     } else {
-        let file = dir.join("runo");
+        let file = dir.join("squad");
         let text = format!("#!/bin/sh\nexec \"{}\" v2 \"$@\"\n", exe.display());
         std::fs::write(&file, text).ok()?;
         #[cfg(unix)]
@@ -45,7 +45,7 @@ fn shim_dir() -> Option<PathBuf> {
     Some(dir)
 }
 
-/// The shell the drawer runs: the person's own, with `runo` on its PATH.
+/// The shell the drawer runs: the person's own, with `squad` on its PATH.
 fn program() -> Option<pty::Program> {
     if cfg!(windows) {
         return None;
@@ -73,7 +73,7 @@ pub fn quick(job: &Job) -> Vec<(&'static str, String)> {
     if let Some(check) = super::work::checks_for(job.dir()).first() {
         v.push(("Run checks", check.clone()));
     }
-    v.push(("Crew", "runo ls".to_string()));
+    v.push(("Crew", "squad ls".to_string()));
     v
 }
 

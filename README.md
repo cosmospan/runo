@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Runo app icon" />
+<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon" />
 
-<h1>Runo</h1>
+<h1>Squad Code</h1>
 
 <h3>Ten agents. One crew. Every turn proven.</h3>
 
@@ -13,7 +13,7 @@ take it all the way to ship, without leaving one native app.
 </p>
 
 <p>
-<a href="https://github.com/deltalark/runo/releases/latest"><img src="https://img.shields.io/badge/Download_for_macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+<a href="https://github.com/hyperhale/squadcode/releases/latest"><img src="https://img.shields.io/badge/Download_for_macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
 &nbsp;
 <a href="#run-from-source"><img src="https://img.shields.io/badge/Build_from_source-b7410e?style=for-the-badge&logo=rust&logoColor=white" alt="Build from source" /></a>
 &nbsp;
@@ -21,8 +21,8 @@ take it all the way to ship, without leaving one native app.
 </p>
 
 <p>
-<a href="https://github.com/deltalark/runo/actions/workflows/ci.yml"><img src="https://github.com/deltalark/runo/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-<a href="https://github.com/deltalark/runo/releases"><img src="https://img.shields.io/github/v/release/deltalark/runo?include_prereleases&label=release&color=5b5bd6" alt="Latest release" /></a>
+<a href="https://github.com/hyperhale/squadcode/actions/workflows/ci.yml"><img src="https://github.com/hyperhale/squadcode/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+<a href="https://github.com/hyperhale/squadcode/releases"><img src="https://img.shields.io/github/v/release/hyperhale/squadcode?include_prereleases&label=release&color=5b5bd6" alt="Latest release" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
 <img src="https://img.shields.io/badge/built%20with-pure%20Rust-b7410e?logo=rust&logoColor=white" alt="Pure Rust" />
 <img src="https://img.shields.io/badge/no-Electron-47848f?logo=electron&logoColor=white" alt="No Electron" />
@@ -302,7 +302,7 @@ See [provider setup](docs/providers.md) for details.
 
 ### Download
 
-Builds for Apple silicon and Intel Macs are on the [Releases](https://github.com/deltalark/runo/releases) page. Open the disk image and drag Runo to Applications. Runo checks there for newer versions and offers to download them; nothing installs on its own.
+Builds for Apple silicon and Intel Macs are on the [Releases](https://github.com/hyperhale/squadcode/releases) page. Open the disk image and drag Runo to Applications. Runo checks there for newer versions and offers to download them; nothing installs on its own.
 
 ### Requirements
 
@@ -315,7 +315,7 @@ Builds for Apple silicon and Intel Macs are on the [Releases](https://github.com
 ### Run from source
 
 ```bash
-git clone https://github.com/deltalark/runo
+git clone https://github.com/hyperhale/squadcode
 cd runo
 cargo run -p runo --release
 ```
@@ -437,7 +437,7 @@ The phone bridge serves a small, token-protected API that a phone app uses to fo
 
 ## Status
 
-Runo is early and moving quickly. Expect rough edges, and please [open an issue](https://github.com/deltalark/runo/issues) when you hit one.
+Runo is early and moving quickly. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one.
 
 ## Contributing
 
