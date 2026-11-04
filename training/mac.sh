@@ -80,7 +80,7 @@ if [ ! -e "$WORK/adapters/.done" ]; then
   mlx_lm.lora --model "$BASE" --train --data "$WORK/data" \
     --batch-size "$BATCH" --iters "$ITERS" --learning-rate 1e-4 \
     --grad-checkpoint --mask-prompt --adapter-path "$WORK/adapters" \
-    --save-every 50 "${RESUME[@]}"
+    --save-every 50 ${RESUME[@]+"${RESUME[@]}"}
   touch "$WORK/adapters/.done"
 fi
 
