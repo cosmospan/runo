@@ -221,6 +221,14 @@ mod tests {
         assert_eq!(r.bot, Member::Checker);
     }
 
+    /// The training scripts write the same prompt (training/make_data.py); a
+    /// model trained on one prompt and asked with another does worse.
+    #[test]
+    fn the_prompt_matches_the_one_training_uses() {
+        let trained = include_str!("../../../../../training/eval/route_system.txt");
+        assert_eq!(route_system(&Member::CREW), trained);
+    }
+
     #[test]
     fn the_prompt_lists_the_crew() {
         let s = route_system(&Member::CREW);

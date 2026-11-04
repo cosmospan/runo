@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Train Squad's own model on an Apple Silicon Mac, end to end.
 #
-#   ANTHROPIC_API_KEY=... ./training/mac.sh
+#   ./training/mac.sh
 #
-# 1. writes about 3,600 labelled job sentences with a teacher model (about $5)
+# 1. builds about 1,900 labelled job sentences from the hand-written seeds
+#    (with ANTHROPIC_API_KEY set, a teacher model adds 3,600 more for about $5)
 # 2. adds your own finished jobs, if Squad Code is installed (they stay here)
 # 3. fine-tunes Qwen3.5-0.8B with LoRA using MLX (free, about 1 to 2 hours)
 # 4. shrinks it to one ~0.5 GB GGUF file and serves it with llama-server
@@ -15,10 +16,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 BASE="${BASE:-Qwen/Qwen3.5-0.8B}"
 WORK="${WORK:-$PWD/work}"
-SQUAD="${SQUAD:-/Applications/Squad Code.app/Contents/MacOS/SquadCode}"
+SQUAD="${SQUAD:-$PWD/../target/release/SquadCode}"
 mkdir -p "$WORK/data"
 
 step() { printf '\n== %s\n' "$*"; }
+
+step "Squad Code from this branch (for export and eval)"
+if [ ! -x "$SQUAD" ] && command -v cargo >/dev/null; then
+  (cd .. && cargo build --release -p runo)
+fi
 
 step "Python packages"
 [ -d "$WORK/venv" ] || python3 -m venv "$WORK/venv"
@@ -27,10 +33,15 @@ source "$WORK/venv/bin/activate"
 pip install -q --upgrade pip
 pip install -q mlx-lm anthropic
 
-step "Training examples from the teacher model"
+step "Training examples"
 if [ ! -s "$WORK/data/synth.jsonl" ]; then
-  : "${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY to write the training examples}"
-  python make_data.py --out "$WORK/data/synth.jsonl" --per-kind 600
+  # From the hand-written seeds, no key needed. With ANTHROPIC_API_KEY set,
+  # a teacher model writes 3,600 more varied ones too (about $5).
+  python build_data.py --out "$WORK/data/synth.jsonl"
+  if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    python make_data.py --out "$WORK/data/teacher.jsonl" --per-kind 600
+    cat "$WORK/data/teacher.jsonl" >> "$WORK/data/synth.jsonl"
+  fi
 fi
 
 step "Your own finished jobs"

@@ -1,0 +1,86 @@
+the checkout page throws a 500 when the cart is empty
+login stopped working after the last deploy
+users get logged out every few minutes
+the date picker shows the wrong month in Safari
+uploads over 10MB fail silently
+the search box freezes the page when I type fast
+Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+KeyError: 'user_id' in handlers/session.py line 88
+panic: runtime error: index out of range [3] with length 3
+thread 'tokio-runtime-worker' panicked at 'called `Option::unwrap()` on a `None` value', src/db.rs:112
+the app crashes on launch on Android 14
+dark mode text is invisible on the settings screen
+emails are being sent twice
+the CSV export has the columns in the wrong order
+pagination skips page 2
+the websocket keeps disconnecting after 30 seconds
+password reset links expire immediately
+images don't load on the product page
+the build fails with "cannot find module '@/utils'"
+error TS2322: Type 'string' is not assignable to type 'number'
+the total in the invoice is off by one cent
+timezone is wrong for users in India
+the notifications badge never clears
+infinite redirect loop after signing in with Google
+memory usage keeps growing until the worker dies
+the API returns 401 even with a valid token
+segfault when opening large files
+the modal can't be closed on mobile
+sorting by price puts 100 before 20
+the cron job runs twice every night
+docker compose up fails with port already in use
+the progress bar jumps back to zero
+copy button copies the wrong text
+dropdown is cut off at the bottom of the screen
+the importer chokes on files with a BOM
+the chart is blank when there's only one data point
+ImportError: cannot import name 'soft_unicode' from 'markupsafe'
+the app hangs when the network drops
+duplicate rows show up in the orders table
+the save button does nothing
+something is broken with the payment webhook, Stripe says it's failing
+fix the race condition in the job queue
+autocomplete shows results from the previous query
+the font looks blurry on Windows
+users can't delete their account, it just spins
+NullPointerException in OrderService.calculateTotal
+the page is really slow when there are more than 1000 rows
+SIGABRT on iOS when the camera opens
+the tests pass locally but the app crashes in production with "undefined is not a function"
+our Go service leaks goroutines under load
+the scroll position resets when I go back
+fix the typo that breaks the config parsing
+links in emails point to localhost
+rate limiter blocks everyone after one request
+the map doesn't show markers anymore
+signup form accepts invalid emails
+the cache never invalidates after an update
+can you fix the flicker when the sidebar opens
+error[E0502]: cannot borrow `self.items` as mutable because it is also borrowed as immutable
+the background job fails with "connection reset by peer"
+avatars are stretched
+the release build crashes but debug is fine
+uploading a PNG with transparency makes it black
+the share link 404s
+CORS error when the frontend calls the API
+the game stutters every few seconds
+audio cuts out after pausing
+our Lambda times out on cold start
+the SQL query returns no rows when the name has an apostrophe
+android back button closes the app instead of going back
+the calendar invite has the wrong time
+login with magic link says token invalid
+the counter goes negative
+characters like é show up as garbage
+the PDF has blank pages at the end
+keyboard covers the input on iPhone
+everything is broken after upgrading to Next 15 please help
+fix this: "Error: listen EADDRINUSE: address already in use :::3000"
+the retry logic retries forever
+the logs show "deadlock detected" a few times a day
+pressing enter submits the form twice
+the filter resets when I change pages
+we get "too many open files" on the server
+the sync loses edits made offline
+the bot replies to its own messages
+the price shows NaN for some products

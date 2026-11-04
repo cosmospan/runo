@@ -15,8 +15,6 @@ import argparse
 import json
 import pathlib
 
-import anthropic
-
 HERE = pathlib.Path(__file__).parent
 
 KINDS = {
@@ -42,7 +40,8 @@ BOT_FOR = {"build": "Builder", "test": "Checker", "review": "Guard", "fix": "Fix
 
 
 def route_system() -> str:
-    """Must match brain::model::route_system in the app, word for word."""
+    """Must match brain::model::route_system in the app, word for word.
+    Both are checked against eval/route_system.txt."""
     s = (
         "You are Fin, the guide in Squad Code. A person typed a job for the crew of coding bots. "
         "Pick the kind of job and the bot that should take it. "
@@ -86,6 +85,8 @@ def main() -> None:
         for l in (HERE / "eval" / "route.jsonl").read_text().splitlines()
         if l.strip()
     }
+    import anthropic
+
     client = anthropic.Anthropic()
     system = route_system()
     seen: set[str] = set()

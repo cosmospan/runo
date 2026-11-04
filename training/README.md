@@ -13,13 +13,14 @@ proposal for the base model, the data, where training runs and what it costs.
 | File | What it does |
 | --- | --- |
 | `eval/route.jsonl` | The fixed test set. Every model is scored on it before it ships, and it is never trained on. |
+| `seeds/*.txt`, `build_data.py` | 380 hand-written job sentences, and the script that turns them into about 1,900 labelled examples with no API key. |
 | `make_data.py` | Writes training examples: varied job sentences for each kind of job, labelled, from a teacher model. |
 | `train_lora.py` | Fine-tunes the base model with LoRA on the examples. |
 | `requirements.txt` | Python packages for the two scripts. |
 
 ## On a Mac, in one go
 
-`ANTHROPIC_API_KEY=... ./training/mac.sh` does every step below with MLX: data,
+`./training/mac.sh` does every step below, with no API key, with MLX: data,
 training, merging, the GGUF file, serving it on port 8088, turning Smart Fin on
 and scoring it. Re-running skips what's done; everything lands in `training/work/`.
 
