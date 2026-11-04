@@ -63,7 +63,7 @@ impl Shell {
                 s.ok += 1;
             }
         }
-        shares.sort_by(|a, b| b.jobs.cmp(&a.jobs));
+        shares.sort_by_key(|s| std::cmp::Reverse(s.jobs));
 
         // Each day's stack: by spend when anything cost money, else by jobs.
         let by_money = spend > 0.;
@@ -289,10 +289,9 @@ impl Shell {
                             .flex()
                             .justify_end()
                             .text_color(c(ui::MUTED))
-                            .child(if s.ended == 0 {
-                                "—".into()
-                            } else {
-                                format!("{}%", s.ok * 100 / s.ended)
+                            .child(match (s.ok * 100).checked_div(s.ended) {
+                                None => "—".into(),
+                                Some(pct) => format!("{pct}%"),
                             }),
                     ),
             );

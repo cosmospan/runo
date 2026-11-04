@@ -7,7 +7,7 @@ use gpui_kit::{App, SharedString, SystemNotification};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The app's identity, as its bundle names it; Windows shows notifications under it.
-const APP_ID: &str = "dev.runo.app";
+const APP_ID: &str = "dev.squadcode.app";
 
 /// Whether clicks are handled yet. On a Mac this first touch of the notification center
 /// may ask for permission, so it waits for the first notification.
@@ -15,7 +15,7 @@ static LISTENING: AtomicBool = AtomicBool::new(false);
 
 /// Name Runo to the system, early, before any window opens.
 pub(crate) fn install(cx: &mut App) {
-    cx.set_app_identity(APP_ID, "Runo");
+    cx.set_app_identity(APP_ID, "Squad Code");
 }
 
 /// Open the session a clicked notification is about.

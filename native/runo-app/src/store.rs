@@ -1365,10 +1365,43 @@ pub fn home_dir() -> Option<PathBuf> {
 
 /// Runo's data folder: `$RUNO_HOME`, else `~/.runo`.
 pub fn data_dir() -> PathBuf {
-    std::env::var_os("RUNO_HOME")
+    std::env::var_os("SQUADCODE_HOME")
+        .or_else(|| std::env::var_os("RUNO_HOME"))
         .map(PathBuf::from)
-        .or_else(|| home_dir().map(|home| home.join(".runo")))
-        .unwrap_or_else(|| PathBuf::from(".runo"))
+        .or_else(|| home_dir().map(|home| home.join(".squadcode")))
+        .unwrap_or_else(|| PathBuf::from(".squadcode"))
+}
+
+/// The first time Squad Code opens, it takes a copy of what Runo had saved (its
+/// settings and v2 jobs, the files at the top of ~/.runo), so nothing has to be set up
+/// again. Runo's own folder is left as it is.
+pub fn adopt_runo_data() {
+    if std::env::var_os("SQUADCODE_HOME").is_some() || std::env::var_os("RUNO_HOME").is_some() {
+        return;
+    }
+    let Some(home) = home_dir() else {
+        return;
+    };
+    adopt_from(&home.join(".runo"), &home.join(".squadcode"));
+}
+
+fn adopt_from(old: &Path, new: &Path) {
+    if new.exists() || !old.is_dir() {
+        return;
+    }
+    if std::fs::create_dir_all(new).is_err() {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(old) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_json = path.extension().is_some_and(|e| e == "json");
+        if is_json && entry.file_type().is_ok_and(|t| t.is_file()) {
+            let _ = std::fs::copy(&path, new.join(entry.file_name()));
+        }
+    }
 }
 
 /// Give a project saved before check levels its level: checks Runo suggested follow the
@@ -2215,16 +2248,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn data_dir_uses_runo_home_else_falls_back_to_home_dot_runo() {
+    fn data_dir_uses_runo_home_else_falls_back_to_home_dot_squadcode() {
         let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _restore = RestoreEnv(
-            ["RUNO_HOME", "HOME"]
+            ["SQUADCODE_HOME", "RUNO_HOME", "HOME"]
                 .into_iter()
                 .map(|k| (k, std::env::var_os(k)))
                 .collect(),
         );
         let base = std::env::temp_dir().join(format!("runo-data-dir-{}", std::process::id()));
 
+        std::env::remove_var("SQUADCODE_HOME");
         let runo_home = base.join("runo-home");
         std::env::set_var("RUNO_HOME", &runo_home);
         assert_eq!(data_dir(), runo_home);
@@ -2232,6 +2266,25 @@ pub(crate) mod tests {
         let home = base.join("home");
         std::env::remove_var("RUNO_HOME");
         std::env::set_var("HOME", &home);
-        assert_eq!(data_dir(), home.join(".runo"));
+        assert_eq!(data_dir(), home.join(".squadcode"));
+    }
+
+    #[test]
+    fn squad_code_copies_runos_saved_files_once() {
+        let base = std::env::temp_dir().join(format!("squad-adopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let old = base.join(".runo");
+        let new = base.join(".squadcode");
+        std::fs::create_dir_all(old.join("logs")).unwrap();
+        std::fs::write(old.join("v2.json"), "{}").unwrap();
+        std::fs::write(old.join("logs/a.log"), "x").unwrap();
+        adopt_from(&old, &new);
+        assert_eq!(std::fs::read_to_string(new.join("v2.json")).unwrap(), "{}");
+        assert!(!new.join("logs").exists());
+        // Not again once Squad Code has its own.
+        std::fs::write(old.join("v2.json"), "{\"later\":1}").unwrap();
+        adopt_from(&old, &new);
+        assert_eq!(std::fs::read_to_string(new.join("v2.json")).unwrap(), "{}");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

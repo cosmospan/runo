@@ -1,5 +1,5 @@
 //! What v2 keeps between launches: the folders the crew works in, every job
-//! and what happened in it, and each bot's chat. Saved as JSON in Runo's data
+//! and what happened in it, and each bot's chat. Saved as JSON in Squad Code's data
 //! folder (`~/.runo/v2.json`), apart from v1's state.
 
 use std::collections::HashMap;
@@ -51,7 +51,7 @@ pub enum Status {
     Done,
     Failed,
     Stopped,
-    /// Runo closed while it ran.
+    /// Squad Code closed while it ran.
     Interrupted,
     /// It changed files in its own worktree and waits for you to approve them.
     Review,
@@ -95,7 +95,7 @@ pub enum Item {
     },
     /// What the person added.
     You(String),
-    /// Runo speaking: a hint or a warning.
+    /// Squad Code speaking: a hint or a warning.
     Note(String),
     /// Another bot on the crew speaking about this job, such as Shipper
     /// reporting a step.
@@ -307,7 +307,7 @@ pub struct Said {
     pub text: String,
     /// Which engine answered, and how long it took.
     pub via: Option<String>,
-    /// Runo speaking, not the bot: a problem or a hint.
+    /// Squad Code speaking, not the bot: a problem or a hint.
     pub note: bool,
 }
 
@@ -407,13 +407,14 @@ impl Store {
             if j.status == Status::Running {
                 j.status = Status::Interrupted;
                 j.ended = Some(j.ended.unwrap_or(j.started));
-                j.feed
-                    .push(Item::Note("Runo closed while this was running.".into()));
+                j.feed.push(Item::Note(
+                    "Squad Code closed while this was running.".into(),
+                ));
             }
             if j.checking {
                 j.checking = false;
             }
-            // Runo closed while Shipper was opening the pull request.
+            // Squad Code closed while Shipper was opening the pull request.
             if j.shipping {
                 j.shipping = false;
                 if j.pr.is_empty() && j.status == Status::Shipping {

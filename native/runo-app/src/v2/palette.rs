@@ -178,7 +178,7 @@ impl Shell {
             act: Act::AddFolder,
         });
         all.push(Entry {
-            label: "Open Runo v1".into(),
+            label: "Open the classic app".into(),
             hint: "Window".into(),
             icon: Some(IconName::ExternalLink),
             bot: None,

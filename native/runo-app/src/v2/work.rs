@@ -2,7 +2,7 @@
 //!
 //! A job that may change files gets its own branch and worktree, so your own
 //! checkout is never touched while the crew works and several jobs can run at
-//! once. When it finishes, Runo lists what changed and Checker runs the
+//! once. When it finishes, Squad Code lists what changed and Checker runs the
 //! project's checks in that worktree. Then you decide: approve it (merged into
 //! the branch it started from), send it back with more words, or discard it.
 
@@ -24,14 +24,14 @@ pub struct Isolated {
     pub base_sha: String,
 }
 
-/// The branch name for a job: `runo/<a few words of the title>`.
+/// The branch name for a job: `squad/<a few words of the title>`.
 pub fn branch_for(title: &str, id: u64) -> String {
     let slug = git::branch_slug(title);
     let slug = slug.strip_prefix("runo/").unwrap_or(&slug).to_string();
     if slug.is_empty() {
-        format!("runo/job-{id}")
+        format!("squad/job-{id}")
     } else {
-        format!("runo/{slug}")
+        format!("squad/{slug}")
     }
 }
 
@@ -103,7 +103,7 @@ pub fn checks_for(dir: &str) -> Vec<String> {
 }
 
 /// Runs the project's checks in `dir` on another thread. Nothing comes back
-/// (an empty list) when the project has no checks Runo can find.
+/// (an empty list) when the project has no checks Squad Code can find.
 pub fn run_checks(dir: String) -> Receiver<Vec<CheckRun>> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
@@ -119,7 +119,7 @@ pub fn run_checks(dir: String) -> Receiver<Vec<CheckRun>> {
 }
 
 /// "641 / 641 passed" style counts are the check tool's business; this is the
-/// one-line verdict Runo shows.
+/// one-line verdict Squad Code shows.
 pub fn verdict(checks: &[CheckRun], checking: bool) -> (String, Verdict) {
     if checking {
         return ("Checker is running the checks".into(), Verdict::Running);
@@ -164,7 +164,7 @@ pub fn message(job: &Job) -> String {
     let title = job.title.lines().next().unwrap_or("").trim();
     let title: String = title.chars().take(72).collect();
     let mut msg = if title.is_empty() {
-        format!("Runo job {}", job.id)
+        format!("Squad Code job {}", job.id)
     } else {
         title
     };
@@ -253,9 +253,9 @@ mod tests {
     fn branch_names_come_from_the_title() {
         assert_eq!(
             branch_for("Add Apple Pay to checkout", 3),
-            "runo/add-apple-pay-checkout"
+            "squad/add-apple-pay-checkout"
         );
-        assert_eq!(branch_for("", 7), "runo/job-7");
+        assert_eq!(branch_for("", 7), "squad/job-7");
     }
 
     #[test]
@@ -338,7 +338,10 @@ mod tests {
             ok: false,
             ..Default::default()
         };
-        assert_eq!(verdict(&[ok.clone()], false).0, "The check passes");
+        assert_eq!(
+            verdict(std::slice::from_ref(&ok), false).0,
+            "The check passes"
+        );
         assert_eq!(
             verdict(&[ok, bad], false),
             ("1 of 2 failed".into(), Verdict::Fail)

@@ -1,6 +1,6 @@
 //! Goals: something too big for one job, split into a few jobs for the crew.
 //!
-//! You describe the goal; Runo's own model splits it into two to six jobs, each
+//! You describe the goal; Squad Code's own model splits it into two to six jobs, each
 //! for the bot whose kind of work it is. You look over the split, drop what you
 //! don't want, and start it. The jobs then run one after another, each on its
 //! own branch: the next starts once the one before it is shipped, so each job
@@ -35,7 +35,7 @@ pub struct Step {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum State {
-    /// Runo is splitting it into jobs.
+    /// Squad Code is splitting it into jobs.
     #[default]
     Planning,
     /// The split is ready for you to look over.
@@ -91,7 +91,7 @@ pub fn step_stuck(j: &Job) -> bool {
     )
 }
 
-/// The words Runo's model is given to split a goal.
+/// The words Squad Code's model is given to split a goal.
 pub fn split_prompt(goal: &str, project: &str) -> String {
     format!(
         "Split this goal for the project \"{project}\" (the current folder) into 2 to 6 jobs a coding agent can each finish in one sitting. Read the code first so the jobs fit it. Order them so each builds on the ones before.\n\nReply with only one line per job, nothing else, in the form\nKIND: what to do, in one sentence\nwhere KIND is one of build, fix, test, tidy or review.\n\nThe goal: {goal}"
@@ -130,14 +130,14 @@ pub fn parse_split(reply: &str) -> Vec<Step> {
         .collect()
 }
 
-/// Asks Runo's model to split a goal, on another thread.
+/// Asks Squad Code's model to split a goal, on another thread.
 pub fn plan(st: &AppSettings, folder: &Folder, goal: &str) -> Result<Receiver<Event>, String> {
     let i = crate::assistant::assistant_provider(st);
     let p = &agent::PROVIDERS[i];
     let configured = st.agent(p.id).binary;
     if !agent::available(p.bin, &configured) {
         return Err(format!(
-            "{} isn't installed, so Runo can't split the goal. Pick another engine for Runo in Engines.",
+            "{} isn't installed, so Squad Code can't split the goal. Pick another engine for Squad Code in Engines.",
             p.name
         ));
     }
@@ -254,7 +254,7 @@ impl Shell {
             .filter(|s| jobs.iter().any(|j| j.id == s.job && step_finished(j)))
             .count();
         let line = match goal.state {
-            State::Planning => "Runo is reading the code and splitting this into jobs\u{2026}".to_string(),
+            State::Planning => "Squad Code is reading the code and splitting this into jobs\u{2026}".to_string(),
             State::Ready => "Look over the jobs, drop any you don't want, then start. They run one after another, each building on the last.".to_string(),
             State::Running => format!("{shipped} of {} done. The next job starts when the one before it ships.", goal.steps.len()),
             State::Paused => "A job stopped, so the goal is waiting for you.".to_string(),

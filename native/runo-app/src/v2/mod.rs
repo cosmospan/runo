@@ -1,12 +1,12 @@
-//! Runo v2: the crew app.
+//! Squad Code v2: the crew app.
 //!
-//! A shell around Runo's bots: Today (hand the crew a job and see what is
+//! A shell around Squad Code's bots: Today (hand the crew a job and see what is
 //! moving), Live (watch one job as the bot works), Chat (ask a bot in plain
 //! words), Crew, Inbox and History. Every job runs for real on the bot's
 //! engine in a folder the person picked, and is kept between launches. The
 //! bots are the bubble crew from `runo-holo`, drawn as their moods change.
 //!
-//! Runo v1 stays one click away on the rail while v2 grows.
+//! Squad Code v1 stays one click away on the rail while v2 grows.
 
 mod chat;
 pub mod cli;
@@ -372,6 +372,9 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
+/// Hears back once a pull request is merged or closed on GitHub.
+type Landing = std::sync::mpsc::Receiver<Result<(), String>>;
+
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
@@ -478,7 +481,7 @@ pub struct Shell {
     )>,
     watched: Instant,
     /// Pull requests being merged (true) or closed (false) on GitHub, by job.
-    landing: Vec<(u64, bool, std::sync::mpsc::Receiver<Result<(), String>>)>,
+    landing: Vec<(u64, bool, Landing)>,
     /// What Approve does in each folder, worked out once per folder.
     ways: HashMap<String, ship::Way>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
@@ -497,7 +500,7 @@ pub struct Shell {
     view_w: f32,
     /// When the queue from `runo` in a terminal was last read.
     queue_at: Instant,
-    /// Goals Runo is splitting now.
+    /// Goals Squad Code is splitting now.
     planning: Vec<(u64, std::sync::mpsc::Receiver<crate::agent::Event>)>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
@@ -1233,6 +1236,7 @@ impl Shell {
 
     /// A new job, on its own branch when it may change files, started on its
     /// bot's engine, or on `pick` (an agent index) for a try in a race.
+    #[allow(clippy::too_many_arguments)]
     fn make_job(
         &mut self,
         bot: Member,
@@ -1381,7 +1385,7 @@ impl Shell {
         self.go(Place::Race(race), cx);
     }
 
-    /// Has Runo split a goal into jobs, then shows the split to look over.
+    /// Has Squad Code split a goal into jobs, then shows the split to look over.
     fn begin_goal(&mut self, text: String, folder: store::Folder, cx: &mut Context<Self>) {
         self.store.next_id += 1;
         let id = self.store.next_id;
@@ -1530,7 +1534,7 @@ impl Shell {
                     }
                     Ok(_) => {
                         g.state = goal::State::Failed;
-                        g.note = "Runo couldn't split this into jobs. Say it another way, or run it as one job.".into();
+                        g.note = "Squad Code couldn't split this into jobs. Say it another way, or run it as one job.".into();
                     }
                     Err(why) => {
                         g.state = goal::State::Failed;
@@ -1541,7 +1545,7 @@ impl Shell {
                             .unwrap_or("")
                             .trim()
                             .to_string();
-                        g.note = format!("Runo couldn't split this into jobs: {first}");
+                        g.note = format!("Squad Code couldn't split this into jobs: {first}");
                     }
                 }
             }
@@ -2219,7 +2223,7 @@ impl Shell {
                         };
                         self.say(msg.clone());
                     }
-                    // Runo is behind other windows: tell the person on the desktop.
+                    // Squad Code is behind other windows: tell the person on the desktop.
                     if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
                         let title = match j.status {
                             Status::Done => format!("{} finished", j.bot.name()),
@@ -2619,11 +2623,11 @@ pub fn open_window(cx: &mut App) {
             cx,
         ))),
         titlebar: Some(TitlebarOptions {
-            title: Some("Runo".into()),
+            title: Some("Squad Code".into()),
             appears_transparent: cfg!(target_os = "macos"),
             traffic_light_position: Some(point(px(16.), px(16.))),
         }),
-        app_id: Some("runo".into()),
+        app_id: Some("squadcode".into()),
         // Solid: the colour wash is drawn by the app, so there's nothing to see
         // through, and blending what's behind the window costs every frame.
         window_background: WindowBackgroundAppearance::Opaque,

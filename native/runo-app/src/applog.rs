@@ -19,7 +19,7 @@ const SIZE_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(30)
 /// Crash reports kept.
 const CRASHES_KEPT: usize = 20;
 /// Where Runo's releases are published.
-pub const REPO: &str = "deltalark/runo";
+pub const REPO: &str = "hyperhale/squadcode";
 
 pub fn logs_dir() -> PathBuf {
     crate::store::data_dir().join("logs")
@@ -326,7 +326,7 @@ pub fn init() {
 /// "Runo 0.5.9 on macos aarch64".
 fn about() -> String {
     format!(
-        "Runo {} on {} {}",
+        "Squad Code {} on {} {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH
@@ -630,7 +630,7 @@ fn install_panic_hook() {
 
 fn crash_report(thread: &str, message: &str, backtrace: &str) -> String {
     format!(
-        "Runo {} on {} {}\nTime: {}\nThread: {thread}\n\n{message}\n\nBacktrace:\n{backtrace}\n",
+        "Squad Code {} on {} {}\nTime: {}\nThread: {thread}\n\n{message}\n\nBacktrace:\n{backtrace}\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -803,11 +803,11 @@ pub fn check_release() -> Option<Release> {
     let current = env!("CARGO_PKG_VERSION");
     let line = match &found {
         Some(release) => format!(
-            "Runo {} is out. Leave Settings to download it from the update card.",
+            "Squad Code {} is out. Leave Settings to download it from the update card.",
             release.version
         ),
         None if !LAST_FAILED.load(std::sync::atomic::Ordering::Relaxed) => {
-            format!("Runo {current} is the latest version.")
+            format!("Squad Code {current} is the latest version.")
         }
         None => "Couldn't reach GitHub to check. Try again later.".to_string(),
     };
@@ -829,7 +829,7 @@ fn fetch_release() -> Option<Release> {
             "-H",
             "Accept: application/vnd.github+json",
             "-H",
-            "User-Agent: Runo",
+            "User-Agent: SquadCode",
             &format!("https://api.github.com/repos/{REPO}/releases/latest"),
         ])
         .stdin(std::process::Stdio::null())
@@ -862,7 +862,7 @@ fn fetch_release() -> Option<Release> {
     match &found {
         Some(release) => info(
             "app-update",
-            format!("Runo {} is out (running {current})", release.version),
+            format!("Squad Code {} is out (running {current})", release.version),
         ),
         None if serde_json::from_str::<serde_json::Value>(&body)
             .is_ok_and(|v| v["tag_name"].is_string()) =>
@@ -1391,7 +1391,7 @@ mod tests {
             &settings,
             &log.join("\n"),
         );
-        assert!(text.starts_with(&format!("Runo {}", env!("CARGO_PKG_VERSION"))));
+        assert!(text.starts_with(&format!("Squad Code {}", env!("CARGO_PKG_VERSION"))));
         assert!(text.contains("Agent CLIs: claude 2.1.300"));
         assert!(text.contains("\"theme\": \"dark\""));
         assert!(text.contains("\"check_runo_updates\": true"));
@@ -1481,7 +1481,7 @@ mod tests {
 
     #[test]
     fn newer_releases_are_found_with_their_download() {
-        let json = r#"{"tag_name":"v0.3.0","html_url":"https://github.com/deltalark/runo/releases/tag/v0.3.0",
+        let json = r#"{"tag_name":"v0.3.0","html_url":"https://github.com/hyperhale/squadcode/releases/tag/v0.3.0",
             "draft":false,"prerelease":false,"assets":[
             {"name":"Runo-0.3.0-macos-arm64.dmg","browser_download_url":"https://x/arm.dmg"},
             {"name":"Runo-0.3.0-macos-x86_64.dmg","browser_download_url":"https://x/intel.dmg"},
@@ -1542,14 +1542,14 @@ mod tests {
     #[test]
     fn only_runos_own_release_links_are_downloaded() {
         assert!(release_link(
-            "https://github.com/deltalark/runo/releases/download/v0.6.0/Runo.dmg"
+            "https://github.com/hyperhale/squadcode/releases/download/v0.6.0/Runo.dmg"
         ));
         for bad in [
-            "http://github.com/deltalark/runo/releases/download/v0.6.0/Runo.dmg",
+            "http://github.com/hyperhale/squadcode/releases/download/v0.6.0/Runo.dmg",
             "https://github.com/someone/runo/releases/download/v0.6.0/Runo.dmg",
-            "https://github.com/deltalark/runo/releases/download/../../x/Runo.dmg",
+            "https://github.com/hyperhale/squadcode/releases/download/../../x/Runo.dmg",
             "https://evil.example/deltalark/runo/releases/download/v1/Runo.dmg",
-            "https://github.com/deltalark/runo/releases/download/",
+            "https://github.com/hyperhale/squadcode/releases/download/",
         ] {
             assert!(!release_link(bad), "{bad}");
         }

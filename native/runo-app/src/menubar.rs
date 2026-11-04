@@ -283,7 +283,7 @@ pub(crate) fn to_background(cx: &mut App) {
         crate::desktop_notify::send(
             cx,
             None,
-            "Runo is still running",
+            "Squad Code is still running",
             "It's in the menu bar, and your agents keep working. Quit from there to quit.",
         );
     }
@@ -543,7 +543,7 @@ mod mac {
                     };
                     button.setTitle(&NSString::from_str(&title));
                     button.setToolTip(Some(&NSString::from_str(&format!(
-                        "Runo: {}",
+                        "Squad Code: {}",
                         snapshot.summary
                     ))));
                 }

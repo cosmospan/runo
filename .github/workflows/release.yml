@@ -1,8 +1,8 @@
-# Builds Runo.app for Apple silicon and Intel Macs and packages a zip and a disk image of
-# each, builds Runo for x86_64 and arm64 Linux as a .deb and a tarball, and builds Runo.exe
+# Builds Squad Code.app for Apple silicon and Intel Macs and packages a zip and a disk image of
+# each, builds Squad Code for x86_64 and arm64 Linux as a .deb and a tarball, and builds SquadCode.exe
 # for 64-bit Windows as a zip. Every run
 # uploads them as workflow artifacts. On a version tag (v1.2.3) they are
-# also attached to the GitHub release, which Runo's in-app updater downloads from.
+# also attached to the GitHub release, which Squad Code's in-app updater downloads from.
 # Run it by hand from the Actions tab for a test build of any branch. Signing and
 # notarization run only when their secrets are set.
 name: Release
@@ -74,22 +74,22 @@ jobs:
       - name: Install cargo-bundle
         run: cargo install cargo-bundle --locked
 
-      - name: Build Runo.app
+      - name: Build Squad Code.app
         working-directory: native/runo-app
         run: cargo bundle --release --target ${{ matrix.target }}
 
       - name: Find the app
         id: app
         run: |
-          app="target/${{ matrix.target }}/release/bundle/osx/Runo.app"
+          app="target/${{ matrix.target }}/release/bundle/osx/Squad Code.app"
           test -d "$app"
           echo "path=$app" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            name="Runo-${GITHUB_REF_NAME#v}-macos-${{ matrix.arch }}"
+            name="SquadCode-${GITHUB_REF_NAME#v}-macos-${{ matrix.arch }}"
           else
             # Test builds carry the commit so they never look like a release.
             version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-            name="Runo-$version-macos-${{ matrix.arch }}-${GITHUB_SHA::7}"
+            name="SquadCode-$version-macos-${{ matrix.arch }}-${GITHUB_SHA::7}"
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -140,7 +140,7 @@ jobs:
           ditto -c -k --keepParent "${{ steps.app.outputs.path }}" "dist/${{ steps.app.outputs.name }}.zip"
           cp -R "${{ steps.app.outputs.path }}" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname Runo -srcfolder dmg -ov -format UDZO "dist/${{ steps.app.outputs.name }}.dmg"
+          hdiutil create -volname "Squad Code" -srcfolder dmg -ov -format UDZO "dist/${{ steps.app.outputs.name }}.dmg"
 
       - name: Sign and notarize the disk image
         if: steps.secrets.outputs.notarize == 'true'
@@ -218,7 +218,7 @@ jobs:
       - name: Install cargo-bundle
         run: cargo install cargo-bundle --locked
 
-      - name: Build Runo
+      - name: Build Squad Code
         working-directory: native/runo-app
         run: cargo bundle --release --format deb
 
@@ -227,10 +227,10 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            name="Runo-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}"
+            name="SquadCode-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}"
           else
             # Test builds carry the commit so they never look like a release.
-            name="Runo-$version-linux-${{ matrix.arch }}-${GITHUB_SHA::7}"
+            name="SquadCode-$version-linux-${{ matrix.arch }}-${GITHUB_SHA::7}"
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -250,7 +250,7 @@ jobs:
 
           dir="$RUNNER_TEMP/${{ steps.build.outputs.name }}"
           mkdir -p "$dir"
-          cp target/release/Runo "$dir/"
+          cp target/release/SquadCode "$dir/"
           cp native/runo-app/assets/linux/runo.desktop "$dir/"
           cp native/runo-app/assets/icon/png/runo-512.png "$dir/runo.png"
           cp LICENSE "$dir/"
@@ -299,7 +299,7 @@ jobs:
         with:
           key: windows-x86_64
 
-      - name: Build Runo.exe
+      - name: Build SquadCode.exe
         run: cargo build --release -p runo
 
       - name: Name the build
@@ -307,10 +307,10 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            name="Runo-${GITHUB_REF_NAME#v}-windows-x86_64"
+            name="SquadCode-${GITHUB_REF_NAME#v}-windows-x86_64"
           else
             # Test builds carry the commit so they never look like a release.
-            name="Runo-$version-windows-x86_64-${GITHUB_SHA::7}"
+            name="SquadCode-$version-windows-x86_64-${GITHUB_SHA::7}"
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -319,7 +319,7 @@ jobs:
         run: |
           $dir = "$env:RUNNER_TEMP/${{ steps.build.outputs.name }}"
           New-Item -ItemType Directory -Force -Path $dir, dist | Out-Null
-          Copy-Item target/release/Runo.exe, LICENSE -Destination $dir
+          Copy-Item target/release/SquadCode.exe, LICENSE -Destination $dir
           Compress-Archive -Path $dir -DestinationPath "dist/${{ steps.build.outputs.name }}.zip"
 
       - name: Upload the build
@@ -341,7 +341,7 @@ jobs:
 
   checksums:
     # Lists the SHA-256 of every file in the release in SHA256SUMS, signed with the
-    # UPDATE_SIGNING_KEY secret (make it with scripts/update-key.sh). Runo's updater
+    # UPDATE_SIGNING_KEY secret (make it with scripts/update-key.sh). Squad Code's updater
     # refuses a download that doesn't match, or whose list isn't signed by update.pub.
     # Test builds get them too, as a workflow artifact, so a run by hand checks this job.
     needs: [macos, linux, windows]
@@ -367,7 +367,7 @@ jobs:
           pub=$(tr -d '[:space:]' < native/runo-app/src/update.pub)
           if [ -z "$UPDATE_SIGNING_KEY" ]; then
             if [ -n "$pub" ]; then
-              echo "::error::update.pub is set but UPDATE_SIGNING_KEY isn't, so Runo would refuse this release."
+              echo "::error::update.pub is set but UPDATE_SIGNING_KEY isn't, so Squad Code would refuse this release."
               exit 1
             fi
             echo "::warning::UPDATE_SIGNING_KEY isn't set, so SHA256SUMS is published unsigned. Run scripts/update-key.sh."
@@ -377,7 +377,7 @@ jobs:
           printf '%s\n' "$UPDATE_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
           openssl pkeyutl -sign -inkey "$RUNNER_TEMP/key.pem" -rawin -in SHA256SUMS | base64 -w0 > SHA256SUMS.sig
           rm "$RUNNER_TEMP/key.pem"
-          # Check it against the key Runo is built with.
+          # Check it against the key Squad Code is built with.
           printf '302a300506032b6570032100' | xxd -r -p > pub.der
           printf '%s' "$pub" | base64 -d >> pub.der
           base64 -d SHA256SUMS.sig > sig.bin

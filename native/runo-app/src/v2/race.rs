@@ -288,10 +288,7 @@ impl Shell {
                             .child(format!("and {} more", j.changes.len() - 6)),
                     );
                 }
-                let words = j
-                    .last_words()
-                    .map(|w| super::live::plain(w))
-                    .unwrap_or_default();
+                let words = j.last_words().map(super::live::plain).unwrap_or_default();
                 let words: String = words.chars().take(220).collect();
                 div()
                     .flex()

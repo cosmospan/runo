@@ -381,8 +381,13 @@ impl Shell {
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
             )
             .child(
-                row("side-v1", IconName::PanelLeft, "Open Runo v1", false)
-                    .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
+                row(
+                    "side-v1",
+                    IconName::PanelLeft,
+                    "Open the classic app",
+                    false,
+                )
+                .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
             );
 
         div()
@@ -470,7 +475,7 @@ impl Shell {
             .store
             .folder()
             .map(|f| f.name.clone())
-            .unwrap_or_else(|| "Runo".into());
+            .unwrap_or_else(|| "Squad Code".into());
         let here: String = match self.place {
             Place::Today => "Jobs".into(),
             Place::Inbox => "Needs you".into(),

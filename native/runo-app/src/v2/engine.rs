@@ -1,8 +1,8 @@
 //! Which engine runs under each bot, and asking a bot a question for real.
 //!
-//! An engine is one of the coding agents Runo already drives (Claude Code, Codex,
+//! An engine is one of the coding agents Squad Code already drives (Claude Code, Codex,
 //! Gemini, OpenCode…) and the model it runs on. Each bot can have its own; the rest
-//! follow the default agent from Settings. Runo's own model calls (shaping jobs,
+//! follow the default agent from Settings. Squad Code's own model calls (shaping jobs,
 //! writing the one question) use the assistant agent and model, and a second agent,
 //! best from another vendor, can double-check decisions.
 
@@ -95,7 +95,7 @@ pub fn race_engines(st: &AppSettings, who: Member, n: usize) -> Vec<usize> {
     let (own, _) = engine(st, who);
     let mut out = vec![own];
     let default = index_of(st, "");
-    // The default agent next, then the rest in the order Runo lists them.
+    // The default agent next, then the rest in the order Squad Code lists them.
     let rest = std::iter::once(default).chain(0..agent::PROVIDERS.len());
     for i in rest {
         if out.len() >= n {
