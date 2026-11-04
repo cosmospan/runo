@@ -1,4 +1,4 @@
-"""Render Runo's app icon from runo.svg for every platform.
+"""Render Squad Code's app icon (Fin on a coral tile) from runo.svg for every platform.
 
 Run from this folder: python3 build.py (needs cairosvg and Pillow).
 
@@ -14,6 +14,8 @@ import cairosvg
 from PIL import Image
 
 SVG = open("runo.svg").read()
+# Below 48px Fin's fins turn to mush, so small sizes use the plain hex and visor.
+SMALL = open("runo-small.svg").read()
 # The tile spans 100..924 of the 1024 canvas; this crops to it for full-bleed sizes.
 FLAT = SVG.replace('viewBox="0 0 1024 1024"', 'viewBox="96 96 832 832"')
 
@@ -23,14 +25,15 @@ def render(svg, size):
     return Image.open(io.BytesIO(png)).convert("RGBA")
 
 
-# Linux: inset art from 64px up, full-bleed below that.
+# Linux: inset art from 64px up, full-bleed below that, and the plain hex under 48.
 for size in (16, 24, 32, 48, 64, 128, 256, 512, 1024):
-    render(SVG if size >= 64 else FLAT, size).save(f"png/runo-{size}.png")
+    art = SVG if size >= 64 else FLAT if size >= 48 else SMALL
+    render(art, size).save(f"png/runo-{size}.png")
 
-# Windows.
-render(FLAT, 256).save(
-    "runo.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)]
-)
+# Windows: each size drawn on its own, so the small ones get the plain hex.
+big = render(FLAT, 256)
+small = {s: render(SMALL if s < 48 else FLAT, s) for s in (16, 24, 32, 48, 64, 128)}
+big.save("runo.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)], append_images=list(small.values()))
 
 # macOS.
 render(SVG, 1024).save("runo.icns")

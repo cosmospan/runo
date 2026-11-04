@@ -1,6 +1,7 @@
-//! The first-run walkthrough: check which coding agents are installed, pick a
-//! folder, choose the crew, and ask a first question. Four short steps, any of
-//! them skippable, shown once.
+//! The first-run walkthrough: check which coding agents are installed and pick
+//! a folder. Two short steps, both skippable, shown once. The crew starts with
+//! the starter bots (changed any time on Crew), and what to do first is on the
+//! Jobs page, which opens next.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -12,8 +13,7 @@ use super::data::{self, Member};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
-const STEPS: [&str; 4] = ["Engines", "Folder", "Crew", "First question"];
-const FIRST_QUESTION: &str = "What does this project do, in plain words?";
+const STEPS: [&str; 2] = ["Engines", "Folder"];
 
 impl Shell {
     /// Ends the walkthrough with the crew picked so far.
@@ -38,9 +38,7 @@ impl Shell {
         let step = self.setup_step;
         let body = match step {
             0 => self.welcome_engines(cx).into_any_element(),
-            1 => self.welcome_folder(cx).into_any_element(),
-            2 => self.welcome_crew(cx).into_any_element(),
-            _ => self.welcome_first(cx).into_any_element(),
+            _ => self.welcome_folder(cx).into_any_element(),
         };
         // The steps down the left, each with where it stands.
         let ready = {
@@ -59,8 +57,6 @@ impl Shell {
                 .folder()
                 .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Not picked yet".into()),
-            format!("{} bots", self.setup_crew.len()),
-            "Ask it about the project".to_string(),
         ];
         let mut steps = div().flex().flex_col().gap(px(4.));
         for (i, name) in STEPS.into_iter().enumerate() {
@@ -135,19 +131,17 @@ impl Shell {
             ui::ghost("setup-back", "Back")
                 .on_click(cx.listener(move |this, _, _, cx| this.setup_step(step - 1, cx)))
         });
-        let next_ok = step != 2 || !self.setup_crew.is_empty();
-        let next: Option<Stateful<Div>> = (step < STEPS.len() - 1).then(|| {
+        let next: Stateful<Div> = if step < STEPS.len() - 1 {
             ui::solid("setup-next", "Continue")
-                .when(!next_ok, |d| d.opacity(0.4))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if step == 2 && this.setup_crew.is_empty() {
-                        this.say("Pick at least one bot.");
-                        cx.notify();
-                        return;
-                    }
-                    this.setup_step(step + 1, cx)
-                }))
-        });
+                .on_click(cx.listener(move |this, _, _, cx| this.setup_step(step + 1, cx)))
+        } else {
+            ui::solid("setup-done", "Start using Squad Code").on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.finish_setup(cx);
+                    this.go(Place::Today, cx);
+                },
+            ))
+        };
         let mark = self.bot(Member::Builder, Mood::Signature, 56., Framing::Bust);
         let left = div()
             .w(px(320.))
@@ -173,14 +167,14 @@ impl Shell {
                             .text_size(px(20.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(ui::INK))
-                            .child("Set up your crew"),
+                            .child("Welcome to Squad Code"),
                     )
                     .child(
                         div()
                             .text_size(px(13.))
                             .line_height(px(19.))
                             .text_color(c(ui::MUTED))
-                            .child("Four short steps. Every one can be changed later, and you can skip them all."),
+                            .child("Two quick checks, then you're on Jobs with a few ideas for a first job. Both can be changed later."),
                     ),
             )
             .child(steps)
@@ -227,7 +221,7 @@ impl Shell {
                             .gap(px(10.))
                             .children(back)
                             .child(div().flex_1())
-                            .children(next),
+                            .child(next),
                     ),
             );
         div()
@@ -285,7 +279,7 @@ impl Shell {
         };
         card_with(
             hero,
-            "Welcome to Squad Code",
+            "Is a coding agent installed?",
             words,
             div()
                 .flex()
@@ -376,161 +370,8 @@ impl Shell {
             ),
         )
     }
-
-    fn welcome_crew(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut grid = div().w_full().grid().grid_cols(3).gap(px(12.));
-        for who in Member::CREW {
-            let on = self.setup_crew.contains(&who);
-            let face = self.bot(
-                who,
-                if on { Mood::Idle } else { Mood::Asleep },
-                56.,
-                Framing::Full,
-            );
-            grid = grid.child(
-                div()
-                    .id(("setup-bot", who.key() as usize))
-                    .w_full()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .pl(px(6.))
-                    .pr(px(14.))
-                    .py(px(8.))
-                    .rounded(px(18.))
-                    .border_2()
-                    .border_color(c(if on { who.accent() } else { ui::LINE }))
-                    .bg(if on {
-                        ca(who.accent(), 0.07)
-                    } else {
-                        ca(ui::PANEL, 0.8)
-                    })
-                    .cursor_pointer()
-                    .on_hover(cx.listener(move |this, h: &bool, _, cx| this.hover_bot(who, *h, cx)))
-                    .child(face)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(15.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .child(who.name()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .line_height(px(16.))
-                                    .text_color(c(ui::MUTED))
-                                    .child(who.role()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex_none()
-                            .size(px(22.))
-                            .rounded_full()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(12.))
-                            .text_color(c(ui::ON_FILL))
-                            .map(|d| {
-                                if on {
-                                    d.bg(c(who.accent())).child("✓")
-                                } else {
-                                    d.border_1().border_color(c(ui::LINE))
-                                }
-                            }),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if let Some(i) = this.setup_crew.iter().position(|m| *m == who) {
-                            this.setup_crew.remove(i);
-                        } else {
-                            this.setup_crew.push(who);
-                        }
-                        cx.notify();
-                    })),
-            );
-        }
-        div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .gap(px(18.))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.))
-                    .child(
-                        div()
-                            .text_size(px(30.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("Choose your crew"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .text_color(c(ui::MUTED))
-                            .child(format!(
-                                "Start with the bots you need. {} picked; add or remove any of them later on Crew, or make your own.",
-                                self.setup_crew.len()
-                            )),
-                    ),
-            )
-            .child(grid)
-    }
-
-    fn welcome_first(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        // The first question goes to a bot that answers questions, if one is on the crew.
-        let asker = if self.setup_crew.contains(&Member::Explainer) {
-            Member::Explainer
-        } else {
-            self.setup_crew
-                .first()
-                .copied()
-                .unwrap_or(Member::Explainer)
-        };
-        let hero = self.bot(asker, Mood::Idle, 150., Framing::Full);
-        let has_folder = self.store.folder().is_some();
-        card_with(
-            hero,
-            "You're set",
-            if has_folder {
-                "Try one safe question first. It only reads the code, changes nothing, and shows you how the crew works."
-            } else {
-                "Add a folder whenever you're ready. Until then you can look around."
-            },
-            div()
-                .flex()
-                .gap(px(10.))
-                .when(has_folder, |d| {
-                    d.child(
-                        ui::solid(
-                            "setup-ask",
-                            format!("Ask {}: \u{201c}{FIRST_QUESTION}\u{201d}", asker.name()),
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.finish_setup(cx);
-                            this.go(Place::Chat(asker), cx);
-                            this.ask(asker, FIRST_QUESTION.to_string(), cx);
-                        })),
-                    )
-                })
-                .child(ui::ghost("setup-done", "Go to Today").on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.finish_setup(cx);
-                        this.go(Place::Today, cx);
-                    },
-                ))),
-        )
-    }
 }
 
-/// A step: a bot, a title, a line of words, and what to do.
 fn card_with(hero: Img, title: &'static str, words: &'static str, body: impl IntoElement) -> Div {
     ui::card()
         .p(px(28.))

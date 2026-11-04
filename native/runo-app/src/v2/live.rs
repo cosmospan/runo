@@ -761,7 +761,7 @@ impl Shell {
         &mut self,
         title: &'static str,
         line: &'static str,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
         let keeper = self.bot(
             super::data::Member::Keeper,
@@ -789,6 +789,14 @@ impl Shell {
                     .text_color(c(ui::MUTED))
                     .child(line),
             )
+            // Nothing anywhere yet: point back to where a first job starts.
+            .when(self.store.jobs.is_empty(), |d| {
+                d.child(
+                    ui::solid("empty-start", "Give the crew a first job")
+                        .mt(px(14.))
+                        .on_click(cx.listener(|this, _, _, cx| this.go(super::Place::Today, cx))),
+                )
+            })
             .into_any_element()
     }
 }

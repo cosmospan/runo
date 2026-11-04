@@ -185,6 +185,16 @@ impl Shell {
             )
             .child(
                 row(
+                    "side-term",
+                    IconName::SquareTerminal,
+                    "Terminal",
+                    self.term_open.is_some_and(super::term::is_project),
+                )
+                .child(kbd(super::term::KEY))
+                .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
+            )
+            .child(
+                row(
                     "side-usage",
                     IconName::ChartColumn,
                     "Usage",
@@ -365,12 +375,14 @@ impl Shell {
                     .child(format!("${today:.2} today")),
             )
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)));
+        let guide = self.getting_started(cx);
         let foot = div()
             .mt_auto()
             .pt(px(10.))
             .flex()
             .flex_col()
             .gap(px(2.))
+            .children(guide)
             .child(engine_card)
             .child(
                 row(

@@ -31,9 +31,44 @@ pub struct Store {
     pub pinned: Vec<Member>,
     /// Goals split into jobs.
     pub goals: Vec<super::goal::Goal>,
+    /// Getting-started steps done that leave no other trace (opening the
+    /// terminal); the rest are read from the jobs themselves.
+    pub steps: Vec<Step>,
+    /// The getting-started card was put away.
+    pub guide_hidden: bool,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+}
+
+/// The getting-started list, in the order it's shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Step {
+    Engine,
+    Folder,
+    Ask,
+    Terminal,
+    Race,
+}
+
+impl Step {
+    pub const ALL: [Step; 5] = [
+        Step::Engine,
+        Step::Folder,
+        Step::Ask,
+        Step::Terminal,
+        Step::Race,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Step::Engine => "Connect an engine",
+            Step::Folder => "Pick a folder",
+            Step::Ask => "Give the crew a first job",
+            Step::Terminal => "Open the terminal",
+            Step::Race => "Try a race",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -433,6 +468,27 @@ impl Store {
             s.current = 0;
         }
         s
+    }
+
+    /// Marks a getting-started step done. True when it wasn't before.
+    pub fn done_step(&mut self, step: Step) -> bool {
+        if self.steps.contains(&step) {
+            return false;
+        }
+        self.steps.push(step);
+        true
+    }
+
+    /// Whether a getting-started step is done, apart from the engine, which
+    /// the settings know about.
+    pub fn step_done(&self, step: Step) -> bool {
+        match step {
+            Step::Engine => self.steps.contains(&step),
+            Step::Folder => self.folder().is_some(),
+            Step::Ask => !self.jobs.is_empty(),
+            Step::Terminal => self.steps.contains(&step),
+            Step::Race => self.jobs.iter().any(|j| j.race != 0),
+        }
     }
 
     pub fn save(&self) {
