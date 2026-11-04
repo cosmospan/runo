@@ -75,11 +75,17 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
                              a job of that kind
   squad new --bot <name> <words...>
                              a job for one bot
+  squad do <words...>         Fin picks the bot and the kind of job
   squad approve <id>          approve a job waiting for review
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
 
-Jobs run in the Squad Code app, which picks these up while it's open.";
+Jobs run in the Squad Code app, which picks these up while it's open.
+
+  squad brain why <words...>  where Fin would send a job, and why
+  squad brain ideas           a bot Fin thinks you could use
+  squad brain export <file>   your finished jobs as training examples
+  squad brain eval [file]     score Fin's routing on the fixed cases";
 
 /// One line per job for `ls`.
 pub fn line(j: &Job) -> String {
@@ -198,6 +204,37 @@ pub fn main(args: &[String]) -> i32 {
                 Ok("Handed to the crew. It shows up in Squad Code in a moment.".into())
             })
         }
+        "do" => {
+            let text = args[1..].join(" ").trim().to_string();
+            if text.is_empty() {
+                Err("Say what the job is: squad do <words...>".into())
+            } else {
+                let r = super::brain::cli::route_do(&text);
+                let dir = std::env::current_dir()
+                    .map(|d| d.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                push(&Ask::New {
+                    text,
+                    mode: r.mode,
+                    bot: r.bot.name().to_string(),
+                    dir,
+                })
+                .map(|_| {
+                    let check = if r.sure < super::brain::route::Route::SURE {
+                        " Not sure? Stop it and use squad new --bot <name> instead."
+                    } else {
+                        ""
+                    };
+                    format!(
+                        "Handed to {} as a {} job. {}{check}",
+                        r.bot.name(),
+                        r.mode.label(),
+                        r.why
+                    )
+                })
+            }
+        }
+        "brain" => super::brain::cli::main(&args[1..]),
         "approve" => {
             id().and_then(|id| push(&Ask::Approve { id }).map(|_| format!("Approving #{id}.")))
         }

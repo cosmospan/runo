@@ -8,6 +8,7 @@
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
+mod brain;
 mod chat;
 pub mod cli;
 mod crew;

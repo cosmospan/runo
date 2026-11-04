@@ -1,0 +1,44 @@
+# Training Squad's own model
+
+Squad's intelligence layer (`native/runo-app/src/v2/brain/`) works with rules
+alone. When Smart Fin is on, it asks a small model running on the person's
+computer first, and uses the answer only if it checks out. This folder trains
+that model: a small open base model fine-tuned on Squad's own jobs.
+
+Nothing here runs on its own, and nothing has been trained yet. See the
+proposal for the base model, the data, where training runs and what it costs.
+
+## The pieces
+
+| File | What it does |
+| --- | --- |
+| `eval/route.jsonl` | The fixed test set. Every model is scored on it before it ships, and it is never trained on. |
+| `make_data.py` | Writes training examples: varied job sentences for each kind of job, labelled, from a teacher model. |
+| `train_lora.py` | Fine-tunes the base model with LoRA on the examples. |
+| `requirements.txt` | Python packages for the two scripts. |
+
+## Steps
+
+1. **Your own jobs (optional, stays on your computer).**
+   `SquadCode v2 brain export mine.jsonl` writes your finished jobs as
+   examples, in the same prompt format the app asks the model in.
+2. **More examples from a teacher.**
+   `python make_data.py --out synth.jsonl --per-kind 600` (needs `ANTHROPIC_API_KEY`).
+   It refuses to write any sentence that is also in `eval/route.jsonl`.
+3. **Train.**
+   `python train_lora.py --data synth.jsonl mine.jsonl --out fin-lora`
+4. **Shrink to one file.** With llama.cpp:
+   `python convert_hf_to_gguf.py fin-lora/merged --outfile fin.gguf` then
+   `llama-quantize fin.gguf fin-q4_k_m.gguf Q4_K_M` (about 0.5 GB for a 0.8B model).
+5. **Serve and score.**
+   `llama-server -m fin-q4_k_m.gguf --port 8088`, set Smart Fin's model to
+   `fin` in settings (`brain_model`), then `SquadCode v2 brain eval`.
+   Ship only if it beats the rules (51 of 53 today) and the last model.
+
+## Rules for the data
+
+- The prompt the model is trained on is the one it's asked with
+  (`brain::model::route_system`). Change one, retrain.
+- Facts never come from the model: it picks a kind of job and a bot, and the
+  app checks both. Training data has no facts about a person's project in it.
+- A person's own jobs go into training only if they choose to share the file.

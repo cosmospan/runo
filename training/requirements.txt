@@ -1,0 +1,7 @@
+anthropic>=1.0
+torch>=2.4
+transformers>=4.57
+peft>=0.17
+trl>=0.24
+datasets>=3.0
+accelerate>=1.0

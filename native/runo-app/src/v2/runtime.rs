@@ -17,7 +17,7 @@ use crate::settings::AppSettings;
 
 use super::data::{Member, Mode};
 use super::store::{self, Said, Status, Store};
-use super::{cli, engine, goal, jobs, ship, trouble, work};
+use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 
 type Landing = Receiver<Result<(), String>>;
 
@@ -55,6 +55,8 @@ pub struct Runtime {
     queue_at: Instant,
     /// Goals Squad Code is splitting now.
     planning: Vec<(u64, Receiver<crate::agent::Event>)>,
+    /// Where jobs can run besides here, for the intelligence layer to choose.
+    pub sites: brain::Sites,
 }
 
 impl Runtime {
@@ -73,6 +75,7 @@ impl Runtime {
             ways: HashMap::new(),
             queue_at: Instant::now(),
             planning: Vec::new(),
+            sites: brain::Sites::default(),
         }
     }
 
@@ -153,6 +156,22 @@ impl Runtime {
         if let Some((i, race)) = pick {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
             job.race = if race == 0 { job.id } else { race };
+        }
+        // Where it runs, and why, when there's a choice to make.
+        let placed = brain::place(
+            st,
+            &brain::JobAsk {
+                bot,
+                mode,
+                text: text.to_string(),
+                folder: job.folder.clone(),
+                race: usize::from(pick.is_some()) * 2,
+                goal: job.goal != 0,
+            },
+            &self.sites,
+        );
+        if !placed.why.is_empty() {
+            job.feed.push(store::Item::Note(placed.why));
         }
         // A job that may change files gets its own branch and worktree, so your
         // checkout stays as it is and its changes wait for your approval.
@@ -517,6 +536,21 @@ impl Runtime {
         for ask in cli::take_queue() {
             self.handle(st, ask);
         }
+    }
+
+    /// Fin suggests a bot worth making, once per idea, when the same kind of
+    /// job keeps coming up and no bot is for it.
+    fn offer_idea(&mut self) {
+        let crew = Member::all();
+        let Some(idea) = brain::ideas::next(&self.store, &crew, &self.store.offered, store::now())
+        else {
+            return;
+        };
+        self.store.offered.push(idea.key.to_string());
+        self.say(brain::fin::line(&brain::fin::Moment::Idea {
+            name: idea.name.to_string(),
+            why: idea.why,
+        }));
     }
 
     /// Does one thing asked from the command line (or any other client).
@@ -1124,6 +1158,7 @@ impl Runtime {
             for id in &finished {
                 self.begin_review(*id);
             }
+            self.offer_idea();
             self.store.save();
         }
         self.poll_goals(st);
