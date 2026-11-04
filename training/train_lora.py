@@ -65,7 +65,9 @@ def main() -> None:
     ap.add_argument("--rank", type=int, default=16)
     args = ap.parse_args()
 
-    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    # is_bf16_supported() says yes on a T4 too (it counts emulation), so ask
+    # for Ampere or newer, where bfloat16 is native.
+    bf16 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
     fp16 = torch.cuda.is_available() and not bf16
     old_gpu()
 
