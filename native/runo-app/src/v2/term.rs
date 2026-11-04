@@ -64,6 +64,13 @@ fn program() -> Option<pty::Program> {
     })
 }
 
+/// The key that opens and closes the terminal, as it's written on this platform.
+pub const KEY: &str = if cfg!(target_os = "macos") {
+    "\u{2303}`"
+} else {
+    "Ctrl `"
+};
+
 /// Terminals that belong to a project folder rather than a job sit at the top
 /// of the id range, one per folder, so they never meet a job's id.
 const PROJECT_BASE: u64 = u64::MAX - 4096;
@@ -210,6 +217,11 @@ impl Shell {
             .path
             .clone();
         let quick = project_quick(&dir);
+        let home = std::env::var("HOME").unwrap_or_default();
+        let dir = match dir.strip_prefix(&home) {
+            Some(rest) if !home.is_empty() => format!("~{rest}"),
+            _ => dir,
+        };
         let width = self.view_w - super::sidebar::WIDTH - 24.;
         self.drawer(id, dir, quick, width, cx)
     }

@@ -190,7 +190,7 @@ impl Shell {
                     "Terminal",
                     self.term_open.is_some_and(super::term::is_project),
                 )
-                .child(kbd("\u{2303}`"))
+                .child(kbd(super::term::KEY))
                 .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
             )
             .child(

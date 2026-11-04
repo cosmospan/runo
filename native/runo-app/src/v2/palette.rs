@@ -141,7 +141,7 @@ impl Shell {
         if self.store.folder().is_some() {
             all.push(Entry {
                 label: "Open the terminal in this folder".into(),
-                hint: "\u{2303}`".into(),
+                hint: super::term::KEY.into(),
                 icon: Some(IconName::SquareTerminal),
                 bot: None,
                 act: Act::ProjectTerminal,

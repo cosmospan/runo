@@ -185,7 +185,7 @@ impl Shell {
                     "start-term",
                     IconName::SquareTerminal,
                     "Terminal",
-                    Some("\u{2303}`"),
+                    Some(super::term::KEY),
                     "A shell in this folder, under any page. Type squad help to hand out jobs from it.",
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
