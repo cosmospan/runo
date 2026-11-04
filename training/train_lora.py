@@ -8,12 +8,23 @@ same JSONL files.
 """
 
 import argparse
+import inspect
 
 import torch
 from datasets import load_dataset
 from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
+
+
+def config(**kw) -> SFTConfig:
+    """An SFTConfig from the settings this version of TRL knows; the names
+    move between releases, and a missing one shouldn't stop the run."""
+    known = set(inspect.signature(SFTConfig.__init__).parameters)
+    dropped = sorted(k for k in kw if k not in known)
+    if dropped:
+        print("This TRL version has no", ", ".join(dropped), "- leaving it out.")
+    return SFTConfig(**{k: v for k, v in kw.items() if k in known})
 
 
 def main() -> None:
@@ -53,20 +64,21 @@ def main() -> None:
             target_modules="all-linear",
             task_type="CAUSAL_LM",
         ),
-        args=SFTConfig(
+        args=config(
             output_dir=args.out,
             num_train_epochs=args.epochs,
             per_device_train_batch_size=16,
             gradient_accumulation_steps=2,
             learning_rate=2e-4,
             lr_scheduler_type="cosine",
-            warmup_ratio=0.05,
+            warmup_steps=10,
             logging_steps=20,
             save_strategy="epoch",
             completion_only_loss=True,
             max_length=1024,
             bf16=bf16,
             fp16=fp16,
+            report_to="none",
         ),
     )
     trainer.train()
