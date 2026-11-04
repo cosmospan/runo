@@ -27,6 +27,20 @@ def config(**kw) -> SFTConfig:
     return SFTConfig(**{k: v for k, v in kw.items() if k in known})
 
 
+def lora_targets(model) -> list[str]:
+    """The text model's linear layers, by name. "all-linear" also reaches a
+    model's vision tower and odd layers some PEFT versions can't wrap."""
+    names = set()
+    for full, mod in model.named_modules():
+        if not isinstance(mod, torch.nn.Linear):
+            continue
+        if any(part in full for part in ("visual", "vision", "lm_head", "mtp")):
+            continue
+        names.add(full.rsplit(".", 1)[-1])
+    print("LoRA on:", ", ".join(sorted(names)))
+    return sorted(names)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="Qwen/Qwen3.5-0.8B")
@@ -61,7 +75,7 @@ def main() -> None:
             r=args.rank,
             lora_alpha=args.rank * 2,
             lora_dropout=0.05,
-            target_modules="all-linear",
+            target_modules=lora_targets(model),
             task_type="CAUSAL_LM",
         ),
         args=config(
