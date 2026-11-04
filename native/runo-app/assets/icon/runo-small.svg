@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="96 96 832 832">
-<defs><linearGradient id="t" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#FF6B7E"/><stop offset="1" stop-color="#C21F38"/></linearGradient></defs>
-<rect x="100" y="100" width="824" height="824" rx="186" fill="url(#t)"/>
-<!-- Below 48px the fins drop out: just the hex shell and the visor. -->
+<defs>
+<linearGradient id="bg" x1="0.15" y1="0" x2="0.65" y2="1"><stop offset="0" stop-color="#2B2F4A"/><stop offset="1" stop-color="#0B0C16"/></linearGradient>
+<linearGradient id="shell" x1="0" y1="0" x2=".45" y2="1"><stop offset="0" stop-color="#FF9AA6"/><stop offset="1" stop-color="#F2364F"/></linearGradient>
+</defs>
+<path d="M381.78 100.00L642.22 100.00C723.36 100.00 763.93 100.00 807.60 113.81C855.28 131.16 892.84 168.72 910.19 216.40C924.00 260.07 924.00 300.64 924.00 381.78L924.00 642.22C924.00 723.36 924.00 763.93 910.19 807.60C892.84 855.28 855.28 892.84 807.60 910.19C763.93 924.00 723.36 924.00 642.22 924.00L381.78 924.00C300.64 924.00 260.07 924.00 216.40 910.19C168.72 892.84 131.16 855.28 113.81 807.60C100.00 763.93 100.00 723.36 100.00 642.22L100.00 381.78C100.00 300.64 100.00 260.07 113.81 216.40C131.16 168.72 168.72 131.16 216.40 113.81C260.07 100.00 300.64 100.00 381.78 100.00Z" fill="url(#bg)"/>
+<!-- Below 48px the fins, ring and face details drop out: just the hex shell, visor and eyes. -->
 <g transform="translate(512 512) scale(8.6) translate(-60 -53)">
-<path d="M60 20L90 37V69L60 86L30 69V37Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="9" stroke-linejoin="round"/>
-<rect x="36" y="35" width="48" height="35" rx="13" fill="#141416"/>
+<path d="M60 20L90 37V69L60 86L30 69V37Z" fill="url(#shell)" stroke="url(#shell)" stroke-width="9" stroke-linejoin="round"/>
+<rect x="36" y="35" width="48" height="35" rx="13" fill="#0E0E12"/>
 <rect x="48.8" y="46" width="6.4" height="13" rx="3.2" fill="#FFFFFF"/>
 <rect x="64.8" y="46" width="6.4" height="13" rx="3.2" fill="#FFFFFF"/>
 </g>
