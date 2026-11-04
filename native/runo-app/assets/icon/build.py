@@ -1,4 +1,4 @@
-"""Render Squad Code's app icon (Fin on a coral tile, its visor an editor window) from runo.svg for every platform.
+"""Render Squad Code's app icon (coral Fin on an ink tile, its visor an editor window) from runo.svg for every platform.
 
 Run from this folder: python3 build.py (needs cairosvg and Pillow).
 
