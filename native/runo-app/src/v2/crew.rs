@@ -302,10 +302,9 @@ impl Shell {
             ))
             .child(num(
                 64.,
-                if ended == 0 {
-                    "\u{2014}".into()
-                } else {
-                    format!("{}%", done * 100 / ended)
+                match (done * 100).checked_div(ended) {
+                    Some(pct) => format!("{pct}%"),
+                    None => "\u{2014}".into(),
                 },
             ))
             .child(num(

@@ -338,7 +338,10 @@ mod tests {
             ok: false,
             ..Default::default()
         };
-        assert_eq!(verdict(&[ok.clone()], false).0, "The check passes");
+        assert_eq!(
+            verdict(std::slice::from_ref(&ok), false).0,
+            "The check passes"
+        );
         assert_eq!(
             verdict(&[ok, bad], false),
             ("1 of 2 failed".into(), Verdict::Fail)

@@ -372,6 +372,9 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
+/// Hears back once a pull request is merged or closed on GitHub.
+type Landing = std::sync::mpsc::Receiver<Result<(), String>>;
+
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
@@ -478,7 +481,7 @@ pub struct Shell {
     )>,
     watched: Instant,
     /// Pull requests being merged (true) or closed (false) on GitHub, by job.
-    landing: Vec<(u64, bool, std::sync::mpsc::Receiver<Result<(), String>>)>,
+    landing: Vec<(u64, bool, Landing)>,
     /// What Approve does in each folder, worked out once per folder.
     ways: HashMap<String, ship::Way>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
@@ -1233,6 +1236,7 @@ impl Shell {
 
     /// A new job, on its own branch when it may change files, started on its
     /// bot's engine, or on `pick` (an agent index) for a try in a race.
+    #[allow(clippy::too_many_arguments)]
     fn make_job(
         &mut self,
         bot: Member,
