@@ -99,7 +99,11 @@ impl Local {
             ],
             "temperature": 0.1,
             "max_tokens": 160,
-            "stream": false
+            "stream": false,
+            // Qwen3.5's chat template thinks first unless told not to, and the
+            // thinking eats the whole answer budget before any JSON comes out.
+            // llama-server passes these to the template; others ignore them.
+            "chat_template_kwargs": {"enable_thinking": false}
         });
         if let Some(schema) = schema {
             body["response_format"] = json!({
