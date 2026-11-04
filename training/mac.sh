@@ -68,7 +68,10 @@ print(f"{len(rows) - cut} to train on, {cut} to validate")
 PY
 
 step "Fine-tune with LoRA (MLX)"
-if [ ! -d "$WORK/adapters" ]; then
+if [ ! -e "$WORK/adapters/.done" ]; then
+  # A run that was stopped carries on from its last saved adapter.
+  RESUME=()
+  [ -s "$WORK/adapters/adapters.safetensors" ] && RESUME=(--resume-adapter-file "$WORK/adapters/adapters.safetensors")
   TRAIN_N=$(wc -l < "$WORK/data/train.jsonl")
   # Macs with 8 GB of memory train in smaller batches, with checkpointing.
   RAM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
@@ -76,7 +79,9 @@ if [ ! -d "$WORK/adapters" ]; then
   ITERS=$(( TRAIN_N * 2 / BATCH ))   # about 2 epochs
   mlx_lm.lora --model "$BASE" --train --data "$WORK/data" \
     --batch-size "$BATCH" --iters "$ITERS" --learning-rate 1e-4 \
-    --grad-checkpoint --mask-prompt --adapter-path "$WORK/adapters"
+    --grad-checkpoint --mask-prompt --adapter-path "$WORK/adapters" \
+    --save-every 50 "${RESUME[@]}"
+  touch "$WORK/adapters/.done"
 fi
 
 step "Merge the adapter into the model"
