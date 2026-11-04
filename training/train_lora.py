@@ -27,6 +27,21 @@ def config(**kw) -> SFTConfig:
     return SFTConfig(**{k: v for k, v in kw.items() if k in known})
 
 
+def old_gpu() -> None:
+    """GPUs older than Ampere (a T4 is 7.5) can't multiply half-precision
+    numbers into a float32 result in one step, which TRL's chunked loss does
+    by default. Tell it to widen the numbers first instead."""
+    if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] >= 8:
+        return
+    try:
+        import trl.kernels.chunked_logprob as chunked
+
+        chunked._MM_OUT_DTYPE = False
+        print("Older GPU: TRL's loss widens to float32 before multiplying.")
+    except ImportError:
+        pass
+
+
 def lora_targets(model) -> list[str]:
     """The text model's linear layers, by name. "all-linear" also reaches a
     model's vision tower and odd layers some PEFT versions can't wrap."""
@@ -50,13 +65,19 @@ def main() -> None:
     ap.add_argument("--rank", type=int, default=16)
     args = ap.parse_args()
 
+    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    fp16 = torch.cuda.is_available() and not bf16
+    old_gpu()
+
     tok = AutoTokenizer.from_pretrained(args.base)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.base,
-        torch_dtype=torch.bfloat16
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-        else torch.float32,
-    )
+    # Newer transformers call it `dtype` and default to the checkpoint's
+    # bfloat16, which a T4 can't train in; older ones call it `torch_dtype`.
+    dtype = torch.bfloat16 if bf16 else torch.float32
+    try:
+        model = AutoModelForCausalLM.from_pretrained(args.base, dtype=dtype)
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(args.base, torch_dtype=dtype)
+    model.to(dtype)
     data = load_dataset("json", data_files=args.data, split="train").shuffle(seed=7)
     # Prompt (instructions + the person's words) and completion (Fin's answer),
     # so only the answer is learned.
@@ -64,9 +85,6 @@ def main() -> None:
         lambda r: {"prompt": r["messages"][:-1], "completion": r["messages"][-1:]},
         remove_columns=["messages"],
     )
-    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-    fp16 = torch.cuda.is_available() and not bf16
-
     trainer = SFTTrainer(
         model=model,
         processing_class=tok,
