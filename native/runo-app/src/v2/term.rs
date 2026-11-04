@@ -64,6 +64,31 @@ fn program() -> Option<pty::Program> {
     })
 }
 
+/// Terminals that belong to a project folder rather than a job sit at the top
+/// of the id range, one per folder, so they never meet a job's id.
+const PROJECT_BASE: u64 = u64::MAX - 4096;
+
+/// The id of the project terminal for the folder at `index`.
+pub fn project_id(index: usize) -> u64 {
+    u64::MAX - index as u64
+}
+
+/// Whether a terminal id is a project's rather than a job's.
+pub fn is_project(id: u64) -> bool {
+    id > PROJECT_BASE
+}
+
+/// Quick commands over a project's drawer.
+fn project_quick(dir: &str) -> Vec<(&'static str, String)> {
+    let mut v = vec![("Status", "git status --short".to_string())];
+    if let Some(check) = super::work::checks_for(dir).first() {
+        v.push(("Run checks", check.clone()));
+    }
+    v.push(("Crew", "squad ls".to_string()));
+    v.push(("Help", "squad help".to_string()));
+    v
+}
+
 /// Quick commands over the drawer: what they're called and what they type.
 pub fn quick(job: &Job) -> Vec<(&'static str, String)> {
     let mut v = vec![
@@ -85,9 +110,21 @@ impl Shell {
             cx.notify();
             return;
         }
-        let dir = match self.store.job(id) {
-            Some(j) => j.dir().to_string(),
-            None => return,
+        let dir = if is_project(id) {
+            let index = (u64::MAX - id) as usize;
+            match self.store.folders.get(index) {
+                Some(f) => f.path.clone(),
+                None => {
+                    self.say("Pick a folder first, then the terminal opens in it.".to_string());
+                    cx.notify();
+                    return;
+                }
+            }
+        } else {
+            match self.store.job(id) {
+                Some(j) => j.dir().to_string(),
+                None => return,
+            }
         };
         let gone = self.terms.get(&id).is_some_and(|t| t.exited());
         if gone {
@@ -134,14 +171,58 @@ impl Shell {
         window.focus(&self.term_focus, cx);
     }
 
+    /// Opens or closes the terminal in the current project folder, from any
+    /// page: no job needed.
+    pub(super) fn toggle_project_term(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.store.folder().is_none() {
+            self.say("Pick a folder first, then the terminal opens in it.".to_string());
+            cx.notify();
+            return;
+        }
+        if self.store.done_step(super::store::Step::Terminal) {
+            self.store.save();
+        }
+        let id = project_id(self.store.current);
+        self.toggle_term(id, window, cx);
+    }
+
     /// The drawer under a job, when it's open.
     pub(super) fn term_drawer(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
-        let id = job.id;
-        if self.term_open != Some(id) {
+        if self.term_open != Some(job.id) {
             return None;
         }
-        // Fit the shell to the drawer's width.
+        let place = if job.branch.is_empty() {
+            job.dir().to_string()
+        } else {
+            format!("{} \u{b7} {}", job.branch, job.dir())
+        };
         let width = self.view_w - 560.;
+        self.drawer(job.id, place, quick(job), width, cx)
+    }
+
+    /// The project's drawer, under whatever page is showing, when it's open.
+    pub(super) fn project_drawer(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let id = self.term_open.filter(|id| is_project(*id))?;
+        let dir = self
+            .store
+            .folders
+            .get((u64::MAX - id) as usize)?
+            .path
+            .clone();
+        let quick = project_quick(&dir);
+        let width = self.view_w - super::sidebar::WIDTH - 24.;
+        self.drawer(id, dir, quick, width, cx)
+    }
+
+    fn drawer(
+        &mut self,
+        id: u64,
+        place: String,
+        quick: Vec<(&'static str, String)>,
+        width: f32,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        // Fit the shell to the drawer's width.
         let cols = ((width / CELL).floor() as u16).clamp(40, 400);
         if cols != self.term_cols {
             self.term_cols = cols;
@@ -242,13 +323,9 @@ impl Shell {
                     .font_family(ui::MONO)
                     .text_size(px(11.))
                     .text_color(c(ui::FAINT))
-                    .child(if job.branch.is_empty() {
-                        job.dir().to_string()
-                    } else {
-                        format!("{} \u{b7} {}", job.branch, job.dir())
-                    }),
+                    .child(place),
             );
-        for (k, (label, command)) in quick(job).into_iter().enumerate() {
+        for (k, (label, command)) in quick.into_iter().enumerate() {
             bar = bar.child(
                 ui::pill(("term-quick", k), label, false)
                     .h(px(24.))

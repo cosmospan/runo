@@ -156,7 +156,7 @@ impl Shell {
                         .child(self.jobs_table(cx))
                         .into_any_element()
                 } else {
-                    self.jobs_table(cx).into_any_element()
+                    self.start_here(cx)
                 }),
                 self.stagger(2),
             ));

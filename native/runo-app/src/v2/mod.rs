@@ -27,6 +27,7 @@ mod race;
 mod review;
 mod ship;
 mod sidebar;
+mod start;
 mod store;
 mod term;
 mod today;
@@ -2517,6 +2518,7 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
+        let project_drawer = self.project_drawer(cx);
         let root = div()
             .size_full()
             .relative()
@@ -2544,13 +2546,17 @@ impl Render for Shell {
                     }
                     return;
                 }
-                // Ctrl+` opens and closes a job's terminal.
-                if m.control && key == "`" {
-                    if let Place::Live(id) = this.place {
-                        this.toggle_term(id, window, cx);
-                        cx.stop_propagation();
-                        return;
+                // Ctrl+` opens and closes a terminal: the job's own on a job,
+                // the project's everywhere else (or when that one is open).
+                if m.control && key == "`" && this.place != Place::Welcome {
+                    match this.place {
+                        Place::Live(id) if !this.term_open.is_some_and(term::is_project) => {
+                            this.toggle_term(id, window, cx)
+                        }
+                        _ => this.toggle_project_term(window, cx),
                     }
+                    cx.stop_propagation();
+                    return;
                 }
                 // Control keys belong to the shell while the terminal has focus.
                 if this.term_focus.is_focused(window) && !m.platform {
@@ -2612,7 +2618,8 @@ impl Render for Shell {
                             .relative()
                             .overflow_hidden()
                             .child(div().size_full().child(body)),
-                    ),
+                    )
+                    .when(!setup, |d| d.children(project_drawer)),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

@@ -30,6 +30,10 @@ pub enum Act {
     /// A new job raced on several engines, or a goal split into jobs.
     NewRace,
     NewGoal,
+    /// Open the terminal in the project folder.
+    ProjectTerminal,
+    /// Show the getting-started card again.
+    Guide,
 }
 
 pub struct Entry {
@@ -134,6 +138,22 @@ impl Shell {
                 act: Act::Go(Place::Chat(who)),
             });
         }
+        if self.store.folder().is_some() {
+            all.push(Entry {
+                label: "Open the terminal in this folder".into(),
+                hint: "\u{2303}`".into(),
+                icon: Some(IconName::SquareTerminal),
+                bot: None,
+                act: Act::ProjectTerminal,
+            });
+        }
+        all.push(Entry {
+            label: "Get started: show the checklist".into(),
+            hint: "Help".into(),
+            icon: Some(IconName::ListChecks),
+            bot: None,
+            act: Act::Guide,
+        });
         all.push(Entry {
             label: "New job, raced on several engines".into(),
             hint: "New job".into(),
@@ -254,6 +274,15 @@ impl Shell {
                 if self.term_open != Some(id) {
                     self.toggle_term(id, window, cx);
                 }
+            }
+            Act::ProjectTerminal => {
+                if !self.term_open.is_some_and(super::term::is_project) {
+                    self.toggle_project_term(window, cx);
+                }
+            }
+            Act::Guide => {
+                self.store.guide_hidden = false;
+                self.store.save();
             }
             Act::NewRace | Act::NewGoal => {
                 if act == Act::NewRace {
