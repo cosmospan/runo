@@ -15,14 +15,79 @@
 pub mod anim;
 pub mod bubble;
 pub mod draw;
+pub mod fin;
 pub mod look;
 
 pub use bubble::{Bubble, BubbleRenderer, Eyes, Layout, Pose, Sway, Tint};
 pub use draw::Detail;
+pub use fin::{Fin, FinPose, FinRenderer};
 pub use look::{custom, Bot, Eye, Look, Mood, Motion, Mouth, Palette, Props, Rgb, Shape};
 
 use vello_cpu::kurbo::Affine;
 use vello_cpu::{Pixmap, RenderContext, Resources};
+
+/// A crew member ready to draw: one of the bubble crew, or Fin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Figure {
+    Bubble(Pose),
+    Fin(FinPose),
+}
+
+impl Figure {
+    /// Busy enough to need a quick frame rate.
+    pub fn lively(&self) -> bool {
+        match self {
+            Figure::Bubble(p) => {
+                p.sparks
+                    || p.ask
+                    || p.shine
+                    || matches!(p.layout, Layout::Think | Layout::Busy | Layout::Splash)
+            }
+            Figure::Fin(p) => p.lively(),
+        }
+    }
+
+    /// Marks it as hovered or worth a moment of attention.
+    pub fn shine(mut self, on: bool) -> Self {
+        match &mut self {
+            Figure::Bubble(p) => p.shine |= on,
+            Figure::Fin(p) => p.shine |= on,
+        }
+        self
+    }
+}
+
+/// Draws either kind of figure at one size, keeping each renderer's buffers.
+pub struct CrewRenderer {
+    px: u16,
+    bubble: Option<BubbleRenderer>,
+    fin: Option<FinRenderer>,
+}
+
+impl CrewRenderer {
+    pub fn new(px: u16) -> Self {
+        CrewRenderer {
+            px,
+            bubble: None,
+            fin: None,
+        }
+    }
+
+    /// Premultiplied RGBA8 pixels of `figure` at time `t`.
+    pub fn draw(&mut self, figure: &Figure, t: f64, framing: Framing) -> &[u8] {
+        let px = self.px;
+        match figure {
+            Figure::Bubble(p) => self
+                .bubble
+                .get_or_insert_with(|| BubbleRenderer::new(px))
+                .draw(p, t, framing),
+            Figure::Fin(p) => self
+                .fin
+                .get_or_insert_with(|| FinRenderer::new(px))
+                .draw(p, t, framing),
+        }
+    }
+}
 
 /// How much of the 200 × 200 view box to show.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -10,6 +10,7 @@ use gpui_kit::*;
 use super::data::{Member, Mode};
 use super::store::{self, Status};
 use super::ui::{self, c, ca};
+use super::Pane;
 use super::{Place, Shell};
 
 /// The person's first name, from the account they're signed in to.
@@ -332,7 +333,7 @@ impl Shell {
                                 ))
                                 .build(window, cx)
                             })
-                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx))),
                     )
                     .child(
                         div()

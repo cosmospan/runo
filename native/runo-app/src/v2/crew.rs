@@ -8,6 +8,7 @@ use runo_holo::{Bubble, Eyes, Framing, Layout, Mood, Sway, Tint};
 use super::data::{Member, Mode};
 use super::store::Status;
 use super::ui::{self, c, ca};
+use super::Pane;
 use super::{Place, Shell};
 
 fn layout_name(l: Layout) -> &'static str {
@@ -290,7 +291,9 @@ impl Shell {
                     .cursor_pointer()
                     .hover(|s| s.text_color(c(ui::INK)))
                     .child(engine)
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
+                    ),
             )
             .child(num(
                 50.,
@@ -438,7 +441,11 @@ impl Shell {
 
     fn maker_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let b = self.maker;
-        let preview = self.pose_img(b.pose(Mood::Signature), 220., Framing::Full);
+        let preview = self.pose_img(
+            runo_holo::Figure::Bubble(b.pose(Mood::Signature)),
+            220.,
+            Framing::Full,
+        );
         let row = |label: &'static str,
                    items: Vec<Choice>,
                    key: &'static str,

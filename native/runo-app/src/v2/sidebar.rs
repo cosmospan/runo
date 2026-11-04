@@ -12,6 +12,7 @@ use runo_holo::Framing;
 
 use super::data::Member;
 use super::ui::{self, c};
+use super::Pane;
 use super::{Place, Shell};
 
 /// The sidebar's width.
@@ -363,7 +364,7 @@ impl Shell {
                     .text_color(c(ui::MUTED))
                     .child(format!("${today:.2} today")),
             )
-            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx)));
+            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)));
         let foot = div()
             .mt_auto()
             .pt(px(10.))
@@ -373,12 +374,15 @@ impl Shell {
             .child(engine_card)
             .child(
                 row(
-                    "side-engines",
+                    "side-settings",
                     IconName::Settings,
                     "Settings",
-                    place == Place::Engines,
+                    matches!(place, Place::Settings(_)),
                 )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let pane = this.settings_pane;
+                    this.go(Place::Settings(pane), cx)
+                })),
             )
             .child(
                 row(
@@ -494,7 +498,7 @@ impl Shell {
                 Some(g) => format!("Jobs / Goal / {}", g.text),
                 None => "Jobs / Goal".into(),
             },
-            Place::Engines => "Settings / Engines".into(),
+            Place::Settings(pane) => format!("Settings / {}", pane.name()),
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
         };
