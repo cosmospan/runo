@@ -21,7 +21,7 @@ fn save(cx: &mut App, f: impl FnOnce(&mut AppSettings)) {
 }
 
 /// A small chip for one choice; `ok` false greys it as not installed.
-fn choice(
+pub(super) fn choice(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     on: bool,
@@ -53,7 +53,7 @@ fn choice(
         .child(label.into())
 }
 
-fn section(title: &'static str, line: &'static str) -> Div {
+pub(super) fn section(title: &'static str, line: &'static str) -> Div {
     div()
         .flex()
         .flex_col()

@@ -8,6 +8,7 @@ use gpui_kit::*;
 
 use super::store::{Item, Job, Status};
 use super::ui::{self, c};
+use super::Pane;
 use super::{Place, Shell};
 
 /// What went wrong with a job.
@@ -233,10 +234,9 @@ impl Shell {
                         .on_click(cx.listener(move |this, _, _, cx| this.rerun(id, None, cx)));
                     buttons = buttons.child(try_again);
                 }
-                buttons = buttons.child(
-                    ui::ghost("trouble-engines", "Engines")
-                        .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
-                );
+                buttons = buttons.child(ui::ghost("trouble-engines", "Engines").on_click(
+                    cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
+                ));
             }
         }
         Some(

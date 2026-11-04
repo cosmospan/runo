@@ -10,6 +10,7 @@ use gpui_kit::*;
 use super::data::{Member, Mode};
 use super::store::Status;
 use super::ui::{self, c, ca};
+use super::Pane;
 use super::{Place, Shell};
 
 /// What picking an entry does.
@@ -95,7 +96,24 @@ impl Shell {
                 "⌘4",
             ),
             (Place::Crew, IconName::Users, "Crew", "⌘5"),
-            (Place::Engines, IconName::Cpu, "Settings: Engines", "⌘6"),
+            (
+                Place::Settings(Pane::General),
+                IconName::Settings,
+                "Settings",
+                "⌘6",
+            ),
+            (
+                Place::Settings(Pane::Mascot),
+                IconName::Bot,
+                "Settings: Mascot",
+                "",
+            ),
+            (
+                Place::Settings(Pane::Engines),
+                IconName::Cpu,
+                "Settings: Engines",
+                "",
+            ),
             (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
         ];
         for (p, icon, label, key) in places {

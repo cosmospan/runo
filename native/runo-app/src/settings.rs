@@ -137,6 +137,13 @@ pub struct AppSettings {
     pub thread_ref_titles: bool,
     /// Places pinned out on the rail beside the main ones, by label, such as "Notes".
     pub rail_pins: Vec<String>,
+    /// How the v2 crew is drawn: "fin" (the Fin mascot) or "bubble" (the bubble crew).
+    pub mascot: String,
+    /// What Fin is made of: "glass", "bubble" (rainbow bubble glow) or "solid".
+    pub fin_material: String,
+    /// Each bot's Fin, by bot key: `colour.hat.left.right.badge`, such as
+    /// `blue.security.shield.baton.star`. Bots not listed wear their default kit.
+    pub fin_looks: HashMap<String, String>,
     /// Translucent window over a blurred desktop: "off", "subtle", "frosted" or "clear".
     pub glass: String,
     /// Cards, menus and dialogs are translucent too.
@@ -339,6 +346,9 @@ impl Default for AppSettings {
             show_deleted_threads: false,
             thread_ref_titles: true,
             rail_pins: Vec::new(),
+            mascot: "fin".into(),
+            fin_material: "glass".into(),
+            fin_looks: HashMap::new(),
             glass: "off".into(),
             glass_cards: true,
             font: "bundled".into(),

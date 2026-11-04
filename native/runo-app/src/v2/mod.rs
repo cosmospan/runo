@@ -20,7 +20,9 @@ mod history;
 mod home;
 mod jobs;
 mod live;
+mod mascot;
 mod palette;
+mod prefs;
 mod race;
 mod review;
 mod ship;
@@ -41,9 +43,10 @@ use std::time::{Duration, Instant};
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::{BubbleRenderer, Framing, Mood, Pose};
+use runo_holo::{CrewRenderer, Figure, Framing, Mood};
 
 use data::{Member, Mode};
+pub use prefs::Pane;
 use store::{Said, Status, Store};
 use ui::{c, ca};
 
@@ -62,7 +65,8 @@ pub enum Place {
     Race(u64),
     /// A goal split into jobs.
     Goal(u64),
-    Engines,
+    /// Settings, open on one pane.
+    Settings(Pane),
     /// What the crew cost and did lately.
     Usage,
     /// The first-run walkthrough.
@@ -76,8 +80,8 @@ pub enum Place {
 /// never waits for a bot. A still bot (motion off) is drawn once and never again.
 struct Holos {
     frame: u64,
-    images: HashMap<(Pose, u32, bool), Frame>,
-    renderers: HashMap<u16, BubbleRenderer>,
+    images: HashMap<(Figure, u32, bool), Frame>,
+    renderers: HashMap<u16, CrewRenderer>,
     /// The fastest rate any bot drawn this frame needed, so the clock can slow
     /// down on screens with only small bots.
     asked: u32,
@@ -110,14 +114,10 @@ struct Frame {
 const FPS: f64 = 60.0;
 
 /// Frames a second for a bot this many logical pixels tall.
-/// How often a bot of this size needs a new frame. A calm bubble drifts slowly,
+/// How often a bot of this size needs a new frame. A calm bot drifts slowly,
 /// so it needs far fewer than one that is busy, celebrating or asking.
-fn fps_for(size: f32, pose: &Pose) -> u32 {
-    use runo_holo::Layout;
-    let lively = pose.sparks
-        || pose.ask
-        || pose.shine
-        || matches!(pose.layout, Layout::Think | Layout::Busy | Layout::Splash);
+fn fps_for(size: f32, pose: &Figure) -> u32 {
+    let lively = pose.lively();
     match (lively, size >= 90.0, size >= 40.0) {
         (true, _, true) => 60,
         (true, false, false) => 30,
@@ -170,7 +170,7 @@ impl Holos {
 
     fn image(
         &mut self,
-        pose: Pose,
+        pose: Figure,
         logical: f32,
         framing: Framing,
         t: f64,
@@ -224,7 +224,7 @@ impl Holos {
         let r = self
             .renderers
             .entry(device)
-            .or_insert_with(|| BubbleRenderer::new(device));
+            .or_insert_with(|| CrewRenderer::new(device));
         let image = to_image(r.draw(&pose, at, framing), device);
         self.spent += began.elapsed();
         self.images.insert(
@@ -261,14 +261,14 @@ impl Holos {
     }
 }
 
-type Slot = (Pose, u32, bool);
+type Slot = (Figure, u32, bool);
 
 /// A bot frame for the painter to draw.
 struct Paint {
     slot: Slot,
     tick: u64,
     at: f64,
-    pose: Pose,
+    pose: Figure,
     device: u16,
     framing: Framing,
 }
@@ -295,7 +295,7 @@ fn painter() -> (Painters, std::sync::mpsc::Receiver<Painted>) {
         let _ = std::thread::Builder::new()
             .name(format!("runo-bots-{i}"))
             .spawn(move || {
-                let mut renderers: HashMap<u16, BubbleRenderer> = HashMap::new();
+                let mut renderers: HashMap<u16, CrewRenderer> = HashMap::new();
                 while let Ok(first) = asks.recv() {
                     let mut todo: Vec<Paint> = vec![first];
                     todo.extend(asks.try_iter());
@@ -307,7 +307,7 @@ fn painter() -> (Painters, std::sync::mpsc::Receiver<Painted>) {
                     for (_, p) in newest {
                         let r = renderers
                             .entry(p.device)
-                            .or_insert_with(|| BubbleRenderer::new(p.device));
+                            .or_insert_with(|| CrewRenderer::new(p.device));
                         let image = to_image(r.draw(&p.pose, p.at, p.framing), p.device);
                         if done
                             .send(Painted {
@@ -429,6 +429,12 @@ pub struct Shell {
     maker_open: bool,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
+    /// The Settings pane last open, where the sidebar's Settings goes back to.
+    settings_pane: Pane,
+    /// The bot being dressed in Settings → Mascot.
+    fin_sel: Member,
+    /// The state the Mascot preview holds; it plays through them all when unset.
+    fin_state: Option<runo_holo::fin::State>,
     /// The bot whose model list is open on Engines.
     engine_open: Option<Member>,
     /// The job Home's inspector shows; the newest active one when unset.
@@ -553,7 +559,7 @@ fn nav_slot(place: Place) -> Option<f32> {
         Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Engines | Place::Usage | Place::Welcome => return None,
+        Place::Settings(_) | Place::Usage | Place::Welcome => return None,
     };
     Some(i as f32 * 46.)
 }
@@ -675,7 +681,9 @@ impl Shell {
             Ok("chat") => Place::Chat(Member::Explainer),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
-            Ok("engines") => Place::Engines,
+            Ok("engines") => Place::Settings(Pane::Engines),
+            Ok("settings") => Place::Settings(Pane::General),
+            Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("usage") => Place::Usage,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
@@ -743,6 +751,9 @@ impl Shell {
             home_tab: 0,
             maker_open: false,
             engine_sel: None,
+            settings_pane: Pane::General,
+            fin_sel: Member::Guard,
+            fin_state: None,
             engine_open: None,
             home_pick: None,
             inbox_pick: None,
@@ -839,6 +850,9 @@ impl Shell {
                 self.nav_at = Instant::now();
             }
             self.place = place;
+            if let Place::Settings(pane) = place {
+                self.settings_pane = pane;
+            }
             self.entered = Instant::now();
             self.folder_menu = false;
         }
@@ -2289,8 +2303,7 @@ impl Shell {
 
     /// A bot drawn at `size` logical pixels, in `mood`.
     fn bot(&mut self, who: Member, mood: Mood, size: f32, framing: Framing) -> Img {
-        let mut pose = who.bubble().pose(mood);
-        pose.shine |= self.hovered == Some(who);
+        let pose = mascot::figure(who, mood).shine(self.hovered == Some(who));
         self.pose_img(pose, size, framing)
     }
 
@@ -2309,7 +2322,7 @@ impl Shell {
         }
     }
 
-    fn pose_img(&mut self, pose: Pose, size: f32, framing: Framing) -> Img {
+    fn pose_img(&mut self, pose: Figure, size: f32, framing: Framing) -> Img {
         // With motion off, or while dozing, every bot holds one calm pose.
         let moving = self.motion && !self.dozing.load(std::sync::atomic::Ordering::Relaxed);
         let t = if moving { self.now() } else { 2.0 };
@@ -2320,7 +2333,7 @@ impl Shell {
     /// A small avatar, like the ones beside chat lines: still, so it costs nothing.
     fn avatar(&mut self, who: Member, size: f32) -> Img {
         let image = self.holos.image(
-            who.bubble().pose(Mood::Idle),
+            mascot::figure(who, Mood::Idle),
             size,
             Framing::Bust,
             2.0,
@@ -2441,6 +2454,7 @@ impl Render for Shell {
             .store(doze, std::sync::atomic::Ordering::Relaxed);
         self.holos.begin(window, cx);
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
+        mascot::sync(cx.global::<crate::settings::AppSettings>());
         // The mode in Today's box must have a bot on the crew to take it.
         if Member::doer_for(self.mode).is_none() {
             if let Some(m) = Mode::ALL
@@ -2459,7 +2473,7 @@ impl Render for Shell {
             Place::Chat(who) => self.chat(who, cx),
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
-            Place::Engines => self.engines(cx),
+            Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
             Place::Welcome => self.welcome(cx),
         };
@@ -2570,7 +2584,7 @@ impl Render for Shell {
                     "3" => Place::History,
                     "4" => Place::Chat(this.last_chat()),
                     "5" => Place::Crew,
-                    "6" => Place::Engines,
+                    "6" => Place::Settings(this.settings_pane),
                     "7" => Place::Usage,
                     _ => return,
                 };

@@ -11,6 +11,7 @@ use runo_holo::{Framing, Mood};
 use super::data::Member;
 use super::live::{note_line, plain, typing};
 use super::ui::{self, c, ca};
+use super::Pane;
 use super::{Place, Shell};
 
 impl Shell {
@@ -89,7 +90,9 @@ impl Shell {
                             .text_color(c(ui::MUTED)),
                     )
                     .child(engine)
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Engines, cx))),
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
+                    ),
             )
             .when(!log.is_empty(), |d| {
                 d.child(ui::ghost("chat-clear", "Clear").on_click(cx.listener(
