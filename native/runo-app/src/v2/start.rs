@@ -57,7 +57,7 @@ impl Shell {
     pub(super) fn start_here(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let face = self.bot(Member::Builder, Mood::Signature, 72., Framing::Full);
         let engine_ok = self.step_is_done(Step::Engine, cx);
-        let folder_ok = self.store.folder().is_some();
+        let folder_ok = self.crew.store.folder().is_some();
         let (title, words) = match (engine_ok, folder_ok) {
             (true, true) => (
                 "Your crew is ready.",
@@ -310,7 +310,7 @@ impl Shell {
         self.term_open = None;
         self.home_pick = None;
         self.inbox_pick = None;
-        self.store = if on {
+        self.crew.store = if on {
             super::demo::seed()
         } else {
             super::store::Store::load()
@@ -391,7 +391,7 @@ impl Shell {
             };
             let copy = cmd.clone();
             let run = cmd.clone();
-            let has_folder = self.store.folder().is_some();
+            let has_folder = self.crew.store.folder().is_some();
             rows = rows.child(
                 div()
                     .flex()
@@ -431,7 +431,7 @@ impl Shell {
                         d.child(
                             ui::ghost(("install-run", n), "Run it").on_click(cx.listener(
                                 move |this, _, window, cx| {
-                                    let id = super::term::project_id(this.store.current);
+                                    let id = super::term::project_id(this.crew.store.current);
                                     this.term_run(id, &run, window, cx);
                                 },
                             )),
@@ -485,14 +485,14 @@ impl Shell {
                 let st = cx.global::<crate::settings::AppSettings>();
                 (0..crate::agent::PROVIDERS.len()).any(|i| super::engine::ready(st, i))
             }
-            s => self.store.step_done(s),
+            s => self.crew.store.step_done(s),
         }
     }
 
     /// The getting-started card at the foot of the sidebar, until every step
     /// is done or it's put away.
     pub(super) fn getting_started(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.store.guide_hidden || self.store.demo {
+        if self.crew.store.guide_hidden || self.crew.store.demo {
             return None;
         }
         let done: Vec<bool> = Step::ALL
@@ -603,8 +603,8 @@ impl Shell {
                                 .hover(|s| s.text_color(c(ui::INK)).bg(c(ui::HOVER)))
                                 .child("Hide")
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    this.store.guide_hidden = true;
-                                    this.store.save();
+                                    this.crew.store.guide_hidden = true;
+                                    this.crew.store.save();
                                     this.say(
                                         "Hidden. Bring it back from the command menu: Get started.",
                                     );

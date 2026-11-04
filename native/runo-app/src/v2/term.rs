@@ -119,7 +119,7 @@ impl Shell {
         }
         let dir = if is_project(id) {
             let index = (u64::MAX - id) as usize;
-            match self.store.folders.get(index) {
+            match self.crew.store.folders.get(index) {
                 Some(f) => f.path.clone(),
                 None => {
                     self.say("Pick a folder first, then the terminal opens in it.".to_string());
@@ -128,7 +128,7 @@ impl Shell {
                 }
             }
         } else {
-            match self.store.job(id) {
+            match self.crew.store.job(id) {
                 Some(j) => j.dir().to_string(),
                 None => return,
             }
@@ -181,15 +181,15 @@ impl Shell {
     /// Opens or closes the terminal in the current project folder, from any
     /// page: no job needed.
     pub(super) fn toggle_project_term(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.store.folder().is_none() {
+        if self.crew.store.folder().is_none() {
             self.say("Pick a folder first, then the terminal opens in it.".to_string());
             cx.notify();
             return;
         }
-        if self.store.done_step(super::store::Step::Terminal) {
-            self.store.save();
+        if self.crew.store.done_step(super::store::Step::Terminal) {
+            self.crew.store.save();
         }
-        let id = project_id(self.store.current);
+        let id = project_id(self.crew.store.current);
         self.toggle_term(id, window, cx);
     }
 
@@ -211,6 +211,7 @@ impl Shell {
     pub(super) fn project_drawer(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let id = self.term_open.filter(|id| is_project(*id))?;
         let dir = self
+            .crew
             .store
             .folders
             .get((u64::MAX - id) as usize)?

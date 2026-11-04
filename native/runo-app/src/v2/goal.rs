@@ -163,6 +163,7 @@ impl Shell {
     /// Goals still going, as a row of small cards over the jobs.
     pub(super) fn goals_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let open: Vec<Goal> = self
+            .crew
             .store
             .goals
             .iter()
@@ -172,7 +173,7 @@ impl Shell {
         if open.is_empty() {
             return None;
         }
-        let jobs = self.store.jobs.clone();
+        let jobs = self.crew.store.jobs.clone();
         let mut row = div().flex().flex_wrap().gap(px(12.));
         for g in open {
             let id = g.id;
@@ -243,10 +244,10 @@ impl Shell {
     }
 
     pub(super) fn goal_page(&mut self, id: u64, cx: &mut Context<Self>) -> AnyElement {
-        let Some(goal) = self.store.goals.iter().find(|g| g.id == id).cloned() else {
+        let Some(goal) = self.crew.store.goals.iter().find(|g| g.id == id).cloned() else {
             return self.empty_place("This goal is gone", "It was removed.", cx);
         };
-        let jobs = self.store.jobs.clone();
+        let jobs = self.crew.store.jobs.clone();
         let current = goal.current(&jobs);
         let shipped = goal
             .steps
@@ -401,13 +402,13 @@ impl Shell {
                                 .child("Remove")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(g) =
-                                        this.store.goals.iter_mut().find(|g| g.id == id)
+                                        this.crew.store.goals.iter_mut().find(|g| g.id == id)
                                     {
                                         if k < g.steps.len() {
                                             g.steps.remove(k);
                                         }
                                     }
-                                    this.store.save();
+                                    this.crew.store.save();
                                     cx.notify();
                                 })),
                         )

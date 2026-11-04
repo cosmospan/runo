@@ -53,7 +53,7 @@ impl Shell {
     pub(super) fn crew(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let all = Member::all();
         let n = all.len();
-        let busy = self.store.running().count();
+        let busy = self.crew.store.running().count();
         let mut list = div()
             .w_full()
             .bg(c(ui::PANEL))
@@ -165,7 +165,13 @@ impl Shell {
         let mood = self.mood(who);
         let face = self.bot(who, mood, 34., Framing::Bust);
         let (status, color) = self.status_of(who);
-        let jobs: Vec<_> = self.store.jobs.iter().filter(|j| j.bot == who).collect();
+        let jobs: Vec<_> = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.bot == who)
+            .collect();
         let done = jobs
             .iter()
             .filter(|j| matches!(j.status, Status::Done | Status::Shipped))
@@ -185,7 +191,7 @@ impl Shell {
             .sum::<f64>();
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
         let mode = who.mode();
-        let pinned = self.store.pinned.contains(&who);
+        let pinned = self.crew.store.pinned.contains(&who);
         let num = |w: f32, v: String| {
             div()
                 .w(px(w))
@@ -328,12 +334,14 @@ impl Shell {
                     .child(
                         small(("crew-pin", key), if pinned { "Unpin" } else { "Pin" }).on_click(
                             cx.listener(move |this, _, _, cx| {
-                                if let Some(i) = this.store.pinned.iter().position(|m| *m == who) {
-                                    this.store.pinned.remove(i);
+                                if let Some(i) =
+                                    this.crew.store.pinned.iter().position(|m| *m == who)
+                                {
+                                    this.crew.store.pinned.remove(i);
                                 } else {
-                                    this.store.pinned.push(who);
+                                    this.crew.store.pinned.push(who);
                                 }
-                                this.store.save();
+                                this.crew.store.save();
                                 cx.notify();
                             }),
                         ),

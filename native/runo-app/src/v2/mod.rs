@@ -25,6 +25,7 @@ mod palette;
 mod prefs;
 mod race;
 mod review;
+mod runtime;
 mod ship;
 mod sidebar;
 mod start;
@@ -48,7 +49,7 @@ use runo_holo::{CrewRenderer, Figure, Framing, Mood};
 
 use data::{Member, Mode};
 pub use prefs::Pane;
-use store::{Said, Status, Store};
+use store::{Status, Store};
 use ui::{c, ca};
 
 /// Where the person is.
@@ -374,8 +375,6 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
 }
 
 /// Hears back once a pull request is merged or closed on GitHub.
-type Landing = std::sync::mpsc::Receiver<Result<(), String>>;
-
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
@@ -383,8 +382,8 @@ pub struct Shell {
     holos: Holos,
     scale: f32,
     mode: Mode,
-    store: Store,
-    runners: Vec<jobs::Runner>,
+    /// The crew: the saved store and everything running for it.
+    crew: runtime::Runtime,
     composer: Entity<TextareaState>,
     chat_input: Entity<InputState>,
     live_input: Entity<InputState>,
@@ -393,8 +392,6 @@ pub struct Shell {
     live_len: usize,
     chat_scroll: ScrollHandle,
     chat_len: usize,
-    /// A question on its way to a bot's engine.
-    asking: Option<engine::Ask>,
     /// The bubble in the "make your own" playground on Crew.
     maker: runo_holo::Bubble,
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
@@ -476,24 +473,9 @@ pub struct Shell {
     inbox_at: Instant,
     /// When the newest chat line arrived, so it can slide in.
     chat_at: Instant,
-    saved: Instant,
-    /// Checker's runs of the checks on finished jobs, by job.
-    checking: Vec<(u64, std::sync::mpsc::Receiver<Vec<crate::proof::CheckRun>>)>,
     /// The changed file whose diff is open on a job's review, if any.
     diff_open: Option<(u64, String)>,
     diff_text: String,
-    /// Shipper opening pull requests, by job.
-    shipping: Vec<(u64, std::sync::mpsc::Receiver<ship::Step>)>,
-    /// Looks at open pull requests, by job, and when the last round started.
-    watching: Vec<(
-        u64,
-        std::sync::mpsc::Receiver<Option<crate::github::PrStatus>>,
-    )>,
-    watched: Instant,
-    /// Pull requests being merged (true) or closed (false) on GitHub, by job.
-    landing: Vec<(u64, bool, Landing)>,
-    /// What Approve does in each folder, worked out once per folder.
-    ways: HashMap<String, ship::Way>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
@@ -508,10 +490,6 @@ pub struct Shell {
     term_cols: u16,
     /// The window's width, for fitting the terminal to it.
     view_w: f32,
-    /// When the queue from `runo` in a terminal was last read.
-    queue_at: Instant,
-    /// Goals Squad Code is splitting now.
-    planning: Vec<(u64, std::sync::mpsc::Receiver<crate::agent::Event>)>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -729,8 +707,7 @@ impl Shell {
             holos: Holos::new(),
             scale: 1.0,
             mode: Mode::Build,
-            store,
-            runners: Vec::new(),
+            crew: runtime::Runtime::new(store),
             composer,
             chat_input,
             live_input,
@@ -738,7 +715,6 @@ impl Shell {
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
             chat_len: 0,
-            asking: None,
             maker: Member::Fixer.bubble(),
             history_filter: 0,
             folder_menu: false,
@@ -784,15 +760,8 @@ impl Shell {
             inbox_seen: usize::MAX,
             inbox_at: Instant::now(),
             chat_at: Instant::now(),
-            saved: Instant::now(),
-            checking: Vec::new(),
             diff_open: None,
             diff_text: String::new(),
-            shipping: Vec::new(),
-            watching: Vec::new(),
-            watched: Instant::now() - Duration::from_secs(3600),
-            landing: Vec::new(),
-            ways: HashMap::new(),
             racing: 0,
             splitting: false,
             terms: HashMap::new(),
@@ -802,8 +771,6 @@ impl Shell {
             term_grab: 0,
             term_cols: 100,
             view_w: 1280.,
-            queue_at: Instant::now(),
-            planning: Vec::new(),
             _subs: subs,
             _pump: pump,
         }
@@ -829,8 +796,8 @@ impl Shell {
         while let Some(p) = self.trail.pop() {
             // Skip jobs that are gone and repeats of where we are.
             let ok = match p {
-                Place::Live(id) | Place::Race(id) => self.store.job(id).is_some(),
-                Place::Goal(id) => self.store.goals.iter().any(|g| g.id == id),
+                Place::Live(id) | Place::Race(id) => self.crew.store.job(id).is_some(),
+                Place::Goal(id) => self.crew.store.goals.iter().any(|g| g.id == id),
                 _ => true,
             };
             if ok && p != self.place {
@@ -904,10 +871,10 @@ impl Shell {
     /// Marks a finished job seen once it's opened.
     fn visit(&mut self, place: Place, cx: &mut Context<Self>) {
         if let Place::Live(id) = place {
-            if let Some(j) = self.store.job_mut(id) {
+            if let Some(j) = self.crew.store.job_mut(id) {
                 if j.status != Status::Running && !j.seen {
                     j.seen = true;
-                    self.store.save();
+                    self.crew.store.save();
                 }
             }
         }
@@ -947,9 +914,10 @@ impl Shell {
                 return;
             };
             let _ = this.update(cx, |this, cx| {
-                this.store.add_folder(path);
-                this.store.save();
+                this.crew.store.add_folder(path);
+                this.crew.store.save();
                 let name = this
+                    .crew
                     .store
                     .folder()
                     .map(|f| f.name.clone())
@@ -969,7 +937,7 @@ impl Shell {
             (true, Some(d)) => d.to_string(),
             (true, None) => return,
         };
-        if self.store.folder().is_none() {
+        if self.crew.store.folder().is_none() {
             self.say("Pick a folder first, so the crew knows where to work.");
             self.pick_folder(cx);
             return;
@@ -980,7 +948,7 @@ impl Shell {
             self.ask(doer, text, cx);
             return;
         }
-        let Some(folder) = self.store.folder().cloned() else {
+        let Some(folder) = self.crew.store.folder().cloned() else {
             return;
         };
         let mode = self.mode;
@@ -1021,22 +989,22 @@ impl Shell {
             cx.notify();
             return;
         }
-        let id = self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+        let id = self.crew.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
         let like = self.maker_like;
         let role = if role.is_empty() {
             like.role().to_string()
         } else {
             role
         };
-        self.store.made.push(data::Made {
+        self.crew.store.made.push(data::Made {
             id,
             name: name.clone(),
             role,
             like,
             look: self.maker.code(),
         });
-        data::set_made(&self.store.made);
-        self.store.save();
+        data::set_made(&self.crew.store.made);
+        self.crew.store.save();
         for input in [&self.maker_name, &self.maker_role] {
             input.update(cx, |i, cx| i.set_value("", window, cx));
         }
@@ -1056,23 +1024,23 @@ impl Shell {
             cx.notify();
             return;
         }
-        if !on && self.store.busy(who).is_some() {
+        if !on && self.crew.store.busy(who).is_some() {
             self.say(format!("{} is working. Stop the job first.", who.name()));
             cx.notify();
             return;
         }
         if !on {
-            self.store.chats.remove(&who);
+            self.crew.store.chats.remove(&who);
             if self.target == Some(who) {
                 self.target = None;
             }
         }
-        self.store.removed.retain(|m| *m != who);
+        self.crew.store.removed.retain(|m| *m != who);
         if !on {
-            self.store.removed.push(who);
+            self.crew.store.removed.push(who);
         }
-        data::set_removed(&self.store.removed);
-        self.store.save();
+        data::set_removed(&self.crew.store.removed);
+        self.crew.store.save();
         if !on && self.place == Place::Chat(who) {
             self.place = Place::Crew;
         }
@@ -1087,22 +1055,22 @@ impl Shell {
     /// Takes a made bot off the crew. Its past jobs stay in History.
     fn remove_made(&mut self, who: Member, cx: &mut Context<Self>) {
         let Member::Made(id) = who else { return };
-        if self.store.busy(who).is_some() {
+        if self.crew.store.busy(who).is_some() {
             self.say(format!("{} is working. Stop the job first.", who.name()));
             cx.notify();
             return;
         }
         let name = who.name();
-        self.store.made.retain(|m| m.id != id);
-        self.store.chats.remove(&who);
-        data::set_made(&self.store.made);
+        self.crew.store.made.retain(|m| m.id != id);
+        self.crew.store.chats.remove(&who);
+        data::set_made(&self.crew.store.made);
         if self.target == Some(who) {
             self.target = None;
         }
         if self.place == Place::Chat(who) {
             self.place = Place::Crew;
         }
-        self.store.save();
+        self.crew.store.save();
         self.say(format!("{name} left the crew."));
         cx.notify();
     }
@@ -1122,15 +1090,15 @@ impl Shell {
     fn drop_paths(&mut self, paths: &[std::path::PathBuf], cx: &mut Context<Self>) {
         let mut added = Vec::new();
         for dir in folders_from(paths) {
-            self.store.add_folder(dir);
-            if let Some(f) = self.store.folder() {
+            self.crew.store.add_folder(dir);
+            if let Some(f) = self.crew.store.folder() {
                 added.push(f.name.clone());
             }
         }
         if added.is_empty() {
             return;
         }
-        self.store.save();
+        self.crew.store.save();
         self.say(match added.as_slice() {
             [one] => format!("The crew now works in {one}."),
             many => format!(
@@ -1144,17 +1112,17 @@ impl Shell {
 
     /// Takes a folder off the crew's list. Its files and past jobs stay.
     fn forget_folder(&mut self, i: usize, cx: &mut Context<Self>) {
-        if i >= self.store.folders.len() {
+        if i >= self.crew.store.folders.len() {
             return;
         }
-        let gone = self.store.folders.remove(i);
-        if self.store.current >= self.store.folders.len() || self.store.current > i {
-            self.store.current = self.store.current.saturating_sub(1);
+        let gone = self.crew.store.folders.remove(i);
+        if self.crew.store.current >= self.crew.store.folders.len() || self.crew.store.current > i {
+            self.crew.store.current = self.crew.store.current.saturating_sub(1);
         }
-        if self.store.folders.is_empty() {
+        if self.crew.store.folders.is_empty() {
             self.folder_menu = false;
         }
-        self.store.save();
+        self.crew.store.save();
         self.say(format!(
             "Removed {} from the list. Its files are untouched.",
             gone.name
@@ -1167,66 +1135,42 @@ impl Shell {
         self.rerun(id, None, cx);
     }
 
+    /// The settings the crew runs with, as they are now.
+    fn app_settings(cx: &Context<Self>) -> crate::settings::AppSettings {
+        cx.global::<crate::settings::AppSettings>().clone()
+    }
+
+    /// Goes to what starting something opened.
+    fn open(&mut self, opened: runtime::Opened, cx: &mut Context<Self>) {
+        let place = match opened {
+            runtime::Opened::Job(id) | runtime::Opened::Busy(id) => Place::Live(id),
+            runtime::Opened::Race(id) => Place::Race(id),
+        };
+        self.go(place, cx);
+    }
+
     /// Runs a job again from the start, in the same branch, on its own engine or
     /// on `pick` (an agent index) when its own can't run it now.
     pub(super) fn rerun(&mut self, id: u64, pick: Option<usize>, cx: &mut Context<Self>) {
-        let st = cx.global::<crate::settings::AppSettings>().clone();
-        let Some(job) = self.store.job_mut(id) else {
-            return;
-        };
-        if job.status == Status::Running {
-            return;
+        let st = Self::app_settings(cx);
+        if self.crew.rerun(&st, id, pick) {
+            self.go(Place::Live(id), cx);
         }
-        if let Some(i) = pick {
-            job.pick = crate::agent::PROVIDERS[i].id.to_string();
-            job.pick_model.clear();
-        }
-        let (i, model) = engine::for_job(&st, job);
-        job.feed.push(store::Item::Note(format!(
-            "Starting again on {}.",
-            engine::label_of(i, &model)
-        )));
-        job.conflict.clear();
-        let text = if job.worktree.is_empty() {
-            job.title.clone()
-        } else {
-            format!(
-                "{}\n\nAn earlier run may have left work in the files. Check what is already done before redoing it.",
-                job.title
-            )
-        };
-        match jobs::start(&st, job, &text, false) {
-            Ok(r) => self.runners.push(r),
-            Err(why) => {
-                job.status = Status::Failed;
-                job.feed.push(store::Item::Error(why));
-            }
-        }
-        self.store.save();
-        self.go(Place::Live(id), cx);
     }
 
     /// A stopped or interrupted job picks up where it was.
     pub(super) fn carry_on(&mut self, id: u64, cx: &mut Context<Self>) {
-        self.follow_up(
-            id,
-            "Carry on from where you stopped. Check what is already done in the files first."
-                .into(),
-            cx,
-        );
+        let st = Self::app_settings(cx);
+        self.crew.carry_on(&st, id);
+        cx.notify();
     }
 
     /// Hands a branch that clashes with its base back to its bot to bring up to
     /// date; it comes back for review when it's done.
     pub(super) fn resolve(&mut self, id: u64, cx: &mut Context<Self>) {
-        let Some(job) = self.store.job(id) else {
-            return;
-        };
-        let text = trouble::resolve_prompt(job);
-        if let Some(j) = self.store.job_mut(id) {
-            j.conflict.clear();
-        }
-        self.follow_up(id, text, cx);
+        let st = Self::app_settings(cx);
+        self.crew.resolve(&st, id);
+        cx.notify();
     }
 
     fn start_job_in(
@@ -1237,89 +1181,9 @@ impl Shell {
         folder: store::Folder,
         cx: &mut Context<Self>,
     ) {
-        if self.sample_guard(cx) {
-            return;
-        }
-        if let Some(busy) = self.store.busy(bot) {
-            let (title, id) = (busy.title.clone(), busy.id);
-            self.say(format!(
-                "{} is still on \u{201c}{title}\u{201d}. This one waits for you to try again.",
-                bot.name()
-            ));
-            self.go(Place::Live(id), cx);
-            return;
-        }
-        let job = self.make_job(bot, mode, &text, folder, None, None, cx);
-        let id = job.id;
-        self.store.jobs.push(job);
-        self.store.save();
-        self.go(Place::Live(id), cx);
-    }
-
-    /// A new job, on its own branch when it may change files, started on its
-    /// bot's engine, or on `pick` (an agent index) for a try in a race.
-    #[allow(clippy::too_many_arguments)]
-    fn make_job(
-        &mut self,
-        bot: Member,
-        mode: Mode,
-        text: &str,
-        folder: store::Folder,
-        pick: Option<(usize, u64)>,
-        part: Option<(u64, String)>,
-        cx: &mut Context<Self>,
-    ) -> store::Job {
-        self.store.next_id += 1;
-        let mut job = store::Job {
-            id: self.store.next_id,
-            bot,
-            mode,
-            title: text.to_string(),
-            folder,
-            started: store::now(),
-            seen: false,
-            ..Default::default()
-        };
-        if let Some((goal, context)) = part {
-            job.goal = goal;
-            job.context = context;
-        }
-        if let Some((i, race)) = pick {
-            job.pick = crate::agent::PROVIDERS[i].id.to_string();
-            job.race = if race == 0 { job.id } else { race };
-        }
-        // A job that may change files gets its own branch and worktree, so your
-        // checkout stays as it is and its changes wait for your approval.
-        if mode.writes() {
-            match work::isolate(&job.folder.path, text, job.id) {
-                Ok(Some(iso)) => {
-                    job.feed.push(store::Item::Note(format!(
-                        "Working on its own branch, {}, so your checkout stays as it is.",
-                        iso.branch
-                    )));
-                    job.branch = iso.branch;
-                    job.worktree = iso.worktree;
-                    job.base = iso.base;
-                    job.base_sha = iso.base_sha;
-                }
-                Ok(None) => {}
-                Err(why) => job.feed.push(store::Item::Note(format!(
-                    "Couldn't give it its own branch ({why}), so it works in your folder."
-                ))),
-            }
-        }
-        let st = cx.global::<crate::settings::AppSettings>();
-        match jobs::start(st, &mut job, text, false) {
-            Ok(r) => self.runners.push(r),
-            Err(why) => {
-                job.status = Status::Failed;
-                job.ended = Some(job.started);
-                let (i, model) = engine::for_job(st, &job);
-                job.engine = engine::label_of(i, &model);
-                job.feed.push(store::Item::Error(why));
-            }
-        }
-        job
+        let st = Self::app_settings(cx);
+        let opened = self.crew.start_job(&st, bot, mode, text, folder);
+        self.open(opened, cx);
     }
 
     /// Races one job on up to `n` engines at once, each try on its own branch,
@@ -1333,23 +1197,9 @@ impl Shell {
         n: usize,
         cx: &mut Context<Self>,
     ) {
-        let engines = {
-            let st = cx.global::<crate::settings::AppSettings>();
-            engine::race_engines(st, bot, n)
-        };
-        if engines.len() < 2 {
-            self.say("Only one engine is ready on this computer, so this runs once. Add another in Settings to race.");
-            self.start_job_in(bot, mode, text, folder, cx);
-            return;
-        }
-        let mut race = 0;
-        for i in engines {
-            let job = self.make_job(bot, mode, &text, folder.clone(), Some((i, race)), None, cx);
-            race = job.race;
-            self.store.jobs.push(job);
-        }
-        self.store.save();
-        self.go(Place::Race(race), cx);
+        let st = Self::app_settings(cx);
+        let opened = self.crew.start_race(&st, bot, mode, text, folder, n);
+        self.open(opened, cx);
     }
 
     /// Starts the same job again on other engines, so it races the first try.
@@ -1357,342 +1207,53 @@ impl Shell {
         if self.sample_guard(cx) {
             return;
         }
-        let Some(first) = self.store.job(id).cloned() else {
-            return;
-        };
-        if !first.mode.writes() {
-            return;
+        let st = Self::app_settings(cx);
+        match self.crew.race_it(&st, id) {
+            Some(race) => self.go(Place::Race(race), cx),
+            None => cx.notify(),
         }
-        let race = if first.race == 0 {
-            first.id
-        } else {
-            first.race
-        };
-        let taken: Vec<String> = self
-            .store
-            .jobs
-            .iter()
-            .filter(|j| j.id == id || (j.race != 0 && j.race == race))
-            .map(|j| j.agent.clone())
-            .collect();
-        let engines: Vec<usize> = {
-            let st = cx.global::<crate::settings::AppSettings>();
-            engine::race_engines(st, first.bot, 8)
-                .into_iter()
-                .filter(|i| !taken.iter().any(|t| t == crate::agent::PROVIDERS[*i].id))
-                .take(3usize.saturating_sub(taken.len()).max(1))
-                .collect()
-        };
-        if engines.is_empty() {
-            self.say("No other engine is ready on this computer. Add one in Settings to race.");
-            cx.notify();
-            return;
-        }
-        if let Some(j) = self.store.job_mut(id) {
-            j.race = race;
-            if j.pick.is_empty() {
-                j.pick = j.agent.clone();
-            }
-        }
-        for i in engines {
-            let job = self.make_job(
-                first.bot,
-                first.mode,
-                &first.title,
-                first.folder.clone(),
-                Some((i, race)),
-                None,
-                cx,
-            );
-            self.store.jobs.push(job);
-        }
-        self.store.save();
-        self.go(Place::Race(race), cx);
     }
 
     /// Has Squad Code split a goal into jobs, then shows the split to look over.
     fn begin_goal(&mut self, text: String, folder: store::Folder, cx: &mut Context<Self>) {
-        self.store.next_id += 1;
-        let id = self.store.next_id;
-        let mut g = goal::Goal {
-            id,
-            text: text.clone(),
-            folder: folder.clone(),
-            started: store::now(),
-            ..Default::default()
-        };
-        let st = cx.global::<crate::settings::AppSettings>();
-        match goal::plan(st, &folder, &text) {
-            Ok(rx) => self.planning.push((id, rx)),
-            Err(why) => {
-                g.state = goal::State::Failed;
-                g.note = why;
-            }
-        }
-        self.store.goals.push(g);
-        self.store.save();
+        let st = Self::app_settings(cx);
+        let id = self.crew.begin_goal(&st, text, folder);
         self.go(Place::Goal(id), cx);
     }
 
     /// Starts a goal's jobs, the first one now.
     pub(super) fn start_goal(&mut self, id: u64, cx: &mut Context<Self>) {
-        if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
-            g.state = goal::State::Running;
-        }
-        self.advance_goals(cx);
-        self.store.save();
+        let st = Self::app_settings(cx);
+        self.crew.start_goal(&st, id);
         cx.notify();
     }
 
     /// Goes on past a job that stopped.
     pub(super) fn skip_step(&mut self, id: u64, cx: &mut Context<Self>) {
-        let jobs = self.store.jobs.clone();
-        if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
-            if let Some(k) = g.current(&jobs) {
-                g.steps[k].skipped = true;
-            }
-            g.state = goal::State::Running;
-        }
-        self.advance_goals(cx);
-        self.store.save();
+        let st = Self::app_settings(cx);
+        self.crew.skip_step(&st, id);
         cx.notify();
     }
 
     pub(super) fn drop_goal(&mut self, id: u64, cx: &mut Context<Self>) {
-        self.store.goals.retain(|g| g.id != id);
-        self.planning.retain(|(g, _)| *g != id);
-        self.store.save();
+        self.crew.drop_goal(id);
         self.go(Place::Today, cx);
-    }
-
-    /// Jobs and decisions sent from `runo` in a terminal, once a second.
-    fn poll_queue(&mut self, cx: &mut Context<Self>) {
-        if self.queue_at.elapsed() < Duration::from_secs(1) || self.store.demo {
-            return;
-        }
-        self.queue_at = Instant::now();
-        for ask in cli::take_queue() {
-            match ask {
-                cli::Ask::New {
-                    text,
-                    mode,
-                    bot,
-                    dir,
-                } => {
-                    let folder = self.folder_for(&dir);
-                    let who = Member::all()
-                        .into_iter()
-                        .find(|m| m.name() == bot)
-                        .or_else(|| Member::doer_for(mode))
-                        .unwrap_or(Member::for_mode(mode));
-                    let text = if text.is_empty() {
-                        mode.default_job().unwrap_or("").to_string()
-                    } else {
-                        text
-                    };
-                    let job = self.make_job(who, mode, &text, folder, None, None, cx);
-                    self.say(format!(
-                        "{} took a job from the terminal: \u{201c}{}\u{201d}.",
-                        who.name(),
-                        job.title
-                    ));
-                    self.store.jobs.push(job);
-                    self.store.save();
-                }
-                cli::Ask::Approve { id } => self.approve(id, cx),
-                cli::Ask::Discard { id } => self.discard_job(id, cx),
-                cli::Ask::Stop { id } => self.stop_job(id, cx),
-            }
-            cx.notify();
-        }
-    }
-
-    /// The project a terminal's folder belongs to: a known one it's inside,
-    /// the project of a job's worktree it's in, or a new one.
-    fn folder_for(&mut self, dir: &str) -> store::Folder {
-        let inside = |root: &str| {
-            !root.is_empty() && std::path::Path::new(dir).starts_with(std::path::Path::new(root))
-        };
-        if let Some(j) = self.store.jobs.iter().find(|j| inside(&j.worktree)) {
-            return j.folder.clone();
-        }
-        if let Some(f) = self
-            .store
-            .folders
-            .iter()
-            .filter(|f| inside(&f.path))
-            .max_by_key(|f| f.path.len())
-        {
-            return f.clone();
-        }
-        // Added at the top: the folder you had picked moves down one.
-        let current = self.store.current;
-        let before = self.store.folders.len();
-        self.store.add_folder(std::path::PathBuf::from(dir));
-        let f = self.store.folder().cloned().unwrap_or_default();
-        if self.store.folders.len() > before && before > 0 {
-            self.store.current = current + 1;
-        }
-        f
-    }
-
-    /// Splits coming back, and running goals moving on.
-    fn poll_goals(&mut self, cx: &mut Context<Self>) {
-        let mut back = Vec::new();
-        self.planning.retain(|(id, rx)| match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, r)) => {
-                back.push((*id, r));
-                false
-            }
-            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => true,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                back.push((*id, Err("it stopped before answering".into())));
-                false
-            }
-        });
-        for (id, r) in back {
-            if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == id) {
-                match r.map(|t| goal::parse_split(&crate::agent::strip_ansi(&t))) {
-                    Ok(steps) if !steps.is_empty() => {
-                        g.steps = steps;
-                        g.state = goal::State::Ready;
-                    }
-                    Ok(_) => {
-                        g.state = goal::State::Failed;
-                        g.note = "Squad Code couldn't split this into jobs. Say it another way, or run it as one job.".into();
-                    }
-                    Err(why) => {
-                        g.state = goal::State::Failed;
-                        let first = why
-                            .lines()
-                            .rev()
-                            .find(|l| !l.trim().is_empty())
-                            .unwrap_or("")
-                            .trim()
-                            .to_string();
-                        g.note = format!("Squad Code couldn't split this into jobs: {first}");
-                    }
-                }
-            }
-            self.store.save();
-        }
-        if self
-            .store
-            .goals
-            .iter()
-            .any(|g| g.state == goal::State::Running)
-        {
-            self.advance_goals(cx);
-        }
-    }
-
-    /// Starts the next job of each running goal once the one before it shipped,
-    /// and pauses a goal whose job stopped.
-    fn advance_goals(&mut self, cx: &mut Context<Self>) {
-        let mut start = Vec::new();
-        let jobs = self.store.jobs.clone();
-        let mut said = Vec::new();
-        for g in &mut self.store.goals {
-            if g.state != goal::State::Running {
-                continue;
-            }
-            match g.current(&jobs) {
-                None => {
-                    g.state = goal::State::Done;
-                    said.push(format!("Goal done: \u{201c}{}\u{201d}.", g.text));
-                }
-                Some(k) if g.steps[k].job == 0 => start.push((g.id, k)),
-                Some(k) => {
-                    if jobs
-                        .iter()
-                        .find(|j| j.id == g.steps[k].job)
-                        .is_some_and(goal::step_stuck)
-                    {
-                        g.state = goal::State::Paused;
-                    }
-                }
-            }
-        }
-        for m in said {
-            self.say(m);
-        }
-        for (gid, k) in start {
-            let Some(g) = self.store.goals.iter().find(|g| g.id == gid).cloned() else {
-                continue;
-            };
-            let step = g.steps[k].clone();
-            let bot = Member::doer_for(step.mode).unwrap_or(Member::for_mode(step.mode));
-            let part = Some((gid, goal::context(&g, k)));
-            let job = self.make_job(
-                bot,
-                step.mode,
-                &step.title,
-                g.folder.clone(),
-                None,
-                part,
-                cx,
-            );
-            let jid = job.id;
-            self.store.jobs.push(job);
-            if let Some(g) = self.store.goals.iter_mut().find(|g| g.id == gid) {
-                g.steps[k].job = jid;
-            }
-            self.store.save();
-        }
     }
 
     /// The tries in a race, first one first.
     pub(super) fn tries(&self, race: u64) -> Vec<store::Job> {
-        let mut v: Vec<_> = self
-            .store
-            .jobs
-            .iter()
-            .filter(|j| j.race == race && race != 0)
-            .cloned()
-            .collect();
-        v.sort_by_key(|j| j.id);
-        v
+        self.crew.tries(race)
     }
 
     /// Keeps one try of a race: approves it and throws the others away.
     pub(super) fn keep_try(&mut self, id: u64, cx: &mut Context<Self>) {
-        let Some(race) = self.store.job(id).map(|j| j.race) else {
-            return;
-        };
-        for other in self.tries(race) {
-            if other.id == id {
-                continue;
-            }
-            if let Some(pos) = self.runners.iter().position(|r| r.id == other.id) {
-                let mut r = self.runners.remove(pos);
-                r.stop();
-            }
-            self.checking.retain(|(j, _)| *j != other.id);
-            if matches!(
-                other.status,
-                Status::Shipped | Status::Shipping | Status::Discarded
-            ) {
-                continue;
-            }
-            work::discard(&other);
-            if let Some(j) = self.store.job_mut(other.id) {
-                j.status = Status::Discarded;
-                j.ended.get_or_insert_with(store::now);
-                j.worktree.clear();
-                j.seen = true;
-                j.feed.push(store::Item::Note(
-                    "Another try won the race, so this one was thrown away.".into(),
-                ));
-            }
-        }
-        self.approve_one(id, cx);
-        self.store.save();
+        self.crew.keep_try(id);
         cx.notify();
     }
 
     /// Opens a job: its race when it is one try in a race.
     pub(super) fn open_job(&mut self, id: u64, cx: &mut Context<Self>) {
-        let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
+        let race = self.crew.store.job(id).map(|j| j.race).unwrap_or(0);
         if race != 0 && self.tries(race).len() > 1 {
             self.go(Place::Race(race), cx);
         } else {
@@ -1703,81 +1264,20 @@ impl Shell {
     /// More words for a job: while it runs they wait; once it's done they start a
     /// follow-up that continues the same conversation when the engine can.
     fn follow_up(&mut self, id: u64, text: String, cx: &mut Context<Self>) {
-        let st = cx.global::<crate::settings::AppSettings>().clone();
-        let Some(job) = self.store.job_mut(id) else {
-            return;
-        };
-        if job.status == Status::Running {
-            self.say("It's still working. Add this once it finishes.");
-            cx.notify();
-            return;
-        }
-        job.feed.push(store::Item::You(text.clone()));
-        match jobs::start(&st, job, &text, true) {
-            Ok(r) => self.runners.push(r),
-            Err(why) => job.feed.push(store::Item::Error(why)),
-        }
-        self.store.save();
+        let st = Self::app_settings(cx);
+        self.crew.follow_up(&st, id, text);
         cx.notify();
-    }
-
-    /// A writing job finished in its own worktree: list what it changed and have
-    /// Checker run the checks. With nothing changed there's nothing to review.
-    fn begin_review(&mut self, id: u64) {
-        let Some(job) = self.store.job_mut(id) else {
-            return;
-        };
-        if job.status != Status::Done || job.worktree.is_empty() {
-            return;
-        }
-        job.changes = work::changed(job);
-        if job.changes.is_empty() {
-            work::discard(job);
-            job.worktree.clear();
-            job.feed
-                .push(store::Item::Note("It didn't change any files.".into()));
-            return;
-        }
-        job.status = Status::Review;
-        job.seen = false;
-        job.checks.clear();
-        job.checking = true;
-        let dir = job.worktree.clone();
-        self.checking.push((id, work::run_checks(dir)));
     }
 
     /// Runs the checks on a job's changes again.
     pub(super) fn recheck(&mut self, id: u64, cx: &mut Context<Self>) {
-        let Some(job) = self.store.job_mut(id) else {
-            return;
-        };
-        if job.worktree.is_empty() || job.checking {
-            return;
-        }
-        job.checks.clear();
-        job.checking = true;
-        let dir = job.worktree.clone();
-        self.checking.retain(|(j, _)| *j != id);
-        self.checking.push((id, work::run_checks(dir)));
+        self.crew.recheck(id);
         cx.notify();
     }
 
     /// What Approve does for this job's project.
     pub(super) fn way(&mut self, job: &store::Job) -> ship::Way {
-        let key = format!("{}\u{0}{}", job.folder.path, job.folder.ship);
-        if let Some(w) = self.ways.get(&key) {
-            return *w;
-        }
-        let ship_pref = self
-            .store
-            .folders
-            .iter()
-            .find(|f| f.path == job.folder.path)
-            .map(|f| f.ship.clone())
-            .unwrap_or_default();
-        let w = ship::way_for(&job.folder.path, &ship_pref);
-        self.ways.insert(key, w);
-        w
+        self.crew.way(job)
     }
 
     /// The Approve button's words for this job.
@@ -1790,25 +1290,7 @@ impl Shell {
 
     /// Switches what Approve does in a job's project: pull request or local merge.
     pub(super) fn set_way(&mut self, id: u64, way: ship::Way, cx: &mut Context<Self>) {
-        let Some(path) = self.store.job(id).map(|j| j.folder.path.clone()) else {
-            return;
-        };
-        let pref = match way {
-            ship::Way::PullRequest => "pr",
-            ship::Way::Merge => "merge",
-        };
-        for f in &mut self.store.folders {
-            if f.path == path {
-                f.ship = pref.into();
-            }
-        }
-        for j in &mut self.store.jobs {
-            if j.folder.path == path {
-                j.folder.ship = pref.into();
-            }
-        }
-        self.ways.clear();
-        self.store.save();
+        self.crew.set_way(id, way);
         cx.notify();
     }
 
@@ -1818,68 +1300,7 @@ impl Shell {
         if self.sample_guard(cx) {
             return;
         }
-        // Approving one try of a race keeps it and throws the others away.
-        let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
-        if race != 0 && self.tries(race).len() > 1 {
-            self.keep_try(id, cx);
-        } else {
-            self.approve_one(id, cx);
-        }
-    }
-
-    fn approve_one(&mut self, id: u64, cx: &mut Context<Self>) {
-        let Some(job) = self.store.job(id).cloned() else {
-            return;
-        };
-        if job.status != Status::Review {
-            return;
-        }
-        if self.way(&job) == ship::Way::PullRequest {
-            if let Some(j) = self.store.job_mut(id) {
-                j.status = Status::Shipping;
-                j.shipping = true;
-                j.seen = true;
-                j.feed.push(store::Item::By(
-                    Member::Shipper,
-                    "Approved. Opening a pull request.".into(),
-                ));
-            }
-            self.shipping.push((id, ship::open_pr(job)));
-            self.store.save();
-            cx.notify();
-            return;
-        }
-        match work::merge(&job) {
-            Ok(hash) => {
-                let msg = format!("Merged into {} as {hash}.", job.base);
-                if let Some(j) = self.store.job_mut(id) {
-                    j.status = Status::Shipped;
-                    j.shipped = msg.clone();
-                    j.worktree.clear();
-                    j.seen = true;
-                    j.feed.push(store::Item::Note(msg.clone()));
-                }
-                self.say(msg);
-            }
-            Err(why) => {
-                let files = trouble::conflict_files(&why);
-                if let Some(j) = self.store.job_mut(id) {
-                    if files.is_empty() {
-                        j.feed
-                            .push(store::Item::Error(format!("Couldn't merge it: {why}")));
-                    } else {
-                        j.feed.push(store::Item::Note(format!(
-                            "{} moved on and {} now clash, so nothing was merged.",
-                            j.base,
-                            files.join(", ")
-                        )));
-                        j.conflict = files;
-                    }
-                }
-                self.say("Couldn't merge it. The reason is on the job.");
-            }
-        }
-        self.store.save();
+        self.crew.approve(id);
         cx.notify();
     }
 
@@ -1888,254 +1309,28 @@ impl Shell {
         if self.sample_guard(cx) {
             return;
         }
-        let Some(job) = self.store.job(id).cloned() else {
-            return;
-        };
-        work::discard(&job);
-        if let Some(j) = self.store.job_mut(id) {
-            j.status = Status::Discarded;
-            j.worktree.clear();
-            j.seen = true;
-            j.feed
-                .push(store::Item::Note("You discarded its changes.".into()));
-        }
+        self.crew.discard(id);
         self.diff_open = None;
-        self.say("Discarded. Your checkout was never touched.");
-        self.store.save();
         cx.notify();
     }
 
     /// Merges (or closes) a job's pull request on GitHub now.
     pub(super) fn land_pr(&mut self, id: u64, merge: bool, cx: &mut Context<Self>) {
-        let Some(job) = self.store.job(id) else {
-            return;
-        };
-        if job.pr.is_empty() || self.landing.iter().any(|(j, ..)| *j == id) {
-            return;
-        }
-        let (dir, url) = (job.folder.path.clone(), job.pr.clone());
-        let rx = if merge {
-            ship::merge_pr(dir, url)
-        } else {
-            ship::close_pr(dir, url)
-        };
-        self.landing.push((id, merge, rx));
-        if let Some(j) = self.store.job_mut(id) {
-            j.feed.push(store::Item::By(
-                Member::Shipper,
-                if merge {
-                    "Merging the pull request.".into()
-                } else {
-                    "Closing the pull request.".into()
-                },
-            ));
-        }
+        self.crew.land_pr(id, merge);
         cx.notify();
     }
 
     /// Turns "merge when checks pass" on or off for a job's pull request.
     pub(super) fn set_auto_merge(&mut self, id: u64, on: bool, cx: &mut Context<Self>) {
-        if let Some(j) = self.store.job_mut(id) {
-            j.auto_merge = on;
-        }
-        self.store.save();
+        self.crew.set_auto_merge(id, on);
         cx.notify();
-    }
-
-    /// Shipper's side of the poll: steps while opening pull requests, a look at
-    /// open ones every half minute, and merges or closes coming back.
-    fn poll_ship(&mut self) {
-        let mut steps = Vec::new();
-        self.shipping.retain(|(id, rx)| loop {
-            match rx.try_recv() {
-                Ok(step) => {
-                    let end = !matches!(step, ship::Step::Did(_));
-                    steps.push((*id, step));
-                    if end {
-                        break false;
-                    }
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => break true,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => break false,
-            }
-        });
-        let mut look_now = false;
-        for (id, step) in steps {
-            let Some(j) = self.store.job_mut(id) else {
-                continue;
-            };
-            match step {
-                ship::Step::Did(what) => j.feed.push(store::Item::By(Member::Shipper, what)),
-                ship::Step::Opened(url) => {
-                    j.shipping = false;
-                    j.pr_number = url
-                        .rsplit('/')
-                        .next()
-                        .and_then(|n| n.parse().ok())
-                        .unwrap_or(0);
-                    j.pr = url.clone();
-                    j.pr_state = "OPEN".into();
-                    j.feed.push(store::Item::By(
-                        Member::Shipper,
-                        format!("Opened the pull request: {url}"),
-                    ));
-                    look_now = true;
-                }
-                ship::Step::Conflict(files) => {
-                    j.shipping = false;
-                    j.status = Status::Review;
-                    j.seen = false;
-                    j.feed.push(store::Item::By(
-                        Member::Shipper,
-                        format!(
-                            "{} moved while this was waiting, and {} now clash with it, so I stopped before pushing.",
-                            j.base,
-                            files.join(", ")
-                        ),
-                    ));
-                    j.conflict = files;
-                }
-                ship::Step::Failed(why) => {
-                    j.shipping = false;
-                    j.status = Status::Review;
-                    j.seen = false;
-                    j.feed.push(store::Item::Error(format!(
-                        "Shipper couldn't open the pull request: {why}"
-                    )));
-                }
-            }
-            self.store.save();
-        }
-        // A look at every open pull request every 30 seconds.
-        if look_now || self.watched.elapsed() > Duration::from_secs(30) {
-            self.watched = Instant::now();
-            let open: Vec<(u64, String, String)> = self
-                .store
-                .jobs
-                .iter()
-                .filter(|j| j.status == Status::Shipping && !j.pr.is_empty())
-                .map(|j| (j.id, j.folder.path.clone(), j.pr.clone()))
-                .collect();
-            for (id, dir, url) in open {
-                if !self.watching.iter().any(|(j, _)| *j == id) {
-                    self.watching.push((id, ship::watch(dir, url)));
-                }
-            }
-        }
-        let mut seen = Vec::new();
-        self.watching.retain(|(id, rx)| match rx.try_recv() {
-            Ok(pr) => {
-                seen.push((*id, pr));
-                false
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => true,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
-        });
-        let mut merge_now = Vec::new();
-        let mut landed = Vec::new();
-        for (id, pr) in seen {
-            let Some(pr) = pr else { continue };
-            let busy = self.landing.iter().any(|(j, ..)| *j == id);
-            let Some(j) = self.store.job_mut(id) else {
-                continue;
-            };
-            j.pr_number = pr.number;
-            j.pr_line = ship::checks_line(&pr);
-            j.pr_state = pr.state.clone();
-            for name in &pr.failed {
-                if !j.pr_failed.contains(name) {
-                    j.pr_failed.push(name.clone());
-                    j.seen = false;
-                    j.feed.push(store::Item::By(
-                        Member::Shipper,
-                        format!("{name} failed on GitHub. Write below to send it back and fix it."),
-                    ));
-                }
-            }
-            match pr.state.as_str() {
-                "MERGED" => landed.push((id, true)),
-                "CLOSED" => landed.push((id, false)),
-                _ => {
-                    let green = pr.failed.is_empty() && pr.pending == 0;
-                    if j.auto_merge && green && pr.mergeable != "CONFLICTING" && !busy {
-                        merge_now.push(id);
-                    }
-                }
-            }
-        }
-        for id in merge_now {
-            if let Some(j) = self.store.job_mut(id) {
-                j.feed.push(store::Item::By(
-                    Member::Shipper,
-                    "Checks pass. Merging, as you asked.".into(),
-                ));
-                let (dir, url) = (j.folder.path.clone(), j.pr.clone());
-                self.landing.push((id, true, ship::merge_pr(dir, url)));
-            }
-        }
-        let mut came_back = Vec::new();
-        self.landing.retain(|(id, merge, rx)| match rx.try_recv() {
-            Ok(r) => {
-                came_back.push((*id, *merge, r));
-                false
-            }
-            Err(std::sync::mpsc::TryRecvError::Empty) => true,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
-        });
-        for (id, merge, r) in came_back {
-            match r {
-                Ok(()) => landed.push((id, merge)),
-                Err(why) => {
-                    if let Some(j) = self.store.job_mut(id) {
-                        j.feed
-                            .push(store::Item::Error(format!("GitHub said no: {why}")));
-                    }
-                }
-            }
-        }
-        for (id, merged) in landed {
-            let Some(job) = self.store.job(id).cloned() else {
-                continue;
-            };
-            if !matches!(job.status, Status::Shipping) {
-                continue;
-            }
-            // The branch lives on GitHub now (or is gone): the local copy can go.
-            work::discard(&job);
-            let msg = if merged {
-                format!(
-                    "Merged #{} into {}. Cleaned up the branch and worktree.",
-                    job.pr_number, job.base
-                )
-            } else {
-                format!(
-                    "Closed #{} without merging. Cleaned up the branch and worktree.",
-                    job.pr_number
-                )
-            };
-            if let Some(j) = self.store.job_mut(id) {
-                j.status = if merged {
-                    Status::Shipped
-                } else {
-                    Status::Discarded
-                };
-                j.pr_state = if merged { "MERGED" } else { "CLOSED" }.into();
-                j.worktree.clear();
-                j.shipped = msg.clone();
-                j.feed.push(store::Item::By(Member::Shipper, msg.clone()));
-            }
-            self.say(msg);
-            self.store.save();
-        }
     }
 
     pub(super) fn stop_job(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.sample_guard(cx) {
             return;
         }
-        if let Some(r) = self.runners.iter_mut().find(|r| r.id == id) {
-            r.stop();
-        }
+        self.crew.stop(id);
         cx.notify();
     }
 
@@ -2144,133 +1339,49 @@ impl Shell {
         if self.sample_guard(cx) {
             return;
         }
-        let history: Vec<(bool, String)> = self
-            .store
-            .chat(who)
-            .iter()
-            .filter(|m| !m.note)
-            .map(|m| (m.mine, m.text.clone()))
-            .collect();
-        let log = self.store.chats.entry(who).or_default();
-        log.push(Said::mine(text.clone()));
-        if self.asking.is_some() {
-            log.push(Said::note(
-                "One question at a time: ask again when the last answer is in.",
-            ));
-            cx.notify();
-            return;
-        }
-        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
-            log.push(Said::note(
-                "Pick a folder first (on Today), so the crew knows which code to read.",
-            ));
-            cx.notify();
-            return;
-        };
-        let st = cx.global::<crate::settings::AppSettings>();
-        match engine::Ask::start(st, who, &folder, &text, &history) {
-            Ok(ask) => self.asking = Some(ask),
-            Err(why) => self
-                .store
-                .chats
-                .entry(who)
-                .or_default()
-                .push(Said::note(why)),
-        }
-        self.store.save();
+        let st = Self::app_settings(cx);
+        self.crew.ask(&st, who, text);
         cx.notify();
     }
 
     /// Whether `who` is answering a question right now.
     fn thinking(&self, who: Member) -> bool {
-        self.asking.as_ref().is_some_and(|a| a.who == who)
+        self.crew.thinking(who)
     }
 
-    /// Collects answers and job output that have arrived.
-    fn poll(&mut self) {
-        if let Some(ask) = &self.asking {
-            if let Some(reply) = ask.poll() {
-                let (who, engine) = (ask.who, ask.engine.clone());
-                let secs = ask.started.elapsed().as_secs_f32();
-                self.store.chats.entry(who).or_default().push(match reply {
-                    engine::Reply::Answer(text) if !text.is_empty() => {
-                        Said::bot(text, format!("{engine} · {secs:.0}s"))
-                    }
-                    engine::Reply::Answer(_) => {
-                        Said::note("The engine answered with nothing. Try asking again.")
-                    }
-                    engine::Reply::Failed(why) => Said::note(why),
-                });
-                self.asking = None;
-                self.store.save();
-            }
+    /// Moves the crew along, then says what happened: what it wants said, and
+    /// jobs that ended while the person was looking elsewhere.
+    fn poll(&mut self, cx: &mut Context<Self>) {
+        let st = Self::app_settings(cx);
+        let viewing = match self.place {
+            Place::Live(id) => Some(id),
+            _ => None,
+        };
+        let finished = self.crew.poll(&st, viewing);
+        for note in std::mem::take(&mut self.crew.notes) {
+            self.say(note);
         }
-        let mut finished = Vec::new();
-        for r in &mut self.runners {
-            if let Some(job) = self.store.jobs.iter_mut().find(|j| j.id == r.id) {
-                if r.pump(job) {
-                    finished.push(r.id);
-                    if self.place == Place::Live(job.id) {
-                        job.seen = true;
+        for id in &finished {
+            let Some(j) = self.crew.store.job(*id).cloned() else {
+                continue;
+            };
+            if self.place != Place::Live(*id) {
+                let msg = match j.status {
+                    Status::Done => {
+                        format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.title)
                     }
-                }
-            } else {
-                finished.push(r.id);
+                    _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
+                };
+                self.say(msg);
             }
-        }
-        // While jobs run, what they've done so far is kept every few seconds.
-        if !self.runners.is_empty() && self.saved.elapsed() > Duration::from_secs(5) {
-            self.saved = Instant::now();
-            self.store.save();
-        }
-        self.poll_ship();
-        // Checker's runs of the checks coming back.
-        let mut back = Vec::new();
-        self.checking.retain(|(id, rx)| match rx.try_recv() {
-            Ok(results) => {
-                back.push((*id, results));
-                false
+            // Squad Code is behind other windows: tell the person on the desktop.
+            if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
+                let title = match j.status {
+                    Status::Done => format!("{} finished", j.bot.name()),
+                    _ => format!("{} stopped", j.bot.name()),
+                };
+                crate::settings::notify(&title, &j.title);
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => true,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                back.push((*id, Vec::new()));
-                false
-            }
-        });
-        for (id, results) in back {
-            if let Some(job) = self.store.job_mut(id) {
-                job.checks = results;
-                job.checking = false;
-            }
-            self.store.save();
-        }
-        if !finished.is_empty() {
-            self.runners.retain(|r| !finished.contains(&r.id));
-            for id in &finished {
-                self.begin_review(*id);
-            }
-            for id in &finished {
-                if let Some(j) = self.store.job(*id).cloned() {
-                    if self.place != Place::Live(*id) {
-                        let msg = match j.status {
-                            Status::Done => {
-                                format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.title)
-                            }
-                            _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
-                        };
-                        self.say(msg.clone());
-                    }
-                    // Squad Code is behind other windows: tell the person on the desktop.
-                    if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
-                        let title = match j.status {
-                            Status::Done => format!("{} finished", j.bot.name()),
-                            _ => format!("{} stopped", j.bot.name()),
-                        };
-                        crate::settings::notify(&title, &j.title);
-                    }
-                }
-            }
-            self.store.save();
         }
     }
 
@@ -2279,10 +1390,11 @@ impl Shell {
         if self.thinking(who) {
             return Mood::Thinking;
         }
-        if self.store.busy(who).is_some() {
+        if self.crew.store.busy(who).is_some() {
             return Mood::Working;
         }
         let recent = self
+            .crew
             .store
             .jobs
             .iter()
@@ -2304,7 +1416,7 @@ impl Shell {
         if self.thinking(who) {
             return ("answering".into(), who.accent());
         }
-        if let Some(j) = self.store.busy(who) {
+        if let Some(j) = self.crew.store.busy(who) {
             return (
                 match j.progress() {
                     Some((d, n)) => format!("working {d}/{n}"),
@@ -2314,6 +1426,7 @@ impl Shell {
             );
         }
         if self
+            .crew
             .store
             .jobs
             .iter()
@@ -2367,7 +1480,8 @@ impl Shell {
     }
 
     fn inbox_count(&self) -> usize {
-        self.store
+        self.crew
+            .store
             .listed()
             .into_iter()
             .filter(|j| j.needs_you())
@@ -2380,7 +1494,7 @@ impl Shell {
             .into_iter()
             .max_by_key(|m| {
                 (
-                    self.store.chat(*m).len().min(1),
+                    self.crew.store.chat(*m).len().min(1),
                     (*m == Member::Explainer) as u8,
                 )
             })
@@ -2398,9 +1512,7 @@ impl Render for Shell {
             // The shell's output arrives on its own thread: keep drawing it.
             window.request_animation_frame();
         }
-        self.poll();
-        self.poll_goals(cx);
-        self.poll_queue(cx);
+        self.poll(cx);
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
@@ -2428,7 +1540,7 @@ impl Render for Shell {
                 .is_some_and(|(_, at)| at.elapsed() < Duration::from_millis(3600));
         // Nobody at the keyboard: the crew slows down, then nearly stops.
         let idle = self.touched.elapsed();
-        let working = self.asking.is_some() || !self.runners.is_empty();
+        let working = self.crew.busy();
         // While something on screen is gliding, draw every frame the display
         // shows (60 or 120 a second), not on the crew's slower clock.
         if busy && self.motion {

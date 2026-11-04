@@ -40,7 +40,7 @@ fn tool_icon(kind: &str) -> IconName {
 
 impl Shell {
     pub(super) fn live(&mut self, id: u64, cx: &mut Context<Self>) -> AnyElement {
-        let Some(job) = self.store.job(id).cloned() else {
+        let Some(job) = self.crew.store.job(id).cloned() else {
             return self.empty_place(
                 "That job is gone",
                 "It may have been cleared. Everything else is in History.",
@@ -209,6 +209,7 @@ impl Shell {
                     .when(job.goal != 0, |d| {
                         let gid = job.goal;
                         let label = self
+                            .crew
                             .store
                             .goals
                             .iter()
@@ -650,6 +651,7 @@ impl Shell {
         }
         let color = status_color(job.status);
         let others: Vec<_> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -790,7 +792,7 @@ impl Shell {
                     .child(line),
             )
             // Nothing anywhere yet: point back to where a first job starts.
-            .when(self.store.jobs.is_empty(), |d| {
+            .when(self.crew.store.jobs.is_empty(), |d| {
                 d.child(
                     ui::solid("empty-start", "Give the crew a first job")
                         .mt(px(14.))

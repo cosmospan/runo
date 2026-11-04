@@ -24,6 +24,7 @@ impl Shell {
     pub(super) fn usage(&mut self, _cx: &mut Context<Self>) -> AnyElement {
         let now = store::now();
         let recent: Vec<_> = self
+            .crew
             .store
             .jobs
             .iter()
@@ -126,7 +127,7 @@ impl Shell {
             .child(kpi(
                 "Jobs",
                 recent.len().to_string(),
-                format!("{} running", self.store.running().count()),
+                format!("{} running", self.crew.store.running().count()),
             ))
             .child(line())
             .child(kpi(

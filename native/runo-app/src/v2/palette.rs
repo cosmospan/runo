@@ -58,7 +58,7 @@ impl Shell {
         let mut all = vec![];
         // What you can do to the job in front of you.
         if let Place::Live(id) | Place::Race(id) = self.place {
-            if let Some(j) = self.store.job(id) {
+            if let Some(j) = self.crew.store.job(id) {
                 if j.status == Status::Review {
                     all.push(Entry {
                         label: format!("Approve \u{201c}{}\u{201d}", j.title),
@@ -138,7 +138,7 @@ impl Shell {
                 act: Act::Go(Place::Chat(who)),
             });
         }
-        if self.store.folder().is_some() {
+        if self.crew.store.folder().is_some() {
             all.push(Entry {
                 label: "Open the terminal in this folder".into(),
                 hint: super::term::KEY.into(),
@@ -180,7 +180,7 @@ impl Shell {
                 act: Act::Job(mode),
             });
         }
-        for j in self.store.jobs.iter().rev().take(12) {
+        for j in self.crew.store.jobs.iter().rev().take(12) {
             let state = match j.status {
                 Status::Running => "Working",
                 _ if j.needs_you() => "New",
@@ -194,8 +194,8 @@ impl Shell {
                 act: Act::Go(Place::Live(j.id)),
             });
         }
-        for (i, f) in self.store.folders.iter().enumerate() {
-            let on = i == self.store.current;
+        for (i, f) in self.crew.store.folders.iter().enumerate() {
+            let on = i == self.crew.store.current;
             all.push(Entry {
                 label: format!("Work in {}", f.name),
                 hint: if on {
@@ -256,9 +256,9 @@ impl Shell {
                 self.focus_moved = std::time::Instant::now();
             }
             Act::Folder(i) => {
-                self.store.current = i;
-                self.store.save();
-                if let Some(f) = self.store.folder() {
+                self.crew.store.current = i;
+                self.crew.store.save();
+                if let Some(f) = self.crew.store.folder() {
                     let name = f.name.clone();
                     self.say(format!("The crew now works in {name}."));
                 }
@@ -281,8 +281,8 @@ impl Shell {
                 }
             }
             Act::Guide => {
-                self.store.guide_hidden = false;
-                self.store.save();
+                self.crew.store.guide_hidden = false;
+                self.crew.store.save();
             }
             Act::NewRace | Act::NewGoal => {
                 if act == Act::NewRace {

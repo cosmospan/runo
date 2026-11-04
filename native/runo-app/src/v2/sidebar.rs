@@ -26,8 +26,8 @@ impl Shell {
         let place = self.place;
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let jobs = self.store.listed().len();
-        let folder = self.store.folder().cloned();
+        let jobs = self.crew.store.listed().len();
+        let folder = self.crew.store.folder().cloned();
 
         // The folder you're working in, at the top.
         let (name, path) = match &folder {
@@ -211,10 +211,12 @@ impl Shell {
             let size = if busy_now(self, who) { 30. } else { 24. };
             let face = self.bot(who, mood, size, Framing::Bust);
             let busy = self
+                .crew
                 .store
                 .busy(who)
                 .map(|j| (j.id, j.title.clone(), j.progress()));
             let asking = self
+                .crew
                 .store
                 .jobs
                 .iter()
@@ -334,7 +336,7 @@ impl Shell {
         let i = super::engine::index_of(st, "");
         let ready = super::engine::ready(st, i);
         let engine_name = crate::agent::PROVIDERS[i].name;
-        let today = store_today_cost(&self.store);
+        let today = store_today_cost(&self.crew.store);
         let engine_card = div()
             .id("side-engine")
             .mx(px(2.))
@@ -488,6 +490,7 @@ impl Shell {
     /// The top bar over every page: where you are, the engine, and a new job.
     pub(super) fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let folder = self
+            .crew
             .store
             .folder()
             .map(|f| f.name.clone())
@@ -498,15 +501,15 @@ impl Shell {
             Place::History => "All jobs".into(),
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
-            Place::Live(id) => match self.store.job(id) {
+            Place::Live(id) => match self.crew.store.job(id) {
                 Some(j) => format!("Jobs / #{id} {}", j.title),
                 None => format!("Jobs / #{id}"),
             },
-            Place::Race(id) => match self.store.job(id) {
+            Place::Race(id) => match self.crew.store.job(id) {
                 Some(j) => format!("Jobs / Race / {}", j.title),
                 None => "Jobs / Race".into(),
             },
-            Place::Goal(id) => match self.store.goals.iter().find(|g| g.id == id) {
+            Place::Goal(id) => match self.crew.store.goals.iter().find(|g| g.id == id) {
                 Some(g) => format!("Jobs / Goal / {}", g.text),
                 None => "Jobs / Goal".into(),
             },
@@ -514,7 +517,7 @@ impl Shell {
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
         };
-        let running = self.store.running().count();
+        let running = self.crew.store.running().count();
         div()
             .h(px(52.))
             .flex_none()
@@ -633,7 +636,13 @@ pub(super) const SIDEBAR_BOTS: usize = 6;
 /// Whether a bot is working or waiting on you, so its sidebar row shows a
 /// second line.
 fn busy_now(sh: &Shell, who: Member) -> bool {
-    sh.store.busy(who).is_some() || sh.store.jobs.iter().any(|j| j.bot == who && j.needs_you())
+    sh.crew.store.busy(who).is_some()
+        || sh
+            .crew
+            .store
+            .jobs
+            .iter()
+            .any(|j| j.bot == who && j.needs_you())
 }
 
 /// The order the sidebar lists bots in: working first, then the ones waiting on
@@ -667,16 +676,23 @@ impl Shell {
         let all = Member::all();
         let order = crew_order(
             &all,
-            |m| self.store.busy(m).is_some(),
-            |m| self.store.jobs.iter().any(|j| j.bot == m && j.needs_you()),
-            &self.store.pinned,
+            |m| self.crew.store.busy(m).is_some(),
+            |m| {
+                self.crew
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == m && j.needs_you())
+            },
+            &self.crew.store.pinned,
         );
         // Everything that's working or waiting on you stays in view.
         let must = order
             .iter()
             .take_while(|m| {
-                self.store.busy(**m).is_some()
+                self.crew.store.busy(**m).is_some()
                     || self
+                        .crew
                         .store
                         .jobs
                         .iter()

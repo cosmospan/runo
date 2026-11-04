@@ -13,6 +13,7 @@ impl Shell {
     /// the bot said, what it changed, and what you can do about it.
     pub(super) fn inbox(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let jobs: Vec<Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -174,12 +175,12 @@ impl Shell {
                             .h(px(28.))
                             .text_size(px(12.5))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                for j in &mut this.store.jobs {
+                                for j in &mut this.crew.store.jobs {
                                     if j.status != Status::Running {
                                         j.seen = true;
                                     }
                                 }
-                                this.store.save();
+                                this.crew.store.save();
                                 cx.notify();
                             })),
                     ),
@@ -405,12 +406,13 @@ impl Shell {
                         d.child(
                             ui::solid("inbox-seen", "Mark as seen").on_click(cx.listener(
                                 move |this, _, _, cx| {
-                                    if let Some(j) = this.store.jobs.iter_mut().find(|j| j.id == id)
+                                    if let Some(j) =
+                                        this.crew.store.jobs.iter_mut().find(|j| j.id == id)
                                     {
                                         j.seen = true;
                                     }
                                     this.inbox_pick = None;
-                                    this.store.save();
+                                    this.crew.store.save();
                                     cx.notify();
                                 },
                             )),
@@ -420,7 +422,7 @@ impl Shell {
     }
 
     pub(super) fn history(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        if self.store.jobs.is_empty() {
+        if self.crew.store.jobs.is_empty() {
             return self.empty_place(
                 "No jobs yet",
                 "Every job the crew takes on is kept here, with what it said and changed.",
@@ -442,6 +444,7 @@ impl Shell {
         let filter = self.history_filter;
         let query = self.history_input.read(cx).value().to_lowercase();
         let jobs: Vec<Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
@@ -467,7 +470,7 @@ impl Shell {
             })
             .cloned()
             .collect();
-        let total = self.store.listed().len();
+        let total = self.crew.store.listed().len();
         let list = if jobs.is_empty() {
             div()
                 .py(px(20.))

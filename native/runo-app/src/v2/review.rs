@@ -292,6 +292,7 @@ impl Shell {
                         } else {
                             // Read once on opening, not on every frame.
                             this.diff_text = this
+                                .crew
                                 .store
                                 .job(id)
                                 .map(|j| work::diff(j, &key.1))

@@ -72,9 +72,10 @@ fn greeting() -> String {
 
 impl Shell {
     pub(super) fn today(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let folder = self.store.folder().map(|f| f.name.clone());
-        let running = self.store.running().count();
+        let folder = self.crew.store.folder().map(|f| f.name.clone());
+        let running = self.crew.store.running().count();
         let today_done = self
+            .crew
             .store
             .jobs
             .iter()
@@ -103,7 +104,7 @@ impl Shell {
             .text_color(c(ui::MUTED))
             .child(lead)
             .child(self.folder_picker(cx));
-        let has_jobs = !self.store.jobs.is_empty();
+        let has_jobs = !self.crew.store.jobs.is_empty();
 
         // A working page: a short header, the job box, the numbers, the table.
         let page = div()
@@ -387,7 +388,7 @@ impl Shell {
 
     /// The folder the crew works in, as words in a sentence you can click.
     fn folder_picker(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let folder = self.store.folder().map(|f| f.name.clone());
+        let folder = self.crew.store.folder().map(|f| f.name.clone());
         let folder_chip = div()
             .id("folder")
             .flex()
@@ -416,7 +417,7 @@ impl Shell {
                     .text_color(c(ui::FAINT)),
             )
             .on_click(cx.listener(|this, _, _, cx| {
-                if this.store.folders.is_empty() {
+                if this.crew.store.folders.is_empty() {
                     this.pick_folder(cx);
                 } else {
                     this.folder_menu = !this.folder_menu;
@@ -437,8 +438,8 @@ impl Shell {
                 .shadow(ui::lift())
                 .flex()
                 .flex_col();
-            for (i, f) in self.store.folders.iter().enumerate() {
-                let on = i == self.store.current;
+            for (i, f) in self.crew.store.folders.iter().enumerate() {
+                let on = i == self.crew.store.current;
                 list = list.child(
                     div()
                         .id(("folder-item", i))
@@ -500,9 +501,9 @@ impl Shell {
                                 })),
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.store.current = i;
+                            this.crew.store.current = i;
                             this.folder_menu = false;
-                            this.store.save();
+                            this.crew.store.save();
                             cx.notify();
                         })),
                 );
