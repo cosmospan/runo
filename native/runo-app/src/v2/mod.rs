@@ -426,6 +426,8 @@ pub struct Shell {
     maker_open: bool,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
+    /// The bot whose model list is open on Engines.
+    engine_open: Option<Member>,
     /// The job Home's inspector shows; the newest active one when unset.
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
@@ -738,6 +740,7 @@ impl Shell {
             home_tab: 0,
             maker_open: false,
             engine_sel: None,
+            engine_open: None,
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),

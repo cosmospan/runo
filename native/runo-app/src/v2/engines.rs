@@ -535,8 +535,50 @@ impl Shell {
                 continue;
             }
             let face = self.avatar(who, 26.);
-            let mut picks = div().flex().flex_wrap().gap(px(6.));
-            for (k, m) in models.iter().take(6).enumerate() {
+            let open = self.engine_open == Some(who);
+            let current = models
+                .iter()
+                .find(|m| m.value == model)
+                .map(|m| m.label.clone())
+                .unwrap_or_else(|| {
+                    if model.is_empty() {
+                        "Its default".into()
+                    } else {
+                        model.clone()
+                    }
+                });
+            let mut picks = div().flex().flex_wrap().items_center().gap(px(6.));
+            if !open {
+                picks = picks
+                    .child(
+                        div()
+                            .px(px(10.))
+                            .h(px(26.))
+                            .flex()
+                            .items_center()
+                            .rounded(px(7.))
+                            .border_1()
+                            .border_color(c(ui::LINE))
+                            .text_size(px(12.))
+                            .text_color(c(ui::INK))
+                            .child(current),
+                    )
+                    .child(
+                        div()
+                            .id(("engine-change", n))
+                            .px(px(6.))
+                            .text_size(px(12.))
+                            .text_color(c(ui::MUTED))
+                            .cursor_pointer()
+                            .hover(|s| s.text_color(c(ui::INK)))
+                            .child("Change model")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.engine_open = Some(who);
+                                cx.notify();
+                            })),
+                    );
+            }
+            for (k, m) in models.iter().take(if open { 6 } else { 0 }).enumerate() {
                 let value = m.value.clone();
                 picks = picks.child(
                     ui::pill(
@@ -546,7 +588,7 @@ impl Shell {
                     )
                     .h(px(26.))
                     .text_size(px(12.))
-                    .on_click(cx.listener(move |_, _, _, cx| {
+                    .on_click(cx.listener(move |this, _, _, cx| {
                         let value = value.clone();
                         save(cx, |st| {
                             engine::set(
@@ -558,6 +600,7 @@ impl Shell {
                                 },
                             )
                         });
+                        this.engine_open = None;
                         cx.notify();
                     })),
                 );

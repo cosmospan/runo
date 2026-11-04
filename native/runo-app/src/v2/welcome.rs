@@ -378,21 +378,20 @@ impl Shell {
     }
 
     fn welcome_crew(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut grid = div().flex().flex_wrap().gap(px(12.));
+        let mut grid = div().w_full().grid().grid_cols(3).gap(px(12.));
         for who in Member::CREW {
             let on = self.setup_crew.contains(&who);
             let face = self.bot(
                 who,
                 if on { Mood::Idle } else { Mood::Asleep },
-                76.,
+                56.,
                 Framing::Full,
             );
             grid = grid.child(
                 div()
                     .id(("setup-bot", who.key() as usize))
-                    .flex_grow(1.)
-                    .flex_basis(px(220.))
-                    .max_w(px(250.))
+                    .w_full()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .gap(px(10.))
@@ -425,7 +424,7 @@ impl Shell {
                                     .text_size(px(12.))
                                     .line_height(px(16.))
                                     .text_color(c(ui::MUTED))
-                                    .child(who.pitch()),
+                                    .child(who.role()),
                             ),
                     )
                     .child(
@@ -457,6 +456,7 @@ impl Shell {
             );
         }
         div()
+            .w_full()
             .flex()
             .flex_col()
             .gap(px(18.))
