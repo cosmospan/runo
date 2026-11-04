@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="96 96 832 832">
+<defs><linearGradient id="t" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#FF6B7E"/><stop offset="1" stop-color="#C21F38"/></linearGradient></defs>
+<rect x="100" y="100" width="824" height="824" rx="186" fill="url(#t)"/>
+<!-- Below 48px the fins drop out: just the hex shell and the visor. -->
+<g transform="translate(512 512) scale(8.6) translate(-60 -53)">
+<path d="M60 20L90 37V69L60 86L30 69V37Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="9" stroke-linejoin="round"/>
+<rect x="36" y="35" width="48" height="35" rx="13" fill="#141416"/>
+<rect x="48.8" y="46" width="6.4" height="13" rx="3.2" fill="#FFFFFF"/>
+<rect x="64.8" y="46" width="6.4" height="13" rx="3.2" fill="#FFFFFF"/>
+</g>
+</svg>
