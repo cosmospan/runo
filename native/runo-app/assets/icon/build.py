@@ -1,4 +1,4 @@
-"""Render Squad Code's app icon (Fin waving over an editor page, flat) from runo.svg for every platform.
+"""Render Squad Code's app icon (Fin waving over a frosted editor page) from runo.svg for every platform.
 
 Run from this folder: python3 build.py (needs cairosvg and Pillow).
 
