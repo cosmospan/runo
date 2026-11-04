@@ -144,7 +144,8 @@ impl Local {
     /// Whether anything answers at the address.
     pub fn alive(&self) -> bool {
         Command::new("curl")
-            .args(["-sS", "-m", "2", "-o", "/dev/null", "-w", "%{http_code}"])
+            .args(["-sS", "-m", "2", "-w", "%{http_code}"])
+            .args(["-o", if cfg!(windows) { "NUL" } else { "/dev/null" }])
             .arg(format!("{}/models", self.url))
             .output()
             .ok()
