@@ -78,8 +78,8 @@ impl Shell {
                             .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(26.))
-                                    .font_weight(FontWeight::BOLD)
+                                    .text_size(px(24.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .child("Crew"),
                             )
                             .child(
@@ -114,7 +114,7 @@ impl Shell {
 
     fn crew_row(&mut self, who: Member, cx: &mut Context<Self>) -> Stateful<Div> {
         let mood = self.mood(who);
-        let face = self.bot(who, mood, 64., Framing::Bust);
+        let face = self.bot(who, mood, 52., Framing::Bust);
         let (status, color) = self.status_of(who);
         let jobs: Vec<_> = self
             .crew
@@ -152,7 +152,7 @@ impl Shell {
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded_full()
+                .rounded(px(7.))
                 .text_size(px(12.))
                 .text_color(c(ui::muted()))
                 .cursor_pointer()
@@ -160,7 +160,6 @@ impl Shell {
                 .child(label)
         };
         let key = who.key() as usize;
-        let accent = who.accent();
         // One figure under the bot: a small label over a mono value.
         let figure = |label: &'static str, v: String| {
             div()
@@ -201,23 +200,9 @@ impl Shell {
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(18.))
+            .rounded(px(ui::CARD_R + 2.))
             .shadow(ui::sheen())
-            .hover(|s| s.border_color(ca(accent, 0.5)))
-            // The bot's own colour, washing down from the top of its card.
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .h(px(110.))
-                    .bg(linear_gradient(
-                        180.,
-                        linear_color_stop(ca(accent, 0.16), 0.),
-                        linear_color_stop(ca(accent, 0.), 1.),
-                    )),
-            )
+            .hover(|s| s.border_color(c(ui::line_hi())))
             .child(
                 div()
                     .flex()
@@ -236,15 +221,15 @@ impl Shell {
                                     .flex()
                                     .items_center()
                                     .gap(px(6.))
-                                    .text_size(px(16.))
-                                    .font_weight(FontWeight::BOLD)
+                                    .text_size(px(15.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(ui::ink()))
                                     .child(who.name())
                                     .when(pinned, |d| {
                                         d.child(
                                             Icon::new(IconName::Pin)
                                                 .size(px(12.))
-                                                .text_color(c(ui::t_violet())),
+                                                .text_color(c(ui::faint())),
                                         )
                                     }),
                             )
@@ -270,8 +255,8 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .rounded_full()
-                    .bg(ca(ui::ink(), 0.04))
+                    .rounded(px(7.))
+                    .bg(c(ui::well()))
                     .border_1()
                     .border_color(c(ui::line2()))
                     .text_size(px(12.))

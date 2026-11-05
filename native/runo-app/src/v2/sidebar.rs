@@ -28,7 +28,7 @@ fn ground() -> u32 {
 }
 
 /// How tall a place row is.
-const ROW_H: f32 = 38.;
+const ROW_H: f32 = 32.;
 
 /// A row's look when it is the place you're on, or when it isn't.
 fn selectable(d: Stateful<Div>, on: bool) -> Stateful<Div> {
@@ -51,7 +51,7 @@ impl Shell {
         let jobs = self.crew.store.listed().len();
         let folder = self.crew.store.folder().cloned();
 
-        // The folder you're working in, at the top: a violet tile with its
+        // The folder you're working in, at the top: a tile with its
         // first letter, its name and where it is.
         let (name, path) = match &folder {
             Some(f) => (f.name.clone(), short_path(&f.path)),
@@ -72,15 +72,16 @@ impl Shell {
                     .size(px(30.))
                     .flex_none()
                     .rounded(px(8.))
-                    .bg(ca(ui::RUNO, 0.22))
+                    .bg(c(ui::raised()))
                     .border_1()
-                    .border_color(ca(ui::RUNO, 0.45))
+                    .border_color(c(ui::line()))
+                    .shadow(ui::edge())
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_size(px(14.))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(c(ui::t_violet()))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
                     .child(
                         name.chars()
                             .next()
@@ -121,13 +122,13 @@ impl Shell {
             .id("side-search")
             .mt(px(10.))
             .mb(px(14.))
-            .h(px(34.))
-            .px(px(12.))
+            .h(px(32.))
+            .px(px(10.))
             .flex()
             .items_center()
             .gap(px(8.))
-            .rounded_full()
-            .bg(ca(ui::ink(), 0.035))
+            .rounded(px(8.))
+            .bg(c(ui::panel()))
             .shadow(ui::edge())
             .border_1()
             .border_color(c(ui::line2()))
@@ -144,26 +145,28 @@ impl Shell {
             }))
             .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx)));
 
-        // A place: its icon on a small tile in its own colour (the violet
-        // gradient when you're on it), and its name.
-        let row = |id: &'static str, icon: IconName, color: u32, label: &'static str, on: bool| {
+        // A place: its icon and its name.
+        let row = |id: &'static str, icon: IconName, label: &'static str, on: bool| {
             selectable(
                 div()
                     .id(id)
                     .relative()
                     .h(px(ROW_H))
-                    .pl(px(6.))
-                    .pr(px(10.))
+                    .px(px(8.))
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .rounded(px(11.))
-                    .text_size(px(13.5))
+                    .rounded(px(7.))
+                    .text_size(px(13.))
                     .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer(),
                 on,
             )
-            .child(ui::tile(icon, color, 26., on))
+            .child(Icon::new(icon).size(px(16.)).text_color(c(if on {
+                ui::ink()
+            } else {
+                ui::muted()
+            })))
             .child(div().flex_1().child(label))
         };
         // A count at the end of a row: amber when it is waiting on you, quiet
@@ -191,12 +194,11 @@ impl Shell {
         let nav = div()
             .flex()
             .flex_col()
-            .gap(px(3.))
+            .gap(px(1.))
             .child(
                 row(
                     "side-inbox",
                     IconName::Inbox,
-                    ui::AMBER,
                     "Needs you",
                     place == Place::Inbox,
                 )
@@ -207,7 +209,6 @@ impl Shell {
                 row(
                     "side-jobs",
                     IconName::LayoutDashboard,
-                    ui::VIOLET,
                     "Jobs",
                     matches!(
                         place,
@@ -225,7 +226,6 @@ impl Shell {
                 row(
                     "side-term",
                     IconName::SquareTerminal,
-                    ui::GREEN,
                     "Terminal",
                     self.term_open.is_some_and(super::term::is_project),
                 )
@@ -242,7 +242,6 @@ impl Shell {
                 row(
                     "side-usage",
                     IconName::ChartColumn,
-                    ui::BLUE,
                     "Usage",
                     place == Place::Usage,
                 )
@@ -522,7 +521,6 @@ impl Shell {
         let settings = row(
             "side-settings",
             IconName::Settings,
-            ui::GREY,
             "Settings",
             matches!(place, Place::Settings(_)),
         )
@@ -649,29 +647,25 @@ impl Shell {
                     .min_w_0()
                     .child(
                         div()
-                            .h(px(26.))
-                            .pl(px(4.))
-                            .pr(px(10.))
+                            .h(px(24.))
                             .flex()
                             .flex_none()
                             .items_center()
-                            .gap(px(7.))
-                            .rounded_full()
-                            .bg(ca(ui::ink(), 0.04))
-                            .border_1()
-                            .border_color(c(ui::line2()))
+                            .gap(px(8.))
                             .text_color(c(ui::muted()))
                             .child(
                                 div()
-                                    .size(px(18.))
-                                    .rounded_full()
+                                    .size(px(20.))
+                                    .rounded(px(5.))
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .bg(ca(ui::RUNO, 0.28))
-                                    .text_size(px(10.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(c(ui::t_violet()))
+                                    .bg(c(ui::raised()))
+                                    .border_1()
+                                    .border_color(c(ui::line()))
+                                    .text_size(px(10.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
                                     .child(mono),
                             )
                             .child(folder),
@@ -683,24 +677,18 @@ impl Shell {
                 d.child(
                     div()
                         .h(px(26.))
-                        .px(px(10.))
+                        .px(px(9.))
                         .flex()
                         .items_center()
                         .gap(px(7.))
-                        .rounded_full()
+                        .rounded(px(7.))
                         .bg(c(ui::run_tone().1))
                         .border_1()
                         .border_color(c(ui::run_tone().2))
                         .text_size(px(12.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(ui::t_blue()))
-                        .child(
-                            div()
-                                .size(px(7.))
-                                .rounded_full()
-                                .bg(c(ui::t_blue()))
-                                .shadow(ui::glow(ui::BLUE, 6.)),
-                        )
+                        .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
                         .child(format!("{running} running")),
                 )
             })
@@ -712,7 +700,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded_full()
+                    .rounded(px(8.))
                     .border_1()
                     .border_color(c(ui::line()))
                     .text_color(c(ui::muted()))
@@ -722,27 +710,11 @@ impl Shell {
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )
             .child(
-                div()
-                    .id("top-new")
+                ui::solid("top-new", "New job")
                     .h(px(30.))
                     .pl(px(10.))
-                    .pr(px(14.))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .rounded_full()
-                    .bg(ui::brand())
-                    .border_1()
-                    .border_color(ca(0xFFFFFF, 0.14))
-                    .shadow(ui::glow(ui::RUNO, 14.))
-                    .text_color(c(0xFFFFFF))
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .cursor_pointer()
-                    .hover(|s| s.opacity(0.92))
-                    .active(|s| s.opacity(0.8))
                     .child(Icon::new(IconName::Plus).size(px(14.)))
-                    .child("New job")
+                    .flex_row_reverse()
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
             )
     }

@@ -8,7 +8,6 @@ use super::home::cost;
 use super::store::{self, Status};
 use super::ui::{self, c};
 use super::Shell;
-use gpui_kit::assets::IconName;
 
 const DAYS: usize = 30;
 
@@ -93,22 +92,19 @@ impl Shell {
             .flex()
             .gap(px(12.))
             .child(ui::stat(
-                IconName::ChartColumn,
-                ui::VIOLET,
+                None,
                 "Spend",
                 format!("${spend:.2}"),
                 "reported by engines".into(),
             ))
             .child(ui::stat(
-                IconName::LayoutDashboard,
-                ui::BLUE,
+                Some(ui::t_blue()),
                 "Jobs",
                 recent.len().to_string(),
                 format!("{} running", self.crew.store.running().count()),
             ))
             .child(ui::stat(
-                IconName::CircleCheck,
-                ui::GREEN,
+                Some(ui::t_green()),
                 "Success rate",
                 if ended == 0 {
                     "—".into()
@@ -118,8 +114,7 @@ impl Shell {
                 format!("{ok} of {ended} finished"),
             ))
             .child(ui::stat(
-                IconName::Clock,
-                ui::AMBER,
+                None,
                 "Time at work",
                 hours(busy),
                 "across the crew".into(),

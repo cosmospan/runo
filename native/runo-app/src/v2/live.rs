@@ -701,9 +701,9 @@ impl Shell {
             .overflow_y_scroll()
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(18.))
+            .rounded(px(12.))
             .shadow(ui::sheen())
-            .bg(ca(ui::panel(), 0.7))
+            .bg(c(ui::panel()))
             .px(px(24.))
             .pt(px(if cfg!(target_os = "macos") { 30. } else { 24. }))
             .pb(px(24. + super::DOCK_ROOM))
@@ -785,8 +785,8 @@ impl Shell {
             .child(keeper)
             .child(
                 div()
-                    .text_size(px(26.))
-                    .font_weight(FontWeight::BOLD)
+                    .text_size(px(24.))
+                    .font_weight(FontWeight::SEMIBOLD)
                     .child(title),
             )
             .child(

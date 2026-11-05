@@ -1925,8 +1925,6 @@ impl Render for Shell {
                             .shadow(ui::float())
                             .overflow_hidden()
                             .relative()
-                            // A soft wash of the crew's violet across the top edge.
-                            .child(ui::aurora())
                             .child(self.topbar(cx))
                     })
                     .child(

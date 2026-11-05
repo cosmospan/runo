@@ -42,7 +42,6 @@ pub struct Theme {
     /// The primary button, its hover and press, and the text on it.
     pub fill: u32,
     pub fill_hover: u32,
-    #[allow(dead_code)]
     pub fill_press: u32,
     pub on_fill: u32,
     /// The terminal and the diff: a sunken well under code.
@@ -399,7 +398,6 @@ pub fn fill() -> u32 {
 pub fn fill_hover() -> u32 {
     theme().fill_hover
 }
-#[allow(dead_code)]
 pub fn fill_press() -> u32 {
     theme().fill_press
 }

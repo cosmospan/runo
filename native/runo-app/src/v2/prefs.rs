@@ -344,44 +344,40 @@ fn swatch(t: &'static Theme) -> Div {
 
 impl Shell {
     pub(super) fn settings(&mut self, pane: Pane, cx: &mut Context<Self>) -> AnyElement {
-        // The panes as one row of round tabs across the top, the one you're on
-        // filled with the violet gradient.
-        let mut tabs = div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .p(px(4.))
-            .rounded_full()
-            .bg(ca(ui::ink(), 0.04))
-            .border_1()
-            .border_color(c(ui::line2()));
+        // The panes as a row of tabs across the top, the one you're on
+        // underlined.
+        let mut tabs = div().flex().items_end().gap(px(22.));
         for p in Pane::ALL {
             let on = p == pane;
             tabs = tabs.child(
                 div()
                     .id(("settings-pane", p as usize))
-                    .h(px(34.))
-                    .pl(px(12.))
-                    .pr(px(16.))
+                    .relative()
+                    .h(px(40.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .rounded_full()
+                    .gap(px(7.))
                     .text_size(px(13.))
+                    .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(ui::brand())
-                                .shadow(ui::glow(ui::RUNO, 10.))
-                                .text_color(c(0xFFFFFF))
-                                .font_weight(FontWeight::SEMIBOLD)
+                            d.text_color(c(ui::ink())).child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .right_0()
+                                    .bottom(px(-1.))
+                                    .h(px(2.))
+                                    .rounded_t(px(2.))
+                                    .bg(c(ui::ink())),
+                            )
                         } else {
-                            d.text_color(c(ui::body()))
-                                .font_weight(FontWeight::MEDIUM)
-                                .hover(|s| s.bg(ca(ui::ink(), 0.06)).text_color(c(ui::ink())))
+                            d.text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
                         }
                     })
-                    .child(Icon::new(p.icon()).size(px(15.)))
+                    .child(Icon::new(p.icon()).size(px(14.)))
                     .child(p.name())
                     .tooltip(move |window, cx| {
                         gpui_kit::component::tooltip::Tooltip::new(p.line()).build(window, cx)
@@ -398,18 +394,9 @@ impl Shell {
         let nav = div()
             .flex_none()
             .px(px(28.))
-            .pt(px(22.))
-            .pb(px(6.))
-            .flex()
-            .items_center()
-            .gap(px(20.))
-            .child(
-                div()
-                    .text_size(px(15.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::muted()))
-                    .child("Settings"),
-            )
+            .pt(px(6.))
+            .border_b_1()
+            .border_color(c(ui::line2()))
             .child(tabs);
         let body = match pane {
             Pane::General => self.settings_general(cx),
@@ -445,8 +432,8 @@ impl Shell {
                         div()
                             .child(
                                 div()
-                                    .text_size(px(26.))
-                                    .font_weight(FontWeight::BOLD)
+                                    .text_size(px(24.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .child(title),
                             )
                             .child(

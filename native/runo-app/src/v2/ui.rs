@@ -19,7 +19,6 @@ pub const AMBER: u32 = 0xF59E0B;
 pub const BLUE: u32 = 0x3B82F6;
 pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
-pub const GREY: u32 = 0x9A9AA8;
 pub const MONO: &str = "JetBrains Mono";
 
 /// The spacing scale every screen keeps to, in pixels.
@@ -57,9 +56,9 @@ fn alpha(hex: u32) -> f32 {
 /// The gap around the page canvas, between it and the window's edge.
 pub const GAP: f32 = 8.;
 /// The page canvas's corner radius.
-pub const CANVAS_R: f32 = 14.;
+pub const CANVAS_R: f32 = 12.;
 /// A card's corner radius.
-pub const CARD_R: f32 = 14.;
+pub const CARD_R: f32 = 10.;
 
 /// The ground under everything: the sidebar sits on it and the page canvas
 /// floats over it. A shade darker than the page in every theme, keeping a
@@ -79,10 +78,10 @@ pub fn float() -> Vec<BoxShadow> {
     let light = theme().light;
     vec![
         BoxShadow {
-            color: ca(0x000000, if light { 0.07 } else { 0.45 }),
-            offset: point(px(0.), px(6.)),
-            blur_radius: px(24.),
-            spread_radius: px(-4.),
+            color: ca(0x000000, if light { 0.05 } else { 0.35 }),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(3.),
+            spread_radius: px(0.),
             inset: false,
         },
         BoxShadow {
@@ -100,10 +99,10 @@ pub fn sheen() -> Vec<BoxShadow> {
     let light = theme().light;
     vec![
         BoxShadow {
-            color: ca(0x000000, if light { 0.04 } else { 0.25 }),
-            offset: point(px(0.), px(2.)),
-            blur_radius: px(8.),
-            spread_radius: px(-2.),
+            color: ca(0x000000, if light { 0.04 } else { 0.2 }),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(2.),
+            spread_radius: px(0.),
             inset: false,
         },
         BoxShadow {
@@ -130,44 +129,6 @@ pub fn chip() -> Vec<BoxShadow> {
     v
 }
 
-/// A soft wash of the crew's violet, fading down from the canvas's top edge.
-/// It sits behind the page and catches no clicks.
-pub fn aurora() -> Div {
-    let k = if theme().light { 0.06 } else { 0.09 };
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
-        .h(px(320.))
-        .bg(linear_gradient(
-            180.,
-            linear_color_stop(ca(RUNO, k), 0.),
-            linear_color_stop(ca(RUNO, 0.), 1.),
-        ))
-}
-
-/// A soft coloured glow around a small thing, like a live dot or the
-/// primary button.
-pub fn glow(color: u32, blur: f32) -> Vec<BoxShadow> {
-    vec![BoxShadow {
-        color: ca(color, if theme().light { 0.28 } else { 0.45 }),
-        offset: point(px(0.), px(2.)),
-        blur_radius: px(blur),
-        spread_radius: px(-2.),
-        inset: false,
-    }]
-}
-
-/// Squad Code's own button fill: a violet gradient, the same in every theme.
-pub fn brand() -> Background {
-    linear_gradient(
-        135.,
-        linear_color_stop(c(0x9467FF), 0.),
-        linear_color_stop(c(0x6A3EF0), 1.),
-    )
-}
-
 /// A hairline shadow, for raised controls like the selected tab.
 pub fn lift() -> Vec<BoxShadow> {
     vec![BoxShadow {
@@ -189,19 +150,18 @@ pub fn card() -> Div {
         .shadow(sheen())
 }
 
-/// A quiet round button, like "Look first" or "Pause": a faint glassy fill,
-/// a hairline ring and a lit top edge.
+/// A quiet outline button, like "Look first" or "Pause".
 pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(16.))
-        .h(px(34.))
+        .px(px(12.))
+        .h(px(32.))
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(7.))
-        .rounded_full()
-        .bg(ca(ink(), 0.05))
+        .gap(px(6.))
+        .rounded(px(8.))
+        .bg(c(panel()))
         .border_1()
         .border_color(c(line()))
         .shadow(edge())
@@ -209,71 +169,67 @@ pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(ink()))
         .cursor_pointer()
-        .hover(|s| s.bg(ca(ink(), 0.09)).border_color(c(line_hi())))
-        .active(|s| s.bg(ca(ink(), 0.13)))
+        .hover(|s| s.bg(c(hover())).border_color(c(line_hi())))
+        .active(|s| s.bg(c(press())))
         .child(label.into())
 }
 
-/// The primary round button, like "Approve & open PR": Squad Code's violet
-/// gradient with a soft glow, the same in every theme.
+/// The primary button, like "Approve & open PR": the theme's solid fill,
+/// high contrast and nothing else.
 pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(18.))
-        .h(px(34.))
+        .px(px(14.))
+        .h(px(32.))
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(8.))
-        .rounded_full()
-        .bg(brand())
-        .border_1()
-        .border_color(ca(0xFFFFFF, 0.16))
-        .shadow(glow(RUNO, 14.))
+        .gap(px(6.))
+        .rounded(px(8.))
+        .bg(c(fill()))
         .text_size(px(13.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(0xFFFFFF))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(on_fill()))
         .cursor_pointer()
-        .hover(|s| s.opacity(0.92))
-        .active(|s| s.opacity(0.8))
+        .hover(|s| s.bg(c(fill_hover())))
+        .active(|s| s.bg(c(fill_press())))
         .child(label.into())
 }
 
-/// A small round pill for filters and tabs; `on` is the selected one, tinted
-/// in the crew's violet.
+/// A small pill for filters and tabs; `on` is the selected one.
 pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(13.))
-        .h(px(30.))
+        .px(px(10.))
+        .h(px(28.))
         .flex()
         .items_center()
         .gap(px(6.))
-        .rounded_full()
-        .text_size(px(13.))
+        .rounded(px(7.))
+        .text_size(px(12.5))
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .border_1()
         .map(|d| {
             if on {
-                d.bg(ca(RUNO, 0.18))
-                    .border_color(ca(RUNO, 0.5))
-                    .text_color(c(t_violet()))
+                d.bg(c(raised()))
+                    .border_color(c(line_hi()))
+                    .text_color(c(ink()))
+                    .shadow(edge())
             } else {
-                d.bg(ca(ink(), 0.03))
-                    .border_color(c(line2()))
-                    .text_color(c(body()))
-                    .hover(|s| s.bg(ca(ink(), 0.07)).text_color(c(ink())))
-                    .active(|s| s.bg(ca(ink(), 0.11)))
+                d.border_color(c(line()))
+                    .text_color(c(muted()))
+                    .hover(|s| s.bg(c(hover())).text_color(c(ink())))
+                    .active(|s| s.bg(c(press())))
             }
         })
         .child(label.into())
 }
 
-/// Just the lit top edge, for small glassy controls.
+/// Just the lit top edge, for small controls.
 pub fn edge() -> Vec<BoxShadow> {
     vec![BoxShadow {
-        color: ca(0xFFFFFF, if theme().light { 0.7 } else { 0.05 }),
+        color: ca(0xFFFFFF, if theme().light { 0.7 } else { 0.04 }),
         offset: point(px(0.), px(1.)),
         blur_radius: px(0.),
         spread_radius: px(0.),
@@ -281,49 +237,15 @@ pub fn edge() -> Vec<BoxShadow> {
     }]
 }
 
-/// A rounded tile holding an icon: tinted in `color`, or filled with the
-/// violet gradient when `on`.
-pub fn tile(icon: gpui_kit::assets::IconName, color: u32, size: f32, on: bool) -> Div {
-    div()
-        .size(px(size))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(size * 0.32))
-        .map(|d| {
-            if on {
-                d.bg(brand()).shadow(glow(RUNO, 10.))
-            } else {
-                d.bg(ca(color, 0.14))
-                    .border_1()
-                    .border_color(ca(color, 0.22))
-            }
-        })
-        .child(
-            gpui_kit::component::Icon::new(icon)
-                .size(px(size * 0.56))
-                .text_color(if on { c(0xFFFFFF) } else { c(color) }),
-        )
-}
-
-/// A stat tile, its own card: an icon tile in its colour, a label, the
-/// figure large, a note under it, and a soft wash of the colour from the top.
-pub fn stat(
-    icon: gpui_kit::assets::IconName,
-    color: u32,
-    label: &'static str,
-    value: String,
-    note: String,
-) -> Div {
+/// A stat card: a quiet label with a status dot, the figure, and a note.
+pub fn stat(dot: Option<u32>, label: &'static str, value: String, note: String) -> Div {
     div()
         .flex_1()
         .flex_basis(px(0.))
         .min_w_0()
-        .relative()
-        .overflow_hidden()
-        .px(px(18.))
-        .py(px(16.))
+        .px(px(16.))
+        .pt(px(14.))
+        .pb(px(16.))
         .bg(c(panel()))
         .border_1()
         .border_color(c(line()))
@@ -331,36 +253,22 @@ pub fn stat(
         .shadow(sheen())
         .child(
             div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .right_0()
-                .h(px(90.))
-                .bg(linear_gradient(
-                    180.,
-                    linear_color_stop(ca(color, 0.10), 0.),
-                    linear_color_stop(ca(color, 0.), 1.),
-                )),
-        )
-        .child(
-            div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
-                .child(tile(icon, color, 28., false))
-                .child(
-                    div()
-                        .text_size(px(12.5))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(muted()))
-                        .child(label),
-                ),
+                .gap(px(7.))
+                .text_size(px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(muted()))
+                .when_some(dot, |d, col| {
+                    d.child(div().size(px(6.)).rounded_full().bg(c(col)))
+                })
+                .child(label),
         )
         .child(
             div()
-                .mt(px(14.))
-                .text_size(px(30.))
-                .font_weight(FontWeight::BOLD)
+                .mt(px(10.))
+                .text_size(px(26.))
+                .font_weight(FontWeight::SEMIBOLD)
                 .child(value),
         )
         .child(

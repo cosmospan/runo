@@ -130,8 +130,8 @@ impl Shell {
                             .gap(px(10.))
                             .child(
                                 div()
-                                    .text_size(px(26.))
-                                    .font_weight(FontWeight::BOLD)
+                                    .text_size(px(24.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .child("Jobs"),
                             )
                             .child(
@@ -195,8 +195,8 @@ impl Shell {
             .items_center()
             .p(px(3.))
             .gap(px(super::MODE_STEP - TAB))
-            .rounded_full()
-            .bg(ca(ui::ink(), 0.04))
+            .rounded(px(10.))
+            .bg(c(ui::well()))
             .border_1()
             .border_color(c(ui::line2()))
             .child(
@@ -205,10 +205,12 @@ impl Shell {
                     .top(px(3.))
                     .left(px(3. + x))
                     .w(px(TAB))
-                    .h(px(32.))
-                    .rounded_full()
-                    .bg(ui::brand())
-                    .shadow(ui::glow(ui::RUNO, 10.)),
+                    .h(px(30.))
+                    .rounded(px(7.))
+                    .bg(c(ui::raised()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .shadow(ui::lift()),
             );
         // Every kind of work. One nobody on the crew does yet is fainter, and a
         // job sent in it makes Fin offer the bot for it.
@@ -219,17 +221,17 @@ impl Shell {
                 div()
                     .id(("mode", i))
                     .w(px(TAB))
-                    .h(px(32.))
+                    .h(px(30.))
                     .flex()
                     .items_center()
                     .justify_center()
                     .gap(px(5.))
-                    .rounded_full()
+                    .rounded(px(7.))
                     .text_size(px(13.))
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(0xFFFFFF))
+                            d.font_weight(FontWeight::MEDIUM).text_color(c(ui::ink()))
                         } else {
                             d.text_color(c(if staffed { ui::muted() } else { ui::faint() }))
                                 .hover(|s| s.text_color(c(ui::ink())))
@@ -355,12 +357,12 @@ impl Shell {
                     .child(
                         div()
                             .id("send")
-                            .size(px(38.))
-                            .rounded_full()
+                            .size(px(34.))
+                            .rounded(px(9.))
                             // Dark once there is something to send.
                             .map(|d| {
                                 if ready {
-                                    d.bg(ui::brand()).shadow(ui::glow(ui::RUNO, 16.))
+                                    d.bg(c(ui::fill()))
                                 } else {
                                     d.bg(c(ui::off()))
                                 }
@@ -374,7 +376,7 @@ impl Shell {
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
-                                    .text_color(c(0xFFFFFF)),
+                                    .text_color(c(if ready { ui::on_fill() } else { 0xFFFFFF })),
                             )
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let text = this.composer.read(cx).value().trim().to_string();
@@ -388,20 +390,14 @@ impl Shell {
             .w_full()
             .flex()
             .gap(px(18.))
-            .px(px(20.))
-            .pt(px(20.))
-            .pb(px(16.))
+            .px(px(16.))
+            .pt(px(16.))
+            .pb(px(12.))
             .bg(c(ui::panel()))
             .border_1()
-            .border_color(ca(ui::RUNO, 0.35))
-            .rounded(px(20.))
-            .shadow({
-                let mut v = ui::glow(ui::RUNO, 40.);
-                v[0].color = ca(ui::RUNO, if ui::theme().light { 0.10 } else { 0.16 });
-                v[0].offset = point(px(0.), px(10.));
-                v.extend(ui::sheen());
-                v
-            })
+            .border_color(c(ui::line()))
+            .rounded(px(12.))
+            .shadow(ui::sheen())
             .child(box_)
     }
 

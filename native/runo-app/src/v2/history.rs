@@ -5,7 +5,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::store::{self, Job, Status};
-use super::ui::{self, c, ca};
+use super::ui::{self, c};
 use super::Shell;
 
 impl Shell {
@@ -61,19 +61,15 @@ impl Shell {
                     .flex()
                     .gap(px(12.))
                     .p(px(14.))
-                    .rounded(px(14.))
+                    .rounded(px(10.))
                     .border_1()
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            // The one you're reading: lifted, with a violet ring.
+                            // The one you're reading: lifted, with a firmer edge.
                             d.bg(c(ui::raised()))
-                                .border_color(ca(ui::RUNO, 0.55))
-                                .shadow({
-                                    let mut v = ui::glow(ui::RUNO, 18.);
-                                    v.extend(ui::edge());
-                                    v
-                                })
+                                .border_color(c(ui::line_hi()))
+                                .shadow(ui::lift())
                         } else {
                             d.bg(c(ui::panel()))
                                 .border_color(c(ui::line2()))
@@ -158,8 +154,8 @@ impl Shell {
                             .flex_1()
                             .child(
                                 div()
-                                    .text_size(px(26.))
-                                    .font_weight(FontWeight::BOLD)
+                                    .text_size(px(24.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .child("Needs you"),
                             )
                             .child(

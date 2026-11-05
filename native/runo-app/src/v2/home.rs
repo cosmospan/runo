@@ -8,7 +8,6 @@ use runo_holo::{Framing, Mood};
 use super::store::{self, Job, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
-use gpui_kit::assets::IconName;
 
 impl Shell {
     /// Running, needs you, done today and what today cost.
@@ -60,29 +59,25 @@ impl Shell {
             .flex()
             .gap(px(12.))
             .child(ui::stat(
-                IconName::Loader,
-                ui::BLUE,
+                Some(ui::t_blue()),
                 "Running",
                 running.len().to_string(),
                 who,
             ))
             .child(ui::stat(
-                IconName::Inbox,
-                ui::AMBER,
+                Some(ui::t_amber()),
                 "Needs you",
                 needs.len().to_string(),
                 oldest,
             ))
             .child(ui::stat(
-                IconName::CircleCheck,
-                ui::GREEN,
+                Some(ui::t_green()),
                 "Done today",
                 done.to_string(),
                 format!("of {ended} finished"),
             ))
             .child(ui::stat(
-                IconName::ChartColumn,
-                ui::VIOLET,
+                None,
                 "Spend today",
                 format!("${spend:.2}"),
                 "across engines".into(),
@@ -150,7 +145,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .text_size(px(13.5))
+                    .text_size(px(13.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .cursor_pointer()
                     .child(
@@ -160,13 +155,7 @@ impl Shell {
                             .text_size(px(10.))
                             .child(if shut { "\u{25b8}" } else { "\u{25be}" }),
                     )
-                    .child(
-                        div()
-                            .size(px(8.))
-                            .rounded_full()
-                            .bg(c(color))
-                            .shadow(ui::glow(color, 6.)),
-                    )
+                    .child(div().size(px(7.)).rounded_full().bg(c(color)))
                     .child(div().text_color(c(ui::ink())).child(label))
                     .child(
                         div()
@@ -174,10 +163,11 @@ impl Shell {
                             .px(px(7.))
                             .flex()
                             .items_center()
-                            .rounded_full()
-                            .bg(ca(color, 0.14))
+                            .rounded(px(5.))
+                            .bg(c(ui::raised()))
                             .text_size(px(11.))
-                            .text_color(c(ui::body()))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(ui::muted()))
                             .child(rows.len().to_string()),
                     )
                     .when(key == 2, |d| {
@@ -291,12 +281,12 @@ impl Shell {
             table = table.child(
                 div()
                     .id(("home-row", id as usize))
-                    .h(px(58.))
+                    .h(px(54.))
                     .px(px(16.))
                     .flex()
                     .items_center()
                     .gap(px(14.))
-                    .rounded(px(12.))
+                    .rounded(px(8.))
                     .bg(c(ui::panel()))
                     .border_1()
                     .border_color(c(ui::line2()))
@@ -627,7 +617,7 @@ impl Shell {
                 .bg(c(ui::panel()))
                 .border_1()
                 .border_color(c(ui::line()))
-                .rounded(px(18.))
+                .rounded(px(12.))
                 .shadow(ui::sheen())
                 .overflow_hidden()
                 .child(

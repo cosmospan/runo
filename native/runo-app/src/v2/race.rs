@@ -107,8 +107,8 @@ impl Shell {
                 )
                 .child(
                     div()
-                        .text_size(px(26.))
-                        .font_weight(FontWeight::BOLD)
+                        .text_size(px(24.))
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::ink()))
                         .truncate()
                         .child(first.title.clone()),
