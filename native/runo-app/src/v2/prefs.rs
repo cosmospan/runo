@@ -3,12 +3,11 @@
 //!
 //! - **General**: how the app behaves while the crew works, and the limits.
 //! - **Appearance**: the theme, solid or frosted glass, with a preview of each.
-//! - **Mascot**: the crew's look. Fin or the bubble crew, Fin's material, and
-//!   each bot's colour and props, with a live preview.
+//! - **Mascot**: the crew's look. Fin's material, and each bot's colour and
+//!   props, with a live preview.
 //! - **Engines**: which coding agent and model each bot runs on.
 //!
-//! Every choice is saved the moment it's made. Anything not here is still in
-//! the classic app's settings.
+//! Every choice is saved the moment it's made.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::tooltip::Tooltip;
@@ -431,25 +430,6 @@ impl Shell {
                     })),
             );
         }
-        nav = nav.child(
-            div()
-                .mt_auto()
-                .px(px(10.))
-                .flex()
-                .flex_col()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(c(ui::faint()))
-                        .child("Terminal, keys and connections are in the classic app."),
-                )
-                .child(
-                    ui::ghost("settings-classic", "Open the classic app")
-                        .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
-                ),
-        );
-
         let body = match pane {
             Pane::General => self.settings_general(cx),
             Pane::Appearance => self.settings_appearance(cx),
@@ -572,34 +552,14 @@ impl Shell {
 
         let look = group(
             "LOOK AND FEEL",
-            vec![
-                toggle(
-                    "set-motion",
-                    "Animations",
-                    "The crew moves and screens ease in. Off, everything holds still.",
-                    st.animations,
-                    |s, v| s.animations = v,
-                    cx,
-                ),
-                row(
-                    "Crew look",
-                    "Fin, the Squad Code mascot, or the bubble crew. Dress each bot under Mascot.",
-                    segmented(vec![
-                        segment("set-look-fin", "Fin", st.mascot != "bubble").on_click(
-                            cx.listener(|_, _, _, cx| {
-                                save(cx, |st| st.mascot = "fin".into());
-                                cx.notify();
-                            }),
-                        ),
-                        segment("set-look-bubble", "Bubbles", st.mascot == "bubble").on_click(
-                            cx.listener(|_, _, _, cx| {
-                                save(cx, |st| st.mascot = "bubble".into());
-                                cx.notify();
-                            }),
-                        ),
-                    ]),
-                ),
-            ],
+            vec![toggle(
+                "set-motion",
+                "Animations",
+                "The crew moves and screens ease in. Off, everything holds still.",
+                st.animations,
+                |s, v| s.animations = v,
+                cx,
+            )],
         );
         let alerts = group(
             "ALERTS",
@@ -839,7 +799,6 @@ impl Shell {
             self.fin_sel = crew.first().copied().unwrap_or(Member::Builder);
         }
         let who = self.fin_sel;
-        let is_fin = st.mascot != "bubble";
         let fin = mascot::fin_in(&st, who);
         let (tint, outfit) = (fin.tint, fin.outfit);
 
@@ -848,15 +807,13 @@ impl Shell {
             let i = (self.now() / 3.2) as usize % State::ALL.len();
             State::ALL[i]
         });
-        let figure = if is_fin {
-            Figure::Fin(FinPose {
-                fin,
-                state,
-                shine: false,
-            })
-        } else {
-            Figure::Bubble(who.bubble().pose(Mood::Signature))
-        };
+        let figure = Figure::Fin(FinPose {
+            fin,
+            state,
+            shine: false,
+            gaze: (0, 0),
+            offset: 0,
+        });
         let preview = self.pose_img(figure, 240., Framing::Full);
         let accent = who.accent();
         let mut states = div().flex().flex_wrap().gap(px(6.));
@@ -917,16 +874,15 @@ impl Shell {
                                     .font_weight(FontWeight::BOLD)
                                     .child(who.name()),
                             )
-                            .child(div().text_size(px(12.)).text_color(c(ui::muted())).child(
-                                if is_fin {
-                                    format!("{role_name} · {}", state.name())
-                                } else {
-                                    who.role().to_string()
-                                },
-                            )),
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::muted()))
+                                    .child(format!("{role_name} · {}", state.name())),
+                            ),
                     ),
             )
-            .when(is_fin, |d| d.child(states));
+            .child(states);
 
         // Whose Fin is being dressed.
         let mut pick = div().flex().flex_wrap().gap(px(8.));
@@ -1055,29 +1011,13 @@ impl Shell {
             .flex_col()
             .child(div().px(px(18.)).pt(px(16.)).pb(px(6.)).child(section(
                 "Crew look",
-                "How every bot is drawn, everywhere in the app.",
+                "What Fin is made of, for every bot, everywhere in the app.",
             )))
             .child(row(
-                "Mascot",
-                "Fin is Squad Code's hex bot. The bubble crew is the earlier look.",
-                segmented(vec![
-                    segment("fin-on", "Fin", is_fin).on_click(cx.listener(|_, _, _, cx| {
-                        save(cx, |st| st.mascot = "fin".into());
-                        cx.notify();
-                    })),
-                    segment("fin-off", "Bubbles", !is_fin).on_click(cx.listener(|_, _, _, cx| {
-                        save(cx, |st| st.mascot = "bubble".into());
-                        cx.notify();
-                    })),
-                ]),
-            ))
-            .when(is_fin, |d| {
-                d.child(row(
-                    "Material",
-                    "Liquid glass, a slowly shifting rainbow glow, or solid colour.",
-                    segmented(mats),
-                ))
-            });
+                "Material",
+                "Liquid glass, a slowly shifting rainbow glow, or solid colour.",
+                segmented(mats),
+            ));
 
         let wardrobe = ui::card()
             .p(px(18.))
@@ -1150,7 +1090,7 @@ impl Shell {
             .flex_col()
             .gap(px(space::M))
             .child(looks)
-            .when(is_fin, |d| d.child(wardrobe));
+            .child(wardrobe);
 
         Self::page(
             "settings-mascot",

@@ -1,6 +1,6 @@
 //! The sidebar: the folder you're in, search, the places, and the crew.
 //!
-//! The crew lives here, one row per bot: its bubble, its name and what it's
+//! The crew lives here, one row per bot: its Fin, its name and what it's
 //! doing right now, with a progress bar while it works. It replaces the dock,
 //! so the bots are always in view and never sit on top of a page.
 
@@ -8,7 +8,6 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::Framing;
 
 use super::data::Member;
 use super::ui::{self, c};
@@ -204,9 +203,23 @@ impl Shell {
         let mut crew = div().flex().flex_col().gap(px(1.));
         let (shown, more) = self.sidebar_crew();
         for who in shown {
-            let mood = self.mood(who);
-            let size = if busy_now(self, who) { 30. } else { 24. };
-            let face = self.bot(who, mood, size, Framing::Bust);
+            let size = if busy_now(self, who) { 32. } else { 28. };
+            let faces = self.faces.clone();
+            let face = div()
+                .relative()
+                .flex_none()
+                .child(self.side_bot(who, size))
+                // Notes where the bot is, so its eyes can follow the pointer.
+                .child(
+                    canvas(
+                        move |bounds, _, _| {
+                            faces.borrow_mut().insert(who, bounds);
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .size_full(),
+                );
             let busy = self
                 .crew
                 .store
@@ -394,15 +407,6 @@ impl Shell {
                     let pane = this.settings_pane;
                     this.go(Place::Settings(pane), cx)
                 })),
-            )
-            .child(
-                row(
-                    "side-v1",
-                    IconName::PanelLeft,
-                    "Open the classic app",
-                    false,
-                )
-                .on_click(cx.listener(|_, _, _, cx| cx.defer(crate::open_main_window))),
             );
 
         div()

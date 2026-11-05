@@ -1,52 +1,42 @@
 //! Crew: every bot, what it is for and what it has done, plus a playground for
-//! making your own bubble.
+//! making your own Fin.
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::{Bubble, Eyes, Framing, Layout, Mood, Sway, Tint};
+use runo_holo::fin::{Badge, Fin, Hat, Held, Material, Outfit, Tool, ROLES};
+use runo_holo::{Framing, Mood, Tint};
 
 use super::data::{Member, Mode};
+use super::mascot;
 use super::store::Status;
 use super::ui::{self, c, ca};
 use super::Pane;
 use super::{Place, Shell};
 
-fn layout_name(l: Layout) -> &'static str {
-    match l {
-        Layout::Solo => "Solo",
-        Layout::Pair => "Pair",
-        Layout::Trio => "Trio",
-        Layout::Orbit => "Orbit",
-        Layout::Rising => "Rising",
-        Layout::Shield => "Shield",
-        _ => "",
-    }
+/// A look picked by `seed`, for "Surprise me": any colour, a role kit or a
+/// mix of props.
+fn surprise(seed: u64) -> (Tint, Outfit) {
+    let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xD1B5_4A32_D192_ED03;
+    let mut next = |n: usize| {
+        s ^= s >> 31;
+        s = s.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        s ^= s >> 29;
+        (s % n as u64) as usize
+    };
+    let tint = mascot::COLOURS[next(mascot::COLOURS.len())].2;
+    let outfit = if next(2) == 0 {
+        ROLES[next(ROLES.len())].outfit
+    } else {
+        Outfit {
+            hat: Hat::ALL[next(Hat::ALL.len())],
+            left: Held::ALL[next(Held::ALL.len())],
+            right: Tool::ALL[next(Tool::ALL.len())],
+            badge: Badge::ALL[next(Badge::ALL.len())],
+        }
+    };
+    (tint, outfit)
 }
 
-fn eyes_name(e: Eyes) -> &'static str {
-    match e {
-        Eyes::Dots => "Dots",
-        Eyes::Smile => "Smiles",
-        Eyes::Lens => "Lens",
-        Eyes::Visor => "Visor",
-        Eyes::Sleepy => "Sleepy",
-        Eyes::Squint => "Squint",
-        _ => "",
-    }
-}
-
-fn sway_name(s: Sway) -> &'static str {
-    match s {
-        Sway::Float => "Float",
-        Sway::Bounce => "Bounce",
-        Sway::Hop => "Hop",
-        Sway::Wobble => "Wobble",
-        Sway::Drift => "Drift",
-        _ => "",
-    }
-}
-
-/// A maker option: its name, whether it's picked, and what picking it does.
 type Choice = (String, bool, Box<dyn Fn(&mut Shell)>);
 
 impl Shell {
@@ -452,9 +442,17 @@ impl Shell {
     }
 
     fn maker_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let b = self.maker;
+        let (tint, outfit) = self.maker;
+        let material = Material::from_id(&cx.global::<crate::settings::AppSettings>().fin_material);
         let preview = self.pose_img(
-            runo_holo::Figure::Bubble(b.pose(Mood::Signature)),
+            runo_holo::Figure::Fin(
+                Fin {
+                    tint,
+                    material,
+                    outfit,
+                }
+                .pose(Mood::Signature),
+            ),
             220.,
             Framing::Full,
         );
@@ -462,7 +460,7 @@ impl Shell {
                    items: Vec<Choice>,
                    key: &'static str,
                    cx: &mut Context<Shell>| {
-            let mut opts = div().flex().flex_wrap().gap(px(8.));
+            let mut opts = div().flex_1().min_w_0().flex().flex_wrap().gap(px(8.));
             for (i, (name, on, f)) in items.into_iter().enumerate() {
                 let f = std::rc::Rc::new(f);
                 opts = opts.child(ui::pill((key, i), name, on).on_click(cx.listener(
@@ -488,8 +486,8 @@ impl Shell {
                 .child(opts)
         };
         let mut swatches = div().flex().gap(px(10.));
-        for (i, t) in Tint::ALL.into_iter().enumerate() {
-            let on = b.tint == t;
+        for (i, (_, _, t)) in mascot::COLOURS.into_iter().enumerate() {
+            let on = tint == t;
             let [l, s, _] = t.0;
             swatches = swatches.child(
                 div()
@@ -506,38 +504,68 @@ impl Shell {
                     ))
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.maker.tint = t;
+                        this.maker.0 = t;
                         cx.notify();
                     })),
             );
         }
-        let layouts = Bubble::LAYOUTS
-            .into_iter()
-            .map(|l| {
-                (
-                    layout_name(l).to_string(),
-                    b.layout == l,
-                    Box::new(move |s: &mut Shell| s.maker.layout = l) as Box<dyn Fn(&mut Shell)>,
+        let pick = |name: &str, on: bool, f: Box<dyn Fn(&mut Shell)>| -> Choice {
+            (name.to_string(), on, f)
+        };
+        let mut kits = vec![pick(
+            "Plain",
+            outfit == Outfit::PLAIN,
+            Box::new(|s: &mut Shell| s.maker.1 = Outfit::PLAIN),
+        )];
+        kits.extend(ROLES.iter().map(|r| {
+            let o = r.outfit;
+            pick(
+                r.name,
+                outfit == o,
+                Box::new(move |s: &mut Shell| s.maker.1 = o),
+            )
+        }));
+        let hats = Hat::ALL
+            .iter()
+            .copied()
+            .map(|h| {
+                pick(
+                    h.name(),
+                    outfit.hat == h,
+                    Box::new(move |s: &mut Shell| s.maker.1.hat = h),
                 )
             })
             .collect();
-        let eyes = Bubble::EYES
-            .into_iter()
-            .map(|e| {
-                (
-                    eyes_name(e).to_string(),
-                    b.eyes == e,
-                    Box::new(move |s: &mut Shell| s.maker.eyes = e) as Box<dyn Fn(&mut Shell)>,
+        let lefts = Held::ALL
+            .iter()
+            .copied()
+            .map(|h| {
+                pick(
+                    h.name(),
+                    outfit.left == h,
+                    Box::new(move |s: &mut Shell| s.maker.1.left = h),
                 )
             })
             .collect();
-        let sways = Bubble::SWAYS
-            .into_iter()
-            .map(|w| {
-                (
-                    sway_name(w).to_string(),
-                    b.sway == w,
-                    Box::new(move |s: &mut Shell| s.maker.sway = w) as Box<dyn Fn(&mut Shell)>,
+        let rights = Tool::ALL
+            .iter()
+            .copied()
+            .map(|t| {
+                pick(
+                    t.name(),
+                    outfit.right == t,
+                    Box::new(move |s: &mut Shell| s.maker.1.right = t),
+                )
+            })
+            .collect();
+        let badges = Badge::ALL
+            .iter()
+            .copied()
+            .map(|b| {
+                pick(
+                    b.name(),
+                    outfit.badge == b,
+                    Box::new(move |s: &mut Shell| s.maker.1.badge = b),
                 )
             })
             .collect();
@@ -552,9 +580,11 @@ impl Shell {
             })
             .collect();
         let like = row("Works like", likes, "mk-like", cx);
-        let layouts = row("Bubbles", layouts, "mk-lay", cx);
-        let eyes = row("Eyes", eyes, "mk-eye", cx);
-        let sways = row("Motion", sways, "mk-sway", cx);
+        let kits = row("Kit", kits, "mk-kit", cx);
+        let hats = row("Head", hats, "mk-hat", cx);
+        let lefts = row("Left fin", lefts, "mk-left", cx);
+        let rights = row("Right fin", rights, "mk-right", cx);
+        let badges = row("Chest", badges, "mk-badge", cx);
         ui::card()
             .p(px(22.))
             .flex()
@@ -591,10 +621,10 @@ impl Shell {
                                     .min_w_0()
                                     .text_size(px(12.5))
                                     .text_color(c(ui::muted()))
-                                    .child("Pick a look, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
+                                    .child("Dress a Fin, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
                             .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
-                                this.maker = Bubble::from_seed(this.clock.elapsed().as_nanos() as u64);
+                                this.maker = surprise(this.clock.elapsed().as_nanos() as u64);
                                 cx.notify();
                             }))),
                     )
@@ -614,9 +644,11 @@ impl Shell {
                             )
                             .child(swatches),
                     )
-                    .child(layouts)
-                    .child(eyes)
-                    .child(sways)
+                    .child(kits)
+                    .child(hats)
+                    .child(lefts)
+                    .child(rights)
+                    .child(badges)
                     .child(like)
                     .child(
                         div()

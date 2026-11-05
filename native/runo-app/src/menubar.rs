@@ -297,7 +297,9 @@ pub(crate) fn to_foreground(cx: &mut App) {
         Some(window) => {
             let _ = window.update(cx, |_, window, _| window.activate_window());
         }
-        None => crate::open_main_window(cx),
+        None if std::env::var_os("RUNO_V1").is_some() => crate::open_main_window(cx),
+        // The Squad Code window: bring it forward, or open it if it was closed.
+        None => crate::v2::to_front(cx),
     }
 }
 

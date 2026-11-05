@@ -1264,14 +1264,17 @@ pub fn tighten_data_dir() {
     tighten(&dir, 1);
 }
 
-/// Folders 0700 and files 0600, `depth` levels down. Links are left alone: they may
-/// point anywhere.
+/// Folders 0700 and files 0600, `depth` levels down. A file that runs (the `squad`
+/// command in `bin`) stays runnable, by the person only: 0700. Links are left alone:
+/// they may point anywhere.
 #[cfg(unix)]
 fn tighten(dir: &Path, depth: u32) {
     use std::os::unix::fs::PermissionsExt;
     let set = |path: &Path, mode: u32| {
         if let Ok(meta) = std::fs::symlink_metadata(path) {
-            if !meta.file_type().is_symlink() && meta.permissions().mode() & 0o077 != 0 {
+            let now = meta.permissions().mode();
+            if !meta.file_type().is_symlink() && now & 0o077 != 0 {
+                let mode = mode | (now & 0o100);
                 let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
             }
         }
@@ -1752,11 +1755,16 @@ pub(crate) mod tests {
         open(&dir, 0o755).unwrap();
         open(&dir.join("settings.json"), 0o644).unwrap();
         open(&dir.join("approvals"), 0o755).unwrap();
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join("bin").join("squad"), "#!/bin/sh\n").unwrap();
+        open(&dir.join("bin").join("squad"), 0o755).unwrap();
         tighten(&dir, 1);
         assert_eq!(mode(&dir), 0o700);
         assert_eq!(mode(&dir.join("settings.json")), 0o600);
         assert_eq!(mode(&dir.join("approvals")), 0o700);
         assert_eq!(mode(&dir.join("approvals").join("1-1.json")), 0o600);
+        // The terminal's `squad` command still runs, for the person alone.
+        assert_eq!(mode(&dir.join("bin").join("squad")), 0o700);
         // New saves are private from the start.
         write_json(&dir.join("state.json"), &serde_json::json!({ "a": 1 }));
         assert_eq!(mode(&dir.join("state.json")), 0o600);
