@@ -28,19 +28,7 @@ fn ground() -> u32 {
 }
 
 /// How tall a place row is.
-const ROW_H: f32 = 30.;
-
-/// The short violet bar on the left edge of the row you're on.
-fn marker() -> Div {
-    div()
-        .absolute()
-        .left(px(-10.))
-        .top(px(8.))
-        .bottom(px(8.))
-        .w(px(3.))
-        .rounded_r(px(3.))
-        .bg(c(ui::RUNO))
-}
+const ROW_H: f32 = 38.;
 
 /// A row's look when it is the place you're on, or when it isn't.
 fn selectable(d: Stateful<Div>, on: bool) -> Stateful<Div> {
@@ -49,7 +37,6 @@ fn selectable(d: Stateful<Div>, on: bool) -> Stateful<Div> {
         d.bg(c(ui::bg()))
             .shadow(ui::chip())
             .text_color(c(ui::ink()))
-            .child(marker())
     } else {
         d.text_color(c(ui::body()))
             .hover(|s| s.bg(ca(ui::hover(), 0.7)).text_color(c(ui::ink())))
@@ -134,13 +121,14 @@ impl Shell {
             .id("side-search")
             .mt(px(10.))
             .mb(px(14.))
-            .h(px(32.))
-            .px(px(10.))
+            .h(px(34.))
+            .px(px(12.))
             .flex()
             .items_center()
             .gap(px(8.))
-            .rounded(px(8.))
+            .rounded_full()
             .bg(ca(ui::ink(), 0.035))
+            .shadow(ui::edge())
             .border_1()
             .border_color(c(ui::line2()))
             .text_size(px(13.))
@@ -156,27 +144,26 @@ impl Shell {
             }))
             .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx)));
 
-        let row = |id: &'static str, icon: IconName, label: &'static str, on: bool| {
+        // A place: its icon on a small tile in its own colour (the violet
+        // gradient when you're on it), and its name.
+        let row = |id: &'static str, icon: IconName, color: u32, label: &'static str, on: bool| {
             selectable(
                 div()
                     .id(id)
                     .relative()
                     .h(px(ROW_H))
-                    .px(px(8.))
+                    .pl(px(6.))
+                    .pr(px(10.))
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .rounded(px(7.))
-                    .text_size(px(13.))
+                    .rounded(px(11.))
+                    .text_size(px(13.5))
                     .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer(),
                 on,
             )
-            .child(Icon::new(icon).size(px(16.)).text_color(c(if on {
-                ui::t_violet()
-            } else {
-                ui::muted()
-            })))
+            .child(ui::tile(icon, color, 26., on))
             .child(div().flex_1().child(label))
         };
         // A count at the end of a row: amber when it is waiting on you, quiet
@@ -204,11 +191,12 @@ impl Shell {
         let nav = div()
             .flex()
             .flex_col()
-            .gap(px(1.))
+            .gap(px(3.))
             .child(
                 row(
                     "side-inbox",
                     IconName::Inbox,
+                    ui::AMBER,
                     "Needs you",
                     place == Place::Inbox,
                 )
@@ -219,6 +207,7 @@ impl Shell {
                 row(
                     "side-jobs",
                     IconName::LayoutDashboard,
+                    ui::VIOLET,
                     "Jobs",
                     matches!(
                         place,
@@ -236,6 +225,7 @@ impl Shell {
                 row(
                     "side-term",
                     IconName::SquareTerminal,
+                    ui::GREEN,
                     "Terminal",
                     self.term_open.is_some_and(super::term::is_project),
                 )
@@ -252,6 +242,7 @@ impl Shell {
                 row(
                     "side-usage",
                     IconName::ChartColumn,
+                    ui::BLUE,
                     "Usage",
                     place == Place::Usage,
                 )
@@ -531,6 +522,7 @@ impl Shell {
         let settings = row(
             "side-settings",
             IconName::Settings,
+            ui::GREY,
             "Settings",
             matches!(place, Place::Settings(_)),
         )

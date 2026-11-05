@@ -5,7 +5,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::store::{self, Job, Status};
-use super::ui::{self, c};
+use super::ui::{self, c, ca};
 use super::Shell;
 
 impl Shell {
@@ -46,10 +46,10 @@ impl Shell {
             .id("inbox-list")
             .flex_1()
             .overflow_y_scroll()
-            .p(px(8.))
+            .p(px(12.))
             .flex()
             .flex_col()
-            .gap(px(4.));
+            .gap(px(8.));
         for j in &jobs {
             let id = j.id;
             let on = id == pick;
@@ -60,18 +60,25 @@ impl Shell {
                     .id(("inbox", id as usize))
                     .flex()
                     .gap(px(12.))
-                    .p(px(12.))
-                    .rounded(px(10.))
+                    .p(px(14.))
+                    .rounded(px(14.))
                     .border_1()
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::panel()))
-                                .border_color(c(ui::line()))
-                                .shadow(ui::lift())
+                            // The one you're reading: lifted, with a violet ring.
+                            d.bg(c(ui::raised()))
+                                .border_color(ca(ui::RUNO, 0.55))
+                                .shadow({
+                                    let mut v = ui::glow(ui::RUNO, 18.);
+                                    v.extend(ui::edge());
+                                    v
+                                })
                         } else {
-                            d.border_color(gpui_kit::transparent_black())
-                                .hover(|s| s.bg(c(ui::hover())))
+                            d.bg(c(ui::panel()))
+                                .border_color(c(ui::line2()))
+                                .shadow(ui::edge())
+                                .hover(|s| s.border_color(c(ui::line_hi())))
                         }
                     })
                     .child(div().flex_none().child(face))
@@ -137,24 +144,22 @@ impl Shell {
             .flex()
             .flex_col()
             .border_r_1()
-            .border_color(c(ui::line()))
+            .border_color(c(ui::line2()))
             .child(
                 div()
                     .px(px(20.))
-                    .pt(px(20.))
-                    .pb(px(14.))
+                    .pt(px(22.))
+                    .pb(px(10.))
                     .flex()
                     .items_end()
                     .gap(px(10.))
-                    .border_b_1()
-                    .border_color(c(ui::line()))
                     .child(
                         div()
                             .flex_1()
                             .child(
                                 div()
-                                    .text_size(px(20.))
-                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_size(px(26.))
+                                    .font_weight(FontWeight::BOLD)
                                     .child("Needs you"),
                             )
                             .child(

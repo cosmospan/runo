@@ -56,7 +56,7 @@ fn full_name() -> Option<String> {
 }
 
 /// A mode tab's width: the bot's face and the word.
-const TAB: f32 = 76.;
+const TAB: f32 = 68.;
 
 fn greeting() -> String {
     use chrono::Timelike;
@@ -187,7 +187,6 @@ impl Shell {
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 26.);
-        let accent = target.accent();
         // The white highlight glides under the tabs as the mode changes.
         let x = self.mode_x();
         let mut modes = div()
@@ -196,8 +195,10 @@ impl Shell {
             .items_center()
             .p(px(3.))
             .gap(px(super::MODE_STEP - TAB))
-            .rounded(px(12.))
-            .bg(c(ui::raised()))
+            .rounded_full()
+            .bg(ca(ui::ink(), 0.04))
+            .border_1()
+            .border_color(c(ui::line2()))
             .child(
                 div()
                     .absolute()
@@ -205,9 +206,9 @@ impl Shell {
                     .left(px(3. + x))
                     .w(px(TAB))
                     .h(px(32.))
-                    .rounded(px(9.))
-                    .bg(c(ui::panel()))
-                    .shadow(ui::lift()),
+                    .rounded_full()
+                    .bg(ui::brand())
+                    .shadow(ui::glow(ui::RUNO, 10.)),
             );
         // Every kind of work. One nobody on the crew does yet is fainter, and a
         // job sent in it makes Fin offer the bot for it.
@@ -223,12 +224,12 @@ impl Shell {
                     .items_center()
                     .justify_center()
                     .gap(px(5.))
-                    .rounded(px(9.))
+                    .rounded_full()
                     .text_size(px(13.))
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
+                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(0xFFFFFF))
                         } else {
                             d.text_color(c(if staffed { ui::muted() } else { ui::faint() }))
                                 .hover(|s| s.text_color(c(ui::ink())))
@@ -357,15 +358,12 @@ impl Shell {
                             .size(px(38.))
                             .rounded_full()
                             // Dark once there is something to send.
-                            .bg(c(if ready { accent } else { ui::off() }))
-                            .when(ready, |d| {
-                                d.shadow(vec![BoxShadow {
-                                    color: ca(accent, 0.45),
-                                    offset: point(px(0.), px(6.)),
-                                    blur_radius: px(16.),
-                                    spread_radius: px(-2.),
-                                    inset: false,
-                                }])
+                            .map(|d| {
+                                if ready {
+                                    d.bg(ui::brand()).shadow(ui::glow(ui::RUNO, 16.))
+                                } else {
+                                    d.bg(c(ui::off()))
+                                }
                             })
                             .flex()
                             .items_center()
@@ -390,14 +388,20 @@ impl Shell {
             .w_full()
             .flex()
             .gap(px(18.))
-            .px(px(18.))
-            .pt(px(18.))
-            .pb(px(14.))
+            .px(px(20.))
+            .pt(px(20.))
+            .pb(px(16.))
             .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::line()))
-            .rounded(px(ui::CARD_R))
-            .shadow(ui::sheen())
+            .border_color(ca(ui::RUNO, 0.35))
+            .rounded(px(20.))
+            .shadow({
+                let mut v = ui::glow(ui::RUNO, 40.);
+                v[0].color = ca(ui::RUNO, if ui::theme().light { 0.10 } else { 0.16 });
+                v[0].offset = point(px(0.), px(10.));
+                v.extend(ui::sheen());
+                v
+            })
             .child(box_)
     }
 

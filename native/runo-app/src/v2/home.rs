@@ -8,6 +8,7 @@ use runo_holo::{Framing, Mood};
 use super::store::{self, Job, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
+use gpui_kit::assets::IconName;
 
 impl Shell {
     /// Running, needs you, done today and what today cost.
@@ -54,82 +55,37 @@ impl Shell {
                 a => format!("oldest {a}"),
             })
             .unwrap_or_else(|| "all clear".into());
-        let cell =
-            |dot: Option<u32>, label: &'static str, value: String, note: String, last: bool| {
-                div()
-                    .flex_1()
-                    .flex_basis(px(0.))
-                    .px(px(18.))
-                    .py(px(14.))
-                    .when(!last, |d| d.border_r_1().border_color(c(ui::line2())))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::muted()))
-                            .when_some(dot, |d, col| {
-                                d.child(div().size(px(7.)).rounded_full().bg(c(col)))
-                            })
-                            .child(label),
-                    )
-                    .child(
-                        div()
-                            .mt(px(4.))
-                            .flex()
-                            .items_baseline()
-                            .gap(px(8.))
-                            .child(
-                                div()
-                                    .text_size(px(22.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(value),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(c(ui::faint()))
-                                    .child(note),
-                            ),
-                    )
-            };
         div()
             .w_full()
             .flex()
-            .bg(c(ui::panel()))
-            .border_1()
-            .border_color(c(ui::line()))
-            .rounded(px(ui::CARD_R))
-            .shadow(ui::sheen())
-            .child(cell(
-                Some(ui::t_blue()),
+            .gap(px(12.))
+            .child(ui::stat(
+                IconName::Loader,
+                ui::BLUE,
                 "Running",
                 running.len().to_string(),
                 who,
-                false,
             ))
-            .child(cell(
-                Some(ui::t_amber()),
+            .child(ui::stat(
+                IconName::Inbox,
+                ui::AMBER,
                 "Needs you",
                 needs.len().to_string(),
                 oldest,
-                false,
             ))
-            .child(cell(
-                Some(ui::t_green()),
+            .child(ui::stat(
+                IconName::CircleCheck,
+                ui::GREEN,
                 "Done today",
                 done.to_string(),
                 format!("of {ended} finished"),
-                false,
             ))
-            .child(cell(
-                None,
+            .child(ui::stat(
+                IconName::ChartColumn,
+                ui::VIOLET,
                 "Spend today",
                 format!("${spend:.2}"),
                 "across engines".into(),
-                true,
             ))
     }
 
@@ -161,15 +117,9 @@ impl Shell {
             .take(8)
             .cloned()
             .collect();
-        let mut list = div()
-            .w_full()
-            .bg(c(ui::panel()))
-            .border_1()
-            .border_color(c(ui::line()))
-            .rounded(px(ui::CARD_R))
-            .shadow(ui::sheen())
-            .overflow_hidden()
-            .child(table_head(false));
+        // No table box: each group is a heading on the canvas over its own
+        // floating rows.
+        let mut list = div().w_full().flex().flex_col().gap(px(8.));
         for (key, label, color, rows, empty) in [
             (
                 0usize,
@@ -194,18 +144,15 @@ impl Shell {
             list = list.child(
                 div()
                     .id(("home-group", key))
-                    .h(px(34.))
-                    .px(px(14.))
+                    .when(key > 0, |d| d.mt(px(10.)))
+                    .h(px(30.))
+                    .px(px(4.))
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .bg(c(ui::raised()))
-                    .border_b_1()
-                    .border_color(c(ui::line2()))
-                    .text_size(px(12.5))
-                    .font_weight(FontWeight::MEDIUM)
+                    .text_size(px(13.5))
+                    .font_weight(FontWeight::SEMIBOLD)
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         div()
                             .w(px(10.))
@@ -213,11 +160,24 @@ impl Shell {
                             .text_size(px(10.))
                             .child(if shut { "\u{25b8}" } else { "\u{25be}" }),
                     )
-                    .child(div().size(px(8.)).rounded_full().bg(c(color)))
+                    .child(
+                        div()
+                            .size(px(8.))
+                            .rounded_full()
+                            .bg(c(color))
+                            .shadow(ui::glow(color, 6.)),
+                    )
                     .child(div().text_color(c(ui::ink())).child(label))
                     .child(
                         div()
-                            .text_color(c(ui::faint()))
+                            .h(px(20.))
+                            .px(px(7.))
+                            .flex()
+                            .items_center()
+                            .rounded_full()
+                            .bg(ca(color, 0.14))
+                            .text_size(px(11.))
+                            .text_color(c(ui::body()))
                             .child(rows.len().to_string()),
                     )
                     .when(key == 2, |d| {
@@ -244,9 +204,10 @@ impl Shell {
             if rows.is_empty() {
                 list = list.child(
                     div()
-                        .px(px(14.))
+                        .px(px(16.))
                         .py(px(16.))
-                        .border_b_1()
+                        .rounded(px(12.))
+                        .border_1()
                         .border_color(c(ui::line2()))
                         .text_size(px(13.))
                         .text_color(c(ui::faint()))
@@ -288,13 +249,13 @@ impl Shell {
 
     /// One row per job.
     pub(super) fn job_rows(&mut self, rows: &[Job], wide: bool, cx: &mut Context<Self>) -> Div {
-        let mut table = div().flex().flex_col();
+        let mut table = div().flex().flex_col().gap(px(6.));
         for j in rows {
             let running = j.status == Status::Running;
             let face = if running {
-                self.bot(j.bot, Mood::Working, 22., Framing::Bust)
+                self.bot(j.bot, Mood::Working, 26., Framing::Bust)
             } else {
-                self.avatar(j.bot, 22.)
+                self.avatar(j.bot, 26.)
             };
             let (word, tone) = status_of(j);
             let progress = j.progress();
@@ -330,16 +291,19 @@ impl Shell {
             table = table.child(
                 div()
                     .id(("home-row", id as usize))
-                    .h(px(50.))
-                    .px(px(14.))
+                    .h(px(58.))
+                    .px(px(16.))
                     .flex()
                     .items_center()
                     .gap(px(14.))
-                    .border_b_1()
+                    .rounded(px(12.))
+                    .bg(c(ui::panel()))
+                    .border_1()
                     .border_color(c(ui::line2()))
+                    .shadow(ui::edge())
                     .text_size(px(13.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
+                    .hover(|s| s.bg(c(ui::raised())).border_color(c(ui::line_hi())))
                     .child(
                         div()
                             .flex_1()
@@ -655,12 +619,17 @@ impl Shell {
             div()
                 .w(px(316.))
                 .flex_none()
-                .h_full()
+                // A floating card beside the page, not a strip glued to its edge.
+                .my(px(12.))
+                .mr(px(12.))
                 .flex()
                 .flex_col()
                 .bg(c(ui::panel()))
-                .border_l_1()
+                .border_1()
                 .border_color(c(ui::line()))
+                .rounded(px(18.))
+                .shadow(ui::sheen())
+                .overflow_hidden()
                 .child(
                     div()
                         .h(px(44.))
@@ -728,13 +697,11 @@ fn table_head(wide: bool) -> Div {
             .child(label)
     };
     div()
-        .h(px(34.))
-        .px(px(14.))
+        .h(px(30.))
+        .px(px(17.))
         .flex()
         .items_center()
         .gap(px(14.))
-        .border_b_1()
-        .border_color(c(ui::line2()))
         .text_size(px(11.5))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(ui::faint()))
@@ -772,7 +739,7 @@ pub(super) fn pill(word: &str, (text, fill, edge): (u32, u32, u32)) -> Div {
         .flex()
         .items_center()
         .gap(px(6.))
-        .rounded(px(6.))
+        .rounded_full()
         .bg(c(fill))
         .border_1()
         .border_color(c(edge))

@@ -19,6 +19,7 @@ pub const AMBER: u32 = 0xF59E0B;
 pub const BLUE: u32 = 0x3B82F6;
 pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
+pub const GREY: u32 = 0x9A9AA8;
 pub const MONO: &str = "JetBrains Mono";
 
 /// The spacing scale every screen keeps to, in pixels.
@@ -188,77 +189,188 @@ pub fn card() -> Div {
         .shadow(sheen())
 }
 
-/// A rounded outline button, like "Look first" or "Pause".
+/// A quiet round button, like "Look first" or "Pause": a faint glassy fill,
+/// a hairline ring and a lit top edge.
 pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(14.))
-        .h(px(32.))
+        .px(px(16.))
+        .h(px(34.))
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(8.))
-        .bg(c(raised()))
+        .gap(px(7.))
+        .rounded_full()
+        .bg(ca(ink(), 0.05))
         .border_1()
         .border_color(c(line()))
+        .shadow(edge())
         .text_size(px(13.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(ink()))
         .cursor_pointer()
-        .hover(|s| s.bg(c(hover())).border_color(c(line_hi())))
-        .active(|s| s.bg(c(press())))
+        .hover(|s| s.bg(ca(ink(), 0.09)).border_color(c(line_hi())))
+        .active(|s| s.bg(ca(ink(), 0.13)))
         .child(label.into())
 }
 
-/// The light primary button, like "Approve & open PR".
+/// The primary round button, like "Approve & open PR": Squad Code's violet
+/// gradient with a soft glow, the same in every theme.
 pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(16.))
-        .h(px(32.))
+        .px(px(18.))
+        .h(px(34.))
         .flex()
         .items_center()
         .justify_center()
         .gap(px(8.))
-        .rounded(px(8.))
-        .bg(c(fill()))
+        .rounded_full()
+        .bg(brand())
+        .border_1()
+        .border_color(ca(0xFFFFFF, 0.16))
+        .shadow(glow(RUNO, 14.))
         .text_size(px(13.))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(on_fill()))
+        .text_color(c(0xFFFFFF))
         .cursor_pointer()
-        .hover(|s| s.bg(c(fill_hover())))
-        .active(|s| s.bg(c(fill_press())))
+        .hover(|s| s.opacity(0.92))
+        .active(|s| s.opacity(0.8))
         .child(label.into())
 }
 
-/// A small rounded pill for filters and tabs; `on` is the selected one.
+/// A small round pill for filters and tabs; `on` is the selected one, tinted
+/// in the crew's violet.
 pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
-        .px(px(11.))
-        .h(px(28.))
+        .px(px(13.))
+        .h(px(30.))
         .flex()
         .items_center()
         .gap(px(6.))
-        .rounded(px(7.))
+        .rounded_full()
         .text_size(px(13.))
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
+        .border_1()
         .map(|d| {
             if on {
-                d.bg(c(hover()))
-                    .border_1()
-                    .border_color(c(line_hi()))
-                    .text_color(c(ink()))
+                d.bg(ca(RUNO, 0.18))
+                    .border_color(ca(RUNO, 0.5))
+                    .text_color(c(t_violet()))
             } else {
-                d.border_1()
-                    .border_color(c(line()))
+                d.bg(ca(ink(), 0.03))
+                    .border_color(c(line2()))
                     .text_color(c(body()))
-                    .hover(|s| s.bg(c(hover())).text_color(c(ink())))
-                    .active(|s| s.bg(c(press())))
+                    .hover(|s| s.bg(ca(ink(), 0.07)).text_color(c(ink())))
+                    .active(|s| s.bg(ca(ink(), 0.11)))
             }
         })
         .child(label.into())
+}
+
+/// Just the lit top edge, for small glassy controls.
+pub fn edge() -> Vec<BoxShadow> {
+    vec![BoxShadow {
+        color: ca(0xFFFFFF, if theme().light { 0.7 } else { 0.05 }),
+        offset: point(px(0.), px(1.)),
+        blur_radius: px(0.),
+        spread_radius: px(0.),
+        inset: true,
+    }]
+}
+
+/// A rounded tile holding an icon: tinted in `color`, or filled with the
+/// violet gradient when `on`.
+pub fn tile(icon: gpui_kit::assets::IconName, color: u32, size: f32, on: bool) -> Div {
+    div()
+        .size(px(size))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(size * 0.32))
+        .map(|d| {
+            if on {
+                d.bg(brand()).shadow(glow(RUNO, 10.))
+            } else {
+                d.bg(ca(color, 0.14))
+                    .border_1()
+                    .border_color(ca(color, 0.22))
+            }
+        })
+        .child(
+            gpui_kit::component::Icon::new(icon)
+                .size(px(size * 0.56))
+                .text_color(if on { c(0xFFFFFF) } else { c(color) }),
+        )
+}
+
+/// A stat tile, its own card: an icon tile in its colour, a label, the
+/// figure large, a note under it, and a soft wash of the colour from the top.
+pub fn stat(
+    icon: gpui_kit::assets::IconName,
+    color: u32,
+    label: &'static str,
+    value: String,
+    note: String,
+) -> Div {
+    div()
+        .flex_1()
+        .flex_basis(px(0.))
+        .min_w_0()
+        .relative()
+        .overflow_hidden()
+        .px(px(18.))
+        .py(px(16.))
+        .bg(c(panel()))
+        .border_1()
+        .border_color(c(line()))
+        .rounded(px(CARD_R))
+        .shadow(sheen())
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .h(px(90.))
+                .bg(linear_gradient(
+                    180.,
+                    linear_color_stop(ca(color, 0.10), 0.),
+                    linear_color_stop(ca(color, 0.), 1.),
+                )),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(tile(icon, color, 28., false))
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(muted()))
+                        .child(label),
+                ),
+        )
+        .child(
+            div()
+                .mt(px(14.))
+                .text_size(px(30.))
+                .font_weight(FontWeight::BOLD)
+                .child(value),
+        )
+        .child(
+            div()
+                .mt(px(2.))
+                .text_size(px(12.))
+                .text_color(c(faint()))
+                .truncate()
+                .child(note),
+        )
 }
 
 /// The small uppercase mono caption the design puts over and under things.

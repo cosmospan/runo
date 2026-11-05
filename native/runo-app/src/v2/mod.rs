@@ -564,7 +564,7 @@ fn doze_after() -> Duration {
 pub(super) const DOCK_ROOM: f32 = 16.;
 
 /// Width of one of Today's mode tabs plus the gap after it.
-const MODE_STEP: f32 = 78.;
+const MODE_STEP: f32 = 70.;
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
