@@ -12,6 +12,12 @@ All notable changes to Runo are documented here.
 - `squad do <words>` lets Fin pick the bot. `squad brain why|ideas|export|eval` shows where a job would go, the bot Fin would suggest, writes your finished jobs as training examples, and scores routing on a fixed test set.
 - `training/`: the fixed test set and the scripts to fine-tune Squad's own model from an open base model.
 
+- Themes. Settings has a new Appearance pane with seven themes, each with a live preview: Midnight (the original look), Graphite, Deep sea and Daylight, which are solid, and three frosted glass themes, Frost, Mist and Aurora, which let your desktop show through the window, blurred. A theme applies the moment you pick it and is remembered.
+
+### Fixed
+
+- Bot avatars show the whole bot. Guard's cap, shield and baton (and every other hat and prop) were cut off at the edge of the square, most visibly in the job inspector.
+
 ## [2.0.0-alpha.4] - 2026-11-03
 
 ### Added

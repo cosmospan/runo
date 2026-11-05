@@ -75,9 +75,9 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::HOVER))
+                            d.bg(c(ui::hover()))
                         } else {
-                            d.hover(|s| s.bg(c(ui::HOVER)))
+                            d.hover(|s| s.bg(c(ui::hover())))
                         }
                     })
                     .child(
@@ -92,13 +92,13 @@ impl Shell {
                             .font_weight(FontWeight::SEMIBOLD)
                             .map(|d| {
                                 if on {
-                                    d.bg(c(ui::FILL)).text_color(c(ui::ON_FILL))
+                                    d.bg(c(ui::fill())).text_color(c(ui::on_fill()))
                                 } else if done {
-                                    d.bg(ca(ui::GREEN, 0.16)).text_color(c(ui::T_GREEN))
+                                    d.bg(ca(ui::GREEN, 0.16)).text_color(c(ui::t_green()))
                                 } else {
                                     d.border_1()
-                                        .border_color(c(ui::LINE_HI))
-                                        .text_color(c(ui::MUTED))
+                                        .border_color(c(ui::line_hi()))
+                                        .text_color(c(ui::muted()))
                                 }
                             })
                             .child(if done {
@@ -114,13 +114,13 @@ impl Shell {
                                 div()
                                     .text_size(px(13.5))
                                     .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c(if on || done { ui::INK } else { ui::BODY }))
+                                    .text_color(c(if on || done { ui::ink() } else { ui::body() }))
                                     .child(name),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .truncate()
                                     .child(notes[i].clone()),
                             ),
@@ -148,9 +148,9 @@ impl Shell {
             .w(px(320.))
             .flex_none()
             .h_full()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_r_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .px(px(24.))
             .pt(px(if cfg!(target_os = "macos") { 48. } else { 28. }))
             .pb(px(24.))
@@ -167,14 +167,14 @@ impl Shell {
                         div()
                             .text_size(px(20.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .child("Welcome to Squad Code"),
                     )
                     .child(
                         div()
                             .text_size(px(13.))
                             .line_height(px(19.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child("Two quick checks, then you're on Jobs with a few ideas for a first job. Both can be changed later."),
                     ),
             )
@@ -184,9 +184,9 @@ impl Shell {
                 div()
                     .id("setup-skip")
                     .text_size(px(12.5))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::INK)))
+                    .hover(|s| s.text_color(c(ui::ink())))
                     .child("Skip setup and go to Jobs")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.finish_setup(cx);
@@ -262,10 +262,10 @@ impl Shell {
                     .h(px(34.))
                     .rounded_full()
                     .border_1()
-                    .border_color(c(if ok { 0x134733 } else { ui::LINE }))
-                    .bg(c(if ok { 0x0F251F } else { ui::PANEL }))
+                    .border_color(c(if ok { ui::ok_tone().2 } else { ui::line() }))
+                    .bg(c(if ok { ui::ok_tone().1 } else { ui::panel() }))
                     .text_size(px(13.))
-                    .text_color(c(if ok { ui::INK } else { ui::FAINT }))
+                    .text_color(c(if ok { ui::ink() } else { ui::faint() }))
                     .child(if ok { "✓" } else { "○" })
                     .child(p.name)
                     .when(!ok, |d| {
@@ -319,13 +319,13 @@ impl Shell {
                     .py(px(9.))
                     .rounded(px(12.))
                     .border_1()
-                    .border_color(c(if on { ui::INK } else { ui::LINE }))
-                    .bg(c(ui::PANEL))
+                    .border_color(c(if on { ui::ink() } else { ui::line() }))
+                    .bg(c(ui::panel()))
                     .cursor_pointer()
                     .child(
                         Icon::new(IconName::Folder)
                             .size(px(15.))
-                            .text_color(c(ui::MUTED)),
+                            .text_color(c(ui::muted())),
                     )
                     .child(
                         div()
@@ -340,7 +340,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(11.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .truncate()
                                     .child(f.path.clone()),
                             ),
@@ -397,7 +397,7 @@ fn card_with(hero: Img, title: &'static str, words: &'static str, body: impl Int
                     div()
                         .text_size(px(14.))
                         .line_height(px(21.))
-                        .text_color(c(ui::BODY))
+                        .text_color(c(ui::body()))
                         .child(words),
                 )
                 .child(div().mt(px(8.)).child(body)),
