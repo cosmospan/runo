@@ -103,8 +103,11 @@ step "Serve it on port 8088"
 if ! curl -s -m 2 http://127.0.0.1:8088/v1/models >/dev/null; then
   # Qwen3.5's template thinks by default, which fills the app's 160-token
   # answer before any JSON; the model was trained to answer straight away.
+  # One 4K slot: left alone it reserves 4 slots of the model's 262K context
+  # (3.3 GB); a routing question needs under 1K tokens (about 250 MB).
   nohup llama-server -m "$WORK/fin-q4_k_m.gguf" --port 8088 --alias fin \
     --chat-template-kwargs '{"enable_thinking":false}' \
+    -c 4096 -np 1 \
     > "$WORK/llama-server.log" 2>&1 &
   for _ in $(seq 1 30); do
     curl -s -m 2 http://127.0.0.1:8088/v1/models >/dev/null && break

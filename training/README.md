@@ -43,8 +43,9 @@ and scoring it. Re-running skips what's done; everything lands in `training/work
    `python convert_hf_to_gguf.py fin-lora/merged --outfile fin.gguf` then
    `llama-quantize fin.gguf fin-q4_k_m.gguf Q4_K_M` (about 0.5 GB for a 0.8B model).
 5. **Serve and score.**
-   `llama-server -m fin-q4_k_m.gguf --port 8088 --alias fin --chat-template-kwargs '{"enable_thinking":false}'`
-   (without it Qwen3.5 thinks first and runs out of room), set Smart Fin's model to
+   `llama-server -m fin-q4_k_m.gguf --port 8088 --alias fin --chat-template-kwargs '{"enable_thinking":false}' -c 4096 -np 1`
+   (without the first flag Qwen3.5 thinks first and runs out of room; `-c 4096 -np 1`
+   keeps it at about 250 MB instead of 3.3 GB), set Smart Fin's model to
    `fin` in settings (`brain_model`), then `SquadCode v2 brain eval`.
    Ship only if it beats the rules (51 of 53 today) and the last model.
 
