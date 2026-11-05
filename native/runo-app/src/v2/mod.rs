@@ -599,8 +599,9 @@ impl Shell {
         let maker_name = cx.new(|cx| InputState::new(window, cx).placeholder("Scout"));
         let maker_role =
             cx.new(|cx| InputState::new(window, cx).placeholder("Checks the docs match the code"));
-        let history_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search jobs, bots, folders…"));
+        let history_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
+        });
         let subs = vec![
             cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {

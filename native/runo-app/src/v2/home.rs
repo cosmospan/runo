@@ -536,20 +536,10 @@ impl Shell {
             }
             any = true;
             body = body.child(
-                div()
+                ui::heading(label, Some(color), Some(rows.len()))
                     .px(px(10.))
-                    .pt(px(12.))
-                    .pb(px(6.))
-                    .flex()
-                    .items_center()
-                    .gap(px(7.))
-                    .text_size(px(11.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::faint()))
-                    .child(div().size(px(6.)).rounded_full().bg(c(color)))
-                    .child(label.to_uppercase())
-                    .child(div().flex_1())
-                    .child(rows.len().to_string()),
+                    .pt(px(14.))
+                    .pb(px(6.)),
             );
             for j in &rows {
                 body = body.child(self.list_row(j, pick == Some(j.id), cx));

@@ -184,143 +184,146 @@ impl Shell {
                                     .text_color(c(ui::muted()))
                                     .child(meta.join(" · ")),
                             ),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .max_w(px(440.))
-                    .pt(px(16.))
-                    .flex()
-                    .flex_wrap()
-                    .justify_end()
-                    .gap(px(8.))
-                    .when(!self.trail.is_empty(), |d| {
-                        d.child(
-                            ui::ghost_i("back", IconName::ArrowLeft, "Back")
-                                .gap(px(6.))
-                                .tooltip(|window, cx| {
-                                    gpui_kit::component::tooltip::Tooltip::new("Back (⌘[)")
-                                        .build(window, cx)
-                                })
-                                .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
-                        )
-                    })
-                    .when(job.goal != 0, |d| {
-                        let gid = job.goal;
-                        let label = self
-                            .crew
-                            .store
-                            .goals
-                            .iter()
-                            .find(|g| g.id == gid)
-                            .and_then(|g| {
-                                let k = g.steps.iter().position(|s| s.job == job.id)?;
-                                Some(format!("Part {} of {}", k + 1, g.steps.len()))
-                            })
-                            .unwrap_or_else(|| "Goal".into());
-                        d.child(ui::ghost("to-goal", label).on_click(
-                            cx.listener(move |this, _, _, cx| this.go(Place::Goal(gid), cx)),
-                        ))
-                    })
-                    .map(|d| {
-                        let tries = if job.race == 0 {
-                            0
-                        } else {
-                            self.tries(job.race).len()
-                        };
-                        let id = job.id;
-                        if tries > 1 {
-                            let race = job.race;
-                            d.child(
-                                ui::ghost_i(
-                                    "compare",
-                                    IconName::Columns2,
-                                    format!("Compare {tries} tries"),
+                    )
+                    // The job's actions sit under its title, on the same edge.
+                    .child(
+                        div()
+                            .mt(px(16.))
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(8.))
+                            .when(!self.trail.is_empty(), |d| {
+                                d.child(
+                                    ui::ghost_i("back", IconName::ArrowLeft, "Back")
+                                        .gap(px(6.))
+                                        .tooltip(|window, cx| {
+                                            gpui_kit::component::tooltip::Tooltip::new("Back (⌘[)")
+                                                .build(window, cx)
+                                        })
+                                        .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
                                 )
-                                .on_click(
+                            })
+                            .when(job.goal != 0, |d| {
+                                let gid = job.goal;
+                                let label = self
+                                    .crew
+                                    .store
+                                    .goals
+                                    .iter()
+                                    .find(|g| g.id == gid)
+                                    .and_then(|g| {
+                                        let k = g.steps.iter().position(|s| s.job == job.id)?;
+                                        Some(format!("Part {} of {}", k + 1, g.steps.len()))
+                                    })
+                                    .unwrap_or_else(|| "Goal".into());
+                                d.child(ui::ghost("to-goal", label).on_click(
                                     cx.listener(move |this, _, _, cx| {
-                                        this.go(Place::Race(race), cx)
+                                        this.go(Place::Goal(gid), cx)
                                     }),
-                                ),
-                            )
-                        } else if job.mode.writes()
-                            && !job.worktree.is_empty()
-                            && matches!(job.status, Status::Running | Status::Review)
-                        {
-                            d.child(
-                                ui::ghost_i("race-it", IconName::Swords, "Race it")
-                                    .tooltip(|window, cx| {
-                                        gpui_kit::component::tooltip::Tooltip::new(
+                                ))
+                            })
+                            .map(|d| {
+                                let tries = if job.race == 0 {
+                                    0
+                                } else {
+                                    self.tries(job.race).len()
+                                };
+                                let id = job.id;
+                                if tries > 1 {
+                                    let race = job.race;
+                                    d.child(
+                                        ui::ghost_i(
+                                            "compare",
+                                            IconName::Columns2,
+                                            format!("Compare {tries} tries"),
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.go(Place::Race(race), cx)
+                                            }),
+                                        ),
+                                    )
+                                } else if job.mode.writes()
+                                    && !job.worktree.is_empty()
+                                    && matches!(job.status, Status::Running | Status::Review)
+                                {
+                                    d.child(
+                                        ui::ghost_i("race-it", IconName::Swords, "Race it")
+                                            .tooltip(|window, cx| {
+                                                gpui_kit::component::tooltip::Tooltip::new(
                                             "Try the same job on other engines and keep the best",
                                         )
                                         .build(window, cx)
-                                    })
-                                    .on_click(
-                                        cx.listener(move |this, _, _, cx| this.race_it(id, cx)),
-                                    ),
-                            )
-                        } else {
-                            d
-                        }
-                    })
-                    .when(job.status == Status::Review, |d| {
-                        let label = self.approve_label(job);
-                        d.child(self.approve_button("approve-top", job, label, cx))
-                    })
-                    .when(
-                        !running
-                            && super::trouble::trouble(job).is_none()
-                            && !matches!(
-                                job.status,
-                                Status::Done | Status::Review | Status::Shipped
-                            ),
-                        |d| {
-                            let id = job.id;
-                            d.child(
-                                ui::ghost_i("retry", IconName::RotateCcw, "Try again").on_click(
-                                    cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
-                                ),
-                            )
-                        },
-                    )
-                    .when(running, |d| {
-                        let id = job.id;
-                        d.child(
-                            ui::ghost_i("stop", IconName::CircleStop, "Stop")
-                                .text_color(c(ui::RED))
-                                .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
-                        )
-                    })
-                    .map(|d| {
-                        let id = job.id;
-                        let open = self.term_open == Some(id);
-                        d.child(
-                            ui::ghost_i(
-                                "terminal",
-                                IconName::SquareTerminal,
-                                if open { "Hide terminal" } else { "Terminal" },
-                            )
-                            .tooltip(|window, cx| {
-                                gpui_kit::component::tooltip::Tooltip::new(
-                                    "A shell in this job's own branch (⌃`)",
-                                )
-                                .build(window, cx)
+                                            })
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.race_it(id, cx)
+                                            })),
+                                    )
+                                } else {
+                                    d
+                                }
                             })
-                            .on_click(cx.listener(
-                                move |this, _, window, cx| this.toggle_term(id, window, cx),
-                            )),
-                        )
-                    })
-                    .when(!running, |d| {
-                        let path = job.folder.path.clone();
-                        d.child(
-                            ui::ghost_i("open-folder", IconName::FolderOpen, "Open folder")
-                                .on_click(cx.listener(move |_, _, _, cx| {
-                                    cx.reveal_path(std::path::Path::new(&path))
-                                })),
-                        )
-                    }),
+                            // Approving lives on the review card below, not up here.
+                            .when(
+                                !running
+                                    && super::trouble::trouble(job).is_none()
+                                    && !matches!(
+                                        job.status,
+                                        Status::Done | Status::Review | Status::Shipped
+                                    ),
+                                |d| {
+                                    let id = job.id;
+                                    d.child(
+                                        ui::ghost_i("retry", IconName::RotateCcw, "Try again")
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.retry_job(id, cx)
+                                            })),
+                                    )
+                                },
+                            )
+                            .when(running, |d| {
+                                let id = job.id;
+                                d.child(
+                                    ui::ghost_i("stop", IconName::CircleStop, "Stop")
+                                        .text_color(c(ui::RED))
+                                        .on_click(
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.stop_job(id, cx)
+                                            }),
+                                        ),
+                                )
+                            })
+                            .map(|d| {
+                                let id = job.id;
+                                let open = self.term_open == Some(id);
+                                d.child(
+                                    ui::ghost_i(
+                                        "terminal",
+                                        IconName::SquareTerminal,
+                                        if open { "Hide terminal" } else { "Terminal" },
+                                    )
+                                    .tooltip(|window, cx| {
+                                        gpui_kit::component::tooltip::Tooltip::new(
+                                            "A shell in this job's own branch (⌃`)",
+                                        )
+                                        .build(window, cx)
+                                    })
+                                    .on_click(cx.listener(
+                                        move |this, _, window, cx| this.toggle_term(id, window, cx),
+                                    )),
+                                )
+                            })
+                            .when(!running, |d| {
+                                let path = job.folder.path.clone();
+                                d.child(
+                                    ui::ghost_i("open-folder", IconName::FolderOpen, "Open folder")
+                                        .on_click(cx.listener(move |_, _, _, cx| {
+                                            cx.reveal_path(std::path::Path::new(&path))
+                                        })),
+                                )
+                            }),
+                    ),
             );
 
         // The feed: what the bot said, the steps it took, and what you added.
@@ -711,17 +714,16 @@ impl Shell {
             .border_l_1()
             .border_color(c(ui::line2()))
             .px(px(24.))
-            .pt(px(if cfg!(target_os = "macos") { 30. } else { 24. }))
+            .pt(px(if cfg!(target_os = "macos") { 16. } else { 4. }))
             .pb(px(24. + super::DOCK_ROOM))
             .flex()
             .flex_col()
-            .gap(px(26.))
-            .child(
-                ui::card()
-                    .p(px(18.))
+            .child(section(
+                "Status",
+                div()
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
+                    .gap(px(8.))
                     .child(ui::status(color, job.status.label()))
                     .child(
                         div()
@@ -760,7 +762,7 @@ impl Shell {
                                 ),
                             }),
                     ),
-            )
+            ))
             .child(section("Plan", plan))
             .child(section("Files changed", files))
             .when(has_more, |d| {
@@ -847,17 +849,17 @@ fn chip(icon: IconName, text: String) -> Div {
         .child(text)
 }
 
+/// One block of the side column: its heading, then its body, with a hairline
+/// under it to part it from the next.
 fn section(title: &str, body: Div) -> Div {
     div()
+        .py(px(20.))
+        .border_b_1()
+        .border_color(c(ui::line2()))
         .flex()
         .flex_col()
         .gap(px(12.))
-        .child(
-            div()
-                .text_size(px(13.5))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(title.to_string()),
-        )
+        .child(ui::heading(title, None, None))
         .child(body)
 }
 

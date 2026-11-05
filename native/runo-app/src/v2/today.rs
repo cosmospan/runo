@@ -89,11 +89,16 @@ impl Shell {
             .count();
         // The line under the greeting carries the folder picker in its words.
         let lead = match (&folder, running, today_done) {
-            (None, ..) => "Pick a folder to start:".to_string(),
-            (Some(_), 0, 0) => "What should we do in".to_string(),
-            (Some(_), 0, d) => format!("{d} {} done today. What next in", plural(d, "job", "jobs")),
+            (None, ..) => format!("{} Pick a folder to start:", greeting()),
+            (Some(_), 0, 0) => format!("{} What should we do in", greeting()),
+            (Some(_), 0, d) => format!(
+                "{} {d} {} done today. What next in",
+                greeting(),
+                plural(d, "job", "jobs")
+            ),
             (Some(_), r, _) => format!(
-                "{r} {} running. What else in",
+                "{} {r} {} running. What else in",
+                greeting(),
                 plural(r, "job is", "jobs are")
             ),
         };
@@ -122,24 +127,12 @@ impl Shell {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap(px(4.))
                     .child(
                         div()
-                            .flex()
-                            .items_baseline()
-                            .gap(px(10.))
-                            .child(
-                                div()
-                                    .text_size(px(24.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Jobs"),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .text_color(c(ui::faint()))
-                                    .child(greeting()),
-                            ),
+                            .text_size(px(24.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Jobs"),
                     )
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
@@ -153,11 +146,16 @@ impl Shell {
             ))
             .child(ui::rise(
                 div().w_full().child(if has_jobs {
+                    let goals = self.goals_strip(cx);
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(20.))
-                        .children(self.goals_strip(cx))
+                        .gap(px(12.))
+                        .when_some(goals, |d, (n, row)| {
+                            d.child(ui::heading("Goals", None, Some(n)).mt(px(8.)))
+                                .child(row)
+                        })
+                        .child(ui::heading("Today", None, None).mt(px(8.)))
                         .child(self.kpis())
                         .into_any_element()
                 } else {

@@ -380,7 +380,7 @@ impl Shell {
                             .text_color(c(ui::muted()))
                             .child(match j.status {
                                 Status::Review => {
-                                    "Approve to merge it, or open it to send it back."
+                                    "Approve it on the card above, or send it back with changes."
                                 }
                                 Status::Done => "Look it over, then mark it seen or ask for more.",
                                 _ => "Open the job to see where it stopped, or ask it to carry on.",
@@ -397,10 +397,6 @@ impl Shell {
                         )
                         .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
                     )
-                    .when(j.status == Status::Review, |d| {
-                        let label = self.approve_label(j);
-                        d.child(self.approve_button("inbox-approve", j, label, cx))
-                    })
                     .when(j.status != Status::Review, |d| {
                         d.child(
                             ui::solid_i("inbox-seen", IconName::Check, "Mark as seen").on_click(
@@ -514,7 +510,7 @@ impl Shell {
                         .border_1()
                         .border_color(c(ui::line()))
                         .child(
-                            gpui_kit::component::Icon::new(gpui_kit::assets::IconName::Search)
+                            gpui_kit::component::Icon::new(gpui_kit::assets::IconName::ListFilter)
                                 .size(px(14.))
                                 .text_color(c(ui::faint())),
                         )

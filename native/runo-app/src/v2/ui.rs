@@ -306,6 +306,24 @@ pub fn stat(
         )
 }
 
+/// A section's mark, the same on every screen: a small uppercase label, with
+/// an optional status dot before it and a count at the far end.
+pub fn heading(label: &str, dot: Option<u32>, count: Option<usize>) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(7.))
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(faint()))
+        .when_some(dot, |d, col| {
+            d.child(div().size(px(6.)).rounded_full().bg(c(col)))
+        })
+        .child(label.to_uppercase())
+        .child(div().flex_1())
+        .when_some(count, |d, n| d.child(n.to_string()))
+}
+
 /// The small uppercase mono caption the design puts over and under things.
 pub fn caption(text: impl Into<SharedString>) -> Div {
     div()

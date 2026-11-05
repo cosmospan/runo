@@ -346,11 +346,14 @@ impl Shell {
                     .text_color(c(ui::faint()))
                     .child("Or write below to send it back with changes."),
             )
-            .child(
-                ui::ghost_i(("discard", id as usize), IconName::Trash, "Discard")
-                    .text_color(c(ui::t_red()))
-                    .on_click(cx.listener(move |this, _, _, cx| this.discard_job(id, cx))),
-            );
+            // A clash card above already offers Discard; don't offer it twice.
+            .when(job.conflict.is_empty(), |d| {
+                d.child(
+                    ui::ghost_i(("discard", id as usize), IconName::Trash, "Discard")
+                        .text_color(c(ui::t_red()))
+                        .on_click(cx.listener(move |this, _, _, cx| this.discard_job(id, cx))),
+                )
+            });
 
         Some(
             div()
