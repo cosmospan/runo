@@ -15,11 +15,11 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::data::Member;
-use super::ui::{self, c, ca};
+use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The sidebar's width.
-pub(super) const WIDTH: f32 = 252.;
+pub(super) const WIDTH: f32 = 64.;
 
 /// The sidebar's ground, a shade darker than the page so the page reads as
 /// the thing in front.
@@ -27,517 +27,233 @@ fn ground() -> u32 {
     ui::ground()
 }
 
-/// How tall a place row is.
-const ROW_H: f32 = 32.;
-
-/// A row's look when it is the place you're on, or when it isn't.
-fn selectable(d: Stateful<Div>, on: bool) -> Stateful<Div> {
-    if on {
-        // Lifted out of the ground in the canvas's own colour, as if part of it.
-        d.bg(c(ui::bg()))
-            .shadow(ui::chip())
-            .text_color(c(ui::ink()))
-    } else {
-        d.text_color(c(ui::body()))
-            .hover(|s| s.bg(ca(ui::hover(), 0.7)).text_color(c(ui::ink())))
-    }
-}
-
 impl Shell {
     pub(super) fn sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let place = self.place;
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let jobs = self.crew.store.listed().len();
+        let working = self.crew.store.running().count();
         let folder = self.crew.store.folder().cloned();
+        let letter = folder
+            .as_ref()
+            .and_then(|f| f.name.chars().next())
+            .unwrap_or('S')
+            .to_uppercase()
+            .to_string();
+        let folder_name = folder
+            .as_ref()
+            .map(|f| format!("{} · {}", f.name, short_path(&f.path)))
+            .unwrap_or_else(|| "No folder yet".into());
 
-        // The folder you're working in, at the top: a tile with its
-        // first letter, its name and where it is.
-        let (name, path) = match &folder {
-            Some(f) => (f.name.clone(), short_path(&f.path)),
-            None => ("No folder".to_string(), "Pick one on Jobs".to_string()),
-        };
+        // The folder you're in, as a tile at the top of the rail.
         let head = div()
             .id("side-folder")
+            .size(px(36.))
+            .mb(px(14.))
             .flex()
             .items_center()
-            .gap(px(10.))
-            .px(px(6.))
-            .py(px(6.))
-            .rounded(px(9.))
+            .justify_center()
+            .rounded(px(10.))
+            .bg(c(ui::fill()))
+            .text_color(c(ui::on_fill()))
+            .text_size(px(15.))
+            .font_weight(FontWeight::BOLD)
+            .shadow(ui::lift())
             .cursor_pointer()
-            .hover(|s| s.bg(c(ui::hover())))
-            .child(
-                div()
-                    .size(px(30.))
-                    .flex_none()
-                    .rounded(px(8.))
-                    .bg(c(ui::raised()))
-                    .border_1()
-                    .border_color(c(ui::line()))
-                    .shadow(ui::edge())
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(14.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::ink()))
-                    .child(
-                        name.chars()
-                            .next()
-                            .unwrap_or('S')
-                            .to_uppercase()
-                            .to_string(),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .text_size(px(13.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::ink()))
-                            .truncate()
-                            .child(name),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c(ui::faint()))
-                            .truncate()
-                            .child(path),
-                    ),
-            )
-            .child(
-                Icon::new(IconName::ChevronsUpDown)
-                    .size(px(14.))
-                    .text_color(c(ui::faint())),
-            )
+            .hover(|s| s.opacity(0.9))
+            .child(letter)
+            .tooltip(move |window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new(folder_name.clone()).build(window, cx)
+            })
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx)));
 
-        // Search: the palette finds places, bots, jobs and folders.
-        let search = div()
-            .id("side-search")
-            .mt(px(10.))
-            .mb(px(14.))
-            .h(px(32.))
-            .px(px(10.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .rounded(px(8.))
-            .bg(c(ui::panel()))
-            .shadow(ui::edge())
-            .border_1()
-            .border_color(c(ui::line2()))
-            .text_size(px(13.))
-            .text_color(c(ui::faint()))
-            .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::line_hi())).text_color(c(ui::muted())))
-            .child(Icon::new(IconName::Search).size(px(14.)))
-            .child(div().flex_1().child("Search or run…"))
-            .child(kbd(if cfg!(target_os = "macos") {
-                "⌘K"
-            } else {
-                "Ctrl K"
-            }))
-            .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx)));
-
-        // A place: its icon and its name.
-        let row = |id: &'static str, icon: IconName, label: &'static str, on: bool| {
-            selectable(
-                div()
-                    .id(id)
-                    .relative()
-                    .h(px(ROW_H))
-                    .px(px(8.))
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .rounded(px(7.))
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .cursor_pointer(),
-                on,
-            )
-            .child(Icon::new(icon).size(px(16.)).text_color(c(if on {
-                ui::ink()
-            } else {
-                ui::muted()
-            })))
-            .child(div().flex_1().child(label))
-        };
-        // A count at the end of a row: amber when it is waiting on you, quiet
-        // otherwise.
-        let count = |n: usize, hot: bool| {
+        // One place: an icon in a rounded square, lit when you're on it, with
+        // an optional count badge on its corner.
+        let item = |id: &'static str,
+                    icon: IconName,
+                    tip: &'static str,
+                    on: bool,
+                    badge: Option<(usize, u32)>| {
             div()
-                .min_w(px(20.))
-                .h(px(18.))
-                .px(px(6.))
+                .id(id)
+                .relative()
+                .size(px(40.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded_full()
-                .text_size(px(11.))
-                .font_weight(FontWeight::SEMIBOLD)
+                .rounded(px(10.))
+                .cursor_pointer()
                 .map(|d| {
-                    if hot {
-                        d.bg(ca(ui::AMBER, 0.16)).text_color(c(ui::t_amber()))
+                    if on {
+                        d.bg(c(ui::bg()))
+                            .shadow(ui::chip())
+                            .text_color(c(ui::ink()))
+                            .child(
+                                div()
+                                    .absolute()
+                                    .left(px(-12.))
+                                    .top(px(10.))
+                                    .bottom(px(10.))
+                                    .w(px(3.))
+                                    .rounded_r(px(3.))
+                                    .bg(c(ui::ink())),
+                            )
                     } else {
-                        d.text_color(c(ui::faint()))
+                        d.text_color(c(ui::muted()))
+                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                     }
                 })
-                .child(n.min(999).to_string())
+                .child(Icon::new(icon).size(px(18.)))
+                .when_some(badge, |d, (n, color)| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .top(px(2.))
+                            .right(px(1.))
+                            .min_w(px(16.))
+                            .h(px(16.))
+                            .px(px(4.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_full()
+                            .bg(c(color))
+                            .border_2()
+                            .border_color(c(ground()))
+                            .text_size(px(9.5))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(c(0x0B0B0E))
+                            .child(n.min(99).to_string()),
+                    )
+                })
+                .tooltip(move |window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
+                })
         };
+        let jobs_on = matches!(
+            place,
+            Place::Today | Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_)
+        );
         let nav = div()
             .flex()
             .flex_col()
-            .gap(px(1.))
+            .items_center()
+            .gap(px(6.))
             .child(
-                row(
+                item(
+                    "side-jobs",
+                    IconName::LayoutDashboard,
+                    "Jobs",
+                    jobs_on,
+                    None,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
+            )
+            .child(
+                item(
                     "side-inbox",
                     IconName::Inbox,
                     "Needs you",
                     place == Place::Inbox,
+                    (inbox > 0).then_some((inbox, ui::AMBER)),
                 )
-                .when(inbox > 0, |d| d.child(count(inbox, true)))
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
             )
             .child(
-                row(
-                    "side-jobs",
-                    IconName::LayoutDashboard,
-                    "Jobs",
-                    matches!(
-                        place,
-                        Place::Today
-                            | Place::History
-                            | Place::Live(_)
-                            | Place::Race(_)
-                            | Place::Goal(_)
-                    ),
+                item(
+                    "side-crew",
+                    IconName::Users,
+                    "Crew",
+                    matches!(place, Place::Crew | Place::Chat(_)),
+                    (working > 0).then_some((working, ui::BLUE)),
                 )
-                .when(jobs > 0, |d| d.child(count(jobs, false)))
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             )
             .child(
-                row(
+                item(
                     "side-term",
                     IconName::SquareTerminal,
                     "Terminal",
                     self.term_open.is_some_and(super::term::is_project),
-                )
-                .child(
-                    div()
-                        .font_family(ui::MONO)
-                        .text_size(px(10.5))
-                        .text_color(c(ui::faint()))
-                        .child(super::term::KEY),
+                    None,
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
             )
             .child(
-                row(
+                item(
                     "side-usage",
                     IconName::ChartColumn,
                     "Usage",
                     place == Place::Usage,
+                    None,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
-        // The crew: every bot, what it's doing, and where clicking takes you.
-        let mut crew = div().flex().flex_col().gap(px(1.));
-        let (shown, more) = self.sidebar_crew();
-        let working = self.crew.store.running().count();
-        for who in shown {
-            let size = 28.;
-            let faces = self.faces.clone();
-            let face = div()
-                .relative()
-                .flex_none()
-                .child(self.side_bot(who, size))
-                // Notes where the bot is, so its eyes can follow the pointer.
-                .child(
-                    canvas(
-                        move |bounds, _, _| {
-                            faces.borrow_mut().insert(who, bounds);
-                        },
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                );
-            let busy = self
-                .crew
-                .store
-                .busy(who)
-                .map(|j| (j.id, j.title.clone(), j.progress()));
+        // The crew at work, as live faces stacked near the foot of the rail:
+        // each one opens its job (or its chat when it's free).
+        let (shown, _) = self.sidebar_crew();
+        let mut faces = div().flex().flex_col().items_center().gap(px(6.));
+        for who in shown.into_iter().take(5) {
+            let busy = self.crew.store.busy(who).map(|j| j.id);
             let asking = self
                 .crew
                 .store
                 .jobs
                 .iter()
                 .any(|j| j.bot == who && j.needs_you());
-            let (word, dot) = self.status_of(who);
-            let line = match &busy {
-                Some((_, title, _)) => title.clone(),
-                None if asking => "Needs you".to_string(),
-                None => capital(&word),
-            };
-            // How far along a working bot is, at the end of its name line.
-            let steps = busy
-                .as_ref()
-                .and_then(|(_, _, p)| p.map(|(d, n)| format!("{d}/{n}")));
-            let here = place == Place::Chat(who)
-                || matches!(place, Place::Live(id) if busy.as_ref().is_some_and(|b| b.0 == id));
-            let bar = busy.as_ref().map(|(id, _, p)| {
-                let to = p
-                    .map(|(d, n)| (d as f32 + 0.5) / n.max(1) as f32)
-                    .unwrap_or(0.0);
-                (p.is_some(), self.glide_bar(*id, to))
-            });
-            let to = busy
-                .as_ref()
-                .map(|b| Place::Live(b.0))
-                .unwrap_or(Place::Chat(who));
             let badge = if busy.is_some() {
                 Some(ui::BLUE)
             } else if asking {
                 Some(ui::AMBER)
-            } else if dot == ui::faint() {
-                None
             } else {
-                Some(dot)
+                None
             };
-            // The face, with its status as a small badge on its corner, cut
-            // out of the ground so it reads at a glance.
-            let avatar = div()
-                .relative()
-                .size(px(28.))
-                .flex_none()
-                .child(face)
-                .when_some(badge, |d, color| {
-                    d.child(
-                        div()
-                            .absolute()
-                            .right(px(-2.))
-                            .bottom(px(-1.))
-                            .size(px(10.))
-                            .rounded_full()
-                            .border_2()
-                            .border_color(c(if here { ui::bg() } else { ground() }))
-                            .bg(c(color)),
-                    )
-                });
-            crew = crew.child(
-                selectable(
-                    div()
-                        .id(("side-bot", who.key() as usize))
-                        .relative()
-                        .flex()
-                        .items_center()
-                        .gap(px(10.))
-                        .px(px(6.))
-                        .py(px(5.))
-                        .rounded(px(8.))
-                        .cursor_pointer(),
-                    here,
-                )
-                .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                    this.hover_bot(who, *on, cx);
-                }))
-                .child(avatar)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .text_size(px(13.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(c(ui::ink()))
-                                        .truncate()
-                                        .child(who.name()),
-                                )
-                                .when_some(steps, |d, s| {
-                                    d.child(
-                                        div()
-                                            .flex_none()
-                                            .font_family(ui::MONO)
-                                            .text_size(px(10.5))
-                                            .text_color(c(ui::t_blue()))
-                                            .child(s),
-                                    )
-                                })
-                                // Idle bots say so quietly on the same line,
-                                // so a big crew stays short.
-                                .when(busy.is_none() && !asking, |d| {
-                                    d.child(
-                                        div()
-                                            .flex_none()
-                                            .text_size(px(11.5))
-                                            .text_color(c(ui::faint()))
-                                            .child(line.clone()),
-                                    )
-                                }),
-                        )
-                        .when(busy.is_some() || asking, |d| {
-                            d.child(
-                                div()
-                                    .text_size(px(11.5))
-                                    .text_color(c(if asking && busy.is_none() {
-                                        ui::t_amber()
-                                    } else {
-                                        ui::muted()
-                                    }))
-                                    .truncate()
-                                    .child(line),
-                            )
-                        })
-                        .map(|d| match bar {
-                            Some((true, f)) => d.child(
-                                div()
-                                    .mt(px(5.))
-                                    .child(ui::bar(f, ui::BLUE).h(px(2.)).bg(c(ui::line2()))),
-                            ),
-                            Some((false, _)) => d.child(
-                                div()
-                                    .mt(px(5.))
-                                    .child(ui::sweep(ui::BLUE, 0.).h(px(2.)).bg(c(ui::line2()))),
-                            ),
-                            None => d,
-                        }),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| this.go(to, cx))),
-            );
-        }
-
-        // A section's heading: a quiet label, with room for more on the right.
-        let section = |label: &'static str| {
-            div()
-                .mt(px(22.))
-                .mb(px(6.))
-                .pl(px(8.))
-                .pr(px(2.))
-                .h(px(20.))
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .text_size(px(11.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(ui::faint()))
-                .child(div().flex_1().child(label))
-        };
-        let crew_head = section("Crew")
-            .when(working > 0, |d| {
-                d.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(5.))
-                        .text_size(px(11.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::t_blue()))
-                        .child(div().size(px(6.)).rounded_full().bg(c(ui::BLUE)))
-                        .child(format!("{working} working")),
-                )
-            })
-            .child(
+            let to = busy.map(Place::Live).unwrap_or(Place::Chat(who));
+            let name = who.name();
+            faces = faces.child(
                 div()
-                    .id("side-add")
-                    .size(px(22.))
-                    .rounded(px(6.))
+                    .id(("side-bot", who.key() as usize))
+                    .relative()
+                    .size(px(36.))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(c(ui::muted()))
+                    .rounded(px(10.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Add or make a bot")
-                            .build(window, cx)
+                    .hover(|s| s.bg(c(ui::hover())))
+                    .child(self.side_bot(who, 28.))
+                    .when_some(badge, |d, color| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .right(px(3.))
+                                .bottom(px(3.))
+                                .size(px(9.))
+                                .rounded_full()
+                                .border_2()
+                                .border_color(c(ground()))
+                                .bg(c(color)),
+                        )
                     })
-                    .child(Icon::new(IconName::Plus).size(px(14.)))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.maker_open = true;
-                        this.go(Place::Crew, cx)
-                    })),
+                    .tooltip(move |window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(name).build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(to, cx))),
             );
+        }
 
-        // Under the crew, one quiet row: the rest of the crew when some is
-        // folded away, or a way to add a bot when all of it is in view.
-        let crew_more = div()
-            .id("side-more")
-            .mt(px(2.))
-            .h(px(28.))
-            .px(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .rounded(px(7.))
-            .text_size(px(12.5))
-            .text_color(c(ui::faint()))
-            .cursor_pointer()
-            .hover(|s| s.bg(ca(ui::hover(), 0.7)).text_color(c(ui::body())))
-            .map(|d| {
-                if more > 0 {
-                    d.child(
-                        div()
-                            .w(px(28.))
-                            .flex()
-                            .justify_center()
-                            .child(Icon::new(IconName::Users).size(px(14.))),
-                    )
-                    .child(div().flex_1().child(format!("{more} more in the crew")))
-                    .child(Icon::new(IconName::ChevronRight).size(px(13.)))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx)))
-                } else {
-                    d.child(
-                        div()
-                            .w(px(28.))
-                            .flex()
-                            .justify_center()
-                            .child(Icon::new(IconName::Plus).size(px(14.))),
-                    )
-                    .child("Add a bot")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.maker_open = true;
-                        this.go(Place::Crew, cx)
-                    }))
-                }
-            });
-
-        // Settings.
-        let settings = row(
+        let settings = item(
             "side-settings",
             IconName::Settings,
             "Settings",
             matches!(place, Place::Settings(_)),
+            None,
         )
         .on_click(cx.listener(|this, _, _, cx| {
             let pane = this.settings_pane;
             this.go(Place::Settings(pane), cx)
         }));
-
-        let guide = self.getting_started(cx);
-        let foot = div()
-            .mt_auto()
-            .pt(px(14.))
-            .flex()
-            .flex_col()
-            .gap(px(6.))
-            .children(guide)
-            .child(settings);
 
         div()
             .id("sidebar")
@@ -546,19 +262,20 @@ impl Shell {
             .flex_none()
             .flex()
             .flex_col()
+            .items_center()
             // On a Mac the window buttons sit in the top-left corner.
-            .pt(px(if cfg!(target_os = "macos") { 40. } else { 12. }))
-            .pb(px(10.))
-            .px(px(10.))
-            // No ground of its own: it sits on the window's, beside the canvas.
-            .overflow_y_scroll()
+            .pt(px(if cfg!(target_os = "macos") { 40. } else { 14. }))
+            .pb(px(12.))
+            .bg(c(ground()))
+            .border_r_1()
+            .border_color(c(ui::line2()))
             .child(head)
-            .child(search)
             .child(nav)
-            .child(crew_head)
-            .child(crew)
-            .child(crew_more)
-            .child(foot)
+            .child(div().flex_1())
+            .child(div().w(px(28.)).h(px(1.)).mb(px(10.)).bg(c(ui::line())))
+            .child(faces)
+            .child(div().h(px(10.)))
+            .child(settings)
     }
 
     /// The top bar over every page: where you are, the engine, and a new job.
@@ -718,27 +435,6 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
             )
     }
-}
-
-/// A small keyboard hint, like ⌘K.
-fn kbd(text: &'static str) -> Div {
-    div()
-        .px(px(5.))
-        .rounded(px(4.))
-        .border_1()
-        .border_color(c(ui::line()))
-        .bg(c(ui::panel()))
-        .font_family(ui::MONO)
-        .text_size(px(10.5))
-        .text_color(c(ui::faint()))
-        .child(text)
-}
-
-fn capital(s: &str) -> String {
-    let mut c = s.chars();
-    c.next()
-        .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-        .unwrap_or_default()
 }
 
 /// A path with the home folder written as `~`.

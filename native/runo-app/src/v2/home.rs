@@ -84,132 +84,6 @@ impl Shell {
             ))
     }
 
-    /// Jobs grouped the way you act on them: what needs you, what's in
-    /// progress, and what finished lately.
-    pub(super) fn jobs_table(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let needs: Vec<Job> = self
-            .crew
-            .store
-            .listed()
-            .into_iter()
-            .filter(|j| j.needs_you())
-            .cloned()
-            .collect();
-        let going: Vec<Job> = self
-            .crew
-            .store
-            .listed()
-            .into_iter()
-            .filter(|j| !j.needs_you() && matches!(j.status, Status::Running | Status::Shipping))
-            .cloned()
-            .collect();
-        let done: Vec<Job> = self
-            .crew
-            .store
-            .listed()
-            .into_iter()
-            .filter(|j| !j.needs_you() && !matches!(j.status, Status::Running | Status::Shipping))
-            .take(8)
-            .cloned()
-            .collect();
-        // No table box: each group is a heading on the canvas over its own
-        // floating rows.
-        let mut list = div().w_full().flex().flex_col().gap(px(8.));
-        for (key, label, color, rows, empty) in [
-            (
-                0usize,
-                "Needs you",
-                ui::AMBER,
-                needs,
-                "Nothing is waiting on you.",
-            ),
-            (
-                1,
-                "In progress",
-                ui::BLUE,
-                going,
-                "Nothing is running. Describe a job above to start one.",
-            ),
-            (2, "Done", ui::GREEN, done, ""),
-        ] {
-            if rows.is_empty() && empty.is_empty() {
-                continue;
-            }
-            let shut = self.home_tab & (1 << key) != 0;
-            list = list.child(
-                div()
-                    .id(("home-group", key))
-                    .when(key > 0, |d| d.mt(px(10.)))
-                    .h(px(30.))
-                    .px(px(4.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .cursor_pointer()
-                    .child(
-                        div()
-                            .w(px(10.))
-                            .text_color(c(ui::faint()))
-                            .text_size(px(10.))
-                            .child(if shut { "\u{25b8}" } else { "\u{25be}" }),
-                    )
-                    .child(div().size(px(7.)).rounded_full().bg(c(color)))
-                    .child(div().text_color(c(ui::ink())).child(label))
-                    .child(
-                        div()
-                            .h(px(20.))
-                            .px(px(7.))
-                            .flex()
-                            .items_center()
-                            .rounded(px(5.))
-                            .bg(c(ui::raised()))
-                            .text_size(px(11.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::muted()))
-                            .child(rows.len().to_string()),
-                    )
-                    .when(key == 2, |d| {
-                        d.child(div().flex_1()).child(
-                            div()
-                                .id("home-all")
-                                .text_color(c(ui::muted()))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                                .child("All jobs \u{2192}")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.go(Place::History, cx)
-                                })),
-                        )
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.home_tab ^= 1 << key;
-                        cx.notify();
-                    })),
-            );
-            if shut {
-                continue;
-            }
-            if rows.is_empty() {
-                list = list.child(
-                    div()
-                        .px(px(16.))
-                        .py(px(16.))
-                        .rounded(px(12.))
-                        .border_1()
-                        .border_color(c(ui::line2()))
-                        .text_size(px(13.))
-                        .text_color(c(ui::faint()))
-                        .child(empty),
-                );
-            } else {
-                list = list.child(self.job_rows(&rows, false, cx));
-            }
-        }
-        list
-    }
-
     /// The jobs table's header and rows. `wide` adds engine, time and cost, for
     /// the Jobs page; on Home a click picks the row for the inspector.
     pub(super) fn job_table(
@@ -447,231 +321,6 @@ impl Shell {
                     .map(|j| j.id)
             })
     }
-
-    /// A panel down the right of Home: the picked job's bot, facts and plan.
-    pub(super) fn inspector(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let id = self.picked()?;
-        let j = self.crew.store.jobs.iter().find(|j| j.id == id)?.clone();
-        let running = j.status == Status::Running;
-        let face = self.bot(
-            j.bot,
-            if running { Mood::Working } else { Mood::Idle },
-            64.,
-            Framing::Bust,
-        );
-        let (word, tone) = status_of(&j);
-        let step = j
-            .progress()
-            .map(|(d, n)| format!("Step {} of {n}", (d + 1).min(n)));
-        let fact = |k: &'static str, v: AnyElement| {
-            div()
-                .flex()
-                .items_center()
-                .min_h(px(24.))
-                .text_size(px(12.5))
-                .child(
-                    div()
-                        .w(px(86.))
-                        .flex_none()
-                        .text_color(c(ui::faint()))
-                        .child(k),
-                )
-                .child(div().flex_1().min_w_0().truncate().child(v))
-        };
-        let text = |s: String| div().child(s).into_any_element();
-        let mut facts = div()
-            .px(px(18.))
-            .py(px(14.))
-            .flex()
-            .flex_col()
-            .gap(px(6.))
-            .border_b_1()
-            .border_color(c(ui::line()))
-            .child(fact(
-                "Status",
-                div()
-                    .flex()
-                    .child(pill(&step.filter(|_| running).unwrap_or(word), tone))
-                    .into_any_element(),
-            ))
-            .child(fact(
-                "Engine",
-                text(if j.engine.is_empty() {
-                    "—".into()
-                } else {
-                    j.engine.clone()
-                }),
-            ))
-            .child(fact("Folder", text(j.folder.name.clone())))
-            .child(fact("Started", text(store::ago(j.started))));
-        if !j.files.is_empty() {
-            facts = facts.child(fact(
-                "Files",
-                div()
-                    .font_family(ui::MONO)
-                    .text_size(px(11.5))
-                    .child(match j.files.len() {
-                        1 => j.files[0].clone(),
-                        n => format!("{} +{}", j.files[0], n - 1),
-                    })
-                    .into_any_element(),
-            ));
-        }
-        if let Some(cost) = cost(&j.summary) {
-            facts = facts.child(fact("Cost", text(format!("${cost:.2}"))));
-        }
-
-        let mut plan = div()
-            .px(px(18.))
-            .py(px(14.))
-            .flex()
-            .flex_col()
-            .gap(px(9.))
-            .child(
-                div()
-                    .text_size(px(11.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::faint()))
-                    .child("PLAN"),
-            );
-        if j.plan.is_empty() {
-            plan = plan.child(div().text_size(px(12.5)).text_color(c(ui::muted())).child(
-                match j.last_words() {
-                    Some(w) => w.lines().next().unwrap_or(w).to_string(),
-                    None => j.doing(),
-                },
-            ));
-        }
-        for (s, state) in &j.plan {
-            let mark = match state {
-                2 => div()
-                    .size(px(14.))
-                    .rounded_full()
-                    .bg(c(ui::GREEN))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(9.))
-                    .text_color(c(0xFFFFFF))
-                    .child("✓"),
-                1 => div()
-                    .size(px(14.))
-                    .rounded_full()
-                    .border_4()
-                    .border_color(c(j.bot.accent())),
-                _ => div()
-                    .size(px(14.))
-                    .rounded_full()
-                    .border_1()
-                    .border_color(c(ui::line_hi())),
-            };
-            plan = plan.child(
-                div()
-                    .flex()
-                    .items_start()
-                    .gap(px(9.))
-                    .text_size(px(12.5))
-                    .child(div().mt(px(1.)).flex_none().child(mark))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .map(|d| match state {
-                                1 => d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink())),
-                                2 => d.text_color(c(ui::body())),
-                                _ => d.text_color(c(ui::muted())),
-                            })
-                            .child(s.clone()),
-                    ),
-            );
-        }
-
-        let foot = div()
-            .p(px(14.))
-            .flex()
-            .gap(px(8.))
-            .border_t_1()
-            .border_color(c(ui::line()))
-            .child(
-                ui::ghost("insp-open", "Open job")
-                    .flex_1()
-                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
-            )
-            .when(running, |d| {
-                d.child(
-                    ui::ghost("insp-stop", "Stop")
-                        .flex_1()
-                        .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
-                )
-            });
-
-        Some(
-            div()
-                .w(px(316.))
-                .flex_none()
-                // A floating card beside the page, not a strip glued to its edge.
-                .my(px(12.))
-                .mr(px(12.))
-                .flex()
-                .flex_col()
-                .bg(c(ui::panel()))
-                .border_1()
-                .border_color(c(ui::line()))
-                .rounded(px(12.))
-                .shadow(ui::sheen())
-                .overflow_hidden()
-                .child(
-                    div()
-                        .h(px(44.))
-                        .px(px(18.))
-                        .flex()
-                        .items_center()
-                        .text_size(px(12.5))
-                        .text_color(c(ui::muted()))
-                        .child(format!("Job #{id}")),
-                )
-                .child(
-                    div()
-                        .px(px(18.))
-                        .pb(px(14.))
-                        .flex()
-                        .items_center()
-                        .gap(px(14.))
-                        .border_b_1()
-                        .border_color(c(ui::line()))
-                        .child(face)
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .child(
-                                    div()
-                                        .text_size(px(15.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .line_height(px(20.))
-                                        .child(j.title.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .mt(px(3.))
-                                        .text_size(px(12.))
-                                        .text_color(c(ui::muted()))
-                                        .child(j.bot.name()),
-                                ),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("insp-body")
-                        .flex_1()
-                        .overflow_y_scroll()
-                        .child(facts)
-                        .child(plan),
-                )
-                .child(foot)
-                .into_any_element(),
-        )
-    }
 }
 
 /// A job's status as a word and pill colours.
@@ -747,6 +396,326 @@ pub(super) fn cost(summary: &str) -> Option<f64> {
         .map(str::trim)
         .find_map(|p| p.strip_prefix('$'))
         .and_then(|v| v.parse().ok())
+}
+
+/// How wide the job list beside a job is.
+const LIST_W: f32 = 360.;
+
+impl Shell {
+    /// A page with the job list beside it: the split view every job page uses.
+    /// `pick` is the job open on the right, if any.
+    pub(super) fn split(
+        &mut self,
+        pick: Option<u64>,
+        detail: AnyElement,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let list = self.job_list(pick, cx);
+        div()
+            .size_full()
+            .flex()
+            .child(list)
+            .child(div().flex_1().min_w_0().h_full().child(detail))
+            .into_any_element()
+    }
+
+    /// The job list: filters, then what needs you, what's running and what
+    /// finished, one row per job with the bot's face.
+    fn job_list(&mut self, pick: Option<u64>, cx: &mut Context<Self>) -> impl IntoElement {
+        let all: Vec<Job> = self.crew.store.listed().into_iter().cloned().collect();
+        let running = |j: &Job| matches!(j.status, Status::Running | Status::Shipping);
+        let needs: Vec<Job> = all.iter().filter(|j| j.needs_you()).cloned().collect();
+        let going: Vec<Job> = all
+            .iter()
+            .filter(|j| !j.needs_you() && running(j))
+            .cloned()
+            .collect();
+        let done: Vec<Job> = all
+            .iter()
+            .filter(|j| !j.needs_you() && !running(j))
+            .cloned()
+            .collect();
+        let filter = self.list_filter;
+
+        let mut filters = div()
+            .flex()
+            .items_center()
+            .p(px(3.))
+            .gap(px(2.))
+            .rounded(px(9.))
+            .bg(c(ui::well()))
+            .border_1()
+            .border_color(c(ui::line2()));
+        for (i, label, n) in [
+            (0u8, "All", all.len()),
+            (1, "Needs you", needs.len()),
+            (2, "Running", going.len()),
+            (3, "Done", done.len()),
+        ] {
+            let on = filter == i;
+            filters = filters.child(
+                div()
+                    .id(("list-filter", i as usize))
+                    .flex_1()
+                    .h(px(26.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(5.))
+                    .rounded(px(6.))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .cursor_pointer()
+                    .map(|d| {
+                        if on {
+                            d.bg(c(ui::raised()))
+                                .shadow(ui::lift())
+                                .text_color(c(ui::ink()))
+                        } else {
+                            d.text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
+                        }
+                    })
+                    .child(label)
+                    .when(n > 0 && i > 0, |d| {
+                        d.child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(c(ui::faint()))
+                                .child(n.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.list_filter = i;
+                        cx.notify();
+                    })),
+            );
+        }
+
+        let head = div()
+            .flex_none()
+            .px(px(16.))
+            .pt(px(16.))
+            .pb(px(12.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .text_size(px(17.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Jobs"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(c(ui::faint()))
+                            .child(all.len().to_string()),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        ui::ghost("list-all", "All jobs")
+                            .h(px(28.))
+                            .text_size(px(12.))
+                            .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
+                    )
+                    .child(
+                        ui::solid("list-new", "New")
+                            .h(px(28.))
+                            .text_size(px(12.5))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.go(Place::Today, cx);
+                                this.composer.update(cx, |i, cx| i.focus(window, cx));
+                            })),
+                    ),
+            )
+            .child(filters);
+
+        let mut body = div()
+            .id("job-list")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px(px(8.))
+            .pb(px(16.))
+            .flex()
+            .flex_col()
+            .gap(px(2.));
+        let groups = [
+            (1u8, "Needs you", ui::AMBER, needs),
+            (2, "Running", ui::BLUE, going),
+            (3, "Done", ui::GREEN, done),
+        ];
+        let mut any = false;
+        for (key, label, color, rows) in groups {
+            if (filter != 0 && filter != key) || rows.is_empty() {
+                continue;
+            }
+            any = true;
+            body = body.child(
+                div()
+                    .px(px(10.))
+                    .pt(px(12.))
+                    .pb(px(6.))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::faint()))
+                    .child(div().size(px(6.)).rounded_full().bg(c(color)))
+                    .child(label.to_uppercase())
+                    .child(div().flex_1())
+                    .child(rows.len().to_string()),
+            );
+            for j in &rows {
+                body = body.child(self.list_row(j, pick == Some(j.id), cx));
+            }
+        }
+        if !any {
+            body = body.child(
+                div()
+                    .px(px(10.))
+                    .py(px(20.))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
+                    .child("Nothing here."),
+            );
+        }
+
+        div()
+            .w(px(LIST_W))
+            .flex_none()
+            .h_full()
+            .flex()
+            .flex_col()
+            .bg(c(ui::panel()))
+            .border_r_1()
+            .border_color(c(ui::line2()))
+            .child(head)
+            .child(body)
+    }
+
+    /// One job in the list: the bot's face, the title, its state, and a thin
+    /// progress line while it runs.
+    fn list_row(&mut self, j: &Job, on: bool, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = j.id;
+        let is_running = j.status == Status::Running;
+        let face = if is_running {
+            self.bot(j.bot, Mood::Working, 34., Framing::Bust)
+        } else {
+            self.avatar(j.bot, 34.)
+        };
+        let (word, tone) = status_of(j);
+        let frac = j.progress().map(|(d, n)| {
+            let f = d as f32 / n.max(1) as f32;
+            if is_running {
+                self.glide_bar(id, f)
+            } else {
+                f
+            }
+        });
+        let when = match store::ago(j.ended.unwrap_or(j.started)).as_str() {
+            "just now" => "now".to_string(),
+            a => a.to_string(),
+        };
+        let sub = if is_running {
+            j.doing()
+        } else {
+            format!("{} · #{}", j.bot.name(), id)
+        };
+        let accent = j.bot.accent();
+        div()
+            .id(("list-row", id as usize))
+            .relative()
+            .flex()
+            .gap(px(11.))
+            .px(px(10.))
+            .py(px(10.))
+            .rounded(px(10.))
+            .cursor_pointer()
+            .map(|d| {
+                if on {
+                    d.bg(c(ui::raised())).shadow(ui::chip()).child(
+                        div()
+                            .absolute()
+                            .left(px(-8.))
+                            .top(px(12.))
+                            .bottom(px(12.))
+                            .w(px(3.))
+                            .rounded_r(px(3.))
+                            .bg(c(accent)),
+                    )
+                } else {
+                    d.hover(|s| s.bg(c(ui::hover())))
+                }
+            })
+            .child(
+                div()
+                    .size(px(38.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(10.))
+                    .bg(ca(accent, 0.10))
+                    .border_1()
+                    .border_color(ca(accent, 0.22))
+                    .child(face),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(3.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::ink()))
+                                    .child(j.title.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::faint()))
+                                    .child(when),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .text_size(px(11.5))
+                            .text_color(c(ui::muted()))
+                            .child(div().size(px(6.)).flex_none().rounded_full().bg(c(tone.0)))
+                            .child(div().flex_none().text_color(c(tone.0)).child(word))
+                            .child(div().flex_none().text_color(c(ui::faint())).child("·"))
+                            .child(div().min_w_0().truncate().child(sub)),
+                    )
+                    .when_some(frac.filter(|_| is_running), |d, f| {
+                        d.child(div().mt(px(4.)).child(ui::bar(f, ui::BLUE).h(px(3.))))
+                    }),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
+    }
 }
 
 #[cfg(test)]

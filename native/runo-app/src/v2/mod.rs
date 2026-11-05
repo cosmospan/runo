@@ -431,8 +431,6 @@ pub struct Shell {
     maker_like: Member,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
-    /// Groups folded shut on Jobs, one bit each: needs you, in progress, done.
-    home_tab: u8,
     /// The bot maker is open on Crew.
     maker_open: bool,
     /// The engines popover over the status bar is open.
@@ -451,6 +449,8 @@ pub struct Shell {
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
+    /// Which jobs the list beside a job shows: all, needing you, running or done.
+    list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
     /// waiting for the person to add the bot Fin suggests.
@@ -764,7 +764,6 @@ impl Shell {
             hovered: None,
             target: None,
             setup_step: 0,
-            home_tab: 0,
             maker_open: false,
             usage_open: false,
             engine_sel: None,
@@ -775,6 +774,7 @@ impl Shell {
             engine_open: None,
             home_pick: None,
             inbox_pick: None,
+            list_filter: 0,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1770,7 +1770,10 @@ impl Render for Shell {
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
             Place::Today => self.today(cx),
-            Place::Live(id) => self.live(id, cx),
+            Place::Live(id) => {
+                let detail = self.live(id, cx);
+                self.split(Some(id), detail, cx)
+            }
             Place::Race(id) => self.race(id, cx),
             Place::Goal(id) => self.goal_page(id, cx),
             Place::Crew => self.crew(cx),
@@ -1915,18 +1918,7 @@ impl Render for Shell {
                     .flex_col()
                     // Full height on its own; as a canvas, it stretches between its margins.
                     .when(setup, |d| d.h_full())
-                    .when(!setup, |d| {
-                        d.my(px(ui::GAP))
-                            .mr(px(ui::GAP))
-                            .rounded(px(ui::CANVAS_R))
-                            .bg(c(ui::bg()))
-                            .border_1()
-                            .border_color(c(ui::line()))
-                            .shadow(ui::float())
-                            .overflow_hidden()
-                            .relative()
-                            .child(self.topbar(cx))
-                    })
+                    .when(!setup, |d| d.bg(c(ui::bg())).child(self.topbar(cx)))
                     .child(
                         div()
                             .flex_1()

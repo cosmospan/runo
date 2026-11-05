@@ -53,10 +53,6 @@ fn alpha(hex: u32) -> f32 {
     }
 }
 
-/// The gap around the page canvas, between it and the window's edge.
-pub const GAP: f32 = 8.;
-/// The page canvas's corner radius.
-pub const CANVAS_R: f32 = 12.;
 /// A card's corner radius.
 pub const CARD_R: f32 = 10.;
 
@@ -71,27 +67,6 @@ pub fn ground() -> u32 {
         (t.well, 0.3)
     };
     super::theme::mix(base & 0xff_ffff, 0x000000, k) | (base & 0xff00_0000)
-}
-
-/// The page canvas's shadow: a soft drop under it and a faint lit top edge.
-pub fn float() -> Vec<BoxShadow> {
-    let light = theme().light;
-    vec![
-        BoxShadow {
-            color: ca(0x000000, if light { 0.05 } else { 0.35 }),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(3.),
-            spread_radius: px(0.),
-            inset: false,
-        },
-        BoxShadow {
-            color: ca(0xFFFFFF, if light { 0.6 } else { 0.035 }),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(0.),
-            spread_radius: px(0.),
-            inset: true,
-        },
-    ]
 }
 
 /// A card's lit top edge and a soft shadow, so it reads as lifted.

@@ -144,6 +144,7 @@ impl Shell {
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
             ))
+            .children(self.getting_started(cx))
             .children(self.sample_banner(cx))
             .children(self.fin_offer(cx))
             .child(ui::rise(
@@ -158,28 +159,24 @@ impl Shell {
                         .gap(px(20.))
                         .children(self.goals_strip(cx))
                         .child(self.kpis())
-                        .child(self.jobs_table(cx))
                         .into_any_element()
                 } else {
                     self.start_here(cx)
                 }),
                 self.stagger(2),
             ));
-        let inspector = if has_jobs { self.inspector(cx) } else { None };
-        div()
+        let main = div()
+            .id("today")
             .size_full()
-            .flex()
-            .child(
-                div()
-                    .id("today")
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .overflow_y_scroll()
-                    .child(page),
-            )
-            .children(inspector)
-            .into_any_element()
+            .overflow_y_scroll()
+            .child(page)
+            .into_any_element();
+        // With jobs to show, the list sits beside the page, as on a job.
+        if has_jobs {
+            self.split(None, main, cx)
+        } else {
+            main
+        }
     }
 
     fn composer_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
