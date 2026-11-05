@@ -26,6 +26,7 @@ mod prefs;
 mod race;
 mod review;
 mod runtime;
+pub mod server;
 mod ship;
 mod sidebar;
 mod start;
