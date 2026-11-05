@@ -1753,7 +1753,8 @@ impl Render for Shell {
                             .overflow_hidden()
                             .child(div().size_full().child(body)),
                     )
-                    .when(!setup, |d| d.children(project_drawer)),
+                    .when(!setup, |d| d.children(project_drawer))
+                    .when(!setup, |d| d.child(self.statusbar(cx))),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

@@ -508,60 +508,6 @@ impl Shell {
                 }
             });
 
-        // The default engine, what it cost today and whether it's ready, on
-        // one line.
-        let st = cx.global::<crate::settings::AppSettings>();
-        let i = super::engine::index_of(st, "");
-        let ready = super::engine::ready(st, i);
-        let engine_name = crate::agent::PROVIDERS[i].name;
-        let today = store_today_cost(&self.crew.store);
-        let engine_card = div()
-            .id("side-engine")
-            .h(px(36.))
-            .px(px(10.))
-            .flex()
-            .items_center()
-            .gap(px(9.))
-            .rounded(px(8.))
-            .border_1()
-            .border_color(c(if ready { ui::LINE2 } else { 0x561A25 }))
-            .bg(if ready {
-                ca(0xFFFFFF, 0.025)
-            } else {
-                c(0x2B1219)
-            })
-            .text_size(px(12.5))
-            .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::LINE_HI)))
-            .child(
-                div()
-                    .size(px(8.))
-                    .flex_none()
-                    .rounded_full()
-                    .bg(c(if ready { ui::GREEN } else { ui::RED })),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::INK))
-                    .child(engine_name),
-            )
-            .child(
-                div()
-                    .flex_none()
-                    .text_size(px(11.5))
-                    .text_color(c(if ready { ui::MUTED } else { ui::T_RED }))
-                    .child(if ready {
-                        format!("${today:.2} today")
-                    } else {
-                        "not found".to_string()
-                    }),
-            )
-            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)));
-
         // Settings, with the classic app as a small button at its end.
         let classic = div()
             .id("side-v1")
@@ -603,7 +549,6 @@ impl Shell {
             .flex_col()
             .gap(px(6.))
             .children(guide)
-            .child(engine_card)
             .child(settings);
 
         div()
@@ -628,6 +573,65 @@ impl Shell {
             .child(crew)
             .child(crew_more)
             .child(foot)
+    }
+
+    /// The status bar along the bottom of the page: the default engine and
+    /// whether it's ready, and what the crew cost today.
+    /// Kept out of the sidebar so the sidebar is only places and the crew.
+    pub(super) fn statusbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let st = cx.global::<crate::settings::AppSettings>();
+        let i = super::engine::index_of(st, "");
+        let ready = super::engine::ready(st, i);
+        let engine_name = crate::agent::PROVIDERS[i].name;
+        let today = store_today_cost(&self.crew.store);
+        let item = |id: &'static str| {
+            div()
+                .id(id)
+                .h_full()
+                .px(px(8.))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .rounded(px(5.))
+                .cursor_pointer()
+                .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+        };
+        div()
+            .h(px(28.))
+            .flex_none()
+            .w_full()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .px(px(12.))
+            .py(px(3.))
+            .bg(c(ui::PANEL))
+            .border_t_1()
+            .border_color(c(ui::LINE))
+            .text_size(px(11.5))
+            .text_color(c(ui::MUTED))
+            .child(
+                item("status-engine")
+                    .child(div().size(px(7.)).rounded_full().bg(c(if ready {
+                        ui::GREEN
+                    } else {
+                        ui::RED
+                    })))
+                    .child(engine_name)
+                    .when(!ready, |d| {
+                        d.child(div().text_color(c(ui::T_RED)).child("not found"))
+                    })
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
+                    ),
+            )
+            .child(div().flex_1())
+            .child(
+                item("status-cost")
+                    .child(Icon::new(IconName::Coins).size(px(12.)))
+                    .child(format!("${today:.2} today"))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
+            )
     }
 
     /// The top bar over every page: where you are, the engine, and a new job.
