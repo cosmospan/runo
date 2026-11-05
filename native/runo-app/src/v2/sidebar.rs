@@ -13,7 +13,6 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::Framing;
 
 use super::data::Member;
 use super::ui::{self, c, ca};
@@ -258,8 +257,23 @@ impl Shell {
         let (shown, more) = self.sidebar_crew();
         let working = self.crew.store.running().count();
         for who in shown {
-            let mood = self.mood(who);
-            let face = self.bot(who, mood, 28., Framing::Bust);
+            let size = 28.;
+            let faces = self.faces.clone();
+            let face = div()
+                .relative()
+                .flex_none()
+                .child(self.side_bot(who, size))
+                // Notes where the bot is, so its eyes can follow the pointer.
+                .child(
+                    canvas(
+                        move |bounds, _, _| {
+                            faces.borrow_mut().insert(who, bounds);
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .size_full(),
+                );
             let busy = self
                 .crew
                 .store
@@ -507,34 +521,13 @@ impl Shell {
                 }
             });
 
-        // Settings, with the classic app as a small button at its end.
-        let classic = div()
-            .id("side-v1")
-            .size(px(24.))
-            .flex_none()
-            .rounded(px(6.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_color(c(ui::FAINT))
-            .cursor_pointer()
-            .hover(|s| s.bg(c(ui::PRESS)).text_color(c(ui::INK)))
-            .tooltip(|window, cx| {
-                gpui_kit::component::tooltip::Tooltip::new("Open the classic app").build(window, cx)
-            })
-            .child(Icon::new(IconName::PanelLeft).size(px(14.)))
-            .on_click(cx.listener(|_, _, _, cx| {
-                cx.stop_propagation();
-                cx.defer(crate::open_main_window)
-            }));
+        // Settings.
         let settings = row(
             "side-settings",
             IconName::Settings,
             "Settings",
             matches!(place, Place::Settings(_)),
         )
-        .pr(px(4.))
-        .child(classic)
         .on_click(cx.listener(|this, _, _, cx| {
             let pane = this.settings_pane;
             this.go(Place::Settings(pane), cx)

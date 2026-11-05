@@ -229,7 +229,7 @@ fn tokens(base: &Path) -> Vec<String> {
 
 /// 256 random bits as hex. Each `RandomState` is keyed from the OS's random source, so
 /// hashing with fresh ones gives unpredictable words without another dependency.
-fn new_token() -> String {
+pub(crate) fn new_token() -> String {
     use std::hash::{BuildHasher, Hasher};
     (0..4)
         .map(|i| {
@@ -257,7 +257,7 @@ fn same(a: &str, b: &str) -> bool {
 
 /// Whether `given` is one of the paired tokens. Every token is compared in full, with no
 /// early return, so timing says nothing about which one matched.
-fn allowed(given: &str, tokens: &[String]) -> bool {
+pub(crate) fn allowed(given: &str, tokens: &[String]) -> bool {
     tokens.iter().fold(false, |ok, t| same(given, t) | ok)
 }
 
@@ -299,7 +299,7 @@ pub fn bind_address(given: Option<&str>, everywhere: bool, addresses: &[IpAddr])
 
 /// This computer's IPv4 addresses, on every interface.
 #[cfg(unix)]
-fn addresses() -> Vec<IpAddr> {
+pub(crate) fn addresses() -> Vec<IpAddr> {
     let mut out = Vec::new();
     let mut list: *mut libc::ifaddrs = std::ptr::null_mut();
     // SAFETY: getifaddrs fills `list` with a linked list we only read, then free once.
@@ -326,7 +326,7 @@ fn addresses() -> Vec<IpAddr> {
 /// This computer's address on the route to Tailscale's own DNS server, which goes through
 /// Tailscale when it is up. Nothing is sent: connecting a UDP socket only picks the route.
 #[cfg(not(unix))]
-fn addresses() -> Vec<IpAddr> {
+pub(crate) fn addresses() -> Vec<IpAddr> {
     std::net::UdpSocket::bind("0.0.0.0:0")
         .and_then(|s| {
             s.connect("100.100.100.100:53")?;
@@ -337,7 +337,7 @@ fn addresses() -> Vec<IpAddr> {
 }
 
 /// The address a phone uses to reach a bridge listening on `bound`.
-fn reachable(bound: SocketAddr) -> String {
+pub(crate) fn reachable(bound: SocketAddr) -> String {
     let ip = if bound.ip().is_unspecified() {
         local_ip().unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST))
     } else {
@@ -524,7 +524,7 @@ pub fn pair_link(url: &str, token: &str) -> String {
 
 /// The link as a QR code drawn with half-block characters, two rows per line, in black on
 /// white whatever the terminal's colours, so phones can read it.
-fn qr(text: &str) -> String {
+pub(crate) fn qr(text: &str) -> String {
     use qrcode::render::unicode::Dense1x2;
     let Ok(code) = qrcode::QrCode::new(text) else {
         return String::new();
@@ -558,15 +558,15 @@ fn local_ip() -> Option<IpAddr> {
 
 /// One parsed HTTP request.
 #[derive(Debug, Default)]
-struct Http {
-    method: String,
-    path: String,
-    auth: String,
-    if_none_match: String,
-    body: Vec<u8>,
+pub(crate) struct Http {
+    pub(crate) method: String,
+    pub(crate) path: String,
+    pub(crate) auth: String,
+    pub(crate) if_none_match: String,
+    pub(crate) body: Vec<u8>,
 }
 
-fn read_request(stream: &mut impl Read) -> Option<Http> {
+pub(crate) fn read_request(stream: &mut impl Read) -> Option<Http> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
