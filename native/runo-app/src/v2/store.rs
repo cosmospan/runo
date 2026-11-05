@@ -36,6 +36,9 @@ pub struct Store {
     pub steps: Vec<Step>,
     /// The getting-started card was put away.
     pub guide_hidden: bool,
+    /// Bot ideas Fin already offered (`brain::ideas`), so each is offered once.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub offered: Vec<String>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,

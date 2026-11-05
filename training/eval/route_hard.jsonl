@@ -1,0 +1,120 @@
+{"text": "login keeps bouncing me back to the sign in page after i enter the code", "mode": "fix"}
+{"text": "npm run build dies with ERR_REQUIRE_ESM since this morning", "mode": "fix"}
+{"text": "the totals on the invoice page are off by a cent sometimes", "mode": "fix"}
+{"text": "dark mode toggle does nothing on safari", "mode": "fix"}
+{"text": "thread main panicked at src/parse.rs:41: called `Option::unwrap()` on a `None` value", "mode": "fix"}
+{"text": "uploads over 10mb just hang forever, no error", "mode": "fix"}
+{"text": "why is the cart empty after I refresh? it should keep the items, please sort it", "mode": "fix"}
+{"text": "push notifications stopped arriving on android 14", "mode": "fix"}
+{"text": "segfault in the image resize worker when the file is a gif", "mode": "fix"}
+{"text": "the date picker shows yesterday for people in australia", "mode": "fix"}
+{"text": "make the search stop returning duplicates", "mode": "fix"}
+{"text": "Traceback (most recent call last): File \"etl.py\", line 88 KeyError: 'customer_id'", "mode": "fix"}
+{"text": "our webhook handler returns 500 whenever stripe retries", "mode": "fix"}
+{"text": "scrolling the feed on iphone jumps back to the top randomly", "mode": "fix"}
+{"text": "memory keeps climbing in the websocket server until it gets OOM killed", "mode": "fix"}
+{"text": "cant log in with google anymore, says redirect_uri_mismatch", "mode": "fix"}
+{"text": "the csv export puts commas inside quotes wrong and excel breaks", "mode": "fix"}
+{"text": "game freezes for a second every time an enemy spawns", "mode": "fix"}
+{"text": "cargo build fails: error[E0277]: the trait bound `Foo: Send` is not satisfied", "mode": "fix"}
+{"text": "emails go out twice when someone resets their password", "mode": "fix"}
+{"text": "add a way for people to invite teammates by email", "mode": "build"}
+{"text": "we need an endpoint that returns the last 30 days of orders as json", "mode": "build"}
+{"text": "make a settings page where users can change their avatar", "mode": "build"}
+{"text": "can you add keyboard shortcuts for next and previous chapter", "mode": "build"}
+{"text": "create a cli command that backs up the database to s3", "mode": "build"}
+{"text": "i want a leaderboard screen in the game with weekly resets", "mode": "build"}
+{"text": "add stripe checkout for the pro plan", "mode": "build"}
+{"text": "build a small admin dashboard showing signups per day", "mode": "build"}
+{"text": "let users export their notes as markdown", "mode": "build"}
+{"text": "add a dark theme", "mode": "build"}
+{"text": "support uploading pdfs in the chat and show a preview", "mode": "build"}
+{"text": "write a slack bot that posts the deploy status", "mode": "build"}
+{"text": "new onboarding flow with three steps: name, team, first project", "mode": "build"}
+{"text": "implement password reset via magic link", "mode": "build"}
+{"text": "add pagination to the /api/products endpoint", "mode": "build"}
+{"text": "give the swift app a widget that shows today's tasks", "mode": "build"}
+{"text": "could we have a public status page", "mode": "build"}
+{"text": "add rate limiting to the public api, 100 requests a minute per key", "mode": "build"}
+{"text": "make a go service that resizes images from a queue", "mode": "build"}
+{"text": "add an undo button after deleting a message", "mode": "build"}
+{"text": "how does the auth middleware decide who's an admin", "mode": "ask"}
+{"text": "where do we store user uploads", "mode": "ask"}
+{"text": "what's the difference between the two config files in the root", "mode": "ask"}
+{"text": "explain what this regex in validators.py is doing", "mode": "ask"}
+{"text": "is there any place we call the payments api without retries?", "mode": "ask"}
+{"text": "who calls the sync_users function", "mode": "ask"}
+{"text": "why do we use redis here instead of postgres", "mode": "ask"}
+{"text": "walk me through how a request gets from the router to the db", "mode": "ask"}
+{"text": "what does the --force flag on deploy actually do", "mode": "ask"}
+{"text": "which version of react are we on", "mode": "ask"}
+{"text": "can you tell me how the caching layer works", "mode": "ask"}
+{"text": "what happens when two people edit the same doc at once", "mode": "ask"}
+{"text": "how are migrations run in production", "mode": "ask"}
+{"text": "what's this repo even for", "mode": "ask"}
+{"text": "remind me how to run the app locally", "mode": "ask"}
+{"text": "does the mobile app talk to the same api as web?", "mode": "ask"}
+{"text": "what would it take to support multiple languages, just roughly", "mode": "ask"}
+{"text": "how many places read the FEATURE_FLAGS env var", "mode": "ask"}
+{"text": "is the websocket code used anywhere still", "mode": "ask"}
+{"text": "summarize what changed in the billing module this month", "mode": "ask"}
+{"text": "look over my branch before I open the pr", "mode": "review"}
+{"text": "can you check this diff for security problems", "mode": "review"}
+{"text": "review the changes in src/auth for anything risky", "mode": "review"}
+{"text": "is this migration safe to run on a big table?", "mode": "review"}
+{"text": "sanity check my pr, especially the error handling", "mode": "review"}
+{"text": "go through the last three commits and tell me what could break", "mode": "review"}
+{"text": "audit how we handle secrets in the ci config", "mode": "review"}
+{"text": "give me a second opinion on this refactor before merge", "mode": "review"}
+{"text": "check the new endpoint for sql injection", "mode": "review"}
+{"text": "does this change break backwards compatibility for api clients", "mode": "review"}
+{"text": "review pr 412 please", "mode": "review"}
+{"text": "look for race conditions in the job queue changes", "mode": "review"}
+{"text": "anything wrong with how i'm using useEffect here? don't change it, just tell me", "mode": "review"}
+{"text": "check that nothing in this patch logs personal data", "mode": "review"}
+{"text": "before we ship, read through the payment changes", "mode": "review"}
+{"text": "is my dockerfile doing anything dangerous", "mode": "review"}
+{"text": "spot check the permissions logic i added", "mode": "review"}
+{"text": "critique the schema i drafted for the events table", "mode": "review"}
+{"text": "look at the open pr and flag risky parts", "mode": "review"}
+{"text": "make sure the new code follows our rules in CONTRIBUTING", "mode": "review"}
+{"text": "write tests for the discount calculator", "mode": "test"}
+{"text": "kick off the whole suite and report the red ones", "mode": "test"}
+{"text": "add a unit test for the date parsing edge cases", "mode": "test"}
+{"text": "try signing up for real in the browser and see if it works", "mode": "test"}
+{"text": "we have no tests for the payments webhook, add some", "mode": "test"}
+{"text": "add an integration test for the export endpoint", "mode": "test"}
+{"text": "run the e2e tests on the checkout flow", "mode": "test"}
+{"text": "can you check the app still works on a small phone screen by actually trying it", "mode": "test"}
+{"text": "write property based tests for the tokenizer", "mode": "test"}
+{"text": "increase coverage on the auth module", "mode": "test"}
+{"text": "add a regression test for the bug we fixed yesterday", "mode": "test"}
+{"text": "smoke test the cli commands after the upgrade", "mode": "test"}
+{"text": "make a test that proves the cache expires after an hour", "mode": "test"}
+{"text": "run pytest -k billing", "mode": "test"}
+{"text": "add snapshot tests for the email templates", "mode": "test"}
+{"text": "test the api with a few bad inputs and see what comes back", "mode": "test"}
+{"text": "write a load test for the search endpoint", "mode": "test"}
+{"text": "do the go tests pass on this branch?", "mode": "test"}
+{"text": "click through the onboarding and tell me if anything is off", "mode": "test"}
+{"text": "add tests around the retry logic", "mode": "test"}
+{"text": "rename userData to profile everywhere", "mode": "tidy"}
+{"text": "bump all the dependencies to latest minor versions", "mode": "tidy"}
+{"text": "split the 2000 line utils file into smaller modules", "mode": "tidy"}
+{"text": "remove the old feature flags we don't use anymore", "mode": "tidy"}
+{"text": "silence the eslint warnings by actually fixing them", "mode": "tidy"}
+{"text": "delete dead code in the legacy folder", "mode": "tidy"}
+{"text": "move the api client into its own package", "mode": "tidy"}
+{"text": "upgrade from python 3.9 to 3.12", "mode": "tidy"}
+{"text": "the payment test is flaky, make it stable", "mode": "tidy"}
+{"text": "clean up the imports and run the formatter", "mode": "tidy"}
+{"text": "replace moment with date-fns", "mode": "tidy"}
+{"text": "convert the remaining js files to typescript", "mode": "tidy"}
+{"text": "pull the duplicated validation into one helper", "mode": "tidy"}
+{"text": "get rid of the console.logs before release", "mode": "tidy"}
+{"text": "update the readme so the setup steps are current", "mode": "tidy"}
+{"text": "migrate the swift code from completion handlers to async await", "mode": "tidy"}
+{"text": "drop support for node 16 and clean up the polyfills", "mode": "tidy"}
+{"text": "rename the repo folders to kebab case", "mode": "tidy"}
+{"text": "simplify the giant switch in reducer.ts", "mode": "tidy"}
+{"text": "upgrade tokio to 1.40 and fix whatever breaks", "mode": "tidy"}
