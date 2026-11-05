@@ -9,13 +9,6 @@ use super::store::{self, Job, Status};
 use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
-/// Status colours: text, fill and edge of a pill.
-const RUN: (u32, u32, u32) = (ui::T_BLUE, 0x131C2F, 0x1C325A);
-const ASK: (u32, u32, u32) = (ui::T_AMBER, 0x2B2010, 0x573B0F);
-const OK: (u32, u32, u32) = (ui::T_GREEN, 0x0F251F, 0x134733);
-const BAD: (u32, u32, u32) = (ui::T_RED, 0x2B1219, 0x561A25);
-const GREY: (u32, u32, u32) = (ui::BODY, 0x1E1E26, 0x2A2A33);
-
 impl Shell {
     /// Running, needs you, done today and what today cost.
     pub(super) fn kpis(&mut self) -> impl IntoElement {
@@ -68,7 +61,7 @@ impl Shell {
                     .flex_basis(px(0.))
                     .px(px(18.))
                     .py(px(14.))
-                    .when(!last, |d| d.border_r_1().border_color(c(ui::LINE2)))
+                    .when(!last, |d| d.border_r_1().border_color(c(ui::line2())))
                     .child(
                         div()
                             .flex()
@@ -76,7 +69,7 @@ impl Shell {
                             .gap(px(6.))
                             .text_size(px(12.))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .when_some(dot, |d, col| {
                                 d.child(div().size(px(7.)).rounded_full().bg(c(col)))
                             })
@@ -97,7 +90,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child(note),
                             ),
                     )
@@ -105,26 +98,26 @@ impl Shell {
         div()
             .w_full()
             .flex()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .child(cell(
-                Some(RUN.0),
+                Some(ui::t_blue()),
                 "Running",
                 running.len().to_string(),
                 who,
                 false,
             ))
             .child(cell(
-                Some(ui::T_AMBER),
+                Some(ui::t_amber()),
                 "Needs you",
                 needs.len().to_string(),
                 oldest,
                 false,
             ))
             .child(cell(
-                Some(ui::T_GREEN),
+                Some(ui::t_green()),
                 "Done today",
                 done.to_string(),
                 format!("of {ended} finished"),
@@ -169,9 +162,9 @@ impl Shell {
             .collect();
         let mut list = div()
             .w_full()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .overflow_hidden()
             .child(table_head(false));
@@ -204,29 +197,33 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .bg(c(ui::RAISED))
+                    .bg(c(ui::raised()))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(12.5))
                     .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         div()
                             .w(px(10.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .text_size(px(10.))
                             .child(if shut { "\u{25b8}" } else { "\u{25be}" }),
                     )
                     .child(div().size(px(8.)).rounded_full().bg(c(color)))
-                    .child(div().text_color(c(ui::INK)).child(label))
-                    .child(div().text_color(c(ui::FAINT)).child(rows.len().to_string()))
+                    .child(div().text_color(c(ui::ink())).child(label))
+                    .child(
+                        div()
+                            .text_color(c(ui::faint()))
+                            .child(rows.len().to_string()),
+                    )
                     .when(key == 2, |d| {
                         d.child(div().flex_1()).child(
                             div()
                                 .id("home-all")
-                                .text_color(c(ui::MUTED))
-                                .hover(|s| s.text_color(c(ui::INK)))
+                                .text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
                                 .child("All jobs \u{2192}")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     cx.stop_propagation();
@@ -248,9 +245,9 @@ impl Shell {
                         .px(px(14.))
                         .py(px(16.))
                         .border_b_1()
-                        .border_color(c(ui::LINE2))
+                        .border_color(c(ui::line2()))
                         .text_size(px(13.))
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(empty),
                 );
             } else {
@@ -276,7 +273,7 @@ impl Shell {
                     .px(px(14.))
                     .py(px(22.))
                     .text_size(px(13.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child(match tab {
                         0 => "Nothing is running. Describe a job above to start one.",
                         1 => "Nothing is waiting on you.",
@@ -337,10 +334,10 @@ impl Shell {
                     .items_center()
                     .gap(px(14.))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(13.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         div()
                             .flex_1()
@@ -355,7 +352,7 @@ impl Shell {
                                 div()
                                     .mt(px(2.))
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .truncate()
                                     .child(sub),
                             ),
@@ -385,7 +382,7 @@ impl Shell {
                             .items_center()
                             .gap(px(8.))
                             .text_size(px(12.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .map(|d| match (frac, progress) {
                                 (Some(f), Some((done, n))) => d
                                     .child(div().w(px(64.)).child(ui::bar(f, tone.0).h(px(3.))))
@@ -393,7 +390,7 @@ impl Shell {
                                 _ if running => {
                                     d.child(div().w(px(64.)).child(ui::sweep(tone.0, 0.).h(px(3.))))
                                 }
-                                _ => d.text_color(c(ui::FAINT)).child("—"),
+                                _ => d.text_color(c(ui::faint())).child("—"),
                             }),
                     )
                     .when(wide, |d| {
@@ -404,7 +401,7 @@ impl Shell {
                                 .flex_none()
                                 .truncate()
                                 .text_size(px(12.))
-                                .text_color(c(ui::MUTED))
+                                .text_color(c(ui::muted()))
                                 .child(j.engine.split(" · ").next().unwrap_or("—").to_string()),
                         )
                         .child(
@@ -415,7 +412,7 @@ impl Shell {
                                 .justify_end()
                                 .font_family(ui::MONO)
                                 .text_size(px(11.5))
-                                .text_color(c(ui::MUTED))
+                                .text_color(c(ui::muted()))
                                 .child(if secs == 0 {
                                     "—".to_string()
                                 } else if secs >= 60 {
@@ -446,7 +443,7 @@ impl Shell {
                             .justify_end()
                             .font_family(ui::MONO)
                             .text_size(px(11.5))
-                            .text_color(c(if files == 0 { ui::FAINT } else { ui::INK }))
+                            .text_color(c(if files == 0 { ui::faint() } else { ui::ink() }))
                             .child(if files == 0 {
                                 "—".to_string()
                             } else {
@@ -459,7 +456,7 @@ impl Shell {
                             .flex_none()
                             .flex()
                             .justify_end()
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(when),
                     )
                     .when(!wide && self.picked() == Some(id), |d| {
@@ -520,7 +517,7 @@ impl Shell {
                     div()
                         .w(px(86.))
                         .flex_none()
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(k),
                 )
                 .child(div().flex_1().min_w_0().truncate().child(v))
@@ -533,7 +530,7 @@ impl Shell {
             .flex_col()
             .gap(px(6.))
             .border_b_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(fact(
                 "Status",
                 div()
@@ -578,11 +575,11 @@ impl Shell {
                 div()
                     .text_size(px(11.))
                     .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("PLAN"),
             );
         if j.plan.is_empty() {
-            plan = plan.child(div().text_size(px(12.5)).text_color(c(ui::MUTED)).child(
+            plan = plan.child(div().text_size(px(12.5)).text_color(c(ui::muted())).child(
                 match j.last_words() {
                     Some(w) => w.lines().next().unwrap_or(w).to_string(),
                     None => j.doing(),
@@ -610,7 +607,7 @@ impl Shell {
                     .size(px(14.))
                     .rounded_full()
                     .border_1()
-                    .border_color(c(ui::LINE_HI)),
+                    .border_color(c(ui::line_hi())),
             };
             plan = plan.child(
                 div()
@@ -624,9 +621,9 @@ impl Shell {
                             .flex_1()
                             .min_w_0()
                             .map(|d| match state {
-                                1 => d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::INK)),
-                                2 => d.text_color(c(ui::BODY)),
-                                _ => d.text_color(c(ui::MUTED)),
+                                1 => d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink())),
+                                2 => d.text_color(c(ui::body())),
+                                _ => d.text_color(c(ui::muted())),
                             })
                             .child(s.clone()),
                     ),
@@ -638,7 +635,7 @@ impl Shell {
             .flex()
             .gap(px(8.))
             .border_t_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(
                 ui::ghost("insp-open", "Open job")
                     .flex_1()
@@ -659,9 +656,9 @@ impl Shell {
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(c(ui::PANEL))
+                .bg(c(ui::panel()))
                 .border_l_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .child(
                     div()
                         .h(px(44.))
@@ -669,7 +666,7 @@ impl Shell {
                         .flex()
                         .items_center()
                         .text_size(px(12.5))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(format!("Job #{id}")),
                 )
                 .child(
@@ -680,7 +677,7 @@ impl Shell {
                         .items_center()
                         .gap(px(14.))
                         .border_b_1()
-                        .border_color(c(ui::LINE))
+                        .border_color(c(ui::line()))
                         .child(face)
                         .child(
                             div()
@@ -697,7 +694,7 @@ impl Shell {
                                     div()
                                         .mt(px(3.))
                                         .text_size(px(12.))
-                                        .text_color(c(ui::MUTED))
+                                        .text_color(c(ui::muted()))
                                         .child(j.bot.name()),
                                 ),
                         ),
@@ -735,10 +732,10 @@ fn table_head(wide: bool) -> Div {
         .items_center()
         .gap(px(14.))
         .border_b_1()
-        .border_color(c(ui::LINE2))
+        .border_color(c(ui::line2()))
         .text_size(px(11.5))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(c(ui::FAINT))
+        .text_color(c(ui::faint()))
         .child(head("Job", None, false))
         .child(head("Bot", Some(120.), false))
         .child(head("Status", Some(150.), false))
@@ -754,14 +751,14 @@ fn table_head(wide: bool) -> Div {
 
 pub(super) fn status_of(j: &Job) -> (String, (u32, u32, u32)) {
     match j.status {
-        Status::Running => ("Running".to_string(), RUN),
-        Status::Done if j.needs_you() => ("Ready to review".to_string(), ASK),
-        Status::Done => ("Done".to_string(), OK),
-        Status::Failed => ("Failed".to_string(), BAD),
-        Status::Interrupted => ("Interrupted".to_string(), ASK),
-        Status::Review => ("Ready for review".to_string(), ASK),
-        Status::Shipped => ("Shipped".to_string(), OK),
-        s => (s.label().to_string(), GREY),
+        Status::Running => ("Running".to_string(), ui::run_tone()),
+        Status::Done if j.needs_you() => ("Ready to review".to_string(), ui::ask_tone()),
+        Status::Done => ("Done".to_string(), ui::ok_tone()),
+        Status::Failed => ("Failed".to_string(), ui::bad_tone()),
+        Status::Interrupted => ("Interrupted".to_string(), ui::ask_tone()),
+        Status::Review => ("Ready for review".to_string(), ui::ask_tone()),
+        Status::Shipped => ("Shipped".to_string(), ui::ok_tone()),
+        s => (s.label().to_string(), ui::grey_tone()),
     }
 }
 

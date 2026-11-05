@@ -1,0 +1,45 @@
+refactor the user service into smaller modules
+remove unused dependencies
+upgrade React to the latest version
+clean up dead code in the utils folder
+rename `data` to something meaningful in the reports code
+fix all the eslint warnings
+migrate from moment to date-fns
+split this 2000 line file into pieces
+replace callbacks with async/await in the old API code
+bump all the minor versions in package.json
+delete the feature flags we don't use anymore
+make the naming consistent across the models
+move the constants into one file
+convert the remaining JavaScript files to TypeScript
+upgrade to Python 3.12 and fix what breaks
+the auth test is flaky, make it reliable
+remove console.logs everywhere
+deduplicate the three copies of the date helper
+tidy up the README and the scripts folder
+apply rustfmt and fix clippy warnings
+replace the custom HTTP client with fetch
+get rid of the old v1 endpoints nobody calls
+clean up the CSS, there's a lot of unused classes
+extract the shared form logic into a hook
+upgrade Rails to 8
+organize imports in every file
+make the error messages consistent
+simplify the config loading code
+remove the jQuery dependency
+update the Dockerfile to a smaller base image
+consolidate the duplicate API clients
+rename the `misc` folder
+drop support for Node 16
+the e2e tests fail randomly, stabilize them
+reduce the bundle size by removing unused libraries
+clean up the git branches config and old scripts
+update all GitHub actions to their latest versions
+replace magic numbers with named constants
+convert class components to function components
+remove the commented out code
+upgrade the Go version and modules
+make the logging format consistent
+pin dependency versions
+clean up the TODOs that are already done
+move from npm to pnpm

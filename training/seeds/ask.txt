@@ -1,0 +1,71 @@
+what does the auth middleware do?
+how is the database schema organized?
+where do we send emails from?
+why is there a separate worker service?
+how does billing work in this codebase?
+what happens when a user signs up?
+explain how the cache is invalidated
+which files handle routing?
+how do I add a new environment variable?
+what's the difference between the v1 and v2 API folders?
+is there any code that talks to S3?
+walk me through the deploy script
+how does the app decide which language to show?
+what libraries are we using for state management?
+where are feature flags defined?
+can you explain what useSync does
+how are permissions checked?
+what does this repo even do
+how do the tests get their fake data?
+why do we have both yarn.lock and package-lock.json?
+what's the entry point of the server?
+how does the websocket reconnect logic work?
+tell me how errors are reported to Sentry
+where is the pricing logic?
+what calls the recalculate function?
+how long do sessions last?
+explain the folder structure to me like I'm new
+does anything still use the old payments client?
+how is the mobile app talking to the backend?
+what's in the shared package?
+how do migrations run in production?
+which endpoints are public?
+how does the search ranking work?
+where does the app store uploaded files?
+what does the Makefile do?
+why is the build so slow? just explain, don't change anything
+how is logging configured?
+what's the flow when a payment fails?
+which part of the code generates invoices?
+how do I run the app locally?
+can you summarize what changed in the last month
+how does the rate limiter count requests?
+what are all the background jobs we run?
+where is the user's timezone stored?
+explain the reducer in cart.ts
+how does the game loop work?
+what does the `--fast` flag do in the CLI?
+how is the GraphQL schema generated?
+what talks to Redis?
+is the API versioned?
+how does the importer detect duplicates?
+what does each service in docker-compose do?
+how do we handle retries for webhooks?
+where's the config for CI?
+what does the Rust crate in /core do?
+how is the onboarding state saved?
+does the app support offline mode right now?
+which database tables are the biggest?
+how does dark mode get applied?
+what is the purpose of the `legacy` folder?
+how are emails templated?
+which version of Python does this need?
+explain how the queue workers scale
+how are images resized?
+what happens if Stripe is down?
+how do the hooks in src/hooks fit together?
+where do analytics events get sent?
+what does the `normalize` util actually normalize?
+how is the admin panel protected?
+how many API routes are there?
+where would I start reading this code?

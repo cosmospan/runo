@@ -39,15 +39,15 @@ pub(super) fn choice(
         .cursor_pointer()
         .map(|d| {
             if on {
-                d.bg(c(ui::FILL))
-                    .text_color(c(ui::ON_FILL))
+                d.bg(c(ui::fill()))
+                    .text_color(c(ui::on_fill()))
                     .font_weight(FontWeight::MEDIUM)
             } else {
                 d.border_1()
-                    .border_color(c(ui::LINE))
-                    .bg(c(ui::PANEL))
-                    .text_color(c(if ok { ui::INK } else { ui::FAINT }))
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .border_color(c(ui::line()))
+                    .bg(c(ui::panel()))
+                    .text_color(c(if ok { ui::ink() } else { ui::faint() }))
+                    .hover(|s| s.bg(c(ui::hover())))
             }
         })
         .child(label.into())
@@ -67,12 +67,93 @@ pub(super) fn section(title: &'static str, line: &'static str) -> Div {
         .child(
             div()
                 .text_size(px(13.))
-                .text_color(c(ui::MUTED))
+                .text_color(c(ui::muted()))
                 .child(line),
         )
 }
 
 impl Shell {
+    /// Smart Fin: off until the person turns it on, which downloads Squad's
+    /// own model once. Squad then runs it only when the rules aren't sure.
+    fn smart_fin(&mut self, st: &AppSettings, cx: &mut Context<Self>) -> Div {
+        use super::brain::helper::{self, Download};
+        let have = helper::model_path().is_file();
+        let ours = st.brain_model.trim() == helper::MODEL && st.brain_url.trim().is_empty();
+        let other = !st.brain_model.trim().is_empty() && !ours;
+        let state = helper::download_state();
+        let downloading = matches!(state, Download::Running { .. });
+        let mut chips = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .child(
+                choice("fin-off", "Off", st.brain_model.trim().is_empty(), true).on_click(
+                    cx.listener(|_, _, _, cx| {
+                        helper::stop();
+                        save(cx, |st| st.brain_model.clear());
+                        cx.notify();
+                    }),
+                ),
+            )
+            .child(
+                choice("fin-on", "On \u{b7} Squad's own model", ours, true).on_click(cx.listener(
+                    |_, _, _, cx| {
+                        let url = cx.global::<AppSettings>().brain_model_url.clone();
+                        helper::download(&url);
+                        save(cx, |st| {
+                            st.brain_model = helper::MODEL.to_string();
+                            st.brain_url.clear();
+                        });
+                        cx.notify();
+                    },
+                )),
+            );
+        if other {
+            chips = chips.child(choice(
+                "fin-other",
+                format!("On \u{b7} {}", st.brain_model.trim()),
+                true,
+                true,
+            ));
+        }
+        if have && !ours && !downloading {
+            chips = chips.child(
+                choice("fin-delete", "Delete the model (505 MB)", false, true).on_click(
+                    cx.listener(|_, _, _, cx| {
+                        helper::remove();
+                        cx.notify();
+                    }),
+                ),
+            );
+        }
+        let mb = |b: u64| b / 1_000_000;
+        let (line, warn) = match state {
+            Download::Running { got, total } if ours => {
+                (format!("Downloading Squad's model: {} of {} MB.", mb(got), mb(total)), false)
+            }
+            Download::Failed(e) if ours && !have => (format!("The download didn't finish: {e}. Turn it on again to retry."), true),
+            _ if other => (format!("Asking {} at {}. You run that server yourself.", st.brain_model.trim(), if st.brain_url.trim().is_empty() { super::brain::model::DEFAULT_URL } else { st.brain_url.trim() }), false),
+            _ if ours && have && helper::server_bin().is_none() => (
+                "Needs llama-server from llama.cpp (on a Mac: brew install llama.cpp). Until then the rules decide.".to_string(),
+                true,
+            ),
+            _ if ours && have => (format!("On. A small model on this computer picks the bot when the rules aren't sure, in about half a second. It stops after {} idle minutes.", helper::IDLE_MINUTES), false),
+            _ => ("Off: the rules pick the bot. Turning it on downloads Squad's own model once (505 MB); it runs on this computer, only when the rules aren't sure.".to_string(), false),
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(chips)
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(c(if warn { ui::AMBER } else { ui::muted() }))
+                    .child(line),
+            )
+    }
+
     pub(super) fn engines(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let st = cx.global::<AppSettings>().clone();
         let ready: Vec<usize> = (0..agent::PROVIDERS.len())
@@ -152,6 +233,7 @@ impl Shell {
                 })),
             );
         }
+        let smart = self.smart_fin(&st, cx);
         let work_vendor = vendor(agent::PROVIDERS[default_i].id);
         let same_vendor =
             !st.challenge_agent.is_empty() && vendor(&st.challenge_agent) == work_vendor;
@@ -168,7 +250,7 @@ impl Shell {
                     .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Shapes jobs, writes the one question"))
                     .child(div().flex_1().flex().flex_col().gap(px(8.)).child(brain_agents).child(div().flex().items_center().gap(px(8.)).child(ui::caption("MODEL")).child(brain_models))),
             )
-            .child(div().h(px(1.)).bg(c(ui::LINE)))
+            .child(div().h(px(1.)).bg(c(ui::line())))
             .child(
                 div()
                     .flex()
@@ -181,12 +263,20 @@ impl Shell {
                             .flex_col()
                             .gap(px(8.))
                             .child(challengers)
-                            .child(div().text_size(px(12.)).text_color(c(if same_vendor { ui::AMBER } else { ui::MUTED })).child(if same_vendor {
+                            .child(div().text_size(px(12.)).text_color(c(if same_vendor { ui::AMBER } else { ui::muted() })).child(if same_vendor {
                                 format!("Same company as the work ({work_vendor}). One from another company catches more.")
                             } else {
                                 "One vendor writes, another checks. Pick an agent from a different company than the default.".to_string()
                             })),
                     ),
+            )
+            .child(div().h(px(1.)).bg(c(ui::line())))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(space::M))
+                    .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Smart Fin"))
+                    .child(smart),
             );
 
         let none_ready = ready.is_empty();
@@ -211,7 +301,7 @@ impl Shell {
                                 div()
                                     .mt(px(6.))
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child("Every bot works through a coding agent you already use. Pick one to see which bots run on it."),
                             ),
                     )
@@ -219,7 +309,7 @@ impl Shell {
                         d.child(
                             div()
                                 .text_size(px(13.))
-                                .text_color(c(ui::T_AMBER))
+                                .text_color(c(ui::t_amber()))
                                 .child("None of the agents' command-line tools were found. Install one (for example Claude Code or Codex) and it shows up here."),
                         )
                     })
@@ -267,12 +357,12 @@ impl Shell {
                     .px(px(14.))
                     .flex()
                     .items_center()
-                    .bg(c(ui::RAISED))
+                    .bg(c(ui::raised()))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(11.5))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(title),
             );
             for i in group {
@@ -291,13 +381,13 @@ impl Shell {
                         .items_center()
                         .gap(px(10.))
                         .border_b_1()
-                        .border_color(c(ui::LINE2))
+                        .border_color(c(ui::line2()))
                         .cursor_pointer()
                         .map(|d| {
                             if i == sel {
-                                d.bg(c(ui::HOVER))
+                                d.bg(c(ui::hover()))
                             } else {
-                                d.hover(|s| s.bg(c(ui::HOVER)))
+                                d.hover(|s| s.bg(c(ui::hover())))
                             }
                         })
                         .child(
@@ -306,7 +396,7 @@ impl Shell {
                                 .flex_none()
                                 .rounded(px(8.))
                                 .bg(ca(p.color, if ok { 0.18 } else { 0.08 }))
-                                .text_color(c(if ok { p.color } else { ui::MUTED }))
+                                .text_color(c(if ok { p.color } else { ui::muted() }))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -322,11 +412,11 @@ impl Shell {
                                     div()
                                         .text_size(px(13.))
                                         .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c(if ok { ui::INK } else { ui::BODY }))
+                                        .text_color(c(if ok { ui::ink() } else { ui::body() }))
                                         .truncate()
                                         .child(p.name),
                                 )
-                                .child(div().text_size(px(11.5)).text_color(c(ui::MUTED)).child(
+                                .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
                                     if ok && bots > 0 {
                                         format!(
                                             "{} \u{b7} {bots} {}",
@@ -344,9 +434,9 @@ impl Shell {
                                 .py(px(1.))
                                 .rounded_full()
                                 .border_1()
-                                .border_color(c(ui::LINE_HI))
+                                .border_color(c(ui::line_hi()))
                                 .text_size(px(10.5))
-                                .text_color(c(ui::INK))
+                                .text_color(c(ui::ink()))
                                 .child("Default")
                         } else if ok {
                             div().size(px(7.)).rounded_full().bg(c(ui::GREEN))
@@ -391,45 +481,43 @@ impl Shell {
             .iter()
             .filter(|j| j.agent == id)
             .count();
-        let mut head = div()
-            .flex()
-            .items_center()
-            .gap(px(12.))
-            .child(
-                div()
-                    .size(px(40.))
-                    .flex_none()
-                    .rounded(px(12.))
-                    .bg(ca(p.color, 0.18))
-                    .text_color(c(p.color))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(18.))
-                    .font_weight(FontWeight::BOLD)
-                    .child(p.mark),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .text_size(px(17.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(p.name),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
-                            .child(format!(
+        let mut head =
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .size(px(40.))
+                        .flex_none()
+                        .rounded(px(12.))
+                        .bg(ca(p.color, 0.18))
+                        .text_color(c(p.color))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(18.))
+                        .font_weight(FontWeight::BOLD)
+                        .child(p.mark),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .text_size(px(17.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(p.name),
+                        )
+                        .child(div().text_size(px(12.5)).text_color(c(ui::muted())).child(
+                            format!(
                                 "{} \u{b7} {} \u{b7} {jobs} jobs \u{b7} ${spent:.2} today",
                                 vendor(id),
                                 if ok { "ready" } else { "not installed" }
-                            )),
-                    ),
-            );
+                            ),
+                        )),
+                );
         if ok && sel != default_i {
             head = head.child(
                 ui::solid("engine-default", "Make default").on_click(cx.listener(
@@ -471,7 +559,7 @@ impl Shell {
             body = body.child(
                 div()
                     .text_size(px(13.))
-                    .text_color(c(ui::BODY))
+                    .text_color(c(ui::body()))
                     .child(format!("{} isn't on this computer. Install its command-line tool, sign in once, and it shows as ready here.", p.name)),
             );
             if let Some(cmd) = install {
@@ -488,9 +576,9 @@ impl Shell {
                                 .px(px(12.))
                                 .py(px(8.))
                                 .rounded(px(8.))
-                                .bg(c(ui::BG))
+                                .bg(c(ui::bg()))
                                 .border_1()
-                                .border_color(c(ui::LINE))
+                                .border_color(c(ui::line()))
                                 .font_family(ui::MONO)
                                 .text_size(px(12.))
                                 .truncate()
@@ -565,9 +653,9 @@ impl Shell {
                             .items_center()
                             .rounded(px(7.))
                             .border_1()
-                            .border_color(c(ui::LINE))
+                            .border_color(c(ui::line()))
                             .text_size(px(12.))
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .child(current),
                     )
                     .child(
@@ -575,9 +663,9 @@ impl Shell {
                             .id(("engine-change", n))
                             .px(px(6.))
                             .text_size(px(12.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .cursor_pointer()
-                            .hover(|s| s.text_color(c(ui::INK)))
+                            .hover(|s| s.text_color(c(ui::ink())))
                             .child("Change model")
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.engine_open = Some(who);
@@ -619,7 +707,7 @@ impl Shell {
                     .items_center()
                     .gap(px(12.))
                     .border_t_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .child(face)
                     .child(
                         div()
@@ -631,7 +719,7 @@ impl Shell {
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(who.name()),
                             )
-                            .child(div().text_size(px(11.5)).text_color(c(ui::FAINT)).child(
+                            .child(div().text_size(px(11.5)).text_color(c(ui::faint())).child(
                                 if own.agent.is_empty() {
                                     "follows the default"
                                 } else {
@@ -645,9 +733,9 @@ impl Shell {
                             div()
                                 .id(("engine-reset", n))
                                 .text_size(px(12.))
-                                .text_color(c(ui::MUTED))
+                                .text_color(c(ui::muted()))
                                 .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::INK)))
+                                .hover(|s| s.text_color(c(ui::ink())))
                                 .child("Use default")
                                 .on_click(cx.listener(move |_, _, _, cx| {
                                     save(cx, |st| engine::set(st, who, BotEngine::default()));

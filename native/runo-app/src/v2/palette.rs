@@ -106,6 +106,12 @@ impl Shell {
                 "⌘6",
             ),
             (
+                Place::Settings(Pane::Appearance),
+                IconName::Palette,
+                "Settings: Appearance",
+                "",
+            ),
+            (
                 Place::Settings(Pane::Mascot),
                 IconName::Bot,
                 "Settings: Mascot",
@@ -168,11 +174,22 @@ impl Shell {
             act: Act::NewGoal,
         });
         for mode in Mode::ALL.into_iter().filter(|m| *m != Mode::Ask) {
-            let Some(who) = Member::doer_for(mode) else {
-                continue;
+            let (who, label) = match Member::doer_for(mode) {
+                Some(who) => (who, format!("{}: give {} a job", mode.label(), who.name())),
+                None => {
+                    let who = Member::for_mode(mode);
+                    (
+                        who,
+                        format!(
+                            "{}: a job for {} (Fin asks to add it)",
+                            mode.label(),
+                            who.name()
+                        ),
+                    )
+                }
             };
             all.push(Entry {
-                label: format!("{}: give {} a job", mode.label(), who.name()),
+                label,
                 hint: "New job".into(),
                 icon: None,
                 bot: Some(who),
@@ -337,7 +354,7 @@ impl Shell {
                     .px(px(14.))
                     .py(px(18.))
                     .text_size(px(13.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("Nothing matches. Try a bot, a job or a place."),
             );
         }
@@ -353,11 +370,11 @@ impl Shell {
                 (None, Some(icon)) => div()
                     .size(px(26.))
                     .rounded(px(8.))
-                    .bg(c(if on { ui::HOVER } else { ui::RAISED }))
+                    .bg(c(if on { ui::hover() } else { ui::raised() }))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(Icon::new(icon).size(px(14.)).text_color(c(ui::MUTED)))
+                    .child(Icon::new(icon).size(px(14.)).text_color(c(ui::muted())))
                     .into_any_element(),
                 _ => div().size(px(26.)).into_any_element(),
             };
@@ -376,7 +393,7 @@ impl Shell {
                     .relative()
                     .left(px(6. * (1. - rk)))
                     .cursor_pointer()
-                    .when(on, |d| d.bg(c(ui::RAISED)))
+                    .when(on, |d| d.bg(c(ui::raised())))
                     .on_mouse_move(cx.listener(move |this, _: &MouseMoveEvent, _, cx| {
                         if this.palette_sel != i {
                             this.palette_sel = i;
@@ -404,14 +421,14 @@ impl Shell {
                         div()
                             .flex_none()
                             .text_size(px(11.5))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child(e.hint),
                     )
                     .when(on, |d| {
                         d.child(
                             Icon::new(IconName::CornerDownLeft)
                                 .size(px(13.))
-                                .text_color(c(ui::MUTED)),
+                                .text_color(c(ui::muted())),
                         )
                     }),
             );
@@ -441,9 +458,9 @@ impl Shell {
                     .max_h(px(520.))
                     .opacity(k)
                     .rounded(px(20.))
-                    .bg(c(ui::PANEL))
+                    .bg(c(ui::panel()))
                     .border_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .shadow(vec![BoxShadow {
                         color: ca(0x000000, 0.55),
                         offset: point(px(0.), px(30.)),
@@ -463,11 +480,11 @@ impl Shell {
                             .px(px(16.))
                             .h(px(56.))
                             .border_b_1()
-                            .border_color(c(ui::LINE))
+                            .border_color(c(ui::line()))
                             .child(
                                 Icon::new(IconName::Search)
                                     .size(px(17.))
-                                    .text_color(c(ui::FAINT)),
+                                    .text_color(c(ui::faint())),
                             )
                             .child(
                                 div().flex_1().text_size(px(15.)).child(
@@ -481,10 +498,10 @@ impl Shell {
                                     .px(px(7.))
                                     .py(px(2.))
                                     .rounded(px(6.))
-                                    .bg(c(ui::RAISED))
+                                    .bg(c(ui::raised()))
                                     .font_family(ui::MONO)
                                     .text_size(px(10.))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child("esc"),
                             ),
                     )
@@ -497,9 +514,9 @@ impl Shell {
                             .h(px(36.))
                             .items_center()
                             .border_t_1()
-                            .border_color(c(ui::LINE))
+                            .border_color(c(ui::line()))
                             .text_size(px(11.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child("↑↓ to move")
                             .child("↵ to open")
                             .child("⌘[ to go back"),

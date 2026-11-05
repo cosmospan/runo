@@ -93,6 +93,20 @@ jobs:
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
+      # Smart Fin's server, inside the app so it's signed with it. Squad starts
+      # it only after the person turns Smart Fin on and downloads the model.
+      - name: Build llama-server for Smart Fin
+        run: |
+          git clone -q --depth 1 --branch v0.8.0 https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp"
+          arch=${{ matrix.arch }}
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/llama-build" -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=$arch -DBUILD_SHARED_LIBS=OFF -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=ON
+          cmake --build "$RUNNER_TEMP/llama-build" --target llama-server -j 4
+          cp "$RUNNER_TEMP/llama-build/bin/llama-server" "${{ steps.app.outputs.path }}/Contents/MacOS/"
+          strip "${{ steps.app.outputs.path }}/Contents/MacOS/llama-server"
+          ls -lh "${{ steps.app.outputs.path }}/Contents/MacOS/"
+
       - name: Import the signing certificate
         if: steps.secrets.outputs.sign == 'true'
         env:

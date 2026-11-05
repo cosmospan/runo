@@ -91,7 +91,7 @@ fn meter(used: f32, w: f32, h: f32) -> Div {
         .h(px(h))
         .flex_none()
         .rounded_full()
-        .bg(c(ui::LINE))
+        .bg(c(ui::line()))
         .child(
             div()
                 .h_full()
@@ -140,7 +140,7 @@ impl Shell {
                     .gap(px(7.))
                     .rounded(px(6.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                     .child(div().size(px(7.)).rounded_full().bg(c(dot)))
                     .child(p.name)
                     .map(|el| match &head {
@@ -149,14 +149,14 @@ impl Shell {
                                 .font_family(ui::MONO)
                                 .text_size(px(10.5))
                                 .text_color(c(if w.used >= 80. {
-                                    ui::T_AMBER
+                                    ui::t_amber()
                                 } else {
-                                    ui::FAINT
+                                    ui::faint()
                                 }))
                                 .child(format!("{:.0}%", w.used)),
                         ),
                         None if !d.ready => {
-                            el.child(div().text_color(c(ui::T_RED)).child("not found"))
+                            el.child(div().text_color(c(ui::t_red())).child("not found"))
                         }
                         None => el,
                     })
@@ -167,7 +167,7 @@ impl Shell {
             left = left.child(
                 div()
                     .px(px(6.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child(format!("+{}", days.len() - BAR_ENGINES)),
             );
         }
@@ -181,15 +181,15 @@ impl Shell {
             .gap(px(8.))
             .rounded(px(6.))
             .cursor_pointer()
-            .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
-            .child(div().text_color(c(ui::FAINT)).child("Today"))
+            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            .child(div().text_color(c(ui::faint())).child("Today"))
             .child(
                 div()
-                    .text_color(c(ui::BODY))
+                    .text_color(c(ui::body()))
                     .font_weight(FontWeight::MEDIUM)
                     .child(format!("${spend:.2}")),
             )
-            .child(div().size(px(3.)).rounded_full().bg(c(ui::FAINT)))
+            .child(div().size(px(3.)).rounded_full().bg(c(ui::faint())))
             .child(format!("{} tokens", crate::health::token_count(tokens)))
             .child(
                 Icon::new(if open {
@@ -198,7 +198,7 @@ impl Shell {
                     IconName::ChevronUp
                 })
                 .size(px(12.))
-                .text_color(c(ui::FAINT)),
+                .text_color(c(ui::faint())),
             )
             .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx)));
 
@@ -210,11 +210,11 @@ impl Shell {
             .items_center()
             .gap(px(4.))
             .px(px(10.))
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_t_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .text_size(px(11.5))
-            .text_color(c(ui::MUTED))
+            .text_color(c(ui::muted()))
             .child(left)
             .child(div().flex_1())
             .child(right)
@@ -241,14 +241,14 @@ impl Shell {
                 .child(
                     div()
                         .text_size(px(11.))
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(label),
                 )
                 .child(
                     div()
                         .text_size(px(16.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .child(value),
                 )
         };
@@ -258,7 +258,7 @@ impl Shell {
             .px(px(16.))
             .py(px(12.))
             .border_b_1()
-            .border_color(c(ui::LINE2))
+            .border_color(c(ui::line2()))
             .child(figure("Spent today", format!("${spend:.2}")))
             .child(figure("Tokens", crate::health::token_count(tokens)))
             .child(figure("Jobs", jobs.to_string()));
@@ -274,7 +274,7 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .gap(px(8.))
-                    .when(k > 0, |el| el.border_t_1().border_color(c(ui::LINE2)))
+                    .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
                     .child(
                         div()
                             .flex()
@@ -289,7 +289,7 @@ impl Shell {
                                 div()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::INK))
+                                    .text_color(c(ui::ink()))
                                     .child(p.name),
                             )
                             .when(default, |el| {
@@ -299,12 +299,12 @@ impl Shell {
                                         .rounded(px(4.))
                                         .bg(ca(ui::RUNO, 0.18))
                                         .text_size(px(10.5))
-                                        .text_color(c(ui::T_VIOLET))
+                                        .text_color(c(ui::t_violet()))
                                         .child("Default"),
                                 )
                             })
                             .child(div().flex_1())
-                            .child(div().text_size(px(11.5)).text_color(c(ui::MUTED)).child(
+                            .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
                                 format!(
                                     "${:.2} · {} · {} job{}",
                                     d.spend,
@@ -335,15 +335,15 @@ impl Shell {
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .text_color(c(ui::BODY))
+                                                .text_color(c(ui::body()))
                                                 .child(format!("{} window", w.label)),
                                         )
                                         .child(
                                             div()
                                                 .text_color(c(if w.used >= 80. {
-                                                    ui::T_AMBER
+                                                    ui::t_amber()
                                                 } else {
-                                                    ui::MUTED
+                                                    ui::muted()
                                                 }))
                                                 .child(format!("{left:.0}% left{resets}")),
                                         ),
@@ -354,7 +354,7 @@ impl Shell {
                 }
                 Some(crate::usage::Reading::Note(text)) => card = card.child(note(text)),
                 Some(crate::usage::Reading::Problem { long, .. }) => {
-                    card = card.child(note(long).text_color(c(ui::T_AMBER)))
+                    card = card.child(note(long).text_color(c(ui::t_amber())))
                 }
                 _ if !d.ready => {}
                 _ => {
@@ -368,7 +368,7 @@ impl Shell {
             if !d.ready {
                 card = card.child(
                     note("Not found on this computer. Set it up under Engines.")
-                        .text_color(c(ui::T_RED)),
+                        .text_color(c(ui::t_red())),
                 );
             }
             list = list.child(card);
@@ -384,9 +384,9 @@ impl Shell {
                 .rounded(px(6.))
                 .text_size(px(12.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(ui::BODY))
+                .text_color(c(ui::body()))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                 .child(label)
         };
         let foot = div()
@@ -396,8 +396,8 @@ impl Shell {
             .px(px(8.))
             .py(px(6.))
             .border_t_1()
-            .border_color(c(ui::LINE2))
-            .bg(c(ui::BG))
+            .border_color(c(ui::line2()))
+            .bg(c(ui::bg()))
             .child(
                 link(
                     "usage-refresh",
@@ -448,9 +448,9 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .rounded(px(12.))
-                    .bg(c(ui::RAISED))
+                    .bg(c(ui::raised()))
                     .border_1()
-                    .border_color(c(ui::LINE_HI))
+                    .border_color(c(ui::line_hi()))
                     .shadow(vec![BoxShadow {
                         color: ca(0x000000, 0.5),
                         offset: point(px(0.), px(12.)),
@@ -470,13 +470,13 @@ impl Shell {
                                     .flex_1()
                                     .text_size(px(13.5))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::INK))
+                                    .text_color(c(ui::ink()))
                                     .child("Engines"),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child("Plan limits and today"),
                             ),
                     )
@@ -491,6 +491,6 @@ impl Shell {
 fn note(text: impl Into<SharedString>) -> Div {
     div()
         .text_size(px(11.5))
-        .text_color(c(ui::FAINT))
+        .text_color(c(ui::faint()))
         .child(text.into())
 }

@@ -88,6 +88,10 @@ pub fn default_look(who: Member) -> (Tint, Outfit) {
             Tint::TEAL,
             kit(Hat::Cap, Held::Parcel, Tool::None, Badge::NameTag),
         ),
+        Member::Fin => (
+            Tint::VIOLET,
+            kit(Hat::Crown, Held::Clipboard, Tool::None, Badge::Star),
+        ),
         Member::Made(_) => who.made_look().unwrap_or((Tint::VIOLET, Outfit::PLAIN)),
     }
 }
@@ -205,7 +209,7 @@ mod tests {
 
     #[test]
     fn every_built_in_bot_wears_something() {
-        for who in Member::CREW {
+        for who in std::iter::once(Member::Fin).chain(Member::CREW) {
             assert_ne!(default_look(who).1, Outfit::PLAIN, "{who:?}");
         }
     }

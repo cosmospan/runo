@@ -8,6 +8,7 @@
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
+mod brain;
 mod chat;
 pub mod cli;
 mod crew;
@@ -33,6 +34,7 @@ mod start;
 mod statusbar;
 mod store;
 mod term;
+mod theme;
 mod today;
 mod trouble;
 mod ui;
@@ -380,6 +382,8 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
+    /// The theme last put on the window, so a change in Settings is applied once.
+    applied_theme: &'static str,
     clock: Instant,
     holos: Holos,
     scale: f32,
@@ -448,6 +452,9 @@ pub struct Shell {
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
     setup_crew: Vec<Member>,
+    /// A job Fin held back because nobody on the crew does its kind of work,
+    /// waiting for the person to add the bot Fin suggests.
+    offer: Option<Offer>,
     /// Sample jobs are showing, picked from the Start here page; the real
     /// store comes back when they're put away.
     sampling: bool,
@@ -504,6 +511,27 @@ pub struct Shell {
 
 /// The folders behind dropped paths: a folder itself, or the folder a file is in,
 /// each once.
+/// A job held back from Today's box until the bot for it is on the crew.
+struct Offer {
+    /// The bot Fin suggests adding.
+    who: Member,
+    mode: Mode,
+    text: String,
+    /// It was going to be split into a goal.
+    goal: bool,
+    /// How many engines it was going to race on.
+    race: usize,
+}
+
+/// "A", "A and B", "A, B and C".
+fn and_list(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 fn folders_from(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
     let mut out: Vec<std::path::PathBuf> = Vec::new();
     for p in paths {
@@ -534,9 +562,6 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
-
-/// The page ground: a quiet neutral grey under white surfaces.
-pub(super) const PAGE: u32 = ui::BG;
 
 /// Width of one of Today's mode tabs plus the gap after it.
 const MODE_STEP: f32 = 78.;
@@ -670,12 +695,13 @@ impl Shell {
         };
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
-            Ok("chat") => Place::Chat(Member::Explainer),
+            Ok("chat") => Place::Chat(Member::Fin),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
             Ok("settings") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
+            Ok("appearance") => Place::Settings(Pane::Appearance),
             Ok("usage") => Place::Usage,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
@@ -743,12 +769,14 @@ impl Shell {
             usage_open: false,
             engine_sel: None,
             settings_pane: Pane::General,
+            applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
             fin_state: None,
             engine_open: None,
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),
+            offer: None,
             sampling: false,
             maker_name,
             maker_role,
@@ -847,7 +875,6 @@ impl Shell {
     fn mode_x(&self) -> f32 {
         let to = Mode::ALL
             .into_iter()
-            .filter(|m| Member::doer_for(*m).is_some())
             .position(|m| m == self.mode)
             .unwrap_or(0) as f32
             * MODE_STEP;
@@ -955,6 +982,19 @@ impl Shell {
             self.pick_folder(cx);
             return;
         }
+        if !Member::all().contains(&self.doer()) {
+            // Nobody on the crew does this kind of work yet: Fin asks first.
+            self.offer = Some(Offer {
+                who: Member::for_mode(self.mode),
+                mode: self.mode,
+                text,
+                goal: self.splitting && self.mode.writes(),
+                race: if self.mode.writes() { self.racing } else { 0 },
+            });
+            cx.notify();
+            return;
+        }
+        self.offer = None;
         let doer = self.doer();
         if self.mode == Mode::Ask {
             self.go(Place::Chat(doer), cx);
@@ -1027,10 +1067,67 @@ impl Shell {
         cx.notify();
     }
 
+    /// Puts built-in bots on the crew, with one line saying so.
+    fn add_to_crew(&mut self, who: &[Member]) {
+        let who: Vec<Member> = who
+            .iter()
+            .copied()
+            .filter(|m| !m.is_made() && !m.on_crew())
+            .collect();
+        if who.is_empty() {
+            return;
+        }
+        self.crew.store.removed.retain(|m| !who.contains(m));
+        data::set_removed(&self.crew.store.removed);
+        self.crew.store.save();
+        let names: Vec<&str> = who.iter().map(|m| m.name()).collect();
+        self.say(format!("Added {} to your crew.", and_list(&names)));
+    }
+
+    /// Fin's offer taken: the bot joins the crew and the held job starts.
+    pub(super) fn take_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.add_to_crew(&[o.who]);
+        self.target = None;
+        self.splitting = o.goal;
+        self.racing = o.race;
+        self.set_mode(o.mode, window, cx);
+        let added = self.toast.clone();
+        self.hand_over(o.text, cx);
+        // Keep "Added Fixer" showing unless starting the job had more to say.
+        if self.toast.is_none() {
+            self.toast = added;
+        }
+        cx.notify();
+    }
+
+    /// Fin's offer turned down: the job goes back in the box, nothing added.
+    pub(super) fn skip_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.composer
+            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+        cx.notify();
+    }
+
+    /// The person would rather make their own bot for the job: the maker opens
+    /// on Crew set to the kind of work, and the job waits in the box.
+    pub(super) fn make_for_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.composer
+            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+        if Member::KINDS.contains(&o.who) {
+            self.maker_like = o.who;
+        }
+        self.maker_open = true;
+        self.go(Place::Crew, cx);
+        self.say("Make your bot, then send the job again from Jobs.");
+        cx.notify();
+    }
+
     /// Adds a built-in bot to the crew, or removes it (with its chat; its past
     /// jobs stay in History).
     fn set_on_crew(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
-        if who.is_made() {
+        if who.is_made() || who == Member::Fin {
             return;
         }
         if !on && Member::all().len() <= 1 {
@@ -1237,6 +1334,16 @@ impl Shell {
 
     /// Starts a goal's jobs, the first one now.
     pub(super) fn start_goal(&mut self, id: u64, cx: &mut Context<Self>) {
+        // The bots its jobs need join the crew first; the page said so.
+        let needs = self
+            .crew
+            .store
+            .goals
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.needs())
+            .unwrap_or_default();
+        self.add_to_crew(&needs);
         let st = Self::app_settings(cx);
         self.crew.start_goal(&st, id);
         cx.notify();
@@ -1457,7 +1564,7 @@ impl Shell {
         {
             return ("needs you".into(), ui::AMBER);
         }
-        (who.role().to_lowercase(), ui::FAINT)
+        (who.role().to_lowercase(), ui::faint())
     }
 
     /// What a bot in the sidebar shows: its real state when it has one (answering,
@@ -1555,17 +1662,17 @@ impl Shell {
             .count()
     }
 
-    /// The bot whose chat was open last, else Explainer.
+    /// The bot whose chat was open last, else Fin.
     fn last_chat(&self) -> Member {
         Member::all()
             .into_iter()
             .max_by_key(|m| {
                 (
                     self.crew.store.chat(*m).len().min(1),
-                    (*m == Member::Explainer) as u8,
+                    (*m == Member::Fin) as u8,
                 )
             })
-            .unwrap_or(Member::Explainer)
+            .unwrap_or(Member::Fin)
     }
 }
 
@@ -1580,6 +1687,10 @@ impl Render for Shell {
             window.request_animation_frame();
         }
         self.poll(cx);
+        if self.applied_theme != ui::theme().id {
+            self.applied_theme = ui::theme().id;
+            apply_theme(window, cx);
+        }
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
@@ -1657,15 +1768,6 @@ impl Render for Shell {
         self.holos.begin(window, cx);
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
         mascot::sync(cx.global::<crate::settings::AppSettings>());
-        // The mode in Today's box must have a bot on the crew to take it.
-        if Member::doer_for(self.mode).is_none() {
-            if let Some(m) = Mode::ALL
-                .into_iter()
-                .find(|m| Member::doer_for(*m).is_some())
-            {
-                self.set_mode(m, window, cx);
-            }
-        }
         let body = match self.place {
             Place::Today => self.today(cx),
             Place::Live(id) => self.live(id, cx),
@@ -1711,8 +1813,8 @@ impl Render for Shell {
                         .px(px(16.))
                         .py(px(10.))
                         .rounded_full()
-                        .bg(c(ui::FILL))
-                        .text_color(c(ui::ON_FILL))
+                        .bg(c(ui::fill()))
+                        .text_color(c(ui::on_fill()))
                         .text_size(px(13.))
                         .shadow(ui::lift())
                         .child(text),
@@ -1800,8 +1902,8 @@ impl Render for Shell {
                 cx.stop_propagation();
             }))
             .font_family("Geist")
-            .text_color(c(ui::INK))
-            .bg(c(PAGE))
+            .text_color(c(ui::ink()))
+            .bg(c(ui::bg()))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
@@ -1841,6 +1943,47 @@ impl Render for Shell {
     }
 }
 
+/// The window's background for the theme in use. Solid themes keep it opaque: the
+/// app paints every pixel, and blending what's behind the window costs every frame.
+/// Frosted themes let the desktop show through, blurred (vibrancy on macOS, acrylic
+/// on Windows, the compositor's blur on Linux; without one the window stays solid).
+fn background() -> WindowBackgroundAppearance {
+    if ui::theme().frosted {
+        WindowBackgroundAppearance::Blurred
+    } else {
+        WindowBackgroundAppearance::Opaque
+    }
+}
+
+/// Puts the theme in use on the window and on the kit's text boxes and menus.
+fn apply_theme(window: &mut Window, cx: &mut App) {
+    use gpui_kit::component::{Theme, ThemeMode};
+    let t = ui::theme();
+    window.set_background_appearance(background());
+    Theme::change(
+        if t.light {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
+        },
+        Some(window),
+        cx,
+    );
+    Theme::update(cx, |k| {
+        k.background = ui::c(ui::bg());
+        k.foreground = ui::c(ui::ink());
+        k.border = ui::c(ui::line());
+        k.input = ui::c(ui::line());
+        k.muted_foreground = ui::c(ui::muted());
+        k.popover = ui::c(ui::raised());
+        k.popover_foreground = ui::c(ui::ink());
+        k.caret = ui::c(ui::ink());
+        k.ring = ui::ca(ui::VIOLET, 0.6);
+        k.selection = ui::ca(ui::VIOLET, if t.light { 0.22 } else { 0.38 });
+    });
+    window.refresh();
+}
+
 /// Opens the v2 window.
 pub fn open_window(cx: &mut App) {
     let options = WindowOptions {
@@ -1855,21 +1998,12 @@ pub fn open_window(cx: &mut App) {
             traffic_light_position: Some(point(px(16.), px(16.))),
         }),
         app_id: Some("squadcode".into()),
-        // Solid: the colour wash is drawn by the app, so there's nothing to see
-        // through, and blending what's behind the window costs every frame.
-        window_background: WindowBackgroundAppearance::Opaque,
+        window_background: background(),
         ..Default::default()
     };
+    ui::set_theme(&cx.global::<crate::settings::AppSettings>().v2_theme);
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
-        // v2 is dark throughout, so text boxes and menus from the kit follow.
-        gpui_kit::component::Theme::change(gpui_kit::component::ThemeMode::Dark, Some(window), cx);
-        gpui_kit::component::Theme::update(cx, |t| {
-            t.background = ui::c(ui::BG);
-            t.foreground = ui::c(ui::INK);
-            t.border = ui::c(ui::LINE);
-            t.input = ui::c(ui::LINE);
-            t.muted_foreground = ui::c(ui::MUTED);
-        });
+        apply_theme(window, cx);
         cx.new(|cx| Shell::new(window, cx))
     });
     // Come to the front when opened, not behind whatever had focus (the first
@@ -1953,7 +2087,15 @@ mod side_tests {
 
 #[cfg(test)]
 mod drop_tests {
-    use super::folders_from;
+    use super::{and_list, folders_from};
+
+    #[test]
+    fn names_read_as_a_list() {
+        assert_eq!(and_list(&[]), "");
+        assert_eq!(and_list(&["Fixer"]), "Fixer");
+        assert_eq!(and_list(&["Fixer", "Checker"]), "Fixer and Checker");
+        assert_eq!(and_list(&["A", "B", "C"]), "A, B and C");
+    }
 
     #[test]
     fn dropped_files_mean_their_folder() {

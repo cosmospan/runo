@@ -1,0 +1,50 @@
+review my changes before I open the PR
+look over the diff for anything risky
+check this branch for security issues
+is there anything dangerous in the auth changes?
+review the payment code for mistakes
+are we leaking any secrets in the repo?
+do a security audit of the file upload handler
+check the new endpoints for missing permission checks
+look for SQL injection in the search code
+is it safe to merge the migration branch?
+review the uncommitted changes in this folder
+can you look over my PR and point out problems
+check whether we log any personal data
+audit our dependencies for known vulnerabilities
+review the session handling for weaknesses
+does anything in this change break backwards compatibility?
+check the CORS setup for risks
+look over the new admin routes before they go live
+review the password hashing code
+are there any XSS holes in the comments feature?
+check that the API doesn't expose other users' data
+review the Dockerfile for security problems
+is our JWT validation correct?
+look at the webhook handler and tell me if it can be spoofed
+review the infra terraform changes for anything risky
+check the env files for committed keys
+review the GDPR delete flow, is anything left behind?
+audit the access control on the reports page
+look for hardcoded credentials anywhere
+review this change to the billing cron before it ships
+is the rate limiting enough to stop brute force logins?
+check my diff for performance problems before merging
+review how we store API tokens
+look over the CSP headers
+review the OAuth callback for open redirects
+check if file paths from users are sanitized
+review the encryption of backups
+do a quick review of what I changed today
+look for race conditions in the transfer code, don't fix anything
+check the mobile app for insecure storage
+review the logging for leaked tokens
+is the new signup flow safe against bots?
+review the SSRF risk in the URL preview feature
+is the admin impersonation feature safe?
+review the changes Builder made before I approve them
+check if anything in the PR touches payments
+audit the S3 bucket policies in the repo
+review the permissions in the GitHub workflow files
+look over the new public API for things we'd regret
+review my branch against our coding rules
