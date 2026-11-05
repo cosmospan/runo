@@ -1567,20 +1567,6 @@ impl Shell {
         (who.role().to_lowercase(), ui::faint())
     }
 
-    /// What a bot in the sidebar shows: its real state when it has one (answering,
-    /// working, waiting on you, just done), else an idle of its own that changes
-    /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
-    fn side_mood(&self, who: Member) -> Mood {
-        let mood = self.mood(who);
-        if mood != Mood::Signature {
-            return mood;
-        }
-        if self.hovered == Some(who) {
-            return Mood::Signature;
-        }
-        idle_mood(who.key(), self.now(), self.touched.elapsed().as_secs())
-    }
-
     /// Where `who`'s eyes look: towards the pointer when it's near, else ahead.
     fn gaze(&self, who: Member) -> (i8, i8) {
         let Some(b) = self.faces.borrow().get(&who).copied() else {
@@ -1600,15 +1586,6 @@ impl Shell {
         if who.iter().map(|w| self.gaze(*w)).ne(before) {
             cx.notify();
         }
-    }
-
-    /// A sidebar bot: its own mood, clock and gaze.
-    fn side_bot(&mut self, who: Member, size: f32) -> Img {
-        let mood = self.side_mood(who);
-        let gaze = if self.motion { self.gaze(who) } else { (0, 0) };
-        let pose = mascot::figure_with(who, mood, gaze, (who.key() * 5 % 17) as u8)
-            .shine(self.hovered == Some(who));
-        self.pose_img(pose, size, Framing::Bust)
     }
 
     /// A bot drawn at `size` logical pixels, in `mood`.
@@ -2021,24 +1998,6 @@ pub fn open_window(cx: &mut App) {
     cx.activate(true);
 }
 
-/// An idle bot's mood for the moment: mostly hovering, now and then a wave,
-/// and dozing off once the person has been away a while. Each bot keeps its own
-/// rhythm, picked from `seed`.
-fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
-    if away_secs > 120 {
-        return Mood::Asleep;
-    }
-    let span = 6.0 + (seed % 5) as f64;
-    let slot = ((now + seed as f64 * 1.9) / span) as u64;
-    let mut h =
-        (seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ slot).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    h ^= h >> 29;
-    match h % 10 {
-        0..=6 => Mood::Idle,
-        _ => Mood::Signature,
-    }
-}
-
 /// Which way eyes at `eye` look to find the pointer at `at` (window pixels):
 /// straight ahead when it's far off, else up to two steps each way.
 fn gaze_towards(eye: (f32, f32), at: (f32, f32)) -> (i8, i8) {
@@ -2068,25 +2027,13 @@ pub fn to_front(cx: &mut App) {
 
 #[cfg(test)]
 mod side_tests {
-    use super::{gaze_towards, idle_mood};
-    use runo_holo::Mood;
+    use super::gaze_towards;
 
     #[test]
     fn eyes_find_a_nearby_pointer_and_ignore_a_far_one() {
         assert_eq!(gaze_towards((100., 100.), (180., 100.)), (2, 0));
         assert_eq!(gaze_towards((100., 100.), (100., 72.)), (0, -1));
         assert_eq!(gaze_towards((100., 100.), (900., 100.)), (0, 0));
-    }
-
-    #[test]
-    fn idle_bots_do_not_all_do_the_same_thing() {
-        let at = |t: f64| (1..=7).map(|k| idle_mood(k, t, 0)).collect::<Vec<_>>();
-        let varied = (0..60).any(|i| {
-            let m = at(i as f64 * 3.0);
-            m.iter().any(|x| *x != m[0])
-        });
-        assert!(varied);
-        assert_eq!(idle_mood(3, 10.0, 600), Mood::Asleep);
     }
 }
 

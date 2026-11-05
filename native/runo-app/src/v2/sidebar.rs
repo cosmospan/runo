@@ -14,7 +14,6 @@ use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use super::data::Member;
 use super::ui::{self, c};
 use super::{Place, Shell};
 
@@ -190,59 +189,6 @@ impl Shell {
                 .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
-        // The crew at work, as live faces stacked near the foot of the rail:
-        // each one opens its job (or its chat when it's free).
-        let (shown, _) = self.sidebar_crew();
-        let mut faces = div().flex().flex_col().items_center().gap(px(6.));
-        for who in shown.into_iter().take(5) {
-            let busy = self.crew.store.busy(who).map(|j| j.id);
-            let asking = self
-                .crew
-                .store
-                .jobs
-                .iter()
-                .any(|j| j.bot == who && j.needs_you());
-            let badge = if busy.is_some() {
-                Some(ui::BLUE)
-            } else if asking {
-                Some(ui::AMBER)
-            } else {
-                None
-            };
-            let to = busy.map(Place::Live).unwrap_or(Place::Chat(who));
-            let name = who.name();
-            faces = faces.child(
-                div()
-                    .id(("side-bot", who.key() as usize))
-                    .relative()
-                    .size(px(36.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
-                    .child(self.side_bot(who, 28.))
-                    .when_some(badge, |d, color| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .right(px(3.))
-                                .bottom(px(3.))
-                                .size(px(9.))
-                                .rounded_full()
-                                .border_2()
-                                .border_color(c(ground()))
-                                .bg(c(color)),
-                        )
-                    })
-                    .tooltip(move |window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new(name).build(window, cx)
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(to, cx))),
-            );
-        }
-
         let settings = item(
             "side-settings",
             IconName::Settings,
@@ -272,9 +218,6 @@ impl Shell {
             .child(head)
             .child(nav)
             .child(div().flex_1())
-            .child(div().w(px(28.)).h(px(1.)).mb(px(10.)).bg(c(ui::line())))
-            .child(faces)
-            .child(div().h(px(10.)))
             .child(settings)
     }
 
@@ -443,88 +386,5 @@ fn short_path(path: &str) -> String {
     match path.strip_prefix(&home) {
         Some(rest) if !home.is_empty() => format!("~{rest}"),
         _ => path.to_string(),
-    }
-}
-
-/// How many bots the sidebar lists before folding the rest into "+N more".
-pub(super) const SIDEBAR_BOTS: usize = 6;
-
-/// The order the sidebar lists bots in: working first, then the ones waiting on
-/// you, then pinned bots, then the rest of the crew as you arranged it.
-pub(super) fn crew_order(
-    all: &[Member],
-    busy: impl Fn(Member) -> bool,
-    asking: impl Fn(Member) -> bool,
-    pinned: &[Member],
-) -> Vec<Member> {
-    let rank = |m: Member| -> u8 {
-        if busy(m) {
-            0
-        } else if asking(m) {
-            1
-        } else if pinned.contains(&m) {
-            2
-        } else {
-            3
-        }
-    };
-    let mut v = all.to_vec();
-    // Stable, so bots of the same rank keep the crew's own order.
-    v.sort_by_key(|m| rank(*m));
-    v
-}
-
-impl Shell {
-    /// The bots the sidebar shows and how many more are folded away.
-    fn sidebar_crew(&self) -> (Vec<Member>, usize) {
-        let all = Member::all();
-        let order = crew_order(
-            &all,
-            |m| self.crew.store.busy(m).is_some(),
-            |m| {
-                self.crew
-                    .store
-                    .jobs
-                    .iter()
-                    .any(|j| j.bot == m && j.needs_you())
-            },
-            &self.crew.store.pinned,
-        );
-        // Everything that's working or waiting on you stays in view.
-        let must = order
-            .iter()
-            .take_while(|m| {
-                self.crew.store.busy(**m).is_some()
-                    || self
-                        .crew
-                        .store
-                        .jobs
-                        .iter()
-                        .any(|j| j.bot == **m && j.needs_you())
-            })
-            .count();
-        let cap = SIDEBAR_BOTS.max(must);
-        // Folding one bot away saves nothing: show it instead of "+1 more".
-        if order.len() <= cap + 1 {
-            return (order, 0);
-        }
-        let more = order.len() - cap;
-        (order.into_iter().take(cap).collect(), more)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{crew_order, Member};
-
-    #[test]
-    fn busy_bots_come_first_then_waiting_then_pinned() {
-        use Member::*;
-        let all = [Builder, Checker, Guard, Fixer, Explainer, Keeper];
-        let order = crew_order(&all, |m| m == Fixer, |m| m == Keeper, &[Guard]);
-        assert_eq!(
-            order,
-            vec![Fixer, Keeper, Guard, Builder, Checker, Explainer]
-        );
     }
 }
