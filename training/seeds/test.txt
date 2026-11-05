@@ -1,0 +1,45 @@
+write tests for the cart total calculation
+run the test suite and tell me what fails
+add unit tests for the date formatting helpers
+add an integration test for the signup flow
+increase coverage on the payments module
+write e2e tests for checkout with Playwright
+try the login flow end to end and report what breaks
+add tests for the CSV importer edge cases
+check that the API returns 404 for missing users
+write a test that reproduces the timezone bug
+run the linters and tests and summarize
+add snapshot tests for the main components
+write property based tests for the parser
+test the app on a slow network and tell me what happens
+add tests for the rate limiter
+verify the password reset email is sent
+write load tests for the search endpoint
+make sure the migrations run on an empty database
+add tests for the Rust config loader
+smoke test the staging deploy
+add a test for empty input to the summarize function
+test that admins can't see other orgs' data
+write tests for the websocket reconnect logic
+run the iOS UI tests and tell me which fail
+add Jest tests for the useCart hook
+cover the error branches in the upload handler with tests
+check the importer handles 100k rows
+write a regression test for the double email bug
+add contract tests between the web app and the API
+test the CLI with missing arguments
+make sure dark mode renders correctly in every screen
+add pytest fixtures for the database tests
+check that the game saves and loads correctly
+write tests for the billing proration math
+run the benchmarks and compare with main
+verify the export works for users with no data
+add tests around the retry backoff
+test every route returns within 200ms
+write tests for the Go worker's queue handling
+does the test suite pass on Node 22? try it
+check accessibility of the signup page with axe
+add tests for unicode names
+write table driven tests for the price formatter
+test the webhook signature verification
+make sure all API docs examples actually work

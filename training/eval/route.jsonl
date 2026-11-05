@@ -1,0 +1,53 @@
+{"text": "The app crashes when I log out", "mode": "fix"}
+{"text": "fix the crash on save", "mode": "fix"}
+{"text": "TypeError: cannot read properties of undefined (reading 'id')", "mode": "fix"}
+{"text": "login button doesn't work on Safari", "mode": "fix"}
+{"text": "the export to CSV is broken since yesterday", "mode": "fix"}
+{"text": "thread 'main' panicked at src/main.rs:42:5", "mode": "fix"}
+{"text": "search results are wrong when the query has a space", "mode": "fix"}
+{"text": "the dashboard is really slow to load", "mode": "fix"}
+{"text": "memory leak in the websocket handler", "mode": "fix"}
+{"text": "signup fails with a 500", "mode": "fix"}
+{"text": "add a dark mode toggle to settings", "mode": "build"}
+{"text": "build a page that lists all invoices", "mode": "build"}
+{"text": "implement password reset by email", "mode": "build"}
+{"text": "create an API endpoint for uploading avatars", "mode": "build"}
+{"text": "make the sidebar collapsible", "mode": "build"}
+{"text": "support exporting reports as PDF", "mode": "build"}
+{"text": "integrate Stripe checkout", "mode": "build"}
+{"text": "a new onboarding screen with three steps", "mode": "build"}
+{"text": "add keyboard shortcuts for the editor", "mode": "build"}
+{"text": "write a command that imports users from a CSV", "mode": "build"}
+{"text": "How does the login flow work?", "mode": "ask"}
+{"text": "what does this project do?", "mode": "ask"}
+{"text": "explain the caching layer", "mode": "ask"}
+{"text": "where are API routes defined?", "mode": "ask"}
+{"text": "why do we have two config files?", "mode": "ask"}
+{"text": "walk me through what happens on startup", "mode": "ask"}
+{"text": "which database does the app use?", "mode": "ask"}
+{"text": "is there any code that sends emails?", "mode": "ask"}
+{"text": "tell me how payments are stored", "mode": "ask"}
+{"text": "how do I run this locally?", "mode": "ask"}
+{"text": "review my changes before I merge", "mode": "review"}
+{"text": "audit the auth code for security problems", "mode": "review"}
+{"text": "are there any secrets checked into the repo", "mode": "review"}
+{"text": "look over the payment changes for risks", "mode": "review"}
+{"text": "is it safe to merge this branch", "mode": "review"}
+{"text": "review the uncommitted changes", "mode": "review"}
+{"text": "check for SQL injection vulnerabilities", "mode": "review"}
+{"text": "increase test coverage for the parser", "mode": "test"}
+{"text": "run the tests and tell me what fails", "mode": "test"}
+{"text": "write e2e tests for checkout", "mode": "test"}
+{"text": "verify that signup still works end to end", "mode": "test"}
+{"text": "add unit tests for the date helpers", "mode": "test"}
+{"text": "smoke test the release build", "mode": "test"}
+{"text": "make sure the importer handles empty files", "mode": "test"}
+{"text": "bump the dependencies and remove dead code", "mode": "tidy"}
+{"text": "refactor the user service into smaller files", "mode": "tidy"}
+{"text": "clean up unused imports", "mode": "tidy"}
+{"text": "rename getUsr to getUser everywhere", "mode": "tidy"}
+{"text": "upgrade React to the latest version", "mode": "tidy"}
+{"text": "fix the lint warnings", "mode": "tidy"}
+{"text": "the login test is flaky, make it stable", "mode": "tidy"}
+{"text": "remove duplicated helpers in utils", "mode": "tidy"}
+{"text": "simplify the settings code", "mode": "tidy"}
