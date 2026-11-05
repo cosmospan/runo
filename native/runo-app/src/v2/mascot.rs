@@ -1,10 +1,10 @@
 //! Fin, the crew's mascot, and how each bot wears it.
 //!
-//! Every bot is drawn as Fin by default, in its own colour and dressed for its
-//! job: the Builder in a hard hat with a wrench, the Guard as security with a
-//! shield and baton, and so on. Settings → Mascot changes any of it, or goes
-//! back to the bubble crew. Choices live in `AppSettings` (`mascot`,
-//! `fin_material`, `fin_looks`); a parsed copy is kept here so drawing a bot
+//! Every bot is drawn as Fin, in its own colour and dressed for its job: the
+//! Builder in a hard hat with a wrench, the Guard as security with a shield and
+//! baton, and so on. Bots made on Crew wear what they were given in the maker.
+//! Settings → Mascot changes any of it. Choices live in `AppSettings`
+//! (`fin_material`, `fin_looks`); a parsed copy is kept here so drawing a bot
 //! never has to reach for the settings.
 
 use std::collections::HashMap;
@@ -39,6 +39,16 @@ pub fn colour_id(t: Tint) -> &'static str {
 
 fn colour(id: &str) -> Option<Tint> {
     COLOURS.iter().find(|c| c.0 == id).map(|c| c.2)
+}
+
+/// Where `t` sits in [`COLOURS`], the form a made bot's colour is saved in.
+pub fn colour_index(t: Tint) -> u8 {
+    COLOURS.iter().position(|c| c.2 == t).unwrap_or(5) as u8
+}
+
+/// The colour at `i` in [`COLOURS`]; out of range is violet.
+pub fn colour_at(i: u8) -> Tint {
+    COLOURS.get(i as usize).map_or(Tint::VIOLET, |c| c.2)
 }
 
 /// What a bot wears when the person hasn't changed it: a kit that fits its job.
@@ -82,7 +92,7 @@ pub fn default_look(who: Member) -> (Tint, Outfit) {
             Tint::VIOLET,
             kit(Hat::Crown, Held::Clipboard, Tool::None, Badge::Star),
         ),
-        Member::Made(_) => (who.bubble().tint, Outfit::PLAIN),
+        Member::Made(_) => who.made_look().unwrap_or((Tint::VIOLET, Outfit::PLAIN)),
     }
 }
 
@@ -98,31 +108,24 @@ fn parse(code: &str) -> Option<(Tint, Outfit)> {
 
 #[derive(Default)]
 struct Looks {
-    on: bool,
     material: Option<Material>,
     saved: HashMap<String, String>,
     parsed: HashMap<String, (Tint, Outfit)>,
 }
 
-static LOOKS: std::sync::LazyLock<RwLock<Looks>> = std::sync::LazyLock::new(|| {
-    RwLock::new(Looks {
-        on: true,
-        ..Looks::default()
-    })
-});
+static LOOKS: std::sync::LazyLock<RwLock<Looks>> =
+    std::sync::LazyLock::new(|| RwLock::new(Looks::default()));
 
 /// Takes the person's choices from the settings; cheap when nothing changed.
 pub fn sync(st: &AppSettings) {
-    let on = st.mascot != "bubble";
     let material = Material::from_id(&st.fin_material);
     {
         let l = LOOKS.read().unwrap_or_else(|e| e.into_inner());
-        if l.on == on && l.material == Some(material) && l.saved == st.fin_looks {
+        if l.material == Some(material) && l.saved == st.fin_looks {
             return;
         }
     }
     let mut l = LOOKS.write().unwrap_or_else(|e| e.into_inner());
-    l.on = on;
     l.material = Some(material);
     l.saved = st.fin_looks.clone();
     l.parsed = st
@@ -167,10 +170,12 @@ pub fn role_of(outfit: Outfit) -> Option<&'static runo_holo::fin::Role> {
 
 /// How `who` is drawn in `mood`, as the last [`sync`] left things.
 pub fn figure(who: Member, mood: Mood) -> Figure {
+    figure_with(who, mood, (0, 0), 0)
+}
+
+/// [`figure`], looking towards `gaze` with its clock shifted by `offset` steps.
+pub fn figure_with(who: Member, mood: Mood, gaze: (i8, i8), offset: u8) -> Figure {
     let l = LOOKS.read().unwrap_or_else(|e| e.into_inner());
-    if !l.on {
-        return Figure::Bubble(who.bubble().pose(mood));
-    }
     let (tint, outfit) = l
         .parsed
         .get(&bot_key(who))
@@ -182,7 +187,9 @@ pub fn figure(who: Member, mood: Mood) -> Figure {
             material: l.material.unwrap_or(Material::Glass),
             outfit,
         }
-        .pose(mood),
+        .pose(mood)
+        .looking(gaze)
+        .offset(offset),
     )
 }
 

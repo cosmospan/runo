@@ -371,6 +371,8 @@ impl Fin {
             fin: self,
             state: State::of(mood),
             shine: false,
+            gaze: (0, 0),
+            offset: 0,
         }
     }
 
@@ -411,9 +413,29 @@ pub struct FinPose {
     pub state: State,
     /// Hovered or worth marking: the ring and glow burn a little brighter.
     pub shine: bool,
+    /// Where the eyes look, each axis from -2 (left, up) to 2 (right, down).
+    pub gaze: (i8, i8),
+    /// Shifts the animation clock, in steps of [`OFFSET_STEP`] seconds, so a
+    /// row of bots in the same state doesn't move in lockstep.
+    pub offset: u8,
 }
 
+/// Seconds per step of [`FinPose::offset`].
+pub const OFFSET_STEP: f64 = 0.37;
+
 impl FinPose {
+    /// Looking towards `gaze` (see [`FinPose::gaze`]).
+    pub fn looking(mut self, gaze: (i8, i8)) -> Self {
+        self.gaze = (gaze.0.clamp(-2, 2), gaze.1.clamp(-2, 2));
+        self
+    }
+
+    /// With its clock shifted by `offset` steps (see [`FinPose::offset`]).
+    pub fn offset(mut self, offset: u8) -> Self {
+        self.offset = offset;
+        self
+    }
+
     /// Busy enough to need a quick frame rate.
     pub fn lively(&self) -> bool {
         matches!(
@@ -656,6 +678,8 @@ struct Rig {
     zs: [(f64, (f64, f64), f64); 3],
     blink: f64,
     look: (f64, f64),
+    /// The whole face shifted towards where Fin is looking.
+    gaze: (f64, f64),
     cursor: f64,
 }
 
@@ -678,6 +702,7 @@ fn rig(state: State, t: f64) -> Rig {
         zs: [(0.0, (0.0, 0.0), 1.0); 3],
         blink: 1.0,
         look: (0.0, 0.0),
+        gaze: (0.0, 0.0),
         cursor: 1.0,
     };
     let swing = |dur: f64, to: f64| {
@@ -893,8 +918,12 @@ fn visor() -> RoundedRect {
     RoundedRect::new(36.0, 35.0, 84.0, 70.0, 13.0)
 }
 
-/// The face: brows, eyes and mouth for a state.
+/// The face: brows, eyes and mouth for a state, turned towards the gaze.
 fn face(p: &mut Pen, state: State, ac: Rgb, rg: &Rig) {
+    p.at(Affine::translate(rg.gaze), |p| face_at(p, state, ac, rg));
+}
+
+fn face_at(p: &mut Pen, state: State, ac: Rgb, rg: &Rig) {
     const L: f64 = 52.0;
     const R: f64 = 68.0;
     const Y: f64 = 53.0;
@@ -1626,8 +1655,9 @@ fn view(framing: Framing) -> (f64, f64, f64) {
     match framing {
         // Room for props that reach past the fins and for the floating bits.
         Framing::Full => (-10.0, -4.0, 140.0),
-        // Avatars: the head and most of the fins, filling the square.
-        Framing::Bust => (9.0, 5.0, 102.0),
+        // Avatars: the head, fins, held props and any hat, with room for a hop, so a
+        // small avatar never cuts off a crown or a fin tip.
+        Framing::Bust => (-8.0, -12.0, 136.0),
     }
 }
 
@@ -1638,7 +1668,10 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let xf = Affine::scale(k) * Affine::translate((-x0, -y0));
     let simple = px < 36;
     let full = framing == Framing::Full;
-    let rg = rig(pose.state, t);
+    let t = t + pose.offset as f64 * OFFSET_STEP;
+    let mut rg = rig(pose.state, t);
+    // The face follows the pointer, on top of whatever the state does with it.
+    rg.gaze = (2.0 * pose.gaze.0 as f64, 1.5 * pose.gaze.1 as f64);
     let mut p = Pen {
         ctx,
         xf,
@@ -1713,6 +1746,8 @@ mod tests {
                     fin: fin(m, Outfit::PLAIN),
                     state: s,
                     shine: false,
+                    gaze: (0, 0),
+                    offset: 0,
                 };
                 let px = r.draw(&pose, 1.3, Framing::Full);
                 assert!(coverage(px) > 600, "{m:?} {s:?} drew almost nothing");

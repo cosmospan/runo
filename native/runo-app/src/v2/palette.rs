@@ -20,7 +20,6 @@ pub enum Act {
     Job(Mode),
     Folder(usize),
     AddFolder,
-    V1,
     /// Approve the job waiting for review.
     Approve(u64),
     /// Try the job on other engines too.
@@ -226,13 +225,6 @@ impl Shell {
             bot: None,
             act: Act::AddFolder,
         });
-        all.push(Entry {
-            label: "Open the classic app".into(),
-            hint: "Window".into(),
-            icon: Some(IconName::ExternalLink),
-            bot: None,
-            act: Act::V1,
-        });
         all.retain(|e| matches(query, &e.label, &e.hint));
         all
     }
@@ -275,7 +267,6 @@ impl Shell {
                 }
             }
             Act::AddFolder => self.pick_folder(cx),
-            Act::V1 => cx.defer(crate::open_main_window),
             Act::Approve(id) => self.approve(id, cx),
             Act::Race(id) => self.race_it(id, cx),
             Act::Terminal(id) => {

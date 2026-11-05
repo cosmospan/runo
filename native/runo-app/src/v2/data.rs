@@ -2,19 +2,25 @@
 
 use std::sync::RwLock;
 
-use runo_holo::{Bot, Bubble};
+use runo_holo::fin::{Fin, Outfit};
+use runo_holo::Tint;
 
 use super::ui;
 
 /// A bot the person made in the maker on Crew: its name, what it's for, the
-/// built-in bot whose kind of work it does, and its look.
+/// built-in bot whose kind of work it does, and how its Fin looks.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Made {
     pub id: u16,
     pub name: String,
     pub role: String,
     pub like: Member,
+    /// `look[0]` is its colour, an index into [`super::mascot::COLOURS`]. The
+    /// rest is left from the old bubble maker and no longer read.
     pub look: [u8; 4],
+    /// Its Fin outfit, as [`Fin::outfit_code`] has it; bare when missing.
+    #[serde(default)]
+    pub outfit: String,
 }
 
 /// Made bots with their words kept for the life of the app, so `Member` stays a
@@ -25,7 +31,8 @@ struct Kept {
     role: &'static str,
     persona: &'static str,
     like: Member,
-    bubble: Bubble,
+    tint: Tint,
+    outfit: Outfit,
 }
 
 static MADE: RwLock<Vec<Kept>> = RwLock::new(Vec::new());
@@ -69,7 +76,8 @@ pub fn set_made(made: &[Made]) {
                 role: keep(&kept, &m.role, |k| k.role),
                 persona: keep(&kept, &persona, |k| k.persona),
                 like: m.like,
-                bubble: Bubble::from_code(m.look),
+                tint: super::mascot::colour_at(m.look[0]),
+                outfit: Fin::outfit_from_code(&m.outfit),
             }
         })
         .collect();
@@ -296,39 +304,18 @@ impl Member {
         }
     }
 
-    pub fn bot(self) -> Bot {
+    /// The colour and outfit a made bot was given in the maker.
+    pub fn made_look(self) -> Option<(Tint, Outfit)> {
         match self {
-            Member::Made(_) => self.like().bot(),
-            Member::Fin => Bot::Explainer,
-            Member::Shipper => Bot::Keeper,
-            Member::Builder => Bot::Builder,
-            Member::Checker => Bot::Checker,
-            Member::Guard => Bot::Guard,
-            Member::Fixer => Bot::Fixer,
-            Member::Explainer => Bot::Explainer,
-            Member::Keeper => Bot::Keeper,
-        }
-    }
-
-    pub fn bubble(self) -> Bubble {
-        match self {
-            Member::Made(id) => made(id, |k| k.bubble).unwrap_or_else(|| self.like().bubble()),
-            Member::Shipper => Bubble {
-                tint: runo_holo::Tint::TEAL,
-                ..Member::Keeper.bot().bubble()
-            },
-            Member::Fin => Bubble {
-                tint: runo_holo::Tint::VIOLET,
-                ..Member::Explainer.bot().bubble()
-            },
-            _ => self.bot().bubble(),
+            Member::Made(id) => made(id, |k| (k.tint, k.outfit)),
+            _ => None,
         }
     }
 
     /// The bot's accent, for its name, status and progress.
     pub fn accent(self) -> u32 {
         match self {
-            Member::Made(_) => self.bubble().tint.strong().0,
+            Member::Made(_) => self.made_look().map_or(Tint::VIOLET, |(t, _)| t).strong().0,
             Member::Fin => ui::RUNO,
             Member::Builder => ui::ORANGE,
             Member::Checker => ui::GREEN,
@@ -481,6 +468,7 @@ mod tests {
             role: "Checks the docs are current".into(),
             like: Member::Checker,
             look: [4, 2, 1, 0],
+            outfit: String::new(),
         }]);
         let all = Member::all();
         assert_eq!(all.len(), Member::CREW.len() + 2);
@@ -497,6 +485,7 @@ mod tests {
             role: "Checks the docs are current".into(),
             like: Member::Checker,
             look: [4, 2, 1, 0],
+            outfit: String::new(),
         }]);
         assert_eq!(Member::Made(1).name(), "Scout 2");
         // Removing Checker: Scout takes its Test jobs.

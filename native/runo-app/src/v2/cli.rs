@@ -79,7 +79,15 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
 
-Jobs run in the Squad Code app, which picks these up while it's open.";
+On a server:
+  squad serve [--listen <address>|tailscale]
+                             run the crew here with no window, for other
+                             devices to reach (127.0.0.1:7640 by default)
+  squad pair [name]           a one-time code to pair a device with
+  squad devices               paired devices
+  squad unpair <name>         stop a device reaching the crew
+
+Jobs run in the Squad Code app while it's open, or in `squad serve`.";
 
 /// One line per job for `ls`.
 pub fn line(j: &Job) -> String {
@@ -205,6 +213,10 @@ pub fn main(args: &[String]) -> i32 {
             id().and_then(|id| push(&Ask::Discard { id }).map(|_| format!("Discarding #{id}.")))
         }
         "stop" => id().and_then(|id| push(&Ask::Stop { id }).map(|_| format!("Stopping #{id}."))),
+        "serve" => return super::server::serve(&args[1..]),
+        "pair" => return super::server::pair_command(&args[1..]),
+        "devices" => return super::server::devices_command(),
+        "unpair" => return super::server::unpair_command(&args[1..]),
         "help" | "-h" | "--help" => Ok(HELP.into()),
         other => Err(format!(
             "squad doesn't know \u{201c}{other}\u{201d}.\n\n{HELP}"
