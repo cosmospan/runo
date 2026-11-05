@@ -9875,8 +9875,7 @@ fn main() {
         startup::mark("notifications, menu bar");
         cx.set_menus(app_menus());
         startup::mark("menus");
-        // Runo v2 opens by default on this branch; RUNO_V1=1 opens the v1 window instead
-        // (v1 is also one click away on v2's rail).
+        // Runo v2 opens by default; RUNO_V1=1 opens the v1 window instead, for development.
         if std::env::var_os("RUNO_V1").is_some() {
             open_main_window(cx);
         } else {

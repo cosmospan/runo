@@ -4,7 +4,7 @@
 //! moving), Live (watch one job as the bot works), Chat (ask a bot in plain
 //! words), Crew, Inbox and History. Every job runs for real on the bot's
 //! engine in a folder the person picked, and is kept between launches. The
-//! bots are the bubble crew from `runo-holo`, drawn as their moods change.
+//! bots are Fin from `runo-holo`, drawn as their moods change.
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
@@ -27,6 +27,7 @@ mod prefs;
 mod race;
 mod review;
 mod runtime;
+pub mod server;
 mod ship;
 mod sidebar;
 mod start;
@@ -393,8 +394,8 @@ pub struct Shell {
     live_len: usize,
     chat_scroll: ScrollHandle,
     chat_len: usize,
-    /// The bubble in the "make your own" playground on Crew.
-    maker: runo_holo::Bubble,
+    /// The Fin in the "make your own" playground on Crew: its colour and outfit.
+    maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
     history_filter: usize,
     folder_menu: bool,
@@ -416,6 +417,10 @@ pub struct Shell {
     touched: Instant,
     /// The bot under the pointer: it gets the light sweep.
     hovered: Option<Member>,
+    /// Where the pointer is in the window, for the sidebar bots' eyes.
+    mouse: Point<Pixels>,
+    /// Where each sidebar bot was painted last frame, so its eyes can find the pointer.
+    faces: std::rc::Rc<std::cell::RefCell<HashMap<Member, Bounds<Pixels>>>>,
     /// The maker's name and job boxes, and the built-in bot its work is like.
     maker_name: Entity<InputState>,
     maker_role: Entity<InputState>,
@@ -716,7 +721,7 @@ impl Shell {
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
             chat_len: 0,
-            maker: Member::Fixer.bubble(),
+            maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
             toast: None,
@@ -744,6 +749,8 @@ impl Shell {
             maker_role,
             maker_like: Member::Checker,
             hover_at: Instant::now(),
+            mouse: Point::default(),
+            faces: Default::default(),
             palette: false,
             focus,
             focus_moved: Instant::now(),
@@ -1002,7 +1009,8 @@ impl Shell {
             name: name.clone(),
             role,
             like,
-            look: self.maker.code(),
+            look: [mascot::colour_index(self.maker.0), 0, 0, 0],
+            outfit: runo_holo::fin::Fin::outfit_code(self.maker.1),
         });
         data::set_made(&self.crew.store.made);
         self.crew.store.save();
@@ -1394,6 +1402,15 @@ impl Shell {
         if self.crew.store.busy(who).is_some() {
             return Mood::Working;
         }
+        if self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .any(|j| j.bot == who && j.needs_you())
+        {
+            return Mood::NeedsYou;
+        }
         let recent = self
             .crew
             .store
@@ -1436,6 +1453,50 @@ impl Shell {
             return ("needs you".into(), ui::AMBER);
         }
         (who.role().to_lowercase(), ui::FAINT)
+    }
+
+    /// What a bot in the sidebar shows: its real state when it has one (answering,
+    /// working, waiting on you, just done), else an idle of its own that changes
+    /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
+    fn side_mood(&self, who: Member) -> Mood {
+        let mood = self.mood(who);
+        if mood != Mood::Signature {
+            return mood;
+        }
+        if self.hovered == Some(who) {
+            return Mood::Signature;
+        }
+        idle_mood(who.key(), self.now(), self.touched.elapsed().as_secs())
+    }
+
+    /// Where `who`'s eyes look: towards the pointer when it's near, else ahead.
+    fn gaze(&self, who: Member) -> (i8, i8) {
+        let Some(b) = self.faces.borrow().get(&who).copied() else {
+            return (0, 0);
+        };
+        gaze_towards(
+            (f32::from(b.center().x), f32::from(b.center().y)),
+            (f32::from(self.mouse.x), f32::from(self.mouse.y)),
+        )
+    }
+
+    /// The pointer moved: redraw if any sidebar bot would now look elsewhere.
+    fn pointer_moved(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let who: Vec<Member> = self.faces.borrow().keys().copied().collect();
+        let before: Vec<_> = who.iter().map(|w| self.gaze(*w)).collect();
+        self.mouse = at;
+        if who.iter().map(|w| self.gaze(*w)).ne(before) {
+            cx.notify();
+        }
+    }
+
+    /// A sidebar bot: its own mood, clock and gaze.
+    fn side_bot(&mut self, who: Member, size: f32) -> Img {
+        let mood = self.side_mood(who);
+        let gaze = if self.motion { self.gaze(who) } else { (0, 0) };
+        let pose = mascot::figure_with(who, mood, gaze, (who.key() * 5 % 17) as u8)
+            .shine(self.hovered == Some(who));
+        self.pose_img(pose, size, Framing::Bust)
     }
 
     /// A bot drawn at `size` logical pixels, in `mood`.
@@ -1659,8 +1720,9 @@ impl Render for Shell {
             .relative()
             .flex()
             .track_focus(&self.focus)
-            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
+            .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
                 this.wake(cx);
+                this.pointer_moved(e.position, cx);
             }))
             .capture_key_down(cx.listener(|this, _: &KeyDownEvent, _, cx| {
                 this.wake(cx);
@@ -1806,8 +1868,78 @@ pub fn open_window(cx: &mut App) {
     cx.activate(true);
     if let Ok((handle, _)) = opened {
         let _ = handle.update(cx, |_, window, _| window.activate_window());
+        cx.set_global(OpenWindow(handle));
     }
     cx.activate(true);
+}
+
+/// An idle bot's mood for the moment: mostly hovering, now and then a wave,
+/// and dozing off once the person has been away a while. Each bot keeps its own
+/// rhythm, picked from `seed`.
+fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
+    if away_secs > 120 {
+        return Mood::Asleep;
+    }
+    let span = 6.0 + (seed % 5) as f64;
+    let slot = ((now + seed as f64 * 1.9) / span) as u64;
+    let mut h =
+        (seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ slot).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 29;
+    match h % 10 {
+        0..=6 => Mood::Idle,
+        _ => Mood::Signature,
+    }
+}
+
+/// Which way eyes at `eye` look to find the pointer at `at` (window pixels):
+/// straight ahead when it's far off, else up to two steps each way.
+fn gaze_towards(eye: (f32, f32), at: (f32, f32)) -> (i8, i8) {
+    let (dx, dy) = (at.0 - eye.0, at.1 - eye.1);
+    if dx.hypot(dy) > 260.0 {
+        return (0, 0);
+    }
+    let step = |d: f32| (d / 28.0).round().clamp(-2.0, 2.0) as i8;
+    (step(dx), step(dy))
+}
+
+/// The Squad Code window, once one has been opened.
+struct OpenWindow(AnyWindowHandle);
+
+impl Global for OpenWindow {}
+
+/// Brings the Squad Code window forward, opening a new one if it was closed.
+pub fn to_front(cx: &mut App) {
+    let shown = cx.try_global::<OpenWindow>().map(|w| w.0).is_some_and(|w| {
+        w.update(cx, |_, window, _| window.activate_window())
+            .is_ok()
+    });
+    if !shown {
+        open_window(cx);
+    }
+}
+
+#[cfg(test)]
+mod side_tests {
+    use super::{gaze_towards, idle_mood};
+    use runo_holo::Mood;
+
+    #[test]
+    fn eyes_find_a_nearby_pointer_and_ignore_a_far_one() {
+        assert_eq!(gaze_towards((100., 100.), (180., 100.)), (2, 0));
+        assert_eq!(gaze_towards((100., 100.), (100., 72.)), (0, -1));
+        assert_eq!(gaze_towards((100., 100.), (900., 100.)), (0, 0));
+    }
+
+    #[test]
+    fn idle_bots_do_not_all_do_the_same_thing() {
+        let at = |t: f64| (1..=7).map(|k| idle_mood(k, t, 0)).collect::<Vec<_>>();
+        let varied = (0..60).any(|i| {
+            let m = at(i as f64 * 3.0);
+            m.iter().any(|x| *x != m[0])
+        });
+        assert!(varied);
+        assert_eq!(idle_mood(3, 10.0, 600), Mood::Asleep);
+    }
 }
 
 #[cfg(test)]

@@ -39,7 +39,7 @@ fn shim_dir() -> Option<PathBuf> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755));
+            let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700));
         }
     }
     Some(dir)

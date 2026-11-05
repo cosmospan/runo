@@ -310,21 +310,24 @@ pub fn seed() -> Store {
             name: "Pixel".into(),
             role: "Polishes the UI".into(),
             like: Member::Builder,
-            look: [1, 2, 0, 1],
+            look: [3, 0, 0, 0],
+            outfit: "beret.none.pencil.heart".into(),
         },
         Made {
             id: 2,
             name: "Scribe".into(),
             role: "Writes the docs".into(),
             like: Member::Explainer,
-            look: [2, 0, 1, 0],
+            look: [4, 0, 0, 0],
+            outfit: "headset.clipboard.pencil.tag".into(),
         },
         Made {
             id: 3,
             name: "Atlas".into(),
             role: "Keeps the database tidy".into(),
             like: Member::Keeper,
-            look: [0, 1, 2, 2],
+            look: [6, 0, 0, 0],
+            outfit: "bandana.none.broom.gear".into(),
         },
     ];
     super::data::set_made(&made);
