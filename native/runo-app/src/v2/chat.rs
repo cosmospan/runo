@@ -47,7 +47,7 @@ impl Shell {
             .pt(px(if cfg!(target_os = "macos") { 14. } else { 8. }))
             .pb(px(8.))
             .border_b_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(hero)
             .child(
                 div()
@@ -65,7 +65,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(13.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(format!("{} · reads the code, never changes it", who.role())),
                     ),
             )
@@ -79,15 +79,15 @@ impl Shell {
                     .h(px(32.))
                     .rounded_full()
                     .border_1()
-                    .border_color(c(ui::LINE))
-                    .bg(c(ui::PANEL))
+                    .border_color(c(ui::line()))
+                    .bg(c(ui::panel()))
                     .text_size(px(12.5))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         Icon::new(IconName::Cpu)
                             .size(px(13.))
-                            .text_color(c(ui::MUTED)),
+                            .text_color(c(ui::muted())),
                     )
                     .child(engine)
                     .on_click(
@@ -125,8 +125,8 @@ impl Shell {
                             .px(px(16.))
                             .py(px(10.))
                             .rounded(px(16.))
-                            .bg(c(ui::FILL))
-                            .text_color(c(ui::ON_FILL))
+                            .bg(c(ui::fill()))
+                            .text_color(c(ui::on_fill()))
                             .text_size(px(14.))
                             .line_height(px(20.))
                             .child(m.text.clone()),
@@ -150,9 +150,9 @@ impl Shell {
                                     .px(px(18.))
                                     .py(px(13.))
                                     .rounded(px(16.))
-                                    .bg(ca(ui::PANEL, 0.85))
+                                    .bg(ca(ui::panel(), 0.85))
                                     .border_1()
-                                    .border_color(c(ui::LINE))
+                                    .border_color(c(ui::line()))
                                     .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
@@ -163,7 +163,7 @@ impl Shell {
                                     div()
                                         .pl(px(4.))
                                         .text_size(px(11.))
-                                        .text_color(c(ui::FAINT))
+                                        .text_color(c(ui::faint()))
                                         .child(via),
                                 )
                             }),
@@ -189,7 +189,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(format!("reading the code · {secs}s")),
                     ),
             );
@@ -268,16 +268,16 @@ impl Shell {
                                     .id("chat-send")
                                     .size(px(36.))
                                     .rounded_full()
-                                    .bg(c(ui::FILL))
+                                    .bg(c(ui::fill()))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(c(0xDCDCE3)))
+                                    .hover(|s| s.bg(c(ui::fill_hover())))
                                     .child(
                                         Icon::new(IconName::ArrowUp)
                                             .size(px(15.))
-                                            .text_color(c(ui::ON_FILL)),
+                                            .text_color(c(ui::on_fill())),
                                     )
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         let text =
@@ -310,12 +310,12 @@ impl Shell {
                     .flex()
                     .items_center()
                     .rounded_full()
-                    .bg(ca(ui::PANEL, 0.75))
+                    .bg(ca(ui::panel(), 0.75))
                     .border_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .text_size(px(13.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(q)
                     .on_click(cx.listener(move |this, _, _, cx| this.ask(who, q.to_string(), cx))),
             );
@@ -338,7 +338,7 @@ impl Shell {
                     .text_center()
                     .text_size(px(13.5))
                     .line_height(px(20.))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(who.pitch()),
             )
             .child(asks)

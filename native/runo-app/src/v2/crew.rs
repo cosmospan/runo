@@ -46,9 +46,9 @@ impl Shell {
         let busy = self.crew.store.running().count();
         let mut list = div()
             .w_full()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .overflow_hidden()
             .child(
@@ -59,10 +59,10 @@ impl Shell {
                     .items_center()
                     .gap(px(14.))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(11.5))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child(div().flex_1().min_w_0().child("Bot"))
                     .child(div().w(px(120.)).flex_none().child("Status"))
                     .child(div().w(px(170.)).flex_none().child("Engine"))
@@ -124,7 +124,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(format!(
                                         "{n} {} on your crew, {busy} working now. Each one runs on the engine you pick for it, and you can add as many as you like.",
                                         if n == 1 { "bot" } else { "bots" }
@@ -190,7 +190,11 @@ impl Shell {
                 .justify_end()
                 .font_family(ui::MONO)
                 .text_size(px(12.))
-                .text_color(c(if v == "\u{2014}" { ui::FAINT } else { ui::INK }))
+                .text_color(c(if v == "\u{2014}" {
+                    ui::faint()
+                } else {
+                    ui::ink()
+                }))
                 .child(v)
         };
         let small = |id: (&'static str, usize), label: &'static str| {
@@ -204,9 +208,9 @@ impl Shell {
                 .justify_center()
                 .rounded(px(6.))
                 .text_size(px(12.))
-                .text_color(c(ui::MUTED))
+                .text_color(c(ui::muted()))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                 .child(label)
         };
         let key = who.key() as usize;
@@ -221,8 +225,8 @@ impl Shell {
             .items_center()
             .gap(px(14.))
             .border_b_1()
-            .border_color(c(ui::LINE2))
-            .hover(|s| s.bg(c(ui::HOVER)))
+            .border_color(c(ui::line2()))
+            .hover(|s| s.bg(c(ui::hover())))
             .child(
                 div()
                     .flex_1()
@@ -243,14 +247,14 @@ impl Shell {
                                     .gap(px(6.))
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::INK))
+                                    .text_color(c(ui::ink()))
                                     .child(who.name())
                                     .when(pinned, |d| {
                                         d.child(
                                             div()
                                                 .text_size(px(10.5))
                                                 .font_weight(FontWeight::MEDIUM)
-                                                .text_color(c(ui::FAINT))
+                                                .text_color(c(ui::faint()))
                                                 .child("PINNED"),
                                         )
                                     }),
@@ -258,7 +262,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .truncate()
                                     .child(who.role()),
                             ),
@@ -270,8 +274,8 @@ impl Shell {
                     .flex_none()
                     .overflow_hidden()
                     .whitespace_nowrap()
-                    .child(if color == ui::FAINT {
-                        ui::status(ui::FAINT, "Idle")
+                    .child(if color == ui::faint() {
+                        ui::status(ui::faint(), "Idle")
                     } else {
                         ui::status(color, status)
                     }),
@@ -283,9 +287,9 @@ impl Shell {
                     .flex_none()
                     .truncate()
                     .text_size(px(12.))
-                    .text_color(c(ui::BODY))
+                    .text_color(c(ui::body()))
                     .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::INK)))
+                    .hover(|s| s.text_color(c(ui::ink())))
                     .child(engine)
                     .on_click(
                         cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
@@ -397,9 +401,9 @@ impl Shell {
                     .py(px(8.))
                     .w(px(330.))
                     .rounded(px(18.))
-                    .bg(ca(ui::PANEL, 0.7))
+                    .bg(ca(ui::panel(), 0.7))
                     .border_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .child(face)
                     .child(
                         div()
@@ -414,7 +418,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(who.role()),
                             ),
                     )
@@ -479,7 +483,7 @@ impl Shell {
                         .flex_none()
                         .font_family(ui::MONO)
                         .text_size(px(10.))
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(label.to_uppercase()),
                 )
                 .child(opts)
@@ -494,7 +498,7 @@ impl Shell {
                     .size(px(28.))
                     .rounded_full()
                     .border_2()
-                    .border_color(c(if on { ui::INK } else { ui::PANEL }))
+                    .border_color(c(if on { ui::ink() } else { ui::panel() }))
                     .shadow(ui::lift())
                     .bg(linear_gradient(
                         135.,
@@ -595,7 +599,7 @@ impl Shell {
                     .h(px(280.))
                     .flex_none()
                     .rounded(px(20.))
-                    .bg(ca(ui::PANEL, 0.6))
+                    .bg(ca(ui::panel(), 0.6))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -619,7 +623,7 @@ impl Shell {
                                     .flex_1()
                                     .min_w_0()
                                     .text_size(px(12.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child("Dress a Fin, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
                             .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
@@ -638,7 +642,7 @@ impl Shell {
                                     .flex_none()
                                     .font_family(ui::MONO)
                                     .text_size(px(10.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child("COLOUR"),
                             )
                             .child(swatches),
@@ -680,15 +684,15 @@ fn field(
         .items_center()
         .gap(px(8.))
         .rounded(px(12.))
-        .bg(c(ui::PANEL))
+        .bg(c(ui::panel()))
         .border_1()
-        .border_color(c(ui::LINE))
+        .border_color(c(ui::line()))
         .child(
             div()
                 .flex_none()
                 .font_family(ui::MONO)
                 .text_size(px(9.5))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(label),
         )
         .child(

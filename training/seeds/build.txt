@@ -1,0 +1,83 @@
+add a settings page where users can change their email
+build a REST endpoint that returns the user's orders
+let people sign in with GitHub
+add pagination to the orders list
+create a dashboard showing daily signups
+implement a dark mode toggle
+add a "forgot password" flow
+add CSV import for contacts
+build a small CLI that resizes images in a folder
+add push notifications when an order ships
+add a search bar to the docs site
+implement rate limiting on the public API
+add two-factor authentication with an authenticator app
+create a landing page for the new pricing
+add an admin screen to ban users
+make the table sortable by every column
+add drag and drop reordering to the todo list
+support uploading multiple files at once
+add a webhook that fires when a payment succeeds
+build an onboarding checklist for new users
+add an undo button to the editor
+let users export their data as JSON
+add a GraphQL query for products by category
+implement infinite scroll on the feed
+add a /health endpoint
+create a Slack integration that posts new tickets
+add i18n support with Spanish and French
+build a leaderboard for the game
+add a share button to each post
+implement offline mode for the mobile app
+add a cron job that emails a weekly summary
+add filters for date range and status on the reports page
+build a Python script that pulls data from our API into a spreadsheet
+add a command palette with cmd+k
+add comments to blog posts
+create a new React component for the pricing table
+add support for Apple Pay
+let admins invite teammates by email
+add a progress bar while the file uploads
+build a simple chat between buyers and sellers
+add a "remember me" checkbox on login
+implement soft delete for projects
+add an API key page so users can create and revoke keys
+add a map view of all stores
+add audit logging for admin actions
+build a Discord bot that answers FAQ questions
+add a feature flag for the new checkout
+add an endpoint to upload avatars to S3
+implement a referral program with invite codes
+add keyboard navigation to the gallery
+make it possible to duplicate a project
+add a billing page using Stripe customer portal
+create a migration and model for subscriptions
+add a print-friendly version of invoices
+add an RSS feed for the blog
+support markdown in comments
+add sound effects when the player scores
+add a tooltip explaining each metric
+build a Chrome extension that saves the current page to our app
+add SSO with Okta
+add autosave to the form every 10 seconds
+implement a recommendations section on the home page
+add a status page for our services
+we need a way for users to change their username
+can you add a button that copies the invite link
+i want a page that lists all failed payments
+make a script that seeds the database with fake data
+add a new screen to the iOS app for notifications settings
+add support for webhooks retries with backoff
+add a "mark all as read" option
+let users pick a theme color
+add tagging to notes
+add an export to PDF button on the report
+build a feedback widget in the corner of every page
+add server-side rendering for the product pages
+create a Go worker that processes the email queue
+add an endpoint that streams logs over SSE
+implement a 7-day free trial
+add a timeline view to the project page
+add avatars to the member list
+allow guest checkout
+add metrics to Prometheus for request latency
+add a cancel subscription flow with a reason survey

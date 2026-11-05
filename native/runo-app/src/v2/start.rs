@@ -91,7 +91,7 @@ impl Shell {
                     div()
                         .text_size(px(13.5))
                         .line_height(px(20.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(words),
                 ),
         );
@@ -110,7 +110,7 @@ impl Shell {
                     .flex_col()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::RAISED)).border_color(c(ui::LINE_HI)))
+                    .hover(|s| s.bg(c(ui::raised())).border_color(c(ui::line_hi())))
                     .child(
                         div()
                             .text_size(px(13.5))
@@ -121,7 +121,7 @@ impl Shell {
                         div()
                             .text_size(px(12.))
                             .line_height(px(17.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(what),
                     )
                     .child(
@@ -130,10 +130,10 @@ impl Shell {
                             .px(px(8.))
                             .py(px(6.))
                             .rounded(px(6.))
-                            .bg(c(ui::RAISED))
+                            .bg(c(ui::raised()))
                             .font_family(ui::MONO)
                             .text_size(px(11.5))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(text),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -158,9 +158,9 @@ impl Shell {
                 .rounded(px(10.))
                 .border_1()
                 .border_dashed()
-                .border_color(c(ui::LINE_HI))
+                .border_color(c(ui::line_hi()))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(ui::HOVER)).border_color(c(ui::MUTED)))
+                .hover(|s| s.bg(c(ui::hover())).border_color(c(ui::muted())))
                 .child(
                     div()
                         .flex()
@@ -168,18 +168,18 @@ impl Shell {
                         .gap(px(7.))
                         .text_size(px(13.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child(Icon::new(icon).size(px(15.)).text_color(c(ui::MUTED)))
+                        .child(Icon::new(icon).size(px(15.)).text_color(c(ui::muted())))
                         .child(name)
                         .children(key.map(|k| {
                             div()
                                 .px(px(5.))
                                 .rounded(px(4.))
                                 .border_1()
-                                .border_color(c(ui::LINE))
+                                .border_color(c(ui::line()))
                                 .font_family(ui::MONO)
                                 .text_size(px(10.5))
                                 .font_weight(FontWeight::NORMAL)
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .child(k)
                         })),
                 )
@@ -187,7 +187,7 @@ impl Shell {
                     div()
                         .text_size(px(12.))
                         .line_height(px(17.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(what),
                 )
         };
@@ -284,12 +284,12 @@ impl Shell {
                     .items_center()
                     .gap(px(4.))
                     .text_size(px(12.5))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child("Not ready to start?")
                     .child(
                         div()
                             .id("start-sample")
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .underline()
                             .cursor_pointer()
                             .child("Look around with sample jobs first")
@@ -411,9 +411,9 @@ impl Shell {
                             .px(px(10.))
                             .py(px(6.))
                             .rounded(px(7.))
-                            .bg(c(ui::BG))
+                            .bg(c(ui::bg()))
                             .border_1()
-                            .border_color(c(ui::LINE))
+                            .border_color(c(ui::line()))
                             .font_family(ui::MONO)
                             .text_size(px(11.5))
                             .truncate()
@@ -470,7 +470,7 @@ impl Shell {
                 div()
                     .text_size(px(12.5))
                     .line_height(px(18.))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child("Any one is enough. Claude Code is the one most people start with. After it installs, run it once in a terminal to sign in."),
             )
             .child(rows)
@@ -518,7 +518,7 @@ impl Shell {
                         .py(px(5.))
                         .rounded(px(6.))
                         .text_size(px(12.5))
-                        .when(!ok, |d| d.cursor_pointer().hover(|s| s.bg(c(ui::HOVER))))
+                        .when(!ok, |d| d.cursor_pointer().hover(|s| s.bg(c(ui::hover()))))
                         .child(
                             div()
                                 .size(px(15.))
@@ -534,7 +534,7 @@ impl Shell {
                                     } else if now {
                                         d.border_1().border_color(c(ui::RED))
                                     } else {
-                                        d.border_1().border_color(c(ui::FAINT))
+                                        d.border_1().border_color(c(ui::faint()))
                                     }
                                 }),
                         )
@@ -544,11 +544,11 @@ impl Shell {
                                 .min_w_0()
                                 .truncate()
                                 .text_color(c(if ok {
-                                    ui::FAINT
+                                    ui::faint()
                                 } else if now {
-                                    ui::INK
+                                    ui::ink()
                                 } else {
-                                    ui::BODY
+                                    ui::body()
                                 }))
                                 .when(ok, |d| d.line_through())
                                 .child(step.label()),
@@ -567,9 +567,9 @@ impl Shell {
                 .mb(px(8.))
                 .p(px(10.))
                 .rounded(px(10.))
-                .bg(c(ui::PANEL))
+                .bg(c(ui::panel()))
                 .border_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .flex()
                 .flex_col()
                 .gap(px(8.))
@@ -588,7 +588,7 @@ impl Shell {
                         .child(
                             div()
                                 .text_size(px(11.))
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .child(format!("{n} of {}", Step::ALL.len())),
                         )
                         .child(
@@ -597,9 +597,9 @@ impl Shell {
                                 .px(px(4.))
                                 .rounded(px(4.))
                                 .text_size(px(11.))
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::INK)).bg(c(ui::HOVER)))
+                                .hover(|s| s.text_color(c(ui::ink())).bg(c(ui::hover())))
                                 .child("Hide")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.crew.store.guide_hidden = true;
@@ -612,7 +612,7 @@ impl Shell {
                         ),
                 )
                 .child(
-                    div().h(px(4.)).rounded(px(2.)).bg(c(ui::LINE)).child(
+                    div().h(px(4.)).rounded(px(2.)).bg(c(ui::line())).child(
                         div()
                             .h_full()
                             .w(relative(frac))
@@ -653,7 +653,7 @@ fn label(text: &'static str) -> Div {
     div()
         .text_size(px(11.5))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(c(ui::FAINT))
+        .text_color(c(ui::faint()))
         .child(text)
 }
 
@@ -683,7 +683,7 @@ fn folder_card(cx: &mut Context<Shell>) -> Div {
             div()
                 .text_size(px(12.5))
                 .line_height(px(18.))
-                .text_color(c(ui::MUTED))
+                .text_color(c(ui::muted()))
                 .child("The folder with your code, usually a git repository. You can also drop a folder anywhere on this window."),
         )
         .child(

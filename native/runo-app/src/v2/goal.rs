@@ -198,12 +198,12 @@ impl Shell {
                 .count();
             let n = g.steps.len().max(1);
             let (word, color) = match g.state {
-                State::Planning => ("Splitting", ui::T_BLUE),
-                State::Ready => ("Ready to start", ui::T_AMBER),
-                State::Running => ("Running", ui::T_BLUE),
-                State::Paused => ("Needs you", ui::T_AMBER),
-                State::Failed => ("Couldn't split", ui::T_RED),
-                State::Done => ("Done", ui::T_GREEN),
+                State::Planning => ("Splitting", ui::t_blue()),
+                State::Ready => ("Ready to start", ui::t_amber()),
+                State::Running => ("Running", ui::t_blue()),
+                State::Paused => ("Needs you", ui::t_amber()),
+                State::Failed => ("Couldn't split", ui::t_red()),
+                State::Done => ("Done", ui::t_green()),
             };
             row = row.child(
                 ui::card()
@@ -216,7 +216,7 @@ impl Shell {
                     .flex_col()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .hover(|s| s.border_color(c(ui::LINE_HI)))
+                    .hover(|s| s.border_color(c(ui::line_hi())))
                     .child(
                         div()
                             .flex()
@@ -230,7 +230,7 @@ impl Shell {
                         div()
                             .text_size(px(13.5))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .truncate()
                             .child(g.text.clone()),
                     )
@@ -247,7 +247,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(format!("{done} of {} jobs", g.steps.len())),
                             ),
                     )
@@ -298,13 +298,13 @@ impl Shell {
                     div()
                         .text_size(px(22.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .child(goal.text.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(13.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(line),
                 ),
         );
@@ -349,9 +349,9 @@ impl Shell {
 
         let mut list = div()
             .w_full()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .overflow_hidden();
         if goal.state == State::Planning {
@@ -367,9 +367,9 @@ impl Shell {
                     home::pill(&w, t)
                 }
                 None if goal.state == State::Running && current == Some(k) => {
-                    home::pill("Starting", (ui::T_BLUE, 0x131C2F, 0x1C325A))
+                    home::pill("Starting", ui::run_tone())
                 }
-                None => home::pill("Waiting", (ui::BODY, 0x1E1E26, 0x2A2A33)),
+                None => home::pill("Waiting", ui::grey_tone()),
             };
             let job_id = s.job;
             list = list.child(
@@ -381,16 +381,16 @@ impl Shell {
                     .items_center()
                     .gap(px(12.))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .when(current == Some(k) && goal.state != State::Ready, |d| {
-                        d.bg(c(ui::RAISED))
+                        d.bg(c(ui::raised()))
                     })
                     .child(
                         div()
                             .w(px(18.))
                             .font_family(ui::MONO)
                             .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child(format!("{}", k + 1)),
                     )
                     .child(face)
@@ -401,14 +401,14 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::INK))
+                                    .text_color(c(ui::ink()))
                                     .truncate()
                                     .child(s.title.clone()),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child(format!("{} \u{b7} {}", s.mode.label(), who.name())),
                             ),
                     )
@@ -424,9 +424,9 @@ impl Shell {
                                 .id(("goal-remove", k))
                                 .px(px(8.))
                                 .text_size(px(12.))
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::T_RED)))
+                                .hover(|s| s.text_color(c(ui::t_red())))
                                 .child("Remove")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(g) =

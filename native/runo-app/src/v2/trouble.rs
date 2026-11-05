@@ -165,7 +165,7 @@ impl Shell {
                 ),
             ),
             Trouble::Stopped => (
-                ui::MUTED,
+                ui::muted(),
                 "You stopped it".into(),
                 if job.worktree.is_empty() {
                     "It can carry on from where it was.".into()
@@ -174,7 +174,7 @@ impl Shell {
                 },
             ),
             Trouble::Interrupted => (
-                ui::MUTED,
+                ui::muted(),
                 "Squad Code closed while this was running".into(),
                 "It can carry on from where it was, or start over.".into(),
             ),
@@ -247,9 +247,9 @@ impl Shell {
                 .flex_col()
                 .gap(px(10.))
                 .border_color(c(match tone {
-                    ui::AMBER => 0x573B0F,
-                    ui::RED => 0x561A25,
-                    _ => ui::LINE,
+                    ui::AMBER => ui::ask_tone().2,
+                    ui::RED => ui::bad_tone().2,
+                    _ => ui::line(),
                 }))
                 .child(
                     div()
@@ -261,7 +261,7 @@ impl Shell {
                             div()
                                 .text_size(px(14.))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(ui::INK))
+                                .text_color(c(ui::ink()))
                                 .child(title),
                         ),
                 )
@@ -270,7 +270,7 @@ impl Shell {
                         div()
                             .text_size(px(13.))
                             .line_height(px(19.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(line),
                     )
                 })
@@ -278,7 +278,7 @@ impl Shell {
                     d.child(
                         div()
                             .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child("No other engine is ready on this computer. Add one in Engines to switch."),
                     )
                 })

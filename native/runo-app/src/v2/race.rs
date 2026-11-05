@@ -109,14 +109,14 @@ impl Shell {
                     div()
                         .text_size(px(22.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .truncate()
                         .child(first.title.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(13.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(line),
                 ),
         );
@@ -151,7 +151,7 @@ impl Shell {
             .id("race")
             .size_full()
             .overflow_y_scroll()
-            .bg(c(super::PAGE))
+            .bg(c(ui::bg()))
             .child(
                 div()
                     .px(px(32.))
@@ -164,7 +164,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child("When you keep one, Shipper ships it the usual way and the other branches are deleted. Your checkout is never touched."),
                     ),
             )
@@ -178,10 +178,10 @@ impl Shell {
         let (added, removed) = j.lines();
         let mut tags = div().flex().flex_wrap().gap(px(6.));
         for (on, label, color) in [
-            (m.passes, "Checks pass", ui::T_GREEN),
-            (m.fastest, "Fastest", ui::T_BLUE),
-            (m.cheapest, "Cheapest", ui::T_AMBER),
-            (m.smallest, "Smallest change", ui::BODY),
+            (m.passes, "Checks pass", ui::t_green()),
+            (m.fastest, "Fastest", ui::t_blue()),
+            (m.cheapest, "Cheapest", ui::t_amber()),
+            (m.smallest, "Smallest change", ui::body()),
         ] {
             if on {
                 tags = tags.child(
@@ -190,7 +190,7 @@ impl Shell {
                         .py(px(2.))
                         .rounded_full()
                         .border_1()
-                        .border_color(c(ui::LINE_HI))
+                        .border_color(c(ui::line_hi()))
                         .text_size(px(11.))
                         .text_color(c(color))
                         .child(label),
@@ -202,21 +202,21 @@ impl Shell {
                 .flex()
                 .justify_between()
                 .text_size(px(12.5))
-                .child(div().text_color(c(ui::MUTED)).child(label.to_string()))
+                .child(div().text_color(c(ui::muted())).child(label.to_string()))
                 .child(
                     div()
                         .font_family(ui::MONO)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .child(value),
                 )
         };
         let (verdict, v) = work::verdict(&j.checks, j.checking);
         let verdict_color = match v {
-            Verdict::Pass => ui::T_GREEN,
-            Verdict::Fail => ui::T_RED,
-            Verdict::Couldnt => ui::T_AMBER,
-            Verdict::Running => ui::T_BLUE,
-            Verdict::None => ui::MUTED,
+            Verdict::Pass => ui::t_green(),
+            Verdict::Fail => ui::t_red(),
+            Verdict::Couldnt => ui::t_amber(),
+            Verdict::Running => ui::t_blue(),
+            Verdict::None => ui::muted(),
         };
         let mut stats = div()
             .flex()
@@ -245,7 +245,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(13.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .truncate()
                             .child(j.doing()),
                     )
@@ -265,17 +265,17 @@ impl Shell {
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
-                                    .text_color(c(ui::BODY))
+                                    .text_color(c(ui::body()))
                                     .child(f.path.clone()),
                             )
                             .child(
                                 div()
-                                    .text_color(c(ui::T_GREEN))
+                                    .text_color(c(ui::t_green()))
                                     .child(format!("+{}", f.added)),
                             )
                             .child(
                                 div()
-                                    .text_color(c(ui::T_RED))
+                                    .text_color(c(ui::t_red()))
                                     .child(format!("\u{2212}{}", f.removed)),
                             ),
                     );
@@ -284,7 +284,7 @@ impl Shell {
                     files = files.child(
                         div()
                             .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child(format!("and {} more", j.changes.len() - 6)),
                     );
                 }
@@ -300,7 +300,7 @@ impl Shell {
                             div()
                                 .text_size(px(12.5))
                                 .line_height(px(18.))
-                                .text_color(c(ui::BODY))
+                                .text_color(c(ui::body()))
                                 .child(words),
                         )
                     })
@@ -320,7 +320,7 @@ impl Shell {
                     .unwrap_or_else(|| j.status.label().to_string());
                 div()
                     .text_size(px(12.5))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(why)
             }
         };
@@ -333,7 +333,7 @@ impl Shell {
         if can_keep {
             let failing = v == Verdict::Fail;
             let keep = if failing {
-                ui::ghost(("try-keep", id as usize), "Keep anyway").text_color(c(ui::T_RED))
+                ui::ghost(("try-keep", id as usize), "Keep anyway").text_color(c(ui::t_red()))
             } else {
                 ui::solid(("try-keep", id as usize), "Keep this one")
             };
@@ -363,7 +363,7 @@ impl Shell {
                             .min_w_0()
                             .text_size(px(14.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .truncate()
                             .child(if j.engine.is_empty() {
                                 j.pick.clone()
@@ -382,7 +382,7 @@ impl Shell {
             .child(home::pill(&word, tint))
             .child(tags)
             .child(stats)
-            .child(div().h(px(1.)).bg(c(ui::LINE2)))
+            .child(div().h(px(1.)).bg(c(ui::line2())))
             .child(body)
             .child(foot)
     }

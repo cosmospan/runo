@@ -66,12 +66,12 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::PANEL))
-                                .border_color(c(ui::LINE))
+                            d.bg(c(ui::panel()))
+                                .border_color(c(ui::line()))
                                 .shadow(ui::lift())
                         } else {
                             d.border_color(gpui_kit::transparent_black())
-                                .hover(|s| s.bg(c(ui::HOVER)))
+                                .hover(|s| s.bg(c(ui::hover())))
                         }
                     })
                     .child(div().flex_none().child(face))
@@ -100,14 +100,14 @@ impl Shell {
                                         div()
                                             .flex_none()
                                             .text_size(px(11.))
-                                            .text_color(c(ui::FAINT))
+                                            .text_color(c(ui::faint()))
                                             .child(store::ago(j.ended.unwrap_or(j.started))),
                                     ),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .truncate()
                                     .child(format!(
                                         "{} · #{} · {}",
@@ -137,7 +137,7 @@ impl Shell {
             .flex()
             .flex_col()
             .border_r_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(
                 div()
                     .px(px(20.))
@@ -147,7 +147,7 @@ impl Shell {
                     .items_end()
                     .gap(px(10.))
                     .border_b_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .child(
                         div()
                             .flex_1()
@@ -161,7 +161,7 @@ impl Shell {
                                 div()
                                     .mt(px(2.))
                                     .text_size(px(12.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(match problems {
                                         0 => format!("{count} waiting on you"),
                                         p => {
@@ -232,7 +232,7 @@ impl Shell {
                 .flex()
                 .items_center()
                 .border_b_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .text_size(px(12.5))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child("Files changed")
@@ -240,7 +240,7 @@ impl Shell {
                 .child(
                     div()
                         .font_weight(FontWeight::NORMAL)
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(j.files.len().to_string()),
                 ),
         );
@@ -250,7 +250,7 @@ impl Shell {
                     .px(px(16.))
                     .py(px(14.))
                     .text_size(px(12.5))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("Nothing was changed."),
             );
         }
@@ -262,7 +262,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .font_family(ui::MONO)
                     .text_size(px(12.))
                     .child(f.clone()),
@@ -275,7 +275,7 @@ impl Shell {
                     .flex()
                     .gap(px(8.))
                     .text_size(px(12.5))
-                    .text_color(c(if *state == 2 { ui::BODY } else { ui::FAINT }))
+                    .text_color(c(if *state == 2 { ui::body() } else { ui::faint() }))
                     .child(if *state == 2 { "✓" } else { "·" })
                     .child(s.clone()),
             );
@@ -312,7 +312,7 @@ impl Shell {
                                     div()
                                         .mt(px(3.))
                                         .text_size(px(12.5))
-                                        .text_color(c(ui::MUTED))
+                                        .text_color(c(ui::muted()))
                                         .truncate()
                                         .child(format!(
                                             "{} · Job #{id} · {}{}",
@@ -337,7 +337,7 @@ impl Shell {
                             .py(px(14.))
                             .text_size(px(13.5))
                             .line_height(px(21.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(said_lines),
                     )
                     .children(self.trouble_card(j, cx).map(|t| t.ml(px(0.))))
@@ -357,7 +357,7 @@ impl Shell {
                                     div()
                                         .text_size(px(11.))
                                         .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(c(ui::FAINT))
+                                        .text_color(c(ui::faint()))
                                         .child("PLAN"),
                                 )
                                 .child(plan),
@@ -371,14 +371,14 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .bg(c(ui::PANEL))
+                    .bg(c(ui::panel()))
                     .border_t_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .child(
                         div()
                             .flex_1()
                             .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(match j.status {
                                 Status::Review => {
                                     "Approve to merge it, or open it to send it back."
@@ -475,7 +475,7 @@ impl Shell {
             div()
                 .py(px(20.))
                 .text_size(px(13.))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(if query.trim().is_empty() {
                     "Nothing here.".to_string()
                 } else {
@@ -511,13 +511,13 @@ impl Shell {
                         .items_center()
                         .gap(px(8.))
                         .rounded(px(12.))
-                        .bg(c(ui::PANEL))
+                        .bg(c(ui::panel()))
                         .border_1()
-                        .border_color(c(ui::LINE))
+                        .border_color(c(ui::line()))
                         .child(
                             gpui_kit::component::Icon::new(gpui_kit::assets::IconName::Search)
                                 .size(px(14.))
-                                .text_color(c(ui::FAINT)),
+                                .text_color(c(ui::faint())),
                         )
                         .child(
                             div().flex_1().text_size(px(13.)).child(
@@ -558,7 +558,7 @@ fn page(title: &'static str, line: String) -> Stateful<Div> {
                 .child(
                     div()
                         .text_size(px(14.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(line),
                 ),
         )
