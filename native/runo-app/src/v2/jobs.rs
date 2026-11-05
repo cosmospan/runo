@@ -254,6 +254,11 @@ fn apply(job: &mut Job, e: AgentEvent) {
             }
         }
         AgentEvent::Summary(s) => job.summary = s,
+        // A run reports its tokens so far; a follow-up starts a new count, so
+        // keep the larger rather than adding one run's count twice.
+        AgentEvent::Usage(u) => job.tokens = job.tokens.max(u.input + u.output),
+        // The plan's limit windows, so the status bar follows them live.
+        AgentEvent::Limit(l) => crate::usage::note_live(&job.agent, &l, crate::usage::now_secs()),
         AgentEvent::Error(s) => job.feed.push(Item::Error(s)),
         AgentEvent::Notice(s) => job.feed.push(Item::Note(s)),
         AgentEvent::Denied(tools) => job.feed.push(Item::Note(format!(

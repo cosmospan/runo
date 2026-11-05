@@ -17,7 +17,6 @@ use runo_holo::Framing;
 
 use super::data::Member;
 use super::ui::{self, c, ca};
-use super::Pane;
 use super::{Place, Shell};
 
 /// The sidebar's width.
@@ -575,65 +574,6 @@ impl Shell {
             .child(foot)
     }
 
-    /// The status bar along the bottom of the page: the default engine and
-    /// whether it's ready, and what the crew cost today.
-    /// Kept out of the sidebar so the sidebar is only places and the crew.
-    pub(super) fn statusbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let st = cx.global::<crate::settings::AppSettings>();
-        let i = super::engine::index_of(st, "");
-        let ready = super::engine::ready(st, i);
-        let engine_name = crate::agent::PROVIDERS[i].name;
-        let today = store_today_cost(&self.crew.store);
-        let item = |id: &'static str| {
-            div()
-                .id(id)
-                .h_full()
-                .px(px(8.))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .rounded(px(5.))
-                .cursor_pointer()
-                .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
-        };
-        div()
-            .h(px(28.))
-            .flex_none()
-            .w_full()
-            .flex()
-            .items_center()
-            .gap(px(2.))
-            .px(px(12.))
-            .py(px(3.))
-            .bg(c(ui::PANEL))
-            .border_t_1()
-            .border_color(c(ui::LINE))
-            .text_size(px(11.5))
-            .text_color(c(ui::MUTED))
-            .child(
-                item("status-engine")
-                    .child(div().size(px(7.)).rounded_full().bg(c(if ready {
-                        ui::GREEN
-                    } else {
-                        ui::RED
-                    })))
-                    .child(engine_name)
-                    .when(!ready, |d| {
-                        d.child(div().text_color(c(ui::T_RED)).child("not found"))
-                    })
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
-                    ),
-            )
-            .child(div().flex_1())
-            .child(
-                item("status-cost")
-                    .child(Icon::new(IconName::Coins).size(px(12.)))
-                    .child(format!("${today:.2} today"))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
-            )
-    }
-
     /// The top bar over every page: where you are, the engine, and a new job.
     pub(super) fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let folder = self
@@ -763,18 +703,6 @@ fn short_path(path: &str) -> String {
         Some(rest) if !home.is_empty() => format!("~{rest}"),
         _ => path.to_string(),
     }
-}
-
-/// What the crew's jobs cost today, from their summaries.
-fn store_today_cost(store: &super::store::Store) -> f64 {
-    let day = super::store::now() / 86_400;
-    store
-        .jobs
-        .iter()
-        .filter(|j| j.started / 86_400 == day)
-        .filter_map(|j| super::home::cost(&j.summary))
-        .sum::<f64>()
-        + 0.0
 }
 
 /// How many bots the sidebar lists before folding the rest into "+N more".

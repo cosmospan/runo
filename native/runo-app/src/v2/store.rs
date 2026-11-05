@@ -159,6 +159,8 @@ pub struct Job {
     pub files: Vec<String>,
     /// "12s · 3 turns · $0.04".
     pub summary: String,
+    /// Tokens the agent reported for its turns, read and written.
+    pub tokens: u64,
     /// The agent's conversation id, so a follow-up continues it.
     pub conversation: String,
     /// The person has opened it since it finished.
@@ -234,6 +236,7 @@ impl Default for Job {
             plan: Vec::new(),
             files: Vec::new(),
             summary: String::new(),
+            tokens: 0,
             conversation: String::new(),
             seen: true,
             branch: String::new(),
