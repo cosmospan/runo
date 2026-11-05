@@ -38,11 +38,11 @@ pub fn set_removed(removed: &[Member]) {
     *REMOVED.write().unwrap_or_else(|e| e.into_inner()) = removed.to_vec();
 }
 
-/// The crew a new person starts with: just Explainer, who only reads and
-/// answers. When a job needs a kind of work nobody on the crew does, Fin offers
-/// the bot for it (see [`Member::needed_for`]); bots can be added or made on
-/// Crew any time too.
-pub const STARTER_CREW: [Member; 1] = [Member::Explainer];
+/// The bots a new person starts with besides Fin: none. Fin leads every crew,
+/// answers questions itself, and when a job needs a kind of work nobody on the
+/// crew does, offers the bot for it (see [`Member::needed_for`]). Bots can be
+/// added or made on Crew any time too.
+pub const STARTER_CREW: [Member; 0] = [];
 
 /// Makes `made` the bots the app knows about (on load, and after a change).
 pub fn set_made(made: &[Made]) {
@@ -83,6 +83,10 @@ fn made<T>(id: u16, f: impl FnOnce(&Kept) -> T) -> Option<T> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Member {
+    /// Leads the crew in every project: answers questions, hands jobs to the
+    /// right bot and offers one the crew is missing. Always on the crew; it
+    /// can't be removed, and a made bot can't be another Fin.
+    Fin,
     Builder,
     Checker,
     Guard,
@@ -116,7 +120,8 @@ impl Member {
         Member::Keeper,
     ];
 
-    /// The person's crew: the built-in bots they kept, then the ones they made.
+    /// The person's crew: Fin, the built-in bots they kept, then the ones they
+    /// made.
     pub fn all() -> Vec<Member> {
         let removed = REMOVED.read().unwrap_or_else(|e| e.into_inner());
         Member::everyone()
@@ -128,14 +133,17 @@ impl Member {
     /// Every bot, kept in the crew or not.
     pub fn everyone() -> Vec<Member> {
         let kept = MADE.read().unwrap_or_else(|e| e.into_inner());
-        Member::CREW
-            .into_iter()
+        std::iter::once(Member::Fin)
+            .chain(Member::CREW)
             .chain(kept.iter().map(|k| Member::Made(k.id)))
             .collect()
     }
 
     /// Whether this bot is in the person's crew.
     pub fn on_crew(self) -> bool {
+        if self == Member::Fin {
+            return true;
+        }
         !REMOVED
             .read()
             .unwrap_or_else(|e| e.into_inner())
@@ -151,7 +159,8 @@ impl Member {
     }
 
     /// The crew member who takes jobs of this kind: the built-in one if it's on the
-    /// crew, else a made bot that does that kind of work.
+    /// crew, else a made bot that does that kind of work, else Fin for a
+    /// question.
     pub fn doer_for(mode: Mode) -> Option<Member> {
         let all = Member::all();
         let own = Member::for_mode(mode);
@@ -160,7 +169,8 @@ impl Member {
         }
         // Shipper takes no jobs of its own: it ships what the others made.
         all.into_iter()
-            .find(|m| *m != Member::Shipper && m.mode() == mode)
+            .find(|m| !matches!(m, Member::Shipper | Member::Fin) && m.mode() == mode)
+            .or((mode == Mode::Ask).then_some(Member::Fin))
     }
 
     /// The bot Fin offers to add when a job of this kind comes in and nobody on
@@ -187,6 +197,7 @@ impl Member {
     pub fn name(self) -> &'static str {
         match self {
             Member::Made(id) => made(id, |k| k.name).unwrap_or("Bot"),
+            Member::Fin => "Fin",
             Member::Builder => "Builder",
             Member::Checker => "Checker",
             Member::Guard => "Guard",
@@ -200,6 +211,7 @@ impl Member {
     pub fn role(self) -> &'static str {
         match self {
             Member::Made(id) => made(id, |k| k.role).unwrap_or("Your bot"),
+            Member::Fin => "Leads your crew",
             Member::Builder => "Writes the code",
             Member::Checker => "Tries it for real",
             Member::Guard => "Keeps your rules",
@@ -214,6 +226,9 @@ impl Member {
     pub fn pitch(self) -> &'static str {
         match self {
             Member::Made(_) => self.role(),
+            Member::Fin => {
+                "Ask it anything about the code. It hands jobs to the right bot and offers one your crew is missing."
+            }
             Member::Builder => {
                 "Give it a feature in a sentence. It plans, writes the code and the tests."
             }
@@ -238,6 +253,11 @@ impl Member {
     pub fn starters(self) -> [&'static str; 3] {
         match self {
             Member::Made(_) => self.like().starters(),
+            Member::Fin => [
+                "What does this project do, in plain words?",
+                "Which bots would help most here?",
+                "What should we work on first?",
+            ],
             Member::Builder => [
                 "How would you add a settings page here?",
                 "What's the smallest change to add dark mode?",
@@ -279,6 +299,7 @@ impl Member {
     pub fn bot(self) -> Bot {
         match self {
             Member::Made(_) => self.like().bot(),
+            Member::Fin => Bot::Explainer,
             Member::Shipper => Bot::Keeper,
             Member::Builder => Bot::Builder,
             Member::Checker => Bot::Checker,
@@ -296,6 +317,10 @@ impl Member {
                 tint: runo_holo::Tint::TEAL,
                 ..Member::Keeper.bot().bubble()
             },
+            Member::Fin => Bubble {
+                tint: runo_holo::Tint::VIOLET,
+                ..Member::Explainer.bot().bubble()
+            },
             _ => self.bot().bubble(),
         }
     }
@@ -304,6 +329,7 @@ impl Member {
     pub fn accent(self) -> u32 {
         match self {
             Member::Made(_) => self.bubble().tint.strong().0,
+            Member::Fin => ui::RUNO,
             Member::Builder => ui::ORANGE,
             Member::Checker => ui::GREEN,
             Member::Guard => ui::AMBER,
@@ -330,6 +356,7 @@ impl Member {
     pub fn persona(self) -> &'static str {
         match self {
             Member::Made(id) => made(id, |k| k.persona).unwrap_or(""),
+            Member::Fin => "You are Fin, who leads the crew in Squad Code. You answer questions about this codebase in plain words for people who may not code: lead with the answer, then the evidence (files, numbers). When what the person wants is work for another bot (building, fixing, testing, reviewing or tidying), say which bot should take it and that they can add it from the Jobs page or Crew.",
             Member::Builder => "You are Builder, a bot in Squad Code's crew that writes code. Plan briefly, make the change with tests, and keep to the project's style.",
             Member::Checker => "You are Checker, a bot in Squad Code's crew that tries things for real. Run the project's tests and checks, and report plainly what passed and what broke.",
             Member::Guard => "You are Guard, a bot in Squad Code's crew that keeps the team's rules. Point out risks to login, payments, data and secrets in plain words.",
@@ -350,6 +377,7 @@ impl Member {
             Member::Explainer => 5,
             Member::Keeper => 6,
             Member::Shipper => 7,
+            Member::Fin => 8,
             Member::Made(id) => 100 + id as u64,
         }
     }
@@ -455,7 +483,7 @@ mod tests {
             look: [4, 2, 1, 0],
         }]);
         let all = Member::all();
-        assert_eq!(all.len(), Member::CREW.len() + 1);
+        assert_eq!(all.len(), Member::CREW.len() + 2);
         let scout = Member::Made(1);
         assert_eq!(scout.name(), "Scout");
         assert_eq!(scout.role(), "Checks the docs are current");
@@ -481,7 +509,18 @@ mod tests {
         set_removed(&[]);
         assert_eq!(Member::doer_for(Mode::Test), Some(Member::Checker));
         assert_eq!(Member::needed_for(Mode::Test), None);
-        assert_eq!(Member::all().len(), Member::CREW.len());
+        assert_eq!(Member::all().len(), Member::CREW.len() + 1);
         assert_eq!(Member::Made(1).name(), "Bot");
+        // Fin is always on the crew and answers questions when nobody else does.
+        set_made(&[]);
+        set_removed(&Member::CREW);
+        assert_eq!(Member::all(), vec![Member::Fin]);
+        assert!(Member::Fin.on_crew());
+        assert_eq!(Member::doer_for(Mode::Ask), Some(Member::Fin));
+        assert_eq!(Member::needed_for(Mode::Ask), None);
+        assert_eq!(Member::needed_for(Mode::Fix), Some(Member::Fixer));
+        // Explainer, once added, takes questions again.
+        set_removed(&[]);
+        assert_eq!(Member::doer_for(Mode::Ask), Some(Member::Explainer));
     }
 }

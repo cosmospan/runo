@@ -346,15 +346,18 @@ impl Shell {
                             }),
                         ),
                     )
-                    .child(small(("crew-remove", key), "Remove").on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            if who.is_made() {
-                                this.remove_made(who, cx)
-                            } else {
-                                this.set_on_crew(who, false, cx)
-                            }
-                        },
-                    )))
+                    // Fin leads every crew, so it stays.
+                    .when(who != Member::Fin, |d| {
+                        d.child(small(("crew-remove", key), "Remove").on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                if who.is_made() {
+                                    this.remove_made(who, cx)
+                                } else {
+                                    this.set_on_crew(who, false, cx)
+                                }
+                            },
+                        )))
+                    })
                     .child(
                         ui::ghost(("crew-chat", key), "Chat")
                             .h(px(28.))

@@ -684,7 +684,7 @@ impl Shell {
         };
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
-            Ok("chat") => Place::Chat(Member::Explainer),
+            Ok("chat") => Place::Chat(Member::Fin),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
@@ -1110,7 +1110,7 @@ impl Shell {
     /// Adds a built-in bot to the crew, or removes it (with its chat; its past
     /// jobs stay in History).
     fn set_on_crew(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
-        if who.is_made() {
+        if who.is_made() || who == Member::Fin {
             return;
         }
         if !on && Member::all().len() <= 1 {
@@ -1592,17 +1592,17 @@ impl Shell {
             .count()
     }
 
-    /// The bot whose chat was open last, else Explainer.
+    /// The bot whose chat was open last, else Fin.
     fn last_chat(&self) -> Member {
         Member::all()
             .into_iter()
             .max_by_key(|m| {
                 (
                     self.crew.store.chat(*m).len().min(1),
-                    (*m == Member::Explainer) as u8,
+                    (*m == Member::Fin) as u8,
                 )
             })
-            .unwrap_or(Member::Explainer)
+            .unwrap_or(Member::Fin)
     }
 }
 

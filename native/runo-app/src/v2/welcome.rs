@@ -1,8 +1,8 @@
 //! The first-run walkthrough: check which coding agents are installed and pick
 //! a folder. Two short steps, both skippable, shown once. The crew starts with
-//! just Explainer: Fin offers the other bots as jobs need them, and any bot can
-//! be added or made on Crew. What to do first is on the Jobs page, which opens
-//! next.
+//! just Fin, who leads it: Fin answers questions and offers the other bots as
+//! jobs need them, and any bot can be added or made on Crew. What to do first
+//! is on the Jobs page, which opens next.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
