@@ -24,6 +24,8 @@ fn main() {
                     fin,
                     state: s,
                     shine: false,
+                    gaze: (0, 0),
+                    offset: 0,
                 },
                 cell,
             ));
@@ -40,6 +42,8 @@ fn main() {
                 fin,
                 state: State::Idle,
                 shine: false,
+                gaze: (0, 0),
+                offset: 0,
             },
             cell,
         ));
@@ -70,6 +74,8 @@ fn main() {
                         fin,
                         state: State::Idle,
                         shine: false,
+                        gaze: (0, 0),
+                        offset: 0,
                     },
                     t,
                     Framing::Bust,
