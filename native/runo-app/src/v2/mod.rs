@@ -440,6 +440,9 @@ pub struct Shell {
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
     setup_crew: Vec<Member>,
+    /// A job Fin held back because nobody on the crew does its kind of work,
+    /// waiting for the person to add the bot Fin suggests.
+    offer: Option<Offer>,
     /// Sample jobs are showing, picked from the Start here page; the real
     /// store comes back when they're put away.
     sampling: bool,
@@ -496,6 +499,27 @@ pub struct Shell {
 
 /// The folders behind dropped paths: a folder itself, or the folder a file is in,
 /// each once.
+/// A job held back from Today's box until the bot for it is on the crew.
+struct Offer {
+    /// The bot Fin suggests adding.
+    who: Member,
+    mode: Mode,
+    text: String,
+    /// It was going to be split into a goal.
+    goal: bool,
+    /// How many engines it was going to race on.
+    race: usize,
+}
+
+/// "A", "A and B", "A, B and C".
+fn and_list(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 fn folders_from(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
     let mut out: Vec<std::path::PathBuf> = Vec::new();
     for p in paths {
@@ -738,6 +762,7 @@ impl Shell {
             home_pick: None,
             inbox_pick: None,
             setup_crew: data::STARTER_CREW.to_vec(),
+            offer: None,
             sampling: false,
             maker_name,
             maker_role,
@@ -834,7 +859,6 @@ impl Shell {
     fn mode_x(&self) -> f32 {
         let to = Mode::ALL
             .into_iter()
-            .filter(|m| Member::doer_for(*m).is_some())
             .position(|m| m == self.mode)
             .unwrap_or(0) as f32
             * MODE_STEP;
@@ -942,6 +966,19 @@ impl Shell {
             self.pick_folder(cx);
             return;
         }
+        if !Member::all().contains(&self.doer()) {
+            // Nobody on the crew does this kind of work yet: Fin asks first.
+            self.offer = Some(Offer {
+                who: Member::for_mode(self.mode),
+                mode: self.mode,
+                text,
+                goal: self.splitting && self.mode.writes(),
+                race: if self.mode.writes() { self.racing } else { 0 },
+            });
+            cx.notify();
+            return;
+        }
+        self.offer = None;
         let doer = self.doer();
         if self.mode == Mode::Ask {
             self.go(Place::Chat(doer), cx);
@@ -1010,6 +1047,63 @@ impl Shell {
         }
         self.entered = Instant::now();
         self.say(format!("{name} joined the crew."));
+        cx.notify();
+    }
+
+    /// Puts built-in bots on the crew, with one line saying so.
+    fn add_to_crew(&mut self, who: &[Member]) {
+        let who: Vec<Member> = who
+            .iter()
+            .copied()
+            .filter(|m| !m.is_made() && !m.on_crew())
+            .collect();
+        if who.is_empty() {
+            return;
+        }
+        self.crew.store.removed.retain(|m| !who.contains(m));
+        data::set_removed(&self.crew.store.removed);
+        self.crew.store.save();
+        let names: Vec<&str> = who.iter().map(|m| m.name()).collect();
+        self.say(format!("Added {} to your crew.", and_list(&names)));
+    }
+
+    /// Fin's offer taken: the bot joins the crew and the held job starts.
+    pub(super) fn take_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.add_to_crew(&[o.who]);
+        self.target = None;
+        self.splitting = o.goal;
+        self.racing = o.race;
+        self.set_mode(o.mode, window, cx);
+        let added = self.toast.clone();
+        self.hand_over(o.text, cx);
+        // Keep "Added Fixer" showing unless starting the job had more to say.
+        if self.toast.is_none() {
+            self.toast = added;
+        }
+        cx.notify();
+    }
+
+    /// Fin's offer turned down: the job goes back in the box, nothing added.
+    pub(super) fn skip_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.composer
+            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+        cx.notify();
+    }
+
+    /// The person would rather make their own bot for the job: the maker opens
+    /// on Crew set to the kind of work, and the job waits in the box.
+    pub(super) fn make_for_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(o) = self.offer.take() else { return };
+        self.composer
+            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+        if Member::KINDS.contains(&o.who) {
+            self.maker_like = o.who;
+        }
+        self.maker_open = true;
+        self.go(Place::Crew, cx);
+        self.say("Make your bot, then send the job again from Jobs.");
         cx.notify();
     }
 
@@ -1223,6 +1317,16 @@ impl Shell {
 
     /// Starts a goal's jobs, the first one now.
     pub(super) fn start_goal(&mut self, id: u64, cx: &mut Context<Self>) {
+        // The bots its jobs need join the crew first; the page said so.
+        let needs = self
+            .crew
+            .store
+            .goals
+            .iter()
+            .find(|g| g.id == id)
+            .map(|g| g.needs())
+            .unwrap_or_default();
+        self.add_to_crew(&needs);
         let st = Self::app_settings(cx);
         self.crew.start_goal(&st, id);
         cx.notify();
@@ -1590,15 +1694,6 @@ impl Render for Shell {
         self.holos.begin(window, cx);
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
         mascot::sync(cx.global::<crate::settings::AppSettings>());
-        // The mode in Today's box must have a bot on the crew to take it.
-        if Member::doer_for(self.mode).is_none() {
-            if let Some(m) = Mode::ALL
-                .into_iter()
-                .find(|m| Member::doer_for(*m).is_some())
-            {
-                self.set_mode(m, window, cx);
-            }
-        }
         let body = match self.place {
             Place::Today => self.today(cx),
             Place::Live(id) => self.live(id, cx),
@@ -1811,7 +1906,15 @@ pub fn open_window(cx: &mut App) {
 
 #[cfg(test)]
 mod drop_tests {
-    use super::folders_from;
+    use super::{and_list, folders_from};
+
+    #[test]
+    fn names_read_as_a_list() {
+        assert_eq!(and_list(&[]), "");
+        assert_eq!(and_list(&["Fixer"]), "Fixer");
+        assert_eq!(and_list(&["Fixer", "Checker"]), "Fixer and Checker");
+        assert_eq!(and_list(&["A", "B", "C"]), "A, B and C");
+    }
 
     #[test]
     fn dropped_files_mean_their_folder() {

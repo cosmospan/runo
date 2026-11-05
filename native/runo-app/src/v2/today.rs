@@ -7,6 +7,8 @@ use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use runo_holo::{Framing, Mood};
+
 use super::data::{Member, Mode};
 use super::store::{self, Status};
 use super::ui::{self, c, ca};
@@ -143,6 +145,7 @@ impl Shell {
                 self.stagger(0),
             ))
             .children(self.sample_banner(cx))
+            .children(self.fin_offer(cx))
             .child(ui::rise(
                 div().w_full().child(self.composer_card(cx)),
                 self.stagger(1),
@@ -206,13 +209,11 @@ impl Shell {
                     .bg(c(ui::PANEL))
                     .shadow(ui::lift()),
             );
-        // Only the kinds of work someone on the crew takes.
-        let shown: Vec<Mode> = Mode::ALL
-            .into_iter()
-            .filter(|m| Member::doer_for(*m).is_some())
-            .collect();
-        for (i, m) in shown.iter().copied().enumerate() {
+        // Every kind of work. One nobody on the crew does yet is fainter, and a
+        // job sent in it makes Fin offer the bot for it.
+        for (i, m) in Mode::ALL.into_iter().enumerate() {
             let on = self.mode == m;
+            let staffed = Member::doer_for(m).is_some();
             modes = modes.child(
                 div()
                     .id(("mode", i))
@@ -229,11 +230,20 @@ impl Shell {
                         if on {
                             d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::INK))
                         } else {
-                            d.text_color(c(ui::MUTED))
+                            d.text_color(c(if staffed { ui::MUTED } else { ui::FAINT }))
                                 .hover(|s| s.text_color(c(ui::INK)))
                         }
                     })
                     .child(m.label())
+                    .when(!staffed, |d| {
+                        let who = Member::for_mode(m).name();
+                        d.tooltip(move |window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(format!(
+                                "Nobody on your crew does this yet. Send a job and Fin offers {who}."
+                            ))
+                            .build(window, cx)
+                        })
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.target = None;
                         this.set_mode(m, window, cx);
@@ -328,7 +338,11 @@ impl Shell {
                             .cursor_pointer()
                             .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
                             .child(face)
-                            .child(target.name())
+                            .child(if target.on_crew() {
+                                target.name().to_string()
+                            } else {
+                                format!("{} (Fin asks first)", target.name())
+                            })
                             .tooltip(move |window, cx| {
                                 gpui_kit::component::tooltip::Tooltip::new(format!(
                                     "Runs on {engine}. Click to change it."
@@ -384,6 +398,84 @@ impl Shell {
             .border_color(c(ui::LINE))
             .rounded(px(12.))
             .child(box_)
+    }
+
+    /// Fin's question when a job needs a bot nobody on the crew is: add it and
+    /// start, make your own, or not now.
+    fn fin_offer(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let (who, mode, text) = {
+            let o = self.offer.as_ref()?;
+            (o.who, o.mode, o.text.clone())
+        };
+        let face = self.bot(who, Mood::NeedsYou, 44., Framing::Bust);
+        let short: String = if text.chars().count() > 80 {
+            format!(
+                "{}\u{2026}",
+                text.chars().take(80).collect::<String>().trim_end()
+            )
+        } else {
+            text
+        };
+        Some(
+            div()
+                .w_full()
+                .flex()
+                .items_center()
+                .gap(px(16.))
+                .px(px(18.))
+                .py(px(14.))
+                .bg(c(ui::PANEL))
+                .border_1()
+                .border_color(ca(who.accent(), 0.45))
+                .rounded(px(12.))
+                .child(face)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(3.))
+                        .child(ui::caption("FIN"))
+                        .child(
+                            div()
+                                .text_size(px(14.5))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(ui::INK))
+                                .child(format!(
+                                    "Nobody on your crew {} yet. Add {} for this job?",
+                                    mode.work(),
+                                    who.name()
+                                )),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.5))
+                                .line_height(px(18.))
+                                .text_color(c(ui::MUTED))
+                                .child(format!("{} \u{b7} \u{201c}{short}\u{201d}", who.pitch())),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(ui::ghost("offer-skip", "Not now").on_click(
+                            cx.listener(|this, _, window, cx| this.skip_offer(window, cx)),
+                        ))
+                        .child(ui::ghost("offer-make", "Make my own").on_click(
+                            cx.listener(|this, _, window, cx| this.make_for_offer(window, cx)),
+                        ))
+                        .child(
+                            ui::solid("offer-add", format!("Add {} and start", who.name()))
+                                .on_click(
+                                    cx.listener(|this, _, window, cx| this.take_offer(window, cx)),
+                                ),
+                        ),
+                ),
+        )
     }
 
     /// The folder the crew works in, as words in a sentence you can click.

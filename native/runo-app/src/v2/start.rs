@@ -97,10 +97,9 @@ impl Shell {
         );
 
         let mut starters = div().flex().gap(px(10.));
+        // All of them, staffed or not: one whose bot isn't on the crew yet
+        // makes Fin offer it when sent.
         for (i, (mode, name, what, text)) in STARTERS.into_iter().enumerate() {
-            if Member::doer_for(mode).is_none() {
-                continue;
-            }
             starters = starters.child(
                 ui::card()
                     .id(("starter", i))

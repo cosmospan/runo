@@ -169,11 +169,22 @@ impl Shell {
             act: Act::NewGoal,
         });
         for mode in Mode::ALL.into_iter().filter(|m| *m != Mode::Ask) {
-            let Some(who) = Member::doer_for(mode) else {
-                continue;
+            let (who, label) = match Member::doer_for(mode) {
+                Some(who) => (who, format!("{}: give {} a job", mode.label(), who.name())),
+                None => {
+                    let who = Member::for_mode(mode);
+                    (
+                        who,
+                        format!(
+                            "{}: a job for {} (Fin asks to add it)",
+                            mode.label(),
+                            who.name()
+                        ),
+                    )
+                }
             };
             all.push(Entry {
-                label: format!("{}: give {} a job", mode.label(), who.name()),
+                label,
                 hint: "New job".into(),
                 icon: None,
                 bot: Some(who),

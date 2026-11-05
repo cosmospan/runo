@@ -38,13 +38,11 @@ pub fn set_removed(removed: &[Member]) {
     *REMOVED.write().unwrap_or_else(|e| e.into_inner()) = removed.to_vec();
 }
 
-/// The crew a new person starts with; the rest can be added any time.
-pub const STARTER_CREW: [Member; 4] = [
-    Member::Builder,
-    Member::Fixer,
-    Member::Explainer,
-    Member::Shipper,
-];
+/// The crew a new person starts with: just Explainer, who only reads and
+/// answers. When a job needs a kind of work nobody on the crew does, Fin offers
+/// the bot for it (see [`Member::needed_for`]); bots can be added or made on
+/// Crew any time too.
+pub const STARTER_CREW: [Member; 1] = [Member::Explainer];
 
 /// Makes `made` the bots the app knows about (on load, and after a change).
 pub fn set_made(made: &[Made]) {
@@ -163,6 +161,15 @@ impl Member {
         // Shipper takes no jobs of its own: it ships what the others made.
         all.into_iter()
             .find(|m| *m != Member::Shipper && m.mode() == mode)
+    }
+
+    /// The bot Fin offers to add when a job of this kind comes in and nobody on
+    /// the crew does that work; `None` when someone already does.
+    pub fn needed_for(mode: Mode) -> Option<Member> {
+        match Member::doer_for(mode) {
+            Some(_) => None,
+            None => Some(Member::for_mode(mode)),
+        }
     }
 
     /// The built-in bot whose kind of work this one does (itself, for the six).
@@ -395,6 +402,18 @@ impl Mode {
         }
     }
 
+    /// The work itself, for "nobody on your crew … yet".
+    pub fn work(self) -> &'static str {
+        match self {
+            Mode::Ask => "answers questions about the code",
+            Mode::Build => "writes new code",
+            Mode::Fix => "fixes bugs",
+            Mode::Review => "reviews changes",
+            Mode::Test => "runs the tests",
+            Mode::Tidy => "tidies up",
+        }
+    }
+
     /// Whether the job may change files. Ask and Review only read.
     pub fn writes(self) -> bool {
         !matches!(self, Mode::Ask | Mode::Review)
@@ -458,8 +477,10 @@ mod tests {
         assert!(!Member::Checker.on_crew());
         set_made(&[]);
         assert_eq!(Member::doer_for(Mode::Test), None);
+        assert_eq!(Member::needed_for(Mode::Test), Some(Member::Checker));
         set_removed(&[]);
         assert_eq!(Member::doer_for(Mode::Test), Some(Member::Checker));
+        assert_eq!(Member::needed_for(Mode::Test), None);
         assert_eq!(Member::all().len(), Member::CREW.len());
         assert_eq!(Member::Made(1).name(), "Bot");
     }
