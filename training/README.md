@@ -19,7 +19,8 @@ Scores (`SquadCode v2 brain eval` and `eval hard`):
 | Rules | 51 | 70 |
 | Tiny classifier, then rules (seeds only) | 53 | 105 |
 | Tiny classifier, then rules (seeds + teacher) | 53 | 117 |
-| Fin 0.8B (Smart Fin, seeds only) | 53 | 117 |
+| Fin 0.8B (seeds only) | 53 | 117 |
+| Fin 0.8B (seeds + teacher, Smart Fin) | 53 | 120 |
 
 ## The pieces
 
