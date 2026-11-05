@@ -2,6 +2,7 @@
 //! same dark cards, pills and hairlines as the rest of v2.
 //!
 //! - **General**: how the app behaves while the crew works, and the limits.
+//! - **Appearance**: the theme, solid or frosted glass, with a preview of each.
 //! - **Mascot**: the crew's look. Fin or the bubble crew, Fin's material, and
 //!   each bot's colour and props, with a live preview.
 //! - **Engines**: which coding agent and model each bot runs on.
@@ -22,6 +23,7 @@ use crate::settings::AppSettings;
 use super::data::Member;
 use super::engines::{choice, section};
 use super::mascot;
+use super::theme::Theme;
 use super::ui::{self, c, ca, space};
 use super::{Place, Shell};
 
@@ -29,16 +31,18 @@ use super::{Place, Shell};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Pane {
     General,
+    Appearance,
     Mascot,
     Engines,
 }
 
 impl Pane {
-    pub const ALL: [Pane; 3] = [Pane::General, Pane::Mascot, Pane::Engines];
+    pub const ALL: [Pane; 4] = [Pane::General, Pane::Appearance, Pane::Mascot, Pane::Engines];
 
     pub fn name(self) -> &'static str {
         match self {
             Pane::General => "General",
+            Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
         }
@@ -47,6 +51,7 @@ impl Pane {
     fn line(self) -> &'static str {
         match self {
             Pane::General => "Alerts, motion and limits",
+            Pane::Appearance => "Themes and frosted glass",
             Pane::Mascot => "Fin, colours and props",
             Pane::Engines => "Agents and models",
         }
@@ -55,6 +60,7 @@ impl Pane {
     fn icon(self) -> IconName {
         match self {
             Pane::General => IconName::Settings,
+            Pane::Appearance => IconName::Palette,
             Pane::Mascot => IconName::Bot,
             Pane::Engines => IconName::Cpu,
         }
@@ -75,9 +81,9 @@ fn switch(on: bool) -> Div {
         .h(px(20.))
         .flex_none()
         .rounded_full()
-        .bg(c(if on { ui::VIOLET } else { 0x2A2A33 }))
+        .bg(c(if on { ui::VIOLET } else { ui::off() }))
         .border_1()
-        .border_color(c(if on { 0x8E66FF } else { ui::LINE_HI }))
+        .border_color(c(if on { 0x8E66FF } else { ui::line_hi() }))
         .relative()
         .child(
             div()
@@ -100,7 +106,7 @@ fn row(title: &'static str, line: impl Into<SharedString>, control: impl IntoEle
         .items_center()
         .gap(px(space::M))
         .border_t_1()
-        .border_color(c(ui::LINE2))
+        .border_color(c(ui::line2()))
         .child(
             div()
                 .flex_1()
@@ -112,13 +118,13 @@ fn row(title: &'static str, line: impl Into<SharedString>, control: impl IntoEle
                     div()
                         .text_size(px(13.5))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .child(title),
                 )
                 .child(
                     div()
                         .text_size(px(12.5))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(line.into()),
                 ),
         )
@@ -135,7 +141,7 @@ fn group(title: &'static str, rows: Vec<Div>) -> Div {
             .pb(px(10.))
             .text_size(px(11.5))
             .font_weight(FontWeight::SEMIBOLD)
-            .text_color(c(ui::MUTED))
+            .text_color(c(ui::muted()))
             .child(title),
     );
     for r in rows {
@@ -152,9 +158,9 @@ fn segmented(items: Vec<Stateful<Div>>) -> Div {
         .gap(px(3.))
         .p(px(3.))
         .rounded(px(9.))
-        .bg(c(ui::BG))
+        .bg(c(ui::bg()))
         .border_1()
-        .border_color(c(ui::LINE));
+        .border_color(c(ui::line()));
     for i in items {
         d = d.child(i);
     }
@@ -174,14 +180,14 @@ fn segment(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -
         .cursor_pointer()
         .map(|d| {
             if on {
-                d.bg(c(ui::RAISED))
+                d.bg(c(ui::raised()))
                     .border_1()
-                    .border_color(c(ui::LINE_HI))
-                    .text_color(c(ui::INK))
+                    .border_color(c(ui::line_hi()))
+                    .text_color(c(ui::ink()))
                     .shadow(ui::lift())
             } else {
-                d.text_color(c(ui::MUTED))
-                    .hover(|s| s.text_color(c(ui::INK)))
+                d.text_color(c(ui::muted()))
+                    .hover(|s| s.text_color(c(ui::ink())))
             }
         })
         .child(label.into())
@@ -195,8 +201,8 @@ fn stepper(value: impl Into<SharedString>, down: Stateful<Div>, up: Stateful<Div
         .items_center()
         .rounded(px(8.))
         .border_1()
-        .border_color(c(ui::LINE))
-        .bg(c(ui::RAISED))
+        .border_color(c(ui::line()))
+        .bg(c(ui::raised()))
         .child(down)
         .child(
             div()
@@ -206,7 +212,7 @@ fn stepper(value: impl Into<SharedString>, down: Stateful<Div>, up: Stateful<Div
                 .justify_center()
                 .text_size(px(12.5))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(ui::INK))
+                .text_color(c(ui::ink()))
                 .child(value.into()),
         )
         .child(up)
@@ -219,10 +225,10 @@ fn step_button(id: impl Into<ElementId>, icon: IconName) -> Stateful<Div> {
         .flex()
         .items_center()
         .justify_center()
-        .text_color(c(ui::BODY))
+        .text_color(c(ui::body()))
         .cursor_pointer()
-        .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
-        .active(|s| s.bg(c(ui::PRESS)))
+        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+        .active(|s| s.bg(c(ui::press())))
         .child(Icon::new(icon).size(px(13.)))
 }
 
@@ -239,10 +245,102 @@ fn slot(label: &'static str, items: Div) -> Div {
                 .pt(px(6.))
                 .font_family(ui::MONO)
                 .text_size(px(10.5))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(label),
         )
         .child(items.flex_1().flex().flex_wrap().gap(px(6.)))
+}
+
+/// A small picture of a theme: a sidebar and a card on its page, with text lines, a
+/// button and the status colours. Frosted themes sit over a colourful backdrop, to
+/// show the desktop coming through.
+fn swatch(t: &'static Theme) -> Div {
+    let line = |w: f32, color: u32| div().h(px(4.)).w(px(w)).rounded_full().bg(c(color));
+    let dot = |color: u32| div().size(px(6.)).rounded_full().bg(c(color));
+    let page = div()
+        .size_full()
+        .flex()
+        .bg(c(t.bg))
+        .child(
+            div()
+                .w(px(48.))
+                .h_full()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .p(px(8.))
+                .border_r_1()
+                .border_color(c(t.line_c))
+                .child(line(28., t.ink))
+                .child(div().h(px(10.)).w_full().rounded(px(3.)).bg(c(t.hover)))
+                .child(line(22., t.muted))
+                .child(line(26., t.faint)),
+        )
+        .child(
+            div().flex_1().p(px(8.)).child(
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .p(px(8.))
+                    .rounded(px(6.))
+                    .bg(c(t.panel))
+                    .border_1()
+                    .border_color(c(t.line_c))
+                    .child(line(64., t.ink))
+                    .child(line(84., t.body))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(4.))
+                            .child(dot(t.t_blue))
+                            .child(dot(t.t_amber))
+                            .child(dot(t.t_green))
+                            .child(dot(t.t_red)),
+                    )
+                    .child(
+                        div()
+                            .mt_auto()
+                            .flex()
+                            .justify_end()
+                            .child(div().h(px(12.)).w(px(34.)).rounded(px(3.)).bg(c(t.fill))),
+                    ),
+            ),
+        );
+    div()
+        .h(px(112.))
+        .w_full()
+        .rounded(px(8.))
+        .overflow_hidden()
+        .relative()
+        .bg(c(if t.light { 0xDCE3F2 } else { 0x0B0B10 }))
+        .when(t.frosted, |d| {
+            d.bg(linear_gradient(
+                135.,
+                linear_color_stop(c(0xF76B8A), 0.),
+                linear_color_stop(c(0x5B7CFA), 1.),
+            ))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(-18.))
+                    .left(px(70.))
+                    .size(px(80.))
+                    .rounded_full()
+                    .bg(c(0xFFC24B)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .bottom(px(-24.))
+                    .left(px(-10.))
+                    .size(px(90.))
+                    .rounded_full()
+                    .bg(c(0x2EC5A1)),
+            )
+        })
+        .child(div().absolute().inset_0().child(page))
 }
 
 impl Shell {
@@ -259,8 +357,8 @@ impl Shell {
             .pt(px(24.))
             .pb(px(16.))
             .border_r_1()
-            .border_color(c(ui::LINE))
-            .bg(c(ui::BG))
+            .border_color(c(ui::line()))
+            .bg(c(ui::bg()))
             .child(
                 div()
                     .px(px(10.))
@@ -283,9 +381,9 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::PANEL)).border_1().border_color(c(ui::LINE))
+                            d.bg(c(ui::panel())).border_1().border_color(c(ui::line()))
                         } else {
-                            d.hover(|s| s.bg(c(ui::HOVER)))
+                            d.hover(|s| s.bg(c(ui::hover())))
                         }
                     })
                     .child(
@@ -299,9 +397,9 @@ impl Shell {
                             .bg(if on {
                                 ca(ui::RUNO, 0.22)
                             } else {
-                                c(ui::RAISED)
+                                c(ui::raised())
                             })
-                            .text_color(c(if on { ui::T_VIOLET } else { ui::MUTED }))
+                            .text_color(c(if on { ui::t_violet() } else { ui::muted() }))
                             .child(Icon::new(p.icon()).size(px(15.))),
                     )
                     .child(
@@ -313,13 +411,13 @@ impl Shell {
                                 div()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c(if on { ui::INK } else { ui::BODY }))
+                                    .text_color(c(if on { ui::ink() } else { ui::body() }))
                                     .child(p.name()),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .truncate()
                                     .child(p.line()),
                             ),
@@ -343,8 +441,8 @@ impl Shell {
                 .child(
                     div()
                         .text_size(px(11.5))
-                        .text_color(c(ui::FAINT))
-                        .child("Themes, terminal, keys and connections are in the classic app."),
+                        .text_color(c(ui::faint()))
+                        .child("Terminal, keys and connections are in the classic app."),
                 )
                 .child(
                     ui::ghost("settings-classic", "Open the classic app")
@@ -354,6 +452,7 @@ impl Shell {
 
         let body = match pane {
             Pane::General => self.settings_general(cx),
+            Pane::Appearance => self.settings_appearance(cx),
             Pane::Mascot => self.settings_mascot(cx),
             Pane::Engines => self.engines(cx),
         };
@@ -392,7 +491,7 @@ impl Shell {
                                 div()
                                     .mt(px(6.))
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(line),
                             ),
                     )
@@ -602,6 +701,137 @@ impl Shell {
         )
     }
 
+    fn settings_appearance(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let current = ui::theme().id;
+        let card_for = |t: &'static Theme, cx: &mut Context<Self>| {
+            let on = t.id == current;
+            div()
+                .id(SharedString::from(format!("theme-{}", t.id)))
+                .w(px(206.))
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .p(px(10.))
+                .rounded(px(12.))
+                .border_1()
+                .cursor_pointer()
+                .map(|d| {
+                    if on {
+                        d.border_color(c(ui::VIOLET)).bg(c(ui::panel()))
+                    } else {
+                        d.border_color(c(ui::line()))
+                            .bg(c(ui::panel()))
+                            .hover(|s| s.border_color(c(ui::line_hi())))
+                    }
+                })
+                .child(swatch(t))
+                .child(
+                    div()
+                        .px(px(4.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(c(ui::ink()))
+                                        .child(t.name),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(ui::muted()))
+                                        .truncate()
+                                        .child(t.line),
+                                ),
+                        )
+                        .when(on, |d| {
+                            d.child(
+                                div()
+                                    .size(px(20.))
+                                    .flex_none()
+                                    .rounded_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .bg(c(ui::VIOLET))
+                                    .text_color(c(0xFFFFFF))
+                                    .child(Icon::new(IconName::Check).size(px(12.))),
+                            )
+                        }),
+                )
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    ui::set_theme(t.id);
+                    save(cx, |st| st.v2_theme = t.id.to_string());
+                    cx.notify();
+                }))
+        };
+        let grid = |frosted: bool, cx: &mut Context<Self>| {
+            let mut d = div().flex().flex_wrap().gap(px(space::SM));
+            for t in ui::THEMES.iter().filter(|t| t.frosted == frosted) {
+                d = d.child(card_for(t, cx));
+            }
+            d
+        };
+        let heading = |title: &'static str, line: &'static str| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(3.))
+                .child(
+                    div()
+                        .text_size(px(13.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .child(line),
+                )
+        };
+        let solid = grid(false, cx);
+        let frosted = grid(true, cx);
+        Self::page(
+            "settings-appearance",
+            "Appearance",
+            "How Squad Code looks. A theme applies the moment you pick it.",
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(space::L))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(space::SM))
+                        .child(heading("Solid", "An opaque window, quickest to draw."))
+                        .child(solid),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(space::SM))
+                        .child(heading(
+                            "Frosted",
+                            "A see-through window over your desktop, blurred like frosted glass.",
+                        ))
+                        .child(frosted),
+                ),
+        )
+    }
+
     fn settings_mascot(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let st = cx.global::<AppSettings>().clone();
         let crew = Member::all();
@@ -662,11 +892,11 @@ impl Shell {
                     .h(px(330.))
                     .rounded(px(10.))
                     .border_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .bg(linear_gradient(
                         180.,
                         linear_color_stop(ca(accent, 0.14), 0.),
-                        linear_color_stop(c(ui::BG), 1.),
+                        linear_color_stop(c(ui::bg()), 1.),
                     ))
                     .relative()
                     .flex()
@@ -687,7 +917,7 @@ impl Shell {
                                     .font_weight(FontWeight::BOLD)
                                     .child(who.name()),
                             )
-                            .child(div().text_size(px(12.)).text_color(c(ui::MUTED)).child(
+                            .child(div().text_size(px(12.)).text_color(c(ui::muted())).child(
                                 if is_fin {
                                     format!("{role_name} · {}", state.name())
                                 } else {
@@ -716,9 +946,10 @@ impl Shell {
                     .border_1()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::HOVER)).border_color(c(ui::LINE_HI))
+                            d.bg(c(ui::hover())).border_color(c(ui::line_hi()))
                         } else {
-                            d.border_color(c(ui::LINE)).hover(|s| s.bg(c(ui::HOVER)))
+                            d.border_color(c(ui::line()))
+                                .hover(|s| s.bg(c(ui::hover())))
                         }
                     })
                     .child(face)
@@ -727,7 +958,7 @@ impl Shell {
                             .pr(px(4.))
                             .text_size(px(12.5))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(if on { ui::INK } else { ui::BODY }))
+                            .text_color(c(if on { ui::ink() } else { ui::body() }))
                             .child(m.name()),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -793,7 +1024,7 @@ impl Shell {
                     .cursor_pointer()
                     .p(px(2.))
                     .border_2()
-                    .border_color(if on { c(ui::INK) } else { ca(0, 0.) })
+                    .border_color(if on { c(ui::ink()) } else { ca(0, 0.) })
                     .child(div().size_full().rounded_full().bg(linear_gradient(
                         135.,
                         linear_color_stop(c(t.0[0].0), 0.),
@@ -868,7 +1099,7 @@ impl Shell {
                     }),
             )
             .child(pick)
-            .child(div().h(px(1.)).my(px(4.)).bg(c(ui::LINE2)))
+            .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
             .child(slot("ROLE", roles))
             .child(slot("HEAD", hats))
             .child(slot("LEFT FIN", lefts))
@@ -891,7 +1122,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(11.5))
-                            .text_color(c(if m == who { ui::INK } else { ui::MUTED }))
+                            .text_color(c(if m == who { ui::ink() } else { ui::muted() }))
                             .child(m.name()),
                     )
                     .on_hover(cx.listener(move |this, on: &bool, _, cx| this.hover_bot(m, *on, cx)))

@@ -18,9 +18,6 @@ use super::{Place, Shell};
 /// The sidebar's width.
 pub(super) const WIDTH: f32 = 252.;
 
-/// The sidebar's ground, a shade off the page.
-const GROUND: u32 = ui::BG;
-
 impl Shell {
     pub(super) fn sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let place = self.place;
@@ -43,19 +40,19 @@ impl Shell {
             .py(px(6.))
             .rounded(px(8.))
             .cursor_pointer()
-            .hover(|s| s.bg(c(ui::HOVER)))
+            .hover(|s| s.bg(c(ui::hover())))
             .child(
                 div()
                     .size(px(26.))
                     .flex_none()
                     .rounded(px(7.))
-                    .bg(c(ui::FILL))
+                    .bg(c(ui::fill()))
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_size(px(13.))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(c(ui::ON_FILL))
+                    .text_color(c(ui::on_fill()))
                     .child(
                         name.chars()
                             .next()
@@ -78,7 +75,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(11.5))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .truncate()
                             .child(path),
                     ),
@@ -86,7 +83,7 @@ impl Shell {
             .child(
                 Icon::new(IconName::ChevronsUpDown)
                     .size(px(14.))
-                    .text_color(c(ui::FAINT)),
+                    .text_color(c(ui::faint())),
             )
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx)));
 
@@ -102,13 +99,13 @@ impl Shell {
             .items_center()
             .gap(px(8.))
             .rounded(px(8.))
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .text_size(px(13.))
-            .text_color(c(ui::FAINT))
+            .text_color(c(ui::faint()))
             .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::LINE_HI)))
+            .hover(|s| s.border_color(c(ui::line_hi())))
             .child(Icon::new(IconName::Search).size(px(15.)))
             .child(div().flex_1().child("Search or run…"))
             .child(kbd(if cfg!(target_os = "macos") {
@@ -132,12 +129,12 @@ impl Shell {
                 .cursor_pointer()
                 .map(|d| {
                     if on {
-                        d.bg(c(ui::PANEL))
+                        d.bg(c(ui::panel()))
                             .border_1()
-                            .border_color(c(ui::LINE))
-                            .text_color(c(ui::INK))
+                            .border_color(c(ui::line()))
+                            .text_color(c(ui::ink()))
                     } else {
-                        d.text_color(c(ui::BODY)).hover(|s| s.bg(c(ui::HOVER)))
+                        d.text_color(c(ui::body())).hover(|s| s.bg(c(ui::hover())))
                     }
                 })
                 .child(Icon::new(icon).size(px(16.)))
@@ -154,7 +151,7 @@ impl Shell {
                             .bg(c(0xE5484D))
                             .text_color(c(0xFFFFFF))
                     } else {
-                        d.text_color(c(ui::MUTED))
+                        d.text_color(c(ui::muted()))
                     }
                 })
                 .child(n.min(999).to_string())
@@ -244,8 +241,8 @@ impl Shell {
                 ui::BLUE
             } else if asking {
                 ui::AMBER
-            } else if dot == ui::FAINT {
-                ui::FAINT
+            } else if dot == ui::faint() {
+                ui::faint()
             } else {
                 dot
             };
@@ -261,9 +258,9 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if here {
-                            d.bg(c(ui::PANEL)).border_1().border_color(c(ui::LINE))
+                            d.bg(c(ui::panel())).border_1().border_color(c(ui::line()))
                         } else {
-                            d.hover(|s| s.bg(c(ui::HOVER)))
+                            d.hover(|s| s.bg(c(ui::hover())))
                         }
                     })
                     .on_hover(cx.listener(move |this, on: &bool, _, cx| {
@@ -287,9 +284,9 @@ impl Shell {
                                     div()
                                         .text_size(px(11.5))
                                         .text_color(c(if asking && busy.is_none() {
-                                            ui::T_AMBER
+                                            ui::t_amber()
                                         } else {
-                                            ui::MUTED
+                                            ui::muted()
                                         }))
                                         .truncate()
                                         .child(line),
@@ -327,7 +324,7 @@ impl Shell {
                 .items_center()
                 .text_size(px(11.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(div().flex_1().child(label))
         };
 
@@ -345,10 +342,10 @@ impl Shell {
             .py(px(9.))
             .rounded(px(9.))
             .border_1()
-            .border_color(c(if ready { ui::LINE } else { 0x561A25 }))
-            .bg(c(if ready { ui::PANEL } else { 0x2B1219 }))
+            .border_color(c(if ready { ui::line() } else { ui::bad_tone().2 }))
+            .bg(c(if ready { ui::panel() } else { ui::bad_tone().1 }))
             .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::LINE_HI)))
+            .hover(|s| s.border_color(c(ui::line_hi())))
             .child(
                 div()
                     .flex()
@@ -365,7 +362,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(c(if ready { ui::MUTED } else { ui::T_RED }))
+                            .text_color(c(if ready { ui::muted() } else { ui::t_red() }))
                             .child(if ready { "ready" } else { "not found" }),
                     ),
             )
@@ -373,7 +370,7 @@ impl Shell {
                 div()
                     .mt(px(2.))
                     .text_size(px(11.5))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(format!("${today:.2} today")),
             )
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)));
@@ -419,9 +416,9 @@ impl Shell {
             .pt(px(if cfg!(target_os = "macos") { 40. } else { 14. }))
             .pb(px(12.))
             .px(px(10.))
-            .bg(c(GROUND))
+            .bg(c(ui::bg()))
             .border_r_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .overflow_y_scroll()
             .child(head)
             .child(search)
@@ -436,7 +433,7 @@ impl Shell {
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                         .tooltip(|window, cx| {
                             gpui_kit::component::tooltip::Tooltip::new("Add or make a bot")
                                 .build(window, cx)
@@ -456,9 +453,9 @@ impl Shell {
                         .items_center()
                         .rounded(px(7.))
                         .text_size(px(12.5))
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::BODY)))
+                        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::body())))
                         .child(format!("+ {more} more"))
                         .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
                 )
@@ -474,9 +471,9 @@ impl Shell {
                     .gap(px(10.))
                     .rounded(px(7.))
                     .text_size(px(13.))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                     .child(Icon::new(IconName::Plus).size(px(15.)))
                     .child("Add a bot")
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -526,9 +523,9 @@ impl Shell {
             .items_center()
             .gap(px(10.))
             .px(px(24.))
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_b_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .text_size(px(13.))
             .child(
                 div()
@@ -536,12 +533,12 @@ impl Shell {
                     .items_center()
                     .gap(px(8.))
                     .min_w_0()
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(folder)
-                    .child(div().text_color(c(ui::FAINT)).child("/"))
+                    .child(div().text_color(c(ui::faint())).child("/"))
                     .child(
                         div()
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .font_weight(FontWeight::SEMIBOLD)
                             .truncate()
                             .child(here),
@@ -557,13 +554,13 @@ impl Shell {
                         .items_center()
                         .gap(px(6.))
                         .rounded(px(6.))
-                        .bg(c(0x131C2F))
+                        .bg(c(ui::run_tone().1))
                         .border_1()
-                        .border_color(c(0x1C325A))
+                        .border_color(c(ui::run_tone().2))
                         .text_size(px(12.))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::T_BLUE))
-                        .child(div().size(px(7.)).rounded_full().bg(c(ui::T_BLUE)))
+                        .text_color(c(ui::t_blue()))
+                        .child(div().size(px(7.)).rounded_full().bg(c(ui::t_blue())))
                         .child(format!("{running} running")),
                 )
             })
@@ -576,12 +573,12 @@ impl Shell {
                     .items_center()
                     .gap(px(8.))
                     .rounded(px(7.))
-                    .bg(c(ui::FILL))
-                    .text_color(c(ui::ON_FILL))
+                    .bg(c(ui::fill()))
+                    .text_color(c(ui::on_fill()))
                     .text_size(px(13.))
                     .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(0xDCDCE3)))
+                    .hover(|s| s.bg(c(ui::fill_hover())))
                     .child("New job")
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
             )
@@ -594,11 +591,11 @@ fn kbd(text: &'static str) -> Div {
         .px(px(5.))
         .rounded(px(4.))
         .border_1()
-        .border_color(c(ui::LINE))
-        .bg(c(ui::PANEL))
+        .border_color(c(ui::line()))
+        .bg(c(ui::panel()))
         .font_family(ui::MONO)
         .text_size(px(10.5))
-        .text_color(c(ui::FAINT))
+        .text_color(c(ui::faint()))
         .child(text)
 }
 

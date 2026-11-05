@@ -93,7 +93,7 @@ impl Shell {
                 .flex_1()
                 .px(px(18.))
                 .py(px(14.))
-                .child(div().text_size(px(12.)).text_color(c(ui::MUTED)).child(k))
+                .child(div().text_size(px(12.)).text_color(c(ui::muted())).child(k))
                 .child(
                     div()
                         .mt(px(4.))
@@ -110,12 +110,12 @@ impl Shell {
                             div()
                                 .pb(px(4.))
                                 .text_size(px(11.5))
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .child(sub),
                         ),
                 )
         };
-        let line = || div().w(px(1.)).bg(c(ui::LINE));
+        let line = || div().w(px(1.)).bg(c(ui::line()));
         let kpis = ui::card()
             .flex()
             .child(kpi(
@@ -163,7 +163,13 @@ impl Shell {
                 );
             }
             if d.is_empty() {
-                col = col.child(div().w_full().h(px(2.)).rounded(px(1.)).bg(c(ui::LINE_HI)));
+                col = col.child(
+                    div()
+                        .w_full()
+                        .h(px(2.))
+                        .rounded(px(1.))
+                        .bg(c(ui::line_hi())),
+                );
             }
             bars = bars.child(col);
         }
@@ -175,7 +181,7 @@ impl Shell {
                     .items_center()
                     .gap(px(5.))
                     .text_size(px(11.5))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(div().size(px(7.)).rounded_full().bg(c(s.who.accent())))
                     .child(s.who.name()),
             );
@@ -210,7 +216,7 @@ impl Shell {
                     .flex()
                     .justify_between()
                     .text_size(px(11.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("30 days ago")
                     .child("Today"),
             );
@@ -222,12 +228,12 @@ impl Shell {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .bg(c(ui::RAISED))
+                .bg(c(ui::raised()))
                 .border_b_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .text_size(px(11.5))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(div().flex_1().child("Bot"))
                 .child(div().w(px(44.)).flex().justify_end().child("Jobs"))
                 .child(div().w(px(64.)).flex().justify_end().child("Spend"))
@@ -239,7 +245,7 @@ impl Shell {
                     .px(px(16.))
                     .py(px(18.))
                     .text_size(px(12.5))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("No jobs in the last 30 days."),
             );
         }
@@ -253,7 +259,7 @@ impl Shell {
                     .items_center()
                     .gap(px(10.))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(13.))
                     .child(
                         div()
@@ -289,7 +295,7 @@ impl Shell {
                             .w(px(44.))
                             .flex()
                             .justify_end()
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(match (s.ok * 100).checked_div(s.ended) {
                                 None => "—".into(),
                                 Some(pct) => format!("{pct}%"),
@@ -320,7 +326,7 @@ impl Shell {
                         div()
                             .mt(px(4.))
                             .text_size(px(13.5))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child("Last 30 days, from the jobs kept on this computer"),
                     ),
             )

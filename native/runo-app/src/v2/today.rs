@@ -101,7 +101,7 @@ impl Shell {
             .items_center()
             .gap(px(4.))
             .text_size(px(17.))
-            .text_color(c(ui::MUTED))
+            .text_color(c(ui::muted()))
             .child(lead)
             .child(self.folder_picker(cx));
         let has_jobs = !self.crew.store.jobs.is_empty();
@@ -135,7 +135,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(13.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child(greeting()),
                             ),
                     )
@@ -194,7 +194,7 @@ impl Shell {
             .p(px(3.))
             .gap(px(super::MODE_STEP - TAB))
             .rounded(px(12.))
-            .bg(c(ui::RAISED))
+            .bg(c(ui::raised()))
             .child(
                 div()
                     .absolute()
@@ -203,7 +203,7 @@ impl Shell {
                     .w(px(TAB))
                     .h(px(32.))
                     .rounded(px(9.))
-                    .bg(c(ui::PANEL))
+                    .bg(c(ui::panel()))
                     .shadow(ui::lift()),
             );
         // Only the kinds of work someone on the crew takes.
@@ -227,10 +227,10 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::INK))
+                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
                         } else {
-                            d.text_color(c(ui::MUTED))
-                                .hover(|s| s.text_color(c(ui::INK)))
+                            d.text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
                         }
                     })
                     .child(m.label())
@@ -324,9 +324,9 @@ impl Shell {
                             .h(px(32.))
                             .rounded_full()
                             .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .cursor_pointer()
-                            .hover(|s| s.bg(c(ui::HOVER)).text_color(c(ui::INK)))
+                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                             .child(face)
                             .child(target.name())
                             .tooltip(move |window, cx| {
@@ -343,7 +343,7 @@ impl Shell {
                             .size(px(38.))
                             .rounded_full()
                             // Dark once there is something to send.
-                            .bg(c(if ready { accent } else { 0x2A2A33 }))
+                            .bg(c(if ready { accent } else { ui::off() }))
                             .when(ready, |d| {
                                 d.shadow(vec![BoxShadow {
                                     color: ca(accent, 0.45),
@@ -379,9 +379,9 @@ impl Shell {
             .px(px(18.))
             .pt(px(18.))
             .pb(px(14.))
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .child(box_)
     }
@@ -398,23 +398,23 @@ impl Shell {
             .h(px(30.))
             .rounded(px(9.))
             .text_color(c(if folder.is_some() {
-                ui::INK
+                ui::ink()
             } else {
                 ui::ORANGE
             }))
             .font_weight(FontWeight::SEMIBOLD)
             .cursor_pointer()
-            .hover(|s| s.bg(c(ui::HOVER)))
+            .hover(|s| s.bg(c(ui::hover())))
             .child(
                 Icon::new(IconName::Folder)
                     .size(px(16.))
-                    .text_color(c(ui::MUTED)),
+                    .text_color(c(ui::muted())),
             )
             .child(folder.clone().unwrap_or_else(|| "Pick a folder".into()))
             .child(
                 Icon::new(IconName::ChevronDown)
                     .size(px(14.))
-                    .text_color(c(ui::FAINT)),
+                    .text_color(c(ui::faint())),
             )
             .on_click(cx.listener(|this, _, _, cx| {
                 if this.crew.store.folders.is_empty() {
@@ -432,9 +432,9 @@ impl Shell {
                 .w(px(300.))
                 .p(px(6.))
                 .rounded(px(14.))
-                .bg(c(ui::PANEL))
+                .bg(c(ui::panel()))
                 .border_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .shadow(ui::lift())
                 .flex()
                 .flex_col();
@@ -451,8 +451,8 @@ impl Shell {
                         .py(px(7.))
                         .rounded(px(9.))
                         .cursor_pointer()
-                        .when(on, |d| d.bg(c(ui::RAISED)))
-                        .hover(|s| s.bg(c(ui::HOVER)))
+                        .when(on, |d| d.bg(c(ui::raised())))
+                        .hover(|s| s.bg(c(ui::hover())))
                         .child(
                             div()
                                 .flex_1()
@@ -466,7 +466,7 @@ impl Shell {
                                 .child(
                                     div()
                                         .text_size(px(11.))
-                                        .text_color(c(ui::FAINT))
+                                        .text_color(c(ui::faint()))
                                         .truncate()
                                         .child(f.path.clone()),
                                 ),
@@ -483,7 +483,7 @@ impl Shell {
                                 .justify_center()
                                 .invisible()
                                 .group_hover("folder-item", |s| s.visible())
-                                .hover(|s| s.bg(c(ui::HOVER)))
+                                .hover(|s| s.bg(c(ui::hover())))
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "Remove from this list (the files stay)",
@@ -493,7 +493,7 @@ impl Shell {
                                 .child(
                                     Icon::new(IconName::X)
                                         .size(px(12.))
-                                        .text_color(c(ui::MUTED)),
+                                        .text_color(c(ui::muted())),
                                 )
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     cx.stop_propagation();
@@ -508,7 +508,7 @@ impl Shell {
                         })),
                 );
             }
-            list.child(div().my(px(4.)).h(px(1.)).bg(c(ui::LINE)))
+            list.child(div().my(px(4.)).h(px(1.)).bg(c(ui::line())))
                 .child(
                     div()
                         .id("folder-add")
@@ -519,7 +519,7 @@ impl Shell {
                         .py(px(8.))
                         .rounded(px(9.))
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(ui::HOVER)))
+                        .hover(|s| s.bg(c(ui::hover())))
                         .text_size(px(13.))
                         .child(Icon::new(IconName::Plus).size(px(14.)))
                         .child("Add a folder…")

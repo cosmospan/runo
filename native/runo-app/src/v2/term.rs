@@ -283,19 +283,19 @@ impl Shell {
                     if cell.is_wide_continuation() {
                         continue;
                     }
-                    let mut fg = color(cell.fgcolor(), ui::BODY);
+                    let mut fg = color(cell.fgcolor(), ui::body());
                     let mut bg = match cell.bgcolor() {
                         vt100::Color::Default => None,
                         x => Some(color(x, 0)),
                     };
                     if cell.inverse() {
-                        let back = bg.unwrap_or(0x09090C);
+                        let back = bg.unwrap_or(ui::well() & 0xff_ffff);
                         bg = Some(fg);
                         fg = back;
                     }
                     if show_cursor && focused && row == cur_row && col == cur_col {
-                        let back = bg.unwrap_or(0x09090C);
-                        bg = Some(ui::INK);
+                        let back = bg.unwrap_or(ui::well() & 0xff_ffff);
+                        bg = Some(ui::ink());
                         fg = back;
                     }
                     let s = (fg, bg, cell.bold());
@@ -320,12 +320,12 @@ impl Shell {
             .items_center()
             .gap(px(6.))
             .border_b_1()
-            .border_color(c(ui::LINE2))
+            .border_color(c(ui::line2()))
             .child(
                 div()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::INK))
+                    .text_color(c(ui::ink()))
                     .child("Terminal"),
             )
             .child(
@@ -335,7 +335,7 @@ impl Shell {
                     .truncate()
                     .font_family(ui::MONO)
                     .text_size(px(11.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child(place),
             );
         for (k, (label, command)) in quick.into_iter().enumerate() {
@@ -353,9 +353,9 @@ impl Shell {
                 .id("term-close")
                 .px(px(8.))
                 .text_size(px(12.))
-                .text_color(c(ui::MUTED))
+                .text_color(c(ui::muted()))
                 .cursor_pointer()
-                .hover(|s| s.text_color(c(ui::INK)))
+                .hover(|s| s.text_color(c(ui::ink())))
                 .child("Close")
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.term_open = None;
@@ -365,9 +365,9 @@ impl Shell {
         Some(
             div()
                 .flex_none()
-                .bg(c(0x09090C))
+                .bg(c(ui::well()))
                 .border_t_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .child(bar)
                 .child(
                     div()
@@ -387,7 +387,7 @@ impl Shell {
                         }))
                         .child(lines)
                         .when(exited, |d| {
-                            d.child(div().text_color(c(ui::FAINT)).child(
+                            d.child(div().text_color(c(ui::faint())).child(
                                 "The shell ended. Close and open the terminal again for a new one.",
                             ))
                         }),

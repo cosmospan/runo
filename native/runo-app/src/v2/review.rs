@@ -35,13 +35,13 @@ impl Shell {
                 .items_center()
                 .rounded(px(8.))
                 .border_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .text_size(px(13.))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child("Fix the clash first");
         }
         let b = if failing {
-            ui::ghost(key, "Approve anyway").text_color(c(ui::T_RED))
+            ui::ghost(key, "Approve anyway").text_color(c(ui::t_red()))
         } else {
             ui::solid(key, label)
         };
@@ -57,14 +57,14 @@ impl Shell {
                     .px(px(16.))
                     .py(px(12.))
                     .rounded(px(12.))
-                    .bg(c(0x0F251F))
+                    .bg(c(ui::ok_tone().1))
                     .border_1()
-                    .border_color(c(0x134733))
+                    .border_color(c(ui::ok_tone().2))
                     .flex()
                     .items_center()
                     .gap(px(10.))
                     .text_size(px(13.))
-                    .text_color(c(ui::T_GREEN))
+                    .text_color(c(ui::t_green()))
                     .child(div().size(px(7.)).rounded_full().bg(c(ui::GREEN)))
                     .child(job.shipped.clone()),
             );
@@ -79,11 +79,11 @@ impl Shell {
         let (files, added, removed) = (job.changes.len(), job.lines().0, job.lines().1);
         let (said, verdict) = work::verdict(&job.checks, job.checking);
         let verdict_color = match verdict {
-            Verdict::Pass => ui::T_GREEN,
-            Verdict::Fail => ui::T_RED,
-            Verdict::Couldnt => ui::T_AMBER,
-            Verdict::Running => ui::T_BLUE,
-            Verdict::None => ui::MUTED,
+            Verdict::Pass => ui::t_green(),
+            Verdict::Fail => ui::t_red(),
+            Verdict::Couldnt => ui::t_amber(),
+            Verdict::Running => ui::t_blue(),
+            Verdict::None => ui::muted(),
         };
         let checker = self.avatar(Member::Checker, 22.);
 
@@ -95,11 +95,8 @@ impl Shell {
             .items_center()
             .gap(px(10.))
             .border_b_1()
-            .border_color(c(ui::LINE))
-            .child(super::home::pill(
-                "Ready for review",
-                (ui::T_AMBER, 0x2B2010, 0x573B0F),
-            ))
+            .border_color(c(ui::line()))
+            .child(super::home::pill("Ready for review", ui::ask_tone()))
             .child(
                 div()
                     .text_size(px(13.))
@@ -115,10 +112,14 @@ impl Shell {
                     .text_size(px(12.))
                     .flex()
                     .gap(px(6.))
-                    .child(div().text_color(c(ui::T_GREEN)).child(format!("+{added}")))
                     .child(
                         div()
-                            .text_color(c(ui::T_RED))
+                            .text_color(c(ui::t_green()))
+                            .child(format!("+{added}")),
+                    )
+                    .child(
+                        div()
+                            .text_color(c(ui::t_red()))
                             .child(format!("\u{2212}{removed}")),
                     ),
             )
@@ -126,7 +127,7 @@ impl Shell {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .flex()
                     .items_center()
                     .gap(px(6.))
@@ -143,7 +144,7 @@ impl Shell {
             .flex_col()
             .gap(px(8.))
             .border_b_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(
                 div()
                     .flex()
@@ -173,11 +174,11 @@ impl Shell {
         }
         for check in &job.checks {
             let (mark, col) = if check.ok {
-                ("pass", ui::T_GREEN)
+                ("pass", ui::t_green())
             } else if !check.infra.is_empty() {
-                ("couldn't run", ui::T_AMBER)
+                ("couldn't run", ui::t_amber())
             } else {
-                ("fail", ui::T_RED)
+                ("fail", ui::t_red())
             };
             proof = proof.child(
                 div()
@@ -190,14 +191,14 @@ impl Shell {
                             .flex_1()
                             .font_family(ui::MONO)
                             .text_size(px(12.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(check.command.clone()),
                     )
                     .child(
                         div()
                             .font_family(ui::MONO)
                             .text_size(px(11.5))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child(format!("{}s", check.secs)),
                     )
                     .child(div().w(px(84.)).text_color(c(col)).child(mark)),
@@ -210,13 +211,13 @@ impl Shell {
                         .px(px(12.))
                         .py(px(8.))
                         .rounded(px(8.))
-                        .bg(c(0x0A0A0D))
+                        .bg(c(ui::well()))
                         .border_1()
-                        .border_color(c(ui::LINE))
+                        .border_color(c(ui::line()))
                         .font_family(ui::MONO)
                         .text_size(px(11.5))
                         .line_height(px(17.))
-                        .text_color(c(ui::BODY))
+                        .text_color(c(ui::body()))
                         .child(tail.join("\n")),
                 );
             }
@@ -239,18 +240,18 @@ impl Shell {
                     .items_center()
                     .gap(px(10.))
                     .cursor_pointer()
-                    .when(i > 0, |d| d.border_t_1().border_color(c(ui::LINE2)))
-                    .when(open, |d| d.bg(c(ui::HOVER)))
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .when(i > 0, |d| d.border_t_1().border_color(c(ui::line2())))
+                    .when(open, |d| d.bg(c(ui::hover())))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         div()
                             .w(px(14.))
                             .font_family(ui::MONO)
                             .text_size(px(11.))
                             .text_color(c(match f.status.chars().next() {
-                                Some('A') => ui::T_GREEN,
-                                Some('D') => ui::T_RED,
-                                _ => ui::T_AMBER,
+                                Some('A') => ui::t_green(),
+                                Some('D') => ui::t_red(),
+                                _ => ui::t_amber(),
                             }))
                             .child(f.status.chars().next().unwrap_or('M').to_string()),
                     )
@@ -261,7 +262,7 @@ impl Shell {
                             .truncate()
                             .font_family(ui::MONO)
                             .text_size(px(12.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(f.path.clone()),
                     )
                     .child(
@@ -273,14 +274,14 @@ impl Shell {
                             .when(f.added > 0, |d| {
                                 d.child(
                                     div()
-                                        .text_color(c(ui::T_GREEN))
+                                        .text_color(c(ui::t_green()))
                                         .child(format!("+{}", f.added)),
                                 )
                             })
                             .when(f.removed > 0, |d| {
                                 d.child(
                                     div()
-                                        .text_color(c(ui::T_RED))
+                                        .text_color(c(ui::t_red()))
                                         .child(format!("\u{2212}{}", f.removed)),
                                 )
                             }),
@@ -323,16 +324,16 @@ impl Shell {
             .items_center()
             .gap(px(8.))
             .border_t_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .child(self.approve_button(("approve", id as usize), job, label, cx))
             .when_some(switch, |d, (words, to)| {
                 d.child(
                     div()
                         .id(("way", id as usize))
                         .text_size(px(12.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .cursor_pointer()
-                        .hover(|s| s.text_color(c(ui::INK)))
+                        .hover(|s| s.text_color(c(ui::ink())))
                         .child(words)
                         .on_click(cx.listener(move |this, _, _, cx| this.set_way(id, to, cx))),
                 )
@@ -341,12 +342,12 @@ impl Shell {
                 div()
                     .flex_1()
                     .text_size(px(12.))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .child("Or write below to send it back with changes."),
             )
             .child(
                 ui::ghost(("discard", id as usize), "Discard")
-                    .text_color(c(ui::T_RED))
+                    .text_color(c(ui::t_red()))
                     .on_click(cx.listener(move |this, _, _, cx| this.discard_job(id, cx))),
             );
 
@@ -354,7 +355,7 @@ impl Shell {
             div()
                 .ml(px(40.))
                 .rounded(px(12.))
-                .bg(c(ui::PANEL))
+                .bg(c(ui::panel()))
                 .border_1()
                 .border_color(ca(ui::AMBER, 0.35))
                 .overflow_hidden()
@@ -377,13 +378,13 @@ impl Shell {
         let opening = job.pr.is_empty();
         let failed = !job.pr_failed.is_empty() && job.pr_line.contains("failed");
         let line_color = if opening {
-            ui::T_BLUE
+            ui::t_blue()
         } else if failed {
-            ui::T_RED
+            ui::t_red()
         } else if job.pr_line.starts_with("All") {
-            ui::T_GREEN
+            ui::t_green()
         } else {
-            ui::T_BLUE
+            ui::t_blue()
         };
         let title = if opening {
             "Opening the pull request".to_string()
@@ -397,7 +398,7 @@ impl Shell {
         let mut card = div()
             .ml(px(40.))
             .rounded(px(12.))
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
             .border_color(ca(0x14B8A6, 0.40))
             .overflow_hidden()
@@ -411,7 +412,7 @@ impl Shell {
                     .items_center()
                     .gap(px(10.))
                     .border_b_1()
-                    .border_color(c(ui::LINE))
+                    .border_color(c(ui::line()))
                     .child(shipper)
                     .child(
                         div()
@@ -464,7 +465,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(12.5))
-                                    .text_color(c(ui::BODY))
+                                    .text_color(c(ui::body()))
                                     .child("Merge when checks pass"),
                             )
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -501,7 +502,7 @@ fn toggle(on: bool) -> Div {
         .h(px(18.))
         .flex_none()
         .rounded_full()
-        .bg(c(if on { ui::GREEN } else { 0x2A2A33 }))
+        .bg(c(if on { ui::GREEN } else { ui::off() }))
         .relative()
         .child(
             div()
@@ -519,12 +520,12 @@ fn branch_chip(name: &str) -> Div {
         .px(px(6.))
         .py(px(1.))
         .rounded(px(5.))
-        .bg(c(ui::RAISED))
+        .bg(c(ui::raised()))
         .border_1()
-        .border_color(c(ui::LINE))
+        .border_color(c(ui::line()))
         .font_family(ui::MONO)
         .text_size(px(11.5))
-        .text_color(c(ui::BODY))
+        .text_color(c(ui::body()))
         .child(name.to_string())
 }
 
@@ -532,9 +533,9 @@ fn branch_chip(name: &str) -> Div {
 fn diff_view(diff: &str) -> Div {
     let mut body = div()
         .py(px(6.))
-        .bg(c(0x0A0A0D))
+        .bg(c(ui::well()))
         .border_t_1()
-        .border_color(c(ui::LINE2))
+        .border_color(c(ui::line2()))
         .font_family(ui::MONO)
         .text_size(px(11.5))
         .line_height(px(18.));
@@ -543,19 +544,19 @@ fn diff_view(diff: &str) -> Div {
         return body.child(
             div()
                 .px(px(16.))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child("Couldn't show this file's changes here. Open the folder to look at it."),
         );
     }
     for l in lines.iter().take(DIFF_LINES) {
         let (fg, bg) = if l.starts_with('+') {
-            (0x7EE2B0, Some(ca(ui::GREEN, 0.08)))
+            (ui::add(), Some(ca(ui::GREEN, 0.08)))
         } else if l.starts_with('-') {
-            (0xFF9AA6, Some(ca(ui::RED, 0.08)))
+            (ui::del(), Some(ca(ui::RED, 0.08)))
         } else if l.starts_with("@@") {
-            (ui::FAINT, None)
+            (ui::faint(), None)
         } else {
-            (ui::BODY, None)
+            (ui::body(), None)
         };
         body = body.child(
             div()
@@ -575,7 +576,7 @@ fn diff_view(diff: &str) -> Div {
         body = body.child(
             div()
                 .px(px(16.))
-                .text_color(c(ui::FAINT))
+                .text_color(c(ui::faint()))
                 .child(format!("{} more lines", lines.len() - DIFF_LINES)),
         );
     }

@@ -31,6 +31,7 @@ mod sidebar;
 mod start;
 mod store;
 mod term;
+mod theme;
 mod today;
 mod trouble;
 mod ui;
@@ -378,6 +379,8 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
+    /// The theme last put on the window, so a change in Settings is applied once.
+    applied_theme: &'static str,
     clock: Instant,
     holos: Holos,
     scale: f32,
@@ -527,9 +530,6 @@ fn doze_after() -> Duration {
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
 
-/// The page ground: a quiet neutral grey under white surfaces.
-pub(super) const PAGE: u32 = ui::BG;
-
 /// Width of one of Today's mode tabs plus the gap after it.
 const MODE_STEP: f32 = 78.;
 
@@ -666,6 +666,7 @@ impl Shell {
             Ok("engines") => Place::Settings(Pane::Engines),
             Ok("settings") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
+            Ok("appearance") => Place::Settings(Pane::Appearance),
             Ok("usage") => Place::Usage,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
@@ -732,6 +733,7 @@ impl Shell {
             maker_open: false,
             engine_sel: None,
             settings_pane: Pane::General,
+            applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
             fin_state: None,
             engine_open: None,
@@ -1434,7 +1436,7 @@ impl Shell {
         {
             return ("needs you".into(), ui::AMBER);
         }
-        (who.role().to_lowercase(), ui::FAINT)
+        (who.role().to_lowercase(), ui::faint())
     }
 
     /// A bot drawn at `size` logical pixels, in `mood`.
@@ -1513,6 +1515,10 @@ impl Render for Shell {
             window.request_animation_frame();
         }
         self.poll(cx);
+        if self.applied_theme != ui::theme().id {
+            self.applied_theme = ui::theme().id;
+            apply_theme(window, cx);
+        }
         // A box that had focus may be gone (a new place opened): take focus back,
         // so shortcuts keep working without a click.
         // (Not just after focus moved on purpose: the new box may not be drawn yet.)
@@ -1644,8 +1650,8 @@ impl Render for Shell {
                         .px(px(16.))
                         .py(px(10.))
                         .rounded_full()
-                        .bg(c(ui::FILL))
-                        .text_color(c(ui::ON_FILL))
+                        .bg(c(ui::fill()))
+                        .text_color(c(ui::on_fill()))
                         .text_size(px(13.))
                         .shadow(ui::lift())
                         .child(text),
@@ -1732,8 +1738,8 @@ impl Render for Shell {
                 cx.stop_propagation();
             }))
             .font_family("Geist")
-            .text_color(c(ui::INK))
-            .bg(c(PAGE))
+            .text_color(c(ui::ink()))
+            .bg(c(ui::bg()))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
@@ -1769,6 +1775,42 @@ impl Render for Shell {
     }
 }
 
+/// The window's background for the theme in use. Solid themes keep it opaque: the
+/// app paints every pixel, and blending what's behind the window costs every frame.
+/// Frosted themes let the desktop show through, blurred (vibrancy on macOS, acrylic
+/// on Windows, the compositor's blur on Linux; without one the window stays solid).
+fn background() -> WindowBackgroundAppearance {
+    if ui::theme().frosted {
+        WindowBackgroundAppearance::Blurred
+    } else {
+        WindowBackgroundAppearance::Opaque
+    }
+}
+
+/// Puts the theme in use on the window and on the kit's text boxes and menus.
+fn apply_theme(window: &mut Window, cx: &mut App) {
+    use gpui_kit::component::{Theme, ThemeMode};
+    let t = ui::theme();
+    window.set_background_appearance(background());
+    Theme::change(
+        if t.light {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
+        },
+        Some(window),
+        cx,
+    );
+    Theme::update(cx, |k| {
+        k.background = ui::c(ui::bg());
+        k.foreground = ui::c(ui::ink());
+        k.border = ui::c(ui::line());
+        k.input = ui::c(ui::line());
+        k.muted_foreground = ui::c(ui::muted());
+    });
+    window.refresh();
+}
+
 /// Opens the v2 window.
 pub fn open_window(cx: &mut App) {
     let options = WindowOptions {
@@ -1783,21 +1825,12 @@ pub fn open_window(cx: &mut App) {
             traffic_light_position: Some(point(px(16.), px(16.))),
         }),
         app_id: Some("squadcode".into()),
-        // Solid: the colour wash is drawn by the app, so there's nothing to see
-        // through, and blending what's behind the window costs every frame.
-        window_background: WindowBackgroundAppearance::Opaque,
+        window_background: background(),
         ..Default::default()
     };
+    ui::set_theme(&cx.global::<crate::settings::AppSettings>().v2_theme);
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
-        // v2 is dark throughout, so text boxes and menus from the kit follow.
-        gpui_kit::component::Theme::change(gpui_kit::component::ThemeMode::Dark, Some(window), cx);
-        gpui_kit::component::Theme::update(cx, |t| {
-            t.background = ui::c(ui::BG);
-            t.foreground = ui::c(ui::INK);
-            t.border = ui::c(ui::LINE);
-            t.input = ui::c(ui::LINE);
-            t.muted_foreground = ui::c(ui::MUTED);
-        });
+        apply_theme(window, cx);
         cx.new(|cx| Shell::new(window, cx))
     });
     // Come to the front when opened, not behind whatever had focus (the first
