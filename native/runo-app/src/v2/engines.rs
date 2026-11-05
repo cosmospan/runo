@@ -149,7 +149,7 @@ impl Shell {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(c(if warn { ui::AMBER } else { ui::MUTED }))
+                    .text_color(c(if warn { ui::AMBER } else { ui::muted() }))
                     .child(line),
             )
     }
@@ -270,7 +270,7 @@ impl Shell {
                             })),
                     ),
             )
-            .child(div().h(px(1.)).bg(c(ui::LINE)))
+            .child(div().h(px(1.)).bg(c(ui::line())))
             .child(
                 div()
                     .flex()
