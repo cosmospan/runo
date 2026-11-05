@@ -1626,8 +1626,10 @@ fn view(framing: Framing) -> (f64, f64, f64) {
     match framing {
         // Room for props that reach past the fins and for the floating bits.
         Framing::Full => (-10.0, -4.0, 140.0),
-        // Avatars: the head and most of the fins, filling the square.
-        Framing::Bust => (9.0, 5.0, 102.0),
+        // Avatars: the whole bot with what it holds and wears, so nothing is cut
+        // off at the square's edge. Props reach out to x -5 and 118, the tallest
+        // hats (the security cap, the crown) up to y 2, and the head bobs.
+        Framing::Bust => (-6.0, -6.0, 132.0),
     }
 }
 

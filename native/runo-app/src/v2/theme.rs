@@ -116,7 +116,7 @@ pub const THEMES: [Theme; 7] = [
         ink: 0xE9E9EF,
         body: 0xB9B9C4,
         muted: 0x8B8B97,
-        faint: 0x5D5D69,
+        faint: 0x6E6E7A,
         line_c: 0x24242D,
         line2: 0x1A1A21,
         line_hi: 0x34343F,
@@ -155,7 +155,7 @@ pub const THEMES: [Theme; 7] = [
         ink: 0xEDEDF0,
         body: 0xC4C4CB,
         muted: 0x98989F,
-        faint: 0x6C6C74,
+        faint: 0x7C7C85,
         line_c: 0x34343A,
         line2: 0x2A2A2F,
         line_hi: 0x46464E,
@@ -188,7 +188,7 @@ pub const THEMES: [Theme; 7] = [
         ink: 0xE6ECF7,
         body: 0xB2BDD3,
         muted: 0x8592AC,
-        faint: 0x596782,
+        faint: 0x6A7894,
         line_c: 0x1E2A42,
         line2: 0x162036,
         line_hi: 0x2D3C5B,
@@ -221,7 +221,7 @@ pub const THEMES: [Theme; 7] = [
         ink: 0x17171D,
         body: 0x3E3E48,
         muted: 0x6A6A76,
-        faint: 0x9696A2,
+        faint: 0x878793,
         line_c: 0xE1E1E7,
         line2: 0xECECF0,
         line_hi: 0xCBCBD4,
@@ -231,12 +231,12 @@ pub const THEMES: [Theme; 7] = [
         on_fill: 0xFFFFFF,
         well: 0xFAFAFB,
         t_blue: 0x2563D8,
-        t_amber: 0xA86200,
-        t_green: 0x13804F,
-        t_red: 0xCC2B42,
+        t_amber: 0x965700,
+        t_green: 0x0F7246,
+        t_red: 0xC02540,
         t_violet: 0x6236DB,
-        add: 0x13804F,
-        del: 0xCC2B42,
+        add: 0x0F7246,
+        del: 0xC02540,
         tones: tones(0xFFFFFF, 0x2563D8, 0xD48A0A, 0x13804F, 0xCC2B42, 0x3E3E48),
     },
     // Frosted dark glass: the desktop shows through, blurred.
@@ -246,15 +246,15 @@ pub const THEMES: [Theme; 7] = [
         line: "Dark frosted glass",
         light: false,
         frosted: true,
-        bg: see(0x0D0D12, 0x99),
-        panel: see(0x17171E, 0x9E),
-        raised: see(0x22222B, 0xB0),
+        bg: see(0x0D0D12, 0xD9),
+        panel: see(0x17171E, 0xCC),
+        raised: see(0x22222B, 0xD8),
         hover: see(0xFFFFFF, 0x14),
         press: see(0xFFFFFF, 0x22),
         ink: 0xF5F5F9,
         body: 0xD0D0D9,
         muted: 0xA2A2AE,
-        faint: 0x74747F,
+        faint: 0x85858F,
         line_c: see(0xFFFFFF, 0x1C),
         line2: see(0xFFFFFF, 0x10),
         line_hi: see(0xFFFFFF, 0x30),
@@ -279,15 +279,15 @@ pub const THEMES: [Theme; 7] = [
         line: "Light frosted glass",
         light: true,
         frosted: true,
-        bg: see(0xF2F2F6, 0xA8),
-        panel: see(0xFFFFFF, 0xA6),
-        raised: see(0xFFFFFF, 0xCC),
+        bg: see(0xF2F2F6, 0xE4),
+        panel: see(0xFFFFFF, 0xCC),
+        raised: see(0xFFFFFF, 0xE6),
         hover: see(0x000000, 0x0D),
         press: see(0x000000, 0x18),
         ink: 0x101016,
         body: 0x2F2F39,
         muted: 0x585865,
-        faint: 0x82828E,
+        faint: 0x74747F,
         line_c: see(0x000000, 0x16),
         line2: see(0x000000, 0x0C),
         line_hi: see(0x000000, 0x28),
@@ -296,13 +296,13 @@ pub const THEMES: [Theme; 7] = [
         fill_press: 0x42424C,
         on_fill: 0xFFFFFF,
         well: see(0xFFFFFF, 0xD0),
-        t_blue: 0x1F57C8,
-        t_amber: 0x965600,
-        t_green: 0x0E7245,
-        t_red: 0xBA2238,
+        t_blue: 0x1A4BB0,
+        t_amber: 0x7E4800,
+        t_green: 0x0B6139,
+        t_red: 0xA51D31,
         t_violet: 0x5A2DCC,
-        add: 0x0E7245,
-        del: 0xBA2238,
+        add: 0x0B6139,
+        del: 0xA51D31,
         tones: glass_tones(0x2563D8, 0xD48A0A, 0x13804F, 0xCC2B42, 0x000000),
     },
     // Frosted glass with a violet cast, in Squad Code's own colour.
@@ -312,15 +312,15 @@ pub const THEMES: [Theme; 7] = [
         line: "Violet-tinted glass",
         light: false,
         frosted: true,
-        bg: see(0x120C24, 0x9C),
-        panel: see(0x1B1433, 0xA0),
-        raised: see(0x261D44, 0xB4),
+        bg: see(0x120C24, 0xD9),
+        panel: see(0x1B1433, 0xCC),
+        raised: see(0x261D44, 0xD8),
         hover: see(0xC9B8FF, 0x16),
         press: see(0xC9B8FF, 0x24),
         ink: 0xF4F1FF,
         body: 0xD3CBEE,
         muted: 0xA69CC8,
-        faint: 0x786E9C,
+        faint: 0x8A80AC,
         line_c: see(0xC9B8FF, 0x22),
         line2: see(0xC9B8FF, 0x14),
         line_hi: see(0xC9B8FF, 0x3A),
@@ -489,6 +489,96 @@ mod tests {
             ] {
                 assert_eq!(s >> 24, 0, "{} has see-through text", t.id);
             }
+        }
+    }
+
+    /// Relative luminance, as WCAG defines it.
+    fn lum(rgb: u32) -> f64 {
+        let ch = |shift: u32| {
+            let c = ((rgb >> shift) & 0xff) as f64 / 255.0;
+            if c <= 0.03928 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * ch(16) + 0.7152 * ch(8) + 0.0722 * ch(0)
+    }
+
+    fn contrast(a: u32, b: u32) -> f64 {
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    /// `top` painted over the solid `under`, honouring its opacity byte.
+    fn over(top: u32, under: u32) -> u32 {
+        let a = match top >> 24 {
+            0 => 1.0,
+            a => a as f64 / 255.0,
+        };
+        let mut out = 0;
+        for shift in [0, 8, 16] {
+            let (t, u) = (
+                ((top >> shift) & 0xff) as f64,
+                ((under >> shift) & 0xff) as f64,
+            );
+            out |= ((t * a + u * (1.0 - a)).round() as u32) << shift;
+        }
+        out
+    }
+
+    /// Every level of text stays readable on every surface. A frosted theme is
+    /// checked over the worst desktops behind it: white, black, grey, a saturated
+    /// blue and a warm yellow.
+    #[test]
+    fn text_reads_on_every_surface() {
+        let need = |t: &Theme| {
+            [
+                ("ink", t.ink, 7.0),
+                ("body", t.body, 4.5),
+                ("muted", t.muted, 4.5),
+                ("faint", t.faint, 3.0),
+                ("blue", t.t_blue, 4.5),
+                ("amber", t.t_amber, 4.5),
+                ("green", t.t_green, 4.5),
+                ("red", t.t_red, 4.5),
+                ("violet", t.t_violet, 4.5),
+                ("add", t.add, 4.5),
+                ("del", t.del, 4.5),
+            ]
+        };
+        for t in &THEMES {
+            let desks: &[u32] = if t.frosted {
+                &[0xFFFFFF, 0x000000, 0x808080, 0x2050D0, 0xF0C040]
+            } else {
+                &[0x000000]
+            };
+            for &desk in desks {
+                let page = over(t.bg, desk);
+                let panel = over(t.panel, page);
+                let surfaces = [
+                    ("page", page),
+                    ("panel", panel),
+                    ("raised", over(t.raised, panel)),
+                    ("hover", over(t.hover, panel)),
+                ];
+                for (name, color, min) in need(t) {
+                    for (s, back) in surfaces {
+                        let got = contrast(color, back);
+                        assert!(
+                            got >= min,
+                            "{}: {name} on {s} over {desk:06x} is {got:.2}, needs {min}",
+                            t.id
+                        );
+                    }
+                }
+                let pills = [t.t_blue, t.t_amber, t.t_green, t.t_red, t.body];
+                for (i, text) in pills.into_iter().enumerate() {
+                    let got = contrast(text, over(t.tones[i].0, panel));
+                    assert!(got >= 4.5, "{}: pill {i} is {got:.2}", t.id);
+                }
+            }
+            assert!(contrast(t.on_fill, t.fill) >= 7.0, "{}: button text", t.id);
         }
     }
 

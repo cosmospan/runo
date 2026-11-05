@@ -1807,6 +1807,11 @@ fn apply_theme(window: &mut Window, cx: &mut App) {
         k.border = ui::c(ui::line());
         k.input = ui::c(ui::line());
         k.muted_foreground = ui::c(ui::muted());
+        k.popover = ui::c(ui::raised());
+        k.popover_foreground = ui::c(ui::ink());
+        k.caret = ui::c(ui::ink());
+        k.ring = ui::ca(ui::VIOLET, 0.6);
+        k.selection = ui::ca(ui::VIOLET, if t.light { 0.22 } else { 0.38 });
     });
     window.refresh();
 }
