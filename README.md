@@ -1,15 +1,15 @@
 <div align="center">
 
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon" />
+<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Fin, the crew's hex bot" />
 
 <h1>Squad Code</h1>
 
-<h3>Ten agents. One crew. Every turn proven.</h3>
+<h3>A crew of coding bots, led by Fin. You hand out the jobs.</h3>
 
 <p>
-<b>Crew</b> splits your goal into threads, and Claude Code, Codex, Gemini and seven more race it side by side, each in its own git worktree.<br />
-Your own tests prove every turn, and the <b>Git place</b>, <b>Design</b> canvas, <b>Architecture</b> diagrams and <b>Cove VMs</b><br />
-take it all the way to ship, without leaving one native app.
+Type what you want in a sentence. <b>Fin</b> picks the right bot, the bot does the work on the coding agent you already use<br />
+(Claude Code, Codex, Gemini and nine more), each job on its own branch, and <b>Checker</b> runs your checks before you see it.<br />
+You approve, send it back or throw it away. <b>Shipper</b> opens the pull request.
 </p>
 
 <p>
@@ -17,7 +17,7 @@ take it all the way to ship, without leaving one native app.
 &nbsp;
 <a href="#run-from-source"><img src="https://img.shields.io/badge/Build_from_source-b7410e?style=for-the-badge&logo=rust&logoColor=white" alt="Build from source" /></a>
 &nbsp;
-<a href="docs/guide"><img src="https://img.shields.io/badge/Read_the_guide-5b5bd6?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Read the guide" /></a>
+<a href="#run-the-crew-on-a-server"><img src="https://img.shields.io/badge/Run_on_a_server-5b5bd6?style=for-the-badge&logo=linux&logoColor=white" alt="Run the crew on a server" /></a>
 </p>
 
 <p>
@@ -26,418 +26,310 @@ take it all the way to ship, without leaving one native app.
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
 <img src="https://img.shields.io/badge/built%20with-pure%20Rust-b7410e?logo=rust&logoColor=white" alt="Pure Rust" />
 <img src="https://img.shields.io/badge/no-Electron-47848f?logo=electron&logoColor=white" alt="No Electron" />
-<img src="https://img.shields.io/badge/agents-10_supported-2ea44f" alt="10 agents supported" />
-<img src="https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple" alt="macOS" />
-<img src="https://img.shields.io/badge/status-early-orange" alt="Status: early" />
+<img src="https://img.shields.io/badge/engines-12_supported-2ea44f" alt="12 engines supported" />
+<img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha" />
 </p>
 
 <p>
-<a href="#why-runo"><b>Why Runo</b></a> ·
-<a href="#whats-new"><b>What's new</b></a> ·
-<a href="#features"><b>Features</b></a> ·
-<a href="#design-and-architecture"><b>Design</b></a> ·
-<a href="#supported-agents"><b>Agents</b></a> ·
-<a href="#getting-started"><b>Get started</b></a> ·
-<a href="#connections-run-anywhere"><b>Run anywhere</b></a> ·
-<a href="#contributing"><b>Contribute</b></a>
+<a href="#how-it-works"><b>How it works</b></a> ·
+<a href="#the-crew"><b>The crew</b></a> ·
+<a href="#a-tour"><b>Tour</b></a> ·
+<a href="#fin-squads-own-intelligence"><b>Smart Fin</b></a> ·
+<a href="#themes"><b>Themes</b></a> ·
+<a href="#squad-in-a-terminal"><b>squad CLI</b></a> ·
+<a href="#run-the-crew-on-a-server"><b>Server</b></a> ·
+<a href="#getting-started"><b>Get started</b></a>
 </p>
 
 <br />
 
-<img src="docs/images/hero.gif" alt="Runo in motion: Crew on the home screen, a session with its diff ready to ship, the Git place with changes and the history graph, and an Architecture diagram" width="920" />
+<img src="docs/images/jobs.png" alt="Squad Code's Jobs page: the sidebar with Needs you, Jobs, Terminal and Usage, the crew listed with what each bot is doing, the job box with Ask, Build, Fix, Review, Test and Tidy, two goals, today's numbers, the jobs table, and the picked job's plan in the inspector" width="920" />
 
 </div>
 
 <br />
 
-## Why Runo
+> [!NOTE]
+> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.5`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
 
-Coding agents are good at working on their own, but juggling several of them across terminal tabs gets messy fast, and reading every diff to find out whether the work is any good doesn't scale. Runo gives each agent its own session and its own isolated copy of the code, checks what it did, and puts everything you need to steer, review and ship in one place.
+## How it works
+
+```mermaid
+flowchart LR
+    You(["You: one sentence"]) --> Fin["Fin<br/>picks the bot and kind of job"]
+    Fin --> Bot["A bot<br/>Builder, Fixer, Guard…"]
+    Bot -- "runs on" --> Engine["Your coding agent<br/>Claude Code, Codex, Gemini…"]
+    Engine --> WT[("Its own branch<br/>and worktree")]
+    WT --> Checker["Checker<br/>runs your checks"]
+    Checker --> Review{"You review"}
+    Review -- "Approve" --> Shipper["Shipper<br/>opens the PR, merges when green"]
+    Review -- "Send back" --> Bot
+    Review -- "Discard" --> Gone(["Thrown away"])
+```
+
+- **One box for every job.** Pick **Ask**, **Build**, **Fix**, **Review**, **Test** or **Tidy**, or just type and let Fin decide. **Split** turns something big into a goal of a few jobs; **Race** tries one job on two or three engines at once.
+- **Your checkout is never touched.** A job that may change files gets its own branch (`squad/<slug>`) and worktree, so several jobs run side by side without stepping on each other.
+- **Proven before you look.** When a job finishes, Checker runs the project's checks in its worktree and the review shows the result next to the diff.
+- **Bring your own agents.** Squad Code drives the agent CLIs you already have installed and signed in. It never sells or proxies tokens, and every bot can run on a different engine and model.
+- **Native and light.** Pure Rust on GPUI, with no Electron and no web view. The crew is drawn at 60 frames a second without getting in the way of the work.
+
+## The crew
+
+<img src="docs/images/crew.png" alt="The Crew page: every bot drawn as Fin in its own colour and outfit, with its status, engine, jobs, success rate and spend, and Chat and Give a job buttons" width="920" />
+
+Every bot is drawn as **Fin**, the hex-headed mascot, in its own colour and dressed for its job.
+
+| Bot | What it does | Kind of job |
+| --- | --- | --- |
+| **Fin** | Leads every crew. Answers questions about the code, hands each job to the right bot, and offers a bot your crew is missing. Always there, can't be removed. | Ask |
+| **Builder** | Writes the code: plans briefly, makes the change with tests, keeps to the project's style. | Build |
+| **Fixer** | Hunts the bug: paste an error or describe it, and it finds the cause and fixes it. | Fix |
+| **Guard** | Keeps your rules: reviews changes for risks to login, payments and data before they land. | Review |
+| **Checker** | Tries it for real: runs the tests or a flow and tells you what broke, and runs the checks on every finished job. | Test |
+| **Keeper** | Tidies up: dependencies, flaky tests, dead code, the chores nobody gets to. | Tidy |
+| **Explainer** | Reads the code and answers in plain words. | Ask |
+| **Shipper** | Owns git: squashes a job's commits, opens the pull request, watches its checks and merges when you've asked it to. | Ships what the others made |
+
+**New crews start with Fin alone.** When a job comes in that nobody on the crew does, Fin holds it and asks: add the bot it suggests and start, make your own bot for it, or not now. Goals add the bots their plan needs when you start them. **Make your own** on the Crew page builds a bot from Fin's parts: colour, role kit, head, fins and chest props, with **Surprise me**.
+
+## A tour
+
+### Watch a job as it works
+
+<img src="docs/images/live.png" alt="A live job: Guard looking for leaked keys, with what it says and does streaming on the left, and its plan, the files it touched and where things stand on the right" width="920" />
+
+Open any job to see what the bot says and does as it happens, with its plan step by step, the files it touched and what it has cost. A terminal drawer at the bottom opens a real shell in the job's own worktree, so you can run, test or poke at the branch without touching your checkout.
 
 <table>
-<tr>
-<td width="33%" valign="top">
-
-### ⚡ Native and fast
-Pure Rust, with no Electron and no web view behind the interface. It starts instantly and stays light while many agents run.
-
-</td>
-<td width="33%" valign="top">
-
-### 🔑 Bring your own agents
-Runo drives the agent CLIs you already have installed and signed in. It never sells or proxies tokens.
-
-</td>
-<td width="33%" valign="top">
-
-### 🌿 Agents never collide
-Every session can get its own git worktree and branch, so parallel agents never overwrite each other's work.
-
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
-
-### ✅ Proven, not promised
-Your tests, lint and build run after every turn. Red goes back to the agent, and another vendor's agent can give a second opinion.
-
-</td>
-<td width="50%" valign="top">
-
-### 🛰️ Run anywhere
-Start on your laptop, send the session to a VM or a build server to keep going while you sleep, and pull it back.
-
-</td>
-</tr>
-<tr>
-<td width="33%" valign="top">
-
-### 🎨 Design and diagram
-A Figma-style canvas of real HTML screens and a draw.io-style architecture editor, both with AI built in.
-
-</td>
-<td width="33%" valign="top">
-
-### 🧩 Nothing hard-coded
-Models, effort levels and permission modes are read from each installed CLI, so new releases show up without a Runo update.
-
-</td>
-<td width="33%" valign="top">
-
-### ✋ Always in control
-Approve permissions, plans and questions from any session or your phone, undo any turn, and cap spending, turns and tokens.
-
-</td>
-</tr>
-</table>
-
-## What's new
-
-> [!TIP]
-> **✅ Proof of done** just landed. Your own checks run after every turn, failures go back to the agent, and another vendor's agent can give a second opinion. See the [changelog](CHANGELOG.md) for everything else.
-
-<table>
-<tr>
-<td width="55%" valign="top">
-
-### ✅ Proof of done
-
-Each project lists its checks (tests, lint, typecheck, build), suggested from its `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml` or `Makefile`. They run after every turn that changes files, and a card under the reply shows the verdict with the end of any failing output.
-
-- **Fix it** sends the failures back to the agent, or let Runo do it on its own for 1, 2, 3 or 5 rounds. It stops when the same failure comes back.
-- **Second opinion** asks an agent from another vendor to review the turn's diff read-only. Its comments land as diff notes, ready for **Send notes**.
-
-</td>
-<td width="45%" valign="top">
-
-<img src="docs/images/proof-of-done.png" alt="A Claude Code turn with a green card under it: all 2 checks passed, Run again, Second opinion, and Codex left 1 note on the diff" />
-
-</td>
-</tr>
-</table>
-
-## Features
-
-### Sessions and worktrees
-
-<img src="docs/images/new-session.png" alt="The New session dialog with five projects, Claude Code, Codex, OpenCode and Gemini to pick from, and a choice between an isolated worktree and the project directory" width="920" />
-
-- **Projects and sessions.** Add any local folder, or clone one from a URL, and start sessions on it. The sidebar groups sessions under each project, on a rail in the project's color, with live status dots, unread markers and `+/-` line counts. Group them by status instead when you'd rather see what needs you.
-- **Isolated worktrees.** A session can run in its own branch and folder under `.runo-worktrees/`, branched from the base you pick and named after the task (such as `runo/fix-login-redirect`), or right in your checkout. A setup command runs in each new worktree before the agent starts, and git-ignored files listed in `.worktreeinclude` (such as `.env`) are copied in. **Clean up** in Settings finds worktrees and branches no session uses any more.
-- **Race several agents.** Send one task to several agents at once, each in its own worktree, compare the results and keep the best one.
-- **Home, Inbox and tabs.** Home shows what every project is doing, the Inbox lists every agent waiting on a permission, plan or question with the answers inline, and open sessions stay in tabs you can drag into order.
-- **Find anything.** The Sessions page searches titles, branches, projects and past conversations, with filters for project, agent and status. **History** lists past Claude Code and Codex conversations on this machine, and opening one resumes that exact conversation.
-
-### Talking to agents
-
-- **Live, structured output.** Each tool step (read, edit, run, search) streams in as it happens and folds into a tidy "Worked · N steps" summary.
-- **A composer that knows the CLI.** Mention files with `@`, attach images, and pick model, effort, permission mode and more from options detected from the agent itself. The `/` menu lists the agent's own commands, custom commands, skills and your playbooks. Type your next message while the agent works and it is queued.
-- **Approve from anywhere.** Permission requests, questions and plans from any session pop up in the corner, so you can answer without leaving what you're doing. Claude Code's permission requests arrive while the turn runs and it carries on as soon as you answer.
-- **Undo, Keep or Review each turn.** Runo checkpoints the worktree before every turn, so you can roll back a turn that went wrong with one click.
-- **Context control.** `/compact` shrinks a long conversation and `/clear` starts fresh. Fork a session from any turn with the files as they were then, or edit and resend a sent message.
-- **Usage and limits.** Tokens, cost and context per turn and per session, with Claude Code's and Codex's plan usage in the status bar. Stop an agent that goes quiet, cap spending, turns and tokens per session and per day, and cap how many agents run at once.
-- **Fixes, not error messages.** A turn that fails because the agent is signed out, the model isn't available or the CLI is too old offers the fix right under it: sign in, retry with a model that works, or update the CLI.
-
-<table>
-<tr>
-<td width="55%" valign="top">
-
-### Switch agents mid-task
-
-Hand a session to another agent at any point. Before anything happens, Runo shows exactly what carries over, what starts fresh and roughly what it costs. The outgoing agent writes a short recap, and the new agent picks up in the same folder and branch, with the same changed files. Switching back is free.
-
-</td>
-<td width="45%" valign="top">
-
-<img src="docs/images/switch-agent.png" alt="The Switch agent dialog from Claude Code to Codex, listing what carries over, what starts fresh and what it costs" />
-
-</td>
-</tr>
-<tr>
-<td width="55%" valign="top">
-
-<img src="docs/images/cli-view.png" alt="The CLI view running Claude Code's own interactive CLI on the same conversation as the chat" />
-
-</td>
-<td width="45%" valign="top">
-
-### Chat or the agent's own CLI
-
-Every session has two views of the same conversation. **Chat** is Runo's own interface, and **CLI** runs the agent's real interactive CLI on the same conversation id. Switch between them freely; nothing is resent to the model.
-
-</td>
-</tr>
-</table>
 
 ### Review and ship
 
-- **Review page.** Every session whose agent stopped with changed files, in one list (<kbd>⌘</kbd> <kbd>3</kbd>). Pick one to see its changes and commit, push, open a pull request or merge.
-- **Changes.** Real `git` status and diffs for each session, with stage, discard, commit, push and **Create PR** buttons. **Merge PR** uses a method the repository allows (merge, squash or rebase), and turns on auto-merge while checks are still running.
-- **Diff notes.** Click any diff line, leave a note, and send all notes back to the agent as one follow-up.
-- **Files.** Browse and edit the worktree, with syntax highlighting, rendered Markdown, images and CSV tables.
-- **Terminal.** A real interactive shell (PTY) in the session's folder, with several tabs per session, your saved commands as one-click buttons, and the agent's own command output.
-- **Browser.** A live, interactive page from a Chromium-based browser on your Mac (your default one when it's Chromium-based, or the one you pick in Settings), embedded in the session. Before a page is open it lists the dev servers running on your machine, and for a session on a connection the ones running there, which it forwards to your machine when you open them.
-- **GitHub.** Pull requests, issues and Actions runs for the project through the `gh` CLI, with one-click "review this PR" sessions whose review you confirm and post, line comments included.
+<img src="docs/images/review.png" alt="A finished job ready for review: the files it changed with their diff, Checker's run of the project's checks, and Approve, Send back and Discard" />
 
-## Design and Architecture
-
-Two canvases for the current project, each with an **Ask AI** bar that hands the change to an agent, shows its work live and keeps the conversation going. A new project can start from either one, before any code exists.
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/design-editor.png" alt="The Design editor: layers on the left, two phone screens on the canvas with a Button component instance selected, and its variant properties, layout and auto layout on the right" /></td>
-<td width="50%"><img src="docs/images/design-code.png" alt="The Design editor's Code tab showing the selected screen written as SwiftUI, with CSS and React beside it" /></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/design.png" alt="The Design canvas with four phone screens side by side: Sign in, Dashboard, List and Detail" /></td>
-<td width="50%"><img src="docs/images/architecture.png" alt="The Architecture canvas with a C4 diagram of Runo: the developer, the native UI, the session manager, local state, git worktrees, coding agents, a remote server and GitHub" /></td>
-</tr>
-</table>
-
-### 🎨 Design: a real design tool, on real HTML
-
-Every screen is a file in `design/screens/`, drawn side by side on a canvas you pan and zoom, so what you design is already code.
-
-- **Edit like in Figma.** Frames, shapes, the pen tool, text and pictures; layers you can name, lock and find; multi-select, copy and paste, groups and auto layout; drag to move and resize with measurements; floating, sticky and pinned layers, gradients, blur and boolean shapes.
-- **A design system that scales.** Components with variant properties, instances and an Assets panel; reusable styles; variables with light and dark values; a theme for colour, font, radius and density; shared libraries across projects; design rules in `docs/design.md` that every AI change follows.
-- **Prototype and present.** Link screens and press **Play** for a clickable prototype that moves the way iOS, Android or desktop apps do, with smart animate and working switches, tabs and toggles. **Present** it and collect comments with @mentions.
-- **AI that edits like you do.** Ask for new screens, variants or changes from pictures, sketches or a sentence. The agent works through Design's own actions on one undo history, shows its changes as they happen, and an undone step can become a design rule.
-- **Checks and hand-off.** **Checks** flags low contrast, tiny text, small tap targets, missing alt text and off-theme colours, with **Fix with AI**. Export PNG, JPG or HTML, read any screen as CSS, React or SwiftUI, hand off a spec with tokens, map components to the app's code, and step through version history.
-
-### 🗺️ Architecture: diagrams that know your code
-
-- **A draw.io-style editor** with C4, flowchart and infrastructure shapes, people and devices drawn as what they are, thousands of brand and technology logos, connectors that route around boxes, layers, collapsible boundaries, a minimap and find.
-- **From the code.** The **Code map** drafts a diagram from the project's packages, imports and files. Every diagram is a view of one model, saved as TOML in `architecture/` and editable as text beside the canvas.
-- **Beautify** untangles a diagram in one click, trying several layouts and keeping the one with the fewest crossings.
-- **Motion and stories.** Connectors flow, carry packets or pulse, and a story plays a request step by step with captions. Export an animated SVG or a story player page.
-- **AI in the loop.** Ask for a change and see it as a diff on the canvas, green for new and red for removed, then Accept or Reject. Explain or expand any part, redraw a whiteboard photo, and run checks with **Fix with AI**. Import and export draw.io, Mermaid, SVG and PNG.
-
-## Playbooks and automations
-
-<img src="docs/images/playbooks.png" alt="The Playbooks page with two saved playbooks, Find bugs and Review my changes, and the templates to start from" width="920" />
-
-Save a task once and run it in any project: from the Playbooks page, from Quick open, by right-clicking a project, or as a slash command inside the agent. Give a playbook a schedule (a time of day, chosen weekdays or a cron expression) and Runo runs it, even while it's closed. Templates cover finding bugs, scanning for vulnerabilities, updating docs, adding tests, reviewing changes and upgrading dependencies.
-
-<details>
-<summary><b>Sharing, inputs, permissions and schedules</b></summary>
-<br />
-
-- **Share playbooks as files.** A playbook is a `.playbook.md` file: a short header (name, author, version, agent, permissions, inputs) and the instructions. Export one, copy it into a chat, or keep a folder of them in a git repo.
-- **Install from anywhere.** Paste a GitHub repo, a link to one file, a local folder or the clipboard into **Install**. Runo lists what it found, marks new and updated playbooks, and shows what each one asks permission to do before you install it. **Update** checks the source again later.
-- **Inputs.** Write `{{area}}` in the instructions and Runo asks for it before the run, with a default for scheduled runs.
-- **Permissions.** A playbook says whether it may edit files, run commands or use the network, and Runo holds every turn of its session to that in the way each agent allows: plan mode for read-only, turning off shell or web tools, Codex's sandbox without network. Where an agent can't be held to a limit, the card and the run form say so. Approving a read-only playbook's plan asks before allowing edits.
-- **Schedules.** Scheduled runs use the project's default connection and its setup command, skip a run while the last one is still going, note runs missed while Runo was closed, and keep the last few sessions (set in Settings → Chat). Each card shows its recent runs and any failure. Turn on **Run while Runo is closed** to have a background job (launchd on macOS, a systemd user timer on Linux, Task Scheduler on Windows) run due playbooks every 5 minutes while Runo isn't open.
-- **Agents can start playbooks**, and Runo asks you first (on by default). An agent in plan mode can't start one that edits or runs commands.
-
-</details>
-
-## Memory and MCP
-
-- **Project notes.** Keep each project's commands, decisions and gotchas in Markdown, saved as you type, with Write, Split and Preview views, an outline and search across projects. Turn on **Share with agents** and every new session in that project starts with the notes.
-- **Session memory.** Runo ships a small MCP server that lets any agent read the session memory, search earlier sessions in the project and save notes, instead of having the whole history pasted into every prompt.
-- **Shared MCP servers.** Runo finds the MCP servers configured in every app on your computer, and you can share any of them with all agents, not just the one it was set up for.
-- **Runo's own servers.** Add servers to Runo's own list in Settings → MCP and every agent's sessions get them. Cursor, Gemini CLI and Droid read them from their project config file, which Runo fills in for each turn, keeps out of git and tidies afterwards; Grok takes no servers by flag, so it gets none and keeps the servers in its own config.
-- **Hooks and skills.** See the Claude Code hooks and skills that apply to a project, open them in Runo's editor, and start a new skill.
-
-## Made to feel at home
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### 💬 The Runo assistant
-The Runo mark in the corner answers questions about Runo itself. Press <kbd>⌘</kbd> <kbd>J</kbd>, ask how to do something, and it answers from the [built-in guide](docs/guide) with your default agent on a fast model, then offers to take you to the right place. It never changes anything, and **Guide only** answers without an agent at all. Turn it on in **Settings → General**.
+When a job finishes you see what changed and Checker's proof. **Approve** merges it into the branch it started from, or, in a project on GitHub, has Shipper push it and open a pull request written from the job. **Send back** with a few more words, or **Discard**.
 
 </td>
 <td width="50%" valign="top">
 
-### 🧰 Agent setup, built in
-See which agent CLIs are installed, every copy on your machine and their versions. Install missing ones, sign in right after, test each model, and get a heads-up when an update is out. Runo updates the exact copy it runs, and each agent has its own default model, executable, arguments and environment.
+### Race it
+
+<img src="docs/images/race.png" alt="A race: Add Apple Pay to checkout tried on Claude Code, Codex and Gemini side by side, each with its time, cost, change and checks, and Keep this one" />
+
+Try one job on two or three engines at once, each on its own branch, and compare them side by side. Keep the try you like best; Shipper takes it from there and the others are thrown away.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Goals
+
+<img src="docs/images/goal.png" alt="A goal split into four jobs for Builder, Checker and Guard, waiting to start, with Discard and Start 4 jobs" />
+
+Something too big for one job? **Split** it. Squad Code turns the goal into two to six jobs, each for the right bot. Drop what you don't want and start it: the jobs run one after another, each building on the last.
+
+</td>
+<td width="50%" valign="top">
+
+### Chat with any bot
+
+<img src="docs/images/chat.png" alt="Chat with Fin: Ask Fin anything, with three starter questions and a box to ask about the code" />
+
+Ask any bot about the code in plain words. It reads the folder and answers, and nothing changes. Each bot keeps its own conversation.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Needs you
+
+<img src="docs/images/inbox.png" alt="Needs you: finished work and jobs that stopped with a problem on the left, and what the bot said, the files it changed and its plan on the right" />
+
+Everything waiting on you in one two-pane list: finished work you haven't looked at and jobs that stopped. A job that ends badly says what went wrong in plain words, with the one or two things that get it going again, like another engine when one runs out of plan.
+
+</td>
+<td width="50%" valign="top">
+
+### Usage
+
+<img src="docs/images/usage.png" alt="The Usage page: spend, jobs, success rate and time at work over 30 days, a chart split by bot, and a table for each bot" />
+
+Spend, jobs, success rate and time at work over the last 30 days, per day and per bot. The status bar along the bottom shows every engine in play today with how much of its plan is left; click it for the details.
 
 </td>
 </tr>
 </table>
 
-- **Quick open** with <kbd>⌘</kbd> <kbd>K</kbd> to jump to any session, file, project or command, and <kbd>⌘</kbd> <kbd>N</kbd> for a new session.
-- **Your own shortcuts.** In **Settings → Keybindings**, click a shortcut and press the new keys. Runo warns you when the keys are already taken, and you can reset one or all of them.
-- **Light and dark themes**, accent colors, colorblind-friendly diff colors, and an optional glass look.
-- **It remembers.** Your layout, open tabs and panels come back after a restart, and local agent turns keep running when Runo closes or crashes.
-- **A one-minute tour** on first launch that you can replay any time, and **right-click menus** everywhere.
+### Engines: any bot on any agent
 
-## Supported agents
+<img src="docs/images/engines.png" alt="Settings, Engines: the coding agents on this computer and the ones not installed, and the engine and model each bot runs on" width="920" />
 
-Runo detects each CLI on your `PATH` and shows its version in **Settings → Providers**.
+An **engine** is one of the coding agents Squad Code drives and the model it runs on. Each bot can have its own (Builder on Claude Code, Guard on Codex, say) and the rest follow the default. Squad Code detects which agent CLIs are installed and reads their models from the CLI itself, so new releases show up without an update.
 
-| Agent | Command | | Agent | Command |
+| Engine | Command | | Engine | Command |
 | --- | --- | --- | --- | --- |
 | Claude Code | `claude` | | Copilot | `copilot` |
 | Codex | `codex` | | Amp | `amp` |
 | Gemini | `gemini` | | Droid | `droid` |
 | OpenCode | `opencode` | | Qwen Code | `qwen` |
 | Cursor | `cursor-agent` | | Grok | `grok` |
+| Antigravity | `agy` | | Pi | `pi` |
 
-See [provider setup](docs/providers.md) for details.
+See [provider setup](docs/providers.md) for installing and signing in to each one.
+
+## Fin: Squad's own intelligence
+
+Squad Code decides the small things for itself: which bot and kind of job a sentence is, whether a job runs here or on your server (and why, in the job's feed), when to suggest a bot you keep needing, and what Fin says. It does that in three steps, each used only when the one before isn't sure:
+
+1. **A tiny classifier built into the app** (370 KB, no download, always on). It gets 117 of 120 messy test sentences right, against 70 for keyword rules alone.
+2. **Keyword rules.**
+3. **Smart Fin**, if you turn it on: Squad's own small model (Qwen3.5-0.8B, fine-tuned here, 505 MB) run by a `llama-server` that Squad starts only when it's unsure and stops after 5 idle minutes. Its answer is kept only if it names a real kind of job and a bot on the crew. Smart Fin also works with a model you already serve through llama-server or Ollama.
+
+Turn Smart Fin on in **Settings → Engines**, or with `squad brain install`. Nothing leaves your computer. The test sets, training data and scripts to train the model yourself (on a free Colab GPU or an Apple silicon Mac) are in [`training/`](training).
+
+## Themes
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/appearance.png" alt="Settings, Appearance: seven themes with a live preview of each, Midnight picked" /></td>
+<td width="50%"><img src="docs/images/daylight.png" alt="The Jobs page in the Daylight theme" /></td>
+</tr>
+</table>
+
+**Settings → Appearance** has seven themes, each with a live preview: **Midnight** (the original look), **Graphite**, **Deep sea** and **Daylight**, which are solid, and **Frost**, **Mist** and **Aurora**, frosted glass that lets your desktop show through the window, blurred. A theme applies the moment you pick it. **Settings → Mascot** changes Fin's material (liquid glass, bubble glow or solid) and dresses each bot with a role kit, a hat and props, with a live preview in every mood.
+
+<img src="docs/images/mascot.png" alt="Settings, Mascot: a large live preview of Guard as Fin in a security cap with a shield and baton, the mood buttons under it, the material choice, and the role, head and fin props for each bot" width="920" />
+
+## Squad in a terminal
+
+Every job you can start in the window you can start from a terminal, including the one built into each job. `squad` is installed for you in `~/.squadcode/bin`.
+
+```bash
+squad do make the checkout remember the cart   # Fin picks the bot and the kind of job
+squad fix the login redirect loops on Safari   # a Fix job, for Fixer
+squad new --bot Guard look for leaked keys     # a job for one bot
+squad ls                                       # jobs, newest first
+squad show 12                                  # where #12 stands and what it changed
+squad approve 12                               # or: squad discard 12, squad stop 12
+squad brain why tidy up the old feature flags  # where Fin would send a job, and why
+```
+
+<details>
+<summary><b>Every command</b></summary>
+<br />
+
+| Command | What it does |
+| --- | --- |
+| `squad ls` | Jobs, newest first |
+| `squad show <id>` | One job: where it stands and what it changed |
+| `squad new <words…>` | A Build job in this folder |
+| `squad fix\|test\|tidy\|review <words…>` | A job of that kind |
+| `squad new --bot <name> <words…>` | A job for one bot |
+| `squad do <words…>` | Fin picks the bot and the kind of job |
+| `squad approve <id>` / `discard <id>` / `stop <id>` | Approve a job waiting for review, throw its changes away, or stop it |
+| `squad serve [--listen <address>\|tailscale]` | Run the crew here with no window ([below](#run-the-crew-on-a-server)) |
+| `squad pair [name]` / `devices` / `unpair <name>` | Pair a device with the server, list them, or cut one off |
+| `squad brain why <words…>` | Where Fin would send a job, and why |
+| `squad brain ideas` | A bot Fin thinks you could use |
+| `squad brain export <file>` | Your finished jobs as training examples |
+| `squad brain eval [hard\|file]` | Score Fin's routing on the fixed test sets |
+| `squad brain install [file]` / `remove` | Turn Smart Fin on with Squad's own model, or off and delete it |
+
+Jobs run in the Squad Code app while it's open, or in `squad serve`.
+
+</details>
+
+## Run the crew on a server
+
+`squad serve` runs the same crew with no window, on a VPS or any machine that stays on, so jobs keep going while your laptop is shut.
+
+```bash
+squad serve                      # listens on 127.0.0.1:7640 and prints a pairing code
+squad serve --listen tailscale   # or listen on this machine's Tailscale address
+squad pair laptop                # a one-time code for another device
+```
+
+- **Nothing is opened to the internet.** It listens on `127.0.0.1:7640` unless told otherwise; reach it over an SSH tunnel or Tailscale.
+- **Every device pairs.** `squad pair` prints a one-time code (8 characters, 10 minutes, 5 tries) that a device trades for its own token, and `squad unpair` revokes one.
+- **One API for every client.** A small HTTP API under `/v1/` covers state, jobs and their actions, chats, goals, folders and devices, and `GET /v1/events` streams every change as server-sent events, so a job started from one device shows up live on all of them. `squad new` and the other commands on the server feed the same crew.
+- **Fin knows where work belongs.** When you have a server, Fin decides per job whether it runs here or there, by where the project lives, where the agent is signed in and how long the work is, and says why in the job's feed.
+
+Connecting the desktop app and the phone to a server is coming next; today you drive a server with `squad` on it or through the API.
 
 ## Getting started
 
 ### Download
 
-Builds for Apple silicon and Intel Macs are on the [Releases](https://github.com/hyperhale/squadcode/releases) page. Open the disk image and drag Runo to Applications. Runo checks there for newer versions and offers to download them; nothing installs on its own.
+Builds are on the [Releases](https://github.com/hyperhale/squadcode/releases) page:
+
+| Platform | File |
+| --- | --- |
+| Mac (Apple silicon) | `SquadCode-<version>-macos-arm64.dmg` or `.zip` |
+| Linux x86_64 and arm64 | `.deb` or `.tar.gz` |
+| Windows x86_64 | `.zip` |
+
+Open the disk image and drag **Squad Code** to Applications. Squad Code checks for newer versions and offers to download them; nothing installs on its own.
+
+### Known gaps
+
+> [!WARNING]
+> - **The Mac app is signed ad hoc, not notarized.** The first time, right-click **Squad Code** in Applications and choose **Open**.
+> - **No Intel Mac build yet.** The bundled `llama-server` doesn't link on x86_64 macOS yet. Intel Macs can [build from source](#run-from-source).
+> - **Smart Fin's model has no public download yet**, and the Mac build doesn't bundle `llama-server` yet. The built-in classifier and rules work without it; to try Smart Fin now, point `squad brain install <file.gguf>` at a model you have, or use one you serve with llama-server or Ollama.
+> - **The desktop app can't connect to `squad serve` yet.** See [Run the crew on a server](#run-the-crew-on-a-server).
+
+### First run
+
+<img src="docs/images/welcome.png" alt="Welcome to Squad Code: step one asks whether a coding agent is installed, showing Claude Code ready and Codex and Gemini not found, with Check again and Continue" width="920" />
+
+A two-step welcome checks which coding agents are installed and asks for a folder; both steps can be skipped. Until there are jobs, the Jobs page shows what to do first: cards to install an agent or pick a folder, **Look around with sample jobs first**, and every kind of work to start from. A short **Get started** checklist in the sidebar points at real controls.
 
 ### Requirements
 
-- macOS (Windows and Linux builds are also targeted, but macOS is the primary platform today)
+- macOS on Apple silicon (Linux and Windows builds are made too, but macOS is the primary platform)
 - `git`
-- At least one agent CLI from the table above, installed and signed in
-- Optional: the [GitHub CLI](https://cli.github.com) (`gh`) for pull requests, issues and Actions, and Chrome, Edge, Brave, Arc or another Chromium-based browser for the Browser tab
-- To build from source: a recent stable [Rust toolchain](https://rustup.rs)
+- At least one agent CLI from [the table above](#engines-any-bot-on-any-agent), installed and signed in
+- Optional: the [GitHub CLI](https://cli.github.com) (`gh`), for Shipper's pull requests
+- To build from source: a recent stable [Rust toolchain](https://rustup.rs) (pinned in `rust-toolchain.toml`)
 
 ### Run from source
 
 ```bash
 git clone https://github.com/hyperhale/squadcode
-cd runo
+cd squadcode
 cargo run -p runo --release
 ```
 
+Set `RUNO_V2_DEMO=1` to open the app on a made-up crew with jobs in every state, without running anything or saving anything.
+
 ### Build the app
 
-To build `Runo.app` and a disk image with its icon, use [cargo-bundle](https://github.com/burtonageo/cargo-bundle):
+To build `Squad Code.app` and a disk image with its icon, use [cargo-bundle](https://github.com/burtonageo/cargo-bundle):
 
 ```bash
 cargo install cargo-bundle
 cd native/runo-app && cargo bundle --release
 ```
 
-On Linux the same command makes a `.deb`, and on Windows the icon is built into `Runo.exe`. To publish a release, see [docs/releasing.md](docs/releasing.md). To change the icon, edit `native/runo-app/assets/icon/runo.svg` and run `python3 build.py` in that folder.
+On Linux the same command makes a `.deb`, and on Windows the icon is built into `SquadCode.exe`. To publish a release, see [docs/releasing.md](docs/releasing.md).
 
-### Where Runo keeps its data
+### Where Squad Code keeps its data
 
-Projects are stored in `~/.runo/state.json`, each session in its own file under `~/.runo/sessions`, and settings in `~/.runo/settings.json`. A log for each launch and any crash reports are in `~/.runo/logs`; after a crash, Runo offers to show or report it on the next start. Set `RUNO_HOME` to move them all. Start Runo with `RUNO_TRACE_STARTUP=1` to write how long each step of starting up took to that launch's log.
+Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. The first time Squad Code opens it copies what Runo had saved in `~/.runo`. Set `SQUADCODE_HOME` to move it all.
 
-## Connections: run anywhere
+## The classic window
 
-<img src="docs/images/runs-on.png" alt="New session with Runs on showing This computer, an SSH server called Build box, and a Cove VM" width="920" />
-
-A **connection** is a place a session can run besides your own machine. Add them in **Settings → Connections**, pick one under **Runs on** when you start a session (or make it a project's default), and move a session from its header whenever you like.
-
-| Connection | What it is | Where the files are |
-| --- | --- | --- |
-| 💻 **This machine** | The agent runs directly on your computer. | Your worktree. |
-| 📦 **Cove on this machine** | Each session gets its own Linux VM from [Cove](https://github.com/deltalark/cove). | Shared into the VM at the same path, so moving is instant. |
-| ☁️ **Cove server** | Cove on your VPS or a big box, by URL and API key. | A copy on the server, synced every turn. |
-| 🔐 **SSH server** | Any Linux or macOS machine you can `ssh` into. | A copy under `~/runo-work`, synced every turn. |
-
-### How moving works
-
-```mermaid
-flowchart LR
-    subgraph Mac["Your computer"]
-        R["Runo<br/>chat, diffs, commits, PRs"]
-        W[("Session worktree")]
-    end
-    subgraph Far["Cove VM or server"]
-        A["Agent CLI<br/>terminals, commands"]
-        C[("Session copy")]
-    end
-    W -- "before each turn:<br/>git push over ssh / cove exec" --> C
-    C -- "after each turn:<br/>git fetch, then restore" --> W
-    R -- "runs the agent there" --> A
-```
-
-- **Everything travels.** Before each agent turn Runo commits the whole working tree, uncommitted and untracked files included, to a hidden ref and sends it over the connection itself. After the turn it brings the result back the same way. Commits the agent made come back on the branch; everything else comes back uncommitted, exactly as it was left.
-- **The conversation travels too.** Claude Code's conversation files go along everywhere, and Codex's to SSH and Cove servers, so after a move the agent resumes the same conversation instead of starting over. Other agents get Runo's handoff brief.
-- **Nobody's work is lost.** If files changed on both sides, your machine's version wins and the other is saved under `refs/runo/s<id>/kept-…`. A warning card in the chat says so, with **Restore kept changes**; what you had is saved first, so restoring can be undone too.
-
-<details>
-<summary><b>What can't move, terminals, GitHub access and backups</b></summary>
-<br />
-
-- **What can't move.** A session whose agent can't take its conversation along starts there with Runo's handoff brief. Folders that aren't git repositories can only run on this machine or Cove on this machine.
-- **Terminals open there.** A terminal tab in a remote session is a shell in the session's copy on that machine, synced before it opens and after it closes. The CLI view and the worktree setup command run there the same way, with the agent's conversation carried along, and the Browser tab forwards that machine's dev servers to yours (an SSH tunnel, or through `cove exec` for Cove).
-- **No GitHub access needed.** Syncing goes over `ssh` or `cove exec`, never through GitHub, so a VM never needs your credentials. Your machine keeps doing the commits, pushes and pull requests. Turn on **GitHub access** for a connection only if the agent there needs `gh` for its own work; the token is passed per command and never written to disk.
-- **Backups (off by default).** Turn them on in Settings and after each turn the checkpoint is also pushed to your project's `origin` as `refs/runo/sessions/<id>`, which no branch list shows. Untracked files stay out unless you ask for them, public repositories are never backed up, and the ref is deleted with the session.
-
-</details>
-
-### Close your laptop, the agent keeps going
-
-On a Cove server or an SSH server, the agent runs **detached** from your computer: as a Cove named process, or under `setsid nohup` over SSH. Its output goes to a log on that machine, and Runo follows the log. So you can send a long task, close the lid or shut down, and come back later.
-
-<details>
-<summary><b>What happens while you're away</b></summary>
-<br />
-
-- **While you're away** the agent keeps working there, and its files stay in the session's copy on that machine.
-- **When Runo opens again** it picks the turn back up. The reply replays from the start, and if the turn already finished, its work and conversation come back right away. If it's still running, you watch the rest live.
-- **Dropped connections** are handled the same way: Runo reconnects and carries on from the last line it showed, while the agent keeps going.
-- **Stop** still stops it: Runo ends the agent's processes there, then brings back what it did so far.
-- **Your keys** reach that machine in a script only its owner can read, and the script deletes itself as soon as it starts.
-- **Approvals.** Claude Code asks for permission mid-turn through Runo's MCP relay, and the turn waits while you answer in the corner card or the Inbox: **Allow once**, **Always allow** or **Deny**. While Runo is closed or this machine is asleep, the request waits on the server until Runo reconnects and shows it, or until the wait in Settings → Chat runs out (5 minutes by default). Unanswered, the turn stops at that command and the permission card offers to allow it and retry; turn that off in Settings → Connections to let the agent carry on without it.
-- **A turn that never starts**, because the machine rebooted before it ran, ends after a few minutes with a message instead of waiting forever.
-
-Runo also stops keeping your computer awake while only remote turns are running. Cove on this machine runs alongside your computer, so it pauses when the computer does; use a Cove server or an SSH server for work that should go on without it.
-
-</details>
-
-### Agents can use connections too
-
-<img src="docs/images/connections.png" alt="Settings, Connections: this machine, buttons to add an SSH server or a Cove VM, and the Cove options" width="920" />
-
-Runo's MCP server works in every session, in Cove VMs and on servers too: the agent there talks to a small relay script, and Runo answers it over the connection, so nothing listens on a port. Through it, agents get `list_connections` and `run_on`, so they can run a heavy build, a test matrix or some research on another machine without moving the whole session. With **Let agents use Cove** on, agents on your machine also get Cove's own tools and can make throwaway VMs for untrusted code. Each connection has an **Agents may use it** switch, and only the API keys you list for a connection ever reach it.
-
-<details>
-<summary><b>Setting one up</b></summary>
-<br />
-
-- **SSH:** add an SSH server and type a host from your `~/.ssh/config` (or `user@host`). Runo uses your SSH agent and config, shares one login between the agent, terminals and syncs, and never turns off host key checks. **Test** shows what it found: the OS, git and the agent CLIs.
-- **Cove on this machine:** install Cove (see its [install guide](https://github.com/deltalark/cove#install)) and Runo offers a Cove VM under **Runs on** on its own. Set the VM's CPUs, memory, network (on or off) and idle stop in Settings.
-- **Cove on a server:** install Cove on the server, run `cove key` there, then add a Cove connection in Runo with the server's URL and that key.
-
-Agent CLIs are installed on the connection on first use, with npm (into a private Node.js when the machine has none) or the vendor's script, and kept at the version you run here. Signing in:
-
-- **API keys** listed for the connection are forwarded, including ones set only in your shell profile.
-- **Codex** and **Claude Code on Linux** keep their login in a file, which Runo copies over. Claude Code on macOS keeps it in the keychain, which can't be copied: run `claude setup-token` and export the token as `CLAUDE_CODE_OAUTH_TOKEN`, or set `ANTHROPIC_API_KEY`.
-- **Test** lists each agent with whether it's installed there and how it will sign in, and what to do when it can't. Testing Cove on this machine doesn't start a VM.
-
-Deleting a session deletes its VM or its copies on every connection it ran on, and removing a connection cleans up what Runo left there.
-
-</details>
-
-## On your phone
-
-The phone bridge serves a small, token-protected API that a phone app uses to follow every session and answer it: allow or deny a permission request, approve a plan, answer an agent's questions, send a follow-up or stop a run. Turn it on in **Settings → Phone**, where each phone gets its own pairing code and can be removed on its own, or run `runo --phone`. It listens on your Tailscale address, or only on this computer without one, unless you choose to open it to your local network. See [docs/phone-bridge.md](docs/phone-bridge.md). The mobile app itself is coming next.
+Squad Code grew out of Runo, a session-by-session app for running coding agents, with a Design canvas, Architecture diagrams, a Git place, Cove VMs, playbooks and a phone bridge. That window is still in the code for development (`RUNO_V1=1`), and its [guide](docs/guide) describes it, but the crew is the app now and those parts are being brought over one at a time.
 
 ## Learn more
 
-- 📖 **[The guide](docs/guide)**: one short article per feature, the same one the Runo assistant answers from.
-- 🔌 **[Provider setup](docs/providers.md)**: installing and signing in to each agent.
-- 📱 **[Phone bridge](docs/phone-bridge.md)**: the API and how pairing works.
+- 🔌 **[Provider setup](docs/providers.md)**: installing and signing in to each engine.
+- 🧠 **[Training Squad's own model](training/README.md)**: the test sets, data and scripts behind Smart Fin.
 - 📝 **[Changelog](CHANGELOG.md)**: everything that changed, as it lands.
-
-## Status
-
-Runo is early and moving quickly. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one.
+- 🚀 **[Releasing](docs/releasing.md)**: how a release is built and signed.
 
 ## Contributing
 
@@ -452,5 +344,5 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up,
 <div align="center">
 <img src="native/runo-app/assets/icon/png/runo-256.png" width="40" alt="" />
 <br />
-<sub>Built in Rust for people who run more than one agent at a time.</sub>
+<sub>Built in Rust for people who'd rather hand out the jobs than juggle the agents.</sub>
 </div>
