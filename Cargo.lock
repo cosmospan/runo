@@ -5934,7 +5934,7 @@ dependencies = [
 
 [[package]]
 name = "runo"
-version = "2.0.0-alpha.4"
+version = "2.0.0-alpha.5"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -5978,7 +5978,7 @@ dependencies = [
 
 [[package]]
 name = "runo-holo"
-version = "2.0.0-alpha.4"
+version = "2.0.0-alpha.5"
 dependencies = [
  "png 0.17.16",
  "vello_cpu",

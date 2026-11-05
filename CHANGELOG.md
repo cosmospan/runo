@@ -4,6 +4,8 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.5] - 2026-11-05
+
 ### Added
 - Fin's tiny classifier, built into the app (370 KB, no download): it picks the kind of job before the keyword rules, and gets 117 of 120 messy test sentences right against the rules' 70. `squad brain eval hard` scores the new messy set.
 - Smart Fin is now opt-in from Engines: turning it on downloads Squad's own model once (505 MB), and Squad starts its own llama-server only when the rules aren't sure of a job, stopping it after 5 idle minutes or when Squad quits. `squad brain install` and `squad brain remove` do the same from a terminal. The Mac app ships llama-server inside it.
