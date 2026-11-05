@@ -61,6 +61,20 @@ pub struct Goal {
 }
 
 impl Goal {
+    /// The bots its jobs need that aren't on the crew yet, each once, in the
+    /// order the jobs come. Starting the goal adds them.
+    pub fn needs(&self) -> Vec<Member> {
+        let mut out: Vec<Member> = Vec::new();
+        for s in self.steps.iter().filter(|s| !s.skipped && s.job == 0) {
+            if let Some(m) = Member::needed_for(s.mode) {
+                if !out.contains(&m) {
+                    out.push(m);
+                }
+            }
+        }
+        out
+    }
+
     /// The step it is on: the first one not yet shipped or finished.
     pub fn current(&self, jobs: &[Job]) -> Option<usize> {
         self.steps.iter().position(|s| {
@@ -249,6 +263,7 @@ impl Shell {
         };
         let jobs = self.crew.store.jobs.clone();
         let current = goal.current(&jobs);
+        let needs = goal.needs();
         let shipped = goal
             .steps
             .iter()
@@ -256,6 +271,12 @@ impl Shell {
             .count();
         let line = match goal.state {
             State::Planning => "Squad Code is reading the code and splitting this into jobs\u{2026}".to_string(),
+            State::Ready if !needs.is_empty() => format!(
+                "Look over the jobs, then start. Fin: this plan needs {}, who {} on your crew yet. Starting adds {}.",
+                super::and_list(&needs.iter().map(|m| m.name()).collect::<Vec<_>>()),
+                if needs.len() == 1 { "isn't" } else { "aren't" },
+                if needs.len() == 1 { "it" } else { "them" },
+            ),
             State::Ready => "Look over the jobs, drop any you don't want, then start. They run one after another, each building on the last.".to_string(),
             State::Running => format!("{shipped} of {} done. The next job starts when the one before it ships.", goal.steps.len()),
             State::Paused => "A job stopped, so the goal is waiting for you.".to_string(),
@@ -295,8 +316,15 @@ impl Shell {
                             .on_click(cx.listener(move |this, _, _, cx| this.drop_goal(id, cx))),
                     )
                     .child(
-                        ui::solid("goal-start", format!("Start {} jobs", goal.steps.len()))
-                            .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
+                        ui::solid(
+                            "goal-start",
+                            match needs.as_slice() {
+                                [] => format!("Start {} jobs", goal.steps.len()),
+                                [one] => format!("Add {} and start", one.name()),
+                                _ => "Add the bots and start".to_string(),
+                            },
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
                     );
             }
             State::Paused => {

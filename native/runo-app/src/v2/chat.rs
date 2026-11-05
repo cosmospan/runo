@@ -194,7 +194,7 @@ impl Shell {
                     ),
             );
         }
-        if !log.is_empty() && !thinking && who.like() != Member::Explainer {
+        if !log.is_empty() && !thinking && !matches!(who.like(), Member::Explainer | Member::Fin) {
             // Turn the conversation into work: a made bot takes the job itself.
             let mode = who.mode();
             let last_q = log.iter().rev().find(|m| m.mine).map(|m| m.text.clone());
