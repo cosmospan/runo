@@ -85,7 +85,9 @@ Jobs run in the Squad Code app, which picks these up while it's open.
   squad brain why <words...>  where Fin would send a job, and why
   squad brain ideas           a bot Fin thinks you could use
   squad brain export <file>   your finished jobs as training examples
-  squad brain eval [file]     score Fin's routing on the fixed cases";
+  squad brain eval [file]     score Fin's routing on the fixed cases
+  squad brain install [file]  turn Smart Fin on with Squad's own model
+  squad brain remove          turn Smart Fin off and delete its model";
 
 /// One line per job for `ls`.
 pub fn line(j: &Job) -> String {

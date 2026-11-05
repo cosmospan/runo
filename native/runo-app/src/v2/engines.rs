@@ -73,6 +73,87 @@ pub(super) fn section(title: &'static str, line: &'static str) -> Div {
 }
 
 impl Shell {
+    /// Smart Fin: off until the person turns it on, which downloads Squad's
+    /// own model once. Squad then runs it only when the rules aren't sure.
+    fn smart_fin(&mut self, st: &AppSettings, cx: &mut Context<Self>) -> Div {
+        use super::brain::helper::{self, Download};
+        let have = helper::model_path().is_file();
+        let ours = st.brain_model.trim() == helper::MODEL && st.brain_url.trim().is_empty();
+        let other = !st.brain_model.trim().is_empty() && !ours;
+        let state = helper::download_state();
+        let downloading = matches!(state, Download::Running { .. });
+        let mut chips = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .child(
+                choice("fin-off", "Off", st.brain_model.trim().is_empty(), true).on_click(
+                    cx.listener(|_, _, _, cx| {
+                        helper::stop();
+                        save(cx, |st| st.brain_model.clear());
+                        cx.notify();
+                    }),
+                ),
+            )
+            .child(
+                choice("fin-on", "On \u{b7} Squad's own model", ours, true).on_click(cx.listener(
+                    |_, _, _, cx| {
+                        let url = cx.global::<AppSettings>().brain_model_url.clone();
+                        helper::download(&url);
+                        save(cx, |st| {
+                            st.brain_model = helper::MODEL.to_string();
+                            st.brain_url.clear();
+                        });
+                        cx.notify();
+                    },
+                )),
+            );
+        if other {
+            chips = chips.child(choice(
+                "fin-other",
+                format!("On \u{b7} {}", st.brain_model.trim()),
+                true,
+                true,
+            ));
+        }
+        if have && !ours && !downloading {
+            chips = chips.child(
+                choice("fin-delete", "Delete the model (505 MB)", false, true).on_click(
+                    cx.listener(|_, _, _, cx| {
+                        helper::remove();
+                        cx.notify();
+                    }),
+                ),
+            );
+        }
+        let mb = |b: u64| b / 1_000_000;
+        let (line, warn) = match state {
+            Download::Running { got, total } if ours => {
+                (format!("Downloading Squad's model: {} of {} MB.", mb(got), mb(total)), false)
+            }
+            Download::Failed(e) if ours && !have => (format!("The download didn't finish: {e}. Turn it on again to retry."), true),
+            _ if other => (format!("Asking {} at {}. You run that server yourself.", st.brain_model.trim(), if st.brain_url.trim().is_empty() { super::brain::model::DEFAULT_URL } else { st.brain_url.trim() }), false),
+            _ if ours && have && helper::server_bin().is_none() => (
+                "Needs llama-server from llama.cpp (on a Mac: brew install llama.cpp). Until then the rules decide.".to_string(),
+                true,
+            ),
+            _ if ours && have => (format!("On. A small model on this computer picks the bot when the rules aren't sure, in about half a second. It stops after {} idle minutes.", helper::IDLE_MINUTES), false),
+            _ => ("Off: the rules pick the bot. Turning it on downloads Squad's own model once (505 MB); it runs on this computer, only when the rules aren't sure.".to_string(), false),
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(chips)
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(c(if warn { ui::AMBER } else { ui::MUTED }))
+                    .child(line),
+            )
+    }
+
     pub(super) fn engines(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let st = cx.global::<AppSettings>().clone();
         let ready: Vec<usize> = (0..agent::PROVIDERS.len())
@@ -152,6 +233,7 @@ impl Shell {
                 })),
             );
         }
+        let smart = self.smart_fin(&st, cx);
         let work_vendor = vendor(agent::PROVIDERS[default_i].id);
         let same_vendor =
             !st.challenge_agent.is_empty() && vendor(&st.challenge_agent) == work_vendor;
@@ -187,6 +269,14 @@ impl Shell {
                                 "One vendor writes, another checks. Pick an agent from a different company than the default.".to_string()
                             })),
                     ),
+            )
+            .child(div().h(px(1.)).bg(c(ui::LINE)))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(space::M))
+                    .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Smart Fin"))
+                    .child(smart),
             );
 
         let none_ready = ready.is_empty();

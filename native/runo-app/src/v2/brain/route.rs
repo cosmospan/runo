@@ -317,6 +317,11 @@ pub fn route(st: &crate::settings::AppSettings, text: &str) -> Route {
         return rules;
     }
     if let Some(m) = super::model::Local::from_settings(st) {
+        // Squad's own server starts on the first unsure job; while it loads,
+        // the rules answer.
+        if super::helper::applies(st) && !super::helper::ensure(st, std::time::Duration::ZERO) {
+            return rules;
+        }
         if let Some(r) = m.route(text, &crew) {
             return r;
         }

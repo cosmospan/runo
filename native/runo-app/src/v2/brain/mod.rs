@@ -20,6 +20,7 @@
 
 pub mod cli;
 pub mod fin;
+pub mod helper;
 pub mod ideas;
 pub mod model;
 pub mod place;

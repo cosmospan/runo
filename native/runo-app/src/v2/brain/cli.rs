@@ -2,7 +2,7 @@
 
 use super::super::data::{Member, Mode};
 use super::super::store::{self, Store};
-use super::{fin, ideas, model, route, teach};
+use super::{fin, helper, ideas, model, route, teach};
 
 /// Where `squad do <words>` sends a job: the bot, the kind of job, and a line
 /// saying why, for the terminal.
@@ -26,7 +26,7 @@ fn here() -> store::Folder {
     }
 }
 
-/// `squad brain why|ideas|export|eval`.
+/// `squad brain why|ideas|export|eval|install|remove`.
 pub fn main(args: &[String]) -> Result<String, String> {
     let sub = args.first().map(String::as_str).unwrap_or("");
     let rest = args.get(1..).unwrap_or(&[]).join(" ");
@@ -37,6 +37,11 @@ pub fn main(args: &[String]) -> Result<String, String> {
         "why" => {
             if rest.trim().is_empty() {
                 return Err("usage: squad brain why <words...>".into());
+            }
+            // From a terminal, wait for Squad's own server to load when the
+            // rules aren't sure, rather than answering with the rules.
+            if route::by_rules(&rest, &crew).sure < route::Route::SURE {
+                helper::ensure(&st, std::time::Duration::from_secs(30));
             }
             let r = route::route(&st, &rest);
             let p = super::place(
@@ -110,6 +115,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 out.push_str("\nSmart Fin is off, so only the rules were scored.");
                 return Ok(out);
             };
+            helper::ensure(&st, std::time::Duration::from_secs(30));
             if !m.alive() {
                 out.push_str(&format!("\n{} isn't answering at {}.", m.model, m.url));
                 return Ok(out);
@@ -129,6 +135,36 @@ pub fn main(args: &[String]) -> Result<String, String> {
             }
             Ok(out)
         }
-        _ => Err("usage: squad brain why|ideas|export|eval".into()),
+        "install" => {
+            // squad brain install [file.gguf | https://…]: Squad's own model,
+            // then Smart Fin on.
+            let from = args.get(1).cloned().unwrap_or_else(|| {
+                let u = st.brain_model_url.trim();
+                if u.is_empty() {
+                    helper::MODEL_URL.to_string()
+                } else {
+                    u.to_string()
+                }
+            });
+            helper::fetch(&from, &helper::model_path())?;
+            let mut st = st.clone();
+            st.brain_model = helper::MODEL.to_string();
+            st.brain_url.clear();
+            st.save();
+            Ok(format!(
+                "Smart Fin is on, with Squad's own model at {}.",
+                helper::model_path().display()
+            ))
+        }
+        "remove" => {
+            helper::remove();
+            let mut st = st.clone();
+            if st.brain_model == helper::MODEL {
+                st.brain_model.clear();
+            }
+            st.save();
+            Ok("Smart Fin is off and its model is deleted.".into())
+        }
+        _ => Err("usage: squad brain why|ideas|export|eval|install|remove".into()),
     }
 }

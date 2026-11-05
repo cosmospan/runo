@@ -5,6 +5,7 @@ All notable changes to Runo are documented here.
 ## [Unreleased]
 
 ### Added
+- Smart Fin is now opt-in from Engines: turning it on downloads Squad's own model once (505 MB), and Squad starts its own llama-server only when the rules aren't sure of a job, stopping it after 5 idle minutes or when Squad quits. `squad brain install` and `squad brain remove` do the same from a terminal. The Mac app ships llama-server inside it.
 
 - Squad's own intelligence layer (`v2/brain`): it routes a typed job to the right bot and kind of job, decides whether a job runs here or on your server (and says why in the job's feed), suggests a bot to make when the same kind of job keeps coming up, and writes Fin's lines. Rules do all of it with no download; Smart Fin (`brain_model` in settings) asks a small model on your own computer first, over llama-server's or Ollama's local API, and keeps its answer only if it checks out.
 - `squad do <words>` lets Fin pick the bot. `squad brain why|ideas|export|eval` shows where a job would go, the bot Fin would suggest, writes your finished jobs as training examples, and scores routing on a fixed test set.
