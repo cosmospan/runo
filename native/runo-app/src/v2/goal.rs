@@ -353,7 +353,6 @@ impl Shell {
             .border_1()
             .border_color(c(ui::line()))
             .rounded(px(ui::CARD_R))
-            .shadow(ui::sheen())
             .overflow_hidden();
         if goal.state == State::Planning {
             list = list.child(div().p(px(18.)).child(ui::sweep(ui::RUNO, 0.)));

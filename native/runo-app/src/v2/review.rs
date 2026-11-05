@@ -1,6 +1,7 @@
 //! The review: what a finished writing job changed, Checker's run of the
 //! checks, and the decision (approve, send back or discard).
 
+use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -41,9 +42,9 @@ impl Shell {
                 .child("Fix the clash first");
         }
         let b = if failing {
-            ui::ghost(key, "Approve anyway").text_color(c(ui::t_red()))
+            ui::ghost_i(key, IconName::GitMerge, "Approve anyway").text_color(c(ui::t_red()))
         } else {
-            ui::solid(key, label)
+            ui::solid_i(key, IconName::GitMerge, label)
         };
         b.on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx)))
     }
@@ -161,7 +162,7 @@ impl Shell {
                     )
                     .when(!job.checking, |d| {
                         d.child(
-                            ui::ghost(("recheck", id as usize), "Run again")
+                            ui::ghost_i(("recheck", id as usize), IconName::RotateCw, "Run again")
                                 .h(px(26.))
                                 .px(px(9.))
                                 .text_size(px(12.))
@@ -346,7 +347,7 @@ impl Shell {
                     .child("Or write below to send it back with changes."),
             )
             .child(
-                ui::ghost(("discard", id as usize), "Discard")
+                ui::ghost_i(("discard", id as usize), IconName::Trash, "Discard")
                     .text_color(c(ui::t_red()))
                     .on_click(cx.listener(move |this, _, _, cx| this.discard_job(id, cx))),
             );
@@ -436,10 +437,14 @@ impl Shell {
                     )
                     .when(!opening, |d| {
                         d.child(
-                            ui::ghost(("pr-open", id as usize), "View on GitHub")
-                                .h(px(28.))
-                                .text_size(px(12.5))
-                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                            ui::ghost_i(
+                                ("pr-open", id as usize),
+                                IconName::Github,
+                                "View on GitHub",
+                            )
+                            .h(px(28.))
+                            .text_size(px(12.5))
+                            .on_click(move |_, _, cx| cx.open_url(&url)),
                         )
                     }),
             );
@@ -474,15 +479,17 @@ impl Shell {
                     )
                     .child(div().flex_1())
                     .child(
-                        ui::ghost(("pr-close", id as usize), "Close PR")
-                            .h(px(28.))
-                            .text_size(px(12.5))
-                            .on_click(
-                                cx.listener(move |this, _, _, cx| this.land_pr(id, false, cx)),
-                            ),
+                        ui::ghost_i(
+                            ("pr-close", id as usize),
+                            IconName::GitPullRequestClosed,
+                            "Close PR",
+                        )
+                        .h(px(28.))
+                        .text_size(px(12.5))
+                        .on_click(cx.listener(move |this, _, _, cx| this.land_pr(id, false, cx))),
                     )
                     .child(
-                        ui::solid(("pr-merge", id as usize), "Merge now")
+                        ui::solid_i(("pr-merge", id as usize), IconName::GitMerge, "Merge now")
                             .h(px(28.))
                             .text_size(px(12.5))
                             .on_click(

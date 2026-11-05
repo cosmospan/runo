@@ -95,13 +95,15 @@ impl Shell {
                     ),
             )
             .when(!log.is_empty(), |d| {
-                d.child(ui::ghost("chat-clear", "Clear").on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        this.crew.store.chats.remove(&who);
-                        this.crew.store.save();
-                        cx.notify();
-                    },
-                )))
+                d.child(
+                    ui::ghost_i("chat-clear", IconName::Eraser, "Clear").on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            this.crew.store.chats.remove(&who);
+                            this.crew.store.save();
+                            cx.notify();
+                        },
+                    )),
+                )
             });
 
         let mut body = div().flex().flex_col().gap(px(14.)).px(px(28.)).py(px(24.));
@@ -153,7 +155,6 @@ impl Shell {
                                     .bg(ca(ui::panel(), 0.85))
                                     .border_1()
                                     .border_color(c(ui::line()))
-                                    .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
                                     .child(plain(&m.text)),

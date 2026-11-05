@@ -206,8 +206,7 @@ impl Shell {
                     .rounded(px(7.))
                     .bg(c(ui::raised()))
                     .border_1()
-                    .border_color(c(ui::line()))
-                    .shadow(ui::lift()),
+                    .border_color(c(ui::line())),
             );
         // Every kind of work. One nobody on the crew does yet is fainter, and a
         // job sent in it makes Fin offer the bot for it.
@@ -280,7 +279,7 @@ impl Shell {
                     .when(self.mode.writes(), |d| {
                         let on = self.splitting;
                         d.child(
-                            ui::pill("split-toggle", "Split", on)
+                            ui::pill_i("split-toggle", IconName::Split, "Split", on)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "For a bigger goal: Squad Code splits it into a few jobs that run one after another",
@@ -303,7 +302,7 @@ impl Shell {
                             _ => "Race".to_string(),
                         };
                         d.child(
-                            ui::pill("race-toggle", label, n > 1)
+                            ui::pill_i("race-toggle", IconName::Swords, label, n > 1)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "Run it on several engines at once and keep the best try",
@@ -394,7 +393,6 @@ impl Shell {
             .border_1()
             .border_color(c(ui::line()))
             .rounded(px(12.))
-            .shadow(ui::sheen())
             .child(box_)
     }
 
@@ -426,7 +424,6 @@ impl Shell {
                 .border_1()
                 .border_color(ca(who.accent(), 0.45))
                 .rounded(px(ui::CARD_R))
-                .shadow(ui::sheen())
                 .child(face)
                 .child(
                     div()
@@ -526,7 +523,6 @@ impl Shell {
                 .bg(c(ui::panel()))
                 .border_1()
                 .border_color(c(ui::line()))
-                .shadow(ui::lift())
                 .flex()
                 .flex_col();
             for (i, f) in self.crew.store.folders.iter().enumerate() {

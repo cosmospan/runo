@@ -1,6 +1,7 @@
 //! Inbox (finished work you haven't looked at, and jobs that stopped with a
 //! problem) and History (every job, newest first).
 
+use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -67,13 +68,10 @@ impl Shell {
                     .map(|d| {
                         if on {
                             // The one you're reading: lifted, with a firmer edge.
-                            d.bg(c(ui::raised()))
-                                .border_color(c(ui::line_hi()))
-                                .shadow(ui::lift())
+                            d.bg(c(ui::raised())).border_color(c(ui::line_hi()))
                         } else {
                             d.bg(c(ui::panel()))
                                 .border_color(c(ui::line2()))
-                                .shadow(ui::edge())
                                 .hover(|s| s.border_color(c(ui::line_hi())))
                         }
                     })
@@ -172,7 +170,7 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::ghost("mark-all", "Mark all seen")
+                        ui::ghost_i("mark-all", IconName::CheckCheck, "Mark all seen")
                             .h(px(28.))
                             .text_size(px(12.5))
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -405,8 +403,8 @@ impl Shell {
                     })
                     .when(j.status != Status::Review, |d| {
                         d.child(
-                            ui::solid("inbox-seen", "Mark as seen").on_click(cx.listener(
-                                move |this, _, _, cx| {
+                            ui::solid_i("inbox-seen", IconName::Check, "Mark as seen").on_click(
+                                cx.listener(move |this, _, _, cx| {
                                     if let Some(j) =
                                         this.crew.store.jobs.iter_mut().find(|j| j.id == id)
                                     {
@@ -415,8 +413,8 @@ impl Shell {
                                     this.inbox_pick = None;
                                     this.crew.store.save();
                                     cx.notify();
-                                },
-                            )),
+                                }),
+                            ),
                         )
                     }),
             )

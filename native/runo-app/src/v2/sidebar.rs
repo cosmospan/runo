@@ -57,7 +57,6 @@ impl Shell {
             .text_color(c(ui::on_fill()))
             .text_size(px(15.))
             .font_weight(FontWeight::BOLD)
-            .shadow(ui::lift())
             .cursor_pointer()
             .hover(|s| s.opacity(0.9))
             .child(letter)
@@ -84,19 +83,16 @@ impl Shell {
                 .cursor_pointer()
                 .map(|d| {
                     if on {
-                        d.bg(c(ui::bg()))
-                            .shadow(ui::chip())
-                            .text_color(c(ui::ink()))
-                            .child(
-                                div()
-                                    .absolute()
-                                    .left(px(-12.))
-                                    .top(px(10.))
-                                    .bottom(px(10.))
-                                    .w(px(3.))
-                                    .rounded_r(px(3.))
-                                    .bg(c(ui::ink())),
-                            )
+                        d.bg(c(ui::raised())).text_color(c(ui::ink())).child(
+                            div()
+                                .absolute()
+                                .left(px(-12.))
+                                .top(px(10.))
+                                .bottom(px(10.))
+                                .w(px(3.))
+                                .rounded_r(px(3.))
+                                .bg(c(ui::ink())),
+                        )
                     } else {
                         d.text_color(c(ui::muted()))
                             .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
@@ -352,30 +348,40 @@ impl Shell {
                         .child(format!("{running} running")),
                 )
             })
-            // Search, as a round button: the palette finds places, bots and jobs.
+            // Search, as a quiet field: the palette finds places, bots and jobs.
             .child(
                 div()
                     .id("top-search")
-                    .size(px(30.))
+                    .w(px(220.))
+                    .h(px(30.))
+                    .px(px(10.))
                     .flex()
                     .items_center()
-                    .justify_center()
+                    .gap(px(8.))
                     .rounded(px(8.))
+                    .bg(c(ui::well()))
                     .border_1()
                     .border_color(c(ui::line()))
-                    .text_color(c(ui::muted()))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .hover(|s| s.border_color(c(ui::line_hi())).text_color(c(ui::muted())))
                     .child(Icon::new(IconName::Search).size(px(14.)))
+                    .child(div().flex_1().child("Search jobs, bots…"))
+                    .child(ui::kbd(if cfg!(target_os = "macos") {
+                        "⌘K"
+                    } else {
+                        "Ctrl K"
+                    }))
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )
             .child(
-                ui::solid("top-new", "New job")
+                ui::solid_i("top-new", IconName::Plus, "New job")
                     .h(px(30.))
-                    .pl(px(10.))
-                    .child(Icon::new(IconName::Plus).size(px(14.)))
-                    .flex_row_reverse()
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.go(Place::Today, cx);
+                        this.composer.update(cx, |i, cx| i.focus(window, cx));
+                    })),
             )
     }
 }

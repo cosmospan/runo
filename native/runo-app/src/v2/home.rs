@@ -1,6 +1,7 @@
 //! Home's working half: a strip of numbers, the jobs table and the inspector
 //! for the job picked in it.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
@@ -59,25 +60,25 @@ impl Shell {
             .flex()
             .gap(px(12.))
             .child(ui::stat(
-                Some(ui::t_blue()),
+                (IconName::LoaderCircle, ui::t_blue()),
                 "Running",
                 running.len().to_string(),
                 who,
             ))
             .child(ui::stat(
-                Some(ui::t_amber()),
+                (IconName::Inbox, ui::t_amber()),
                 "Needs you",
                 needs.len().to_string(),
                 oldest,
             ))
             .child(ui::stat(
-                Some(ui::t_green()),
+                (IconName::CircleCheck, ui::t_green()),
                 "Done today",
                 done.to_string(),
                 format!("of {ended} finished"),
             ))
             .child(ui::stat(
-                None,
+                (IconName::Wallet, ui::t_violet()),
                 "Spend today",
                 format!("${spend:.2}"),
                 "across engines".into(),
@@ -164,7 +165,6 @@ impl Shell {
                     .bg(c(ui::panel()))
                     .border_1()
                     .border_color(c(ui::line2()))
-                    .shadow(ui::edge())
                     .text_size(px(13.))
                     .cursor_pointer()
                     .hover(|s| s.bg(c(ui::raised())).border_color(c(ui::line_hi())))
@@ -371,22 +371,8 @@ pub(super) fn status_of(j: &Job) -> (String, (u32, u32, u32)) {
 }
 
 /// A status pill: a dot and a word on a tinted ground.
-pub(super) fn pill(word: &str, (text, fill, edge): (u32, u32, u32)) -> Div {
-    div()
-        .h(px(22.))
-        .px(px(8.))
-        .flex()
-        .items_center()
-        .gap(px(6.))
-        .rounded_full()
-        .bg(c(fill))
-        .border_1()
-        .border_color(c(edge))
-        .text_size(px(12.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(text))
-        .child(div().size(px(6.)).rounded_full().bg(c(text)))
-        .child(word.to_string())
+pub(super) fn pill(word: &str, tone: (u32, u32, u32)) -> Div {
+    ui::badge(tone, word.to_string())
 }
 
 /// The dollars in a summary like "12s · 3 turns · $0.04".
@@ -468,9 +454,7 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::raised()))
-                                .shadow(ui::lift())
-                                .text_color(c(ui::ink()))
+                            d.bg(c(ui::raised())).text_color(c(ui::ink()))
                         } else {
                             d.text_color(c(ui::muted()))
                                 .hover(|s| s.text_color(c(ui::ink())))
@@ -519,19 +503,13 @@ impl Shell {
                     )
                     .child(div().flex_1())
                     .child(
-                        ui::ghost("list-all", "All jobs")
-                            .h(px(28.))
-                            .text_size(px(12.))
+                        ui::icon_btn("list-all", IconName::ListFilter)
+                            .size(px(28.))
+                            .tooltip(|window, cx| {
+                                gpui_kit::component::tooltip::Tooltip::new("All jobs")
+                                    .build(window, cx)
+                            })
                             .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
-                    )
-                    .child(
-                        ui::solid("list-new", "New")
-                            .h(px(28.))
-                            .text_size(px(12.5))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.go(Place::Today, cx);
-                                this.composer.update(cx, |i, cx| i.focus(window, cx));
-                            })),
                     ),
             )
             .child(filters);
@@ -641,7 +619,7 @@ impl Shell {
             .cursor_pointer()
             .map(|d| {
                 if on {
-                    d.bg(c(ui::raised())).shadow(ui::chip()).child(
+                    d.bg(c(ui::raised())).child(
                         div()
                             .absolute()
                             .left(px(-8.))

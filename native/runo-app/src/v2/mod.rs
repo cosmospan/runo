@@ -1796,7 +1796,6 @@ impl Render for Shell {
                         .bg(c(ui::fill()))
                         .text_color(c(ui::on_fill()))
                         .text_size(px(13.))
-                        .shadow(ui::lift())
                         .child(text),
                 )
         });

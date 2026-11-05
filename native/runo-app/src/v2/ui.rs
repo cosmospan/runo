@@ -1,6 +1,8 @@
 //! The v2 look: colour tokens and the few building blocks every screen uses
 //! (cards, pills, chips, labels), taken from the Holo app screens design.
 
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -69,64 +71,34 @@ pub fn ground() -> u32 {
     super::theme::mix(base & 0xff_ffff, 0x000000, k) | (base & 0xff00_0000)
 }
 
-/// A card's lit top edge and a soft shadow, so it reads as lifted.
-pub fn sheen() -> Vec<BoxShadow> {
-    let light = theme().light;
-    vec![
-        BoxShadow {
-            color: ca(0x000000, if light { 0.04 } else { 0.2 }),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(2.),
-            spread_radius: px(0.),
-            inset: false,
-        },
-        BoxShadow {
-            color: ca(0xFFFFFF, if light { 0.7 } else { 0.03 }),
-            offset: point(px(0.), px(1.)),
-            blur_radius: px(0.),
-            spread_radius: px(0.),
-            inset: true,
-        },
-    ]
-}
-
-/// A small lifted chip, like the selected row in the sidebar: a hairline ring,
-/// a soft shadow and a lit top edge.
-pub fn chip() -> Vec<BoxShadow> {
-    let mut v = vec![BoxShadow {
-        color: c(line()),
-        offset: point(px(0.), px(0.)),
-        blur_radius: px(0.),
-        spread_radius: px(1.),
-        inset: false,
-    }];
-    v.extend(sheen());
-    v
-}
-
-/// A hairline shadow, for raised controls like the selected tab.
-pub fn lift() -> Vec<BoxShadow> {
-    vec![BoxShadow {
-        color: ca(0x000000, 0.35),
-        offset: point(px(0.), px(1.)),
-        blur_radius: px(2.),
-        spread_radius: px(0.),
-        inset: false,
-    }]
-}
-
-/// A panel on the ground, with a hairline edge.
+/// A panel on the ground: flat, with a hairline edge and no shadow.
 pub fn card() -> Div {
     div()
         .bg(c(panel()))
         .border_1()
         .border_color(c(line()))
         .rounded(px(CARD_R))
-        .shadow(sheen())
 }
 
-/// A quiet outline button, like "Look first" or "Pause".
+/// A quiet outline button, like "Look first" or "Pause": a hairline and
+/// nothing behind it until you point at it.
 pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
+    ghost_base(id).child(label.into())
+}
+
+/// A ghost button led by an icon, like "⟲ Run again".
+pub fn ghost_i(
+    id: impl Into<ElementId>,
+    icon: IconName,
+    label: impl Into<SharedString>,
+) -> Stateful<Div> {
+    ghost_base(id)
+        .pl(px(10.))
+        .child(Icon::new(icon).size(px(14.)).text_color(c(muted())))
+        .child(label.into())
+}
+
+fn ghost_base(id: impl Into<ElementId>) -> Stateful<Div> {
     div()
         .id(id)
         .px(px(12.))
@@ -136,22 +108,35 @@ pub fn ghost(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .justify_center()
         .gap(px(6.))
         .rounded(px(8.))
-        .bg(c(panel()))
         .border_1()
-        .border_color(c(line()))
-        .shadow(edge())
+        .border_color(c(line_hi()))
         .text_size(px(13.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(ink()))
         .cursor_pointer()
-        .hover(|s| s.bg(c(hover())).border_color(c(line_hi())))
+        .hover(|s| s.bg(c(hover())))
         .active(|s| s.bg(c(press())))
-        .child(label.into())
 }
 
 /// The primary button, like "Approve & open PR": the theme's solid fill,
 /// high contrast and nothing else.
 pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
+    solid_base(id).child(label.into())
+}
+
+/// A primary button led by an icon, like "+ New job".
+pub fn solid_i(
+    id: impl Into<ElementId>,
+    icon: IconName,
+    label: impl Into<SharedString>,
+) -> Stateful<Div> {
+    solid_base(id)
+        .pl(px(11.))
+        .child(Icon::new(icon).size(px(14.)))
+        .child(label.into())
+}
+
+fn solid_base(id: impl Into<ElementId>) -> Stateful<Div> {
     div()
         .id(id)
         .px(px(14.))
@@ -163,16 +148,49 @@ pub fn solid(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Statef
         .rounded(px(8.))
         .bg(c(fill()))
         .text_size(px(13.))
-        .font_weight(FontWeight::MEDIUM)
+        .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(on_fill()))
         .cursor_pointer()
         .hover(|s| s.bg(c(fill_hover())))
         .active(|s| s.bg(c(fill_press())))
+}
+
+/// A square icon-only button, like search or close: no edge, a soft tint on hover.
+pub fn icon_btn(id: impl Into<ElementId>, icon: IconName) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(30.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .rounded(px(8.))
+        .text_color(c(muted()))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(hover())).text_color(c(ink())))
+        .active(|s| s.bg(c(press())))
+        .child(Icon::new(icon).size(px(16.)))
+}
+
+/// A small pill for filters and tabs; `on` is the selected one, shown as a
+/// flat tint rather than a raised chip.
+pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
+    pill_base(id, on).child(label.into())
+}
+
+/// A pill led by an icon, like the composer's "Split" and "Race" toggles.
+pub fn pill_i(
+    id: impl Into<ElementId>,
+    icon: IconName,
+    label: impl Into<SharedString>,
+    on: bool,
+) -> Stateful<Div> {
+    pill_base(id, on)
+        .child(Icon::new(icon).size(px(13.)))
         .child(label.into())
 }
 
-/// A small pill for filters and tabs; `on` is the selected one.
-pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -> Stateful<Div> {
+fn pill_base(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
         .px(px(10.))
@@ -184,36 +202,61 @@ pub fn pill(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) 
         .text_size(px(12.5))
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
-        .border_1()
         .map(|d| {
             if on {
-                d.bg(c(raised()))
-                    .border_color(c(line_hi()))
-                    .text_color(c(ink()))
-                    .shadow(edge())
+                d.bg(c(raised())).text_color(c(ink()))
             } else {
-                d.border_color(c(line()))
-                    .text_color(c(muted()))
+                d.text_color(c(muted()))
                     .hover(|s| s.bg(c(hover())).text_color(c(ink())))
                     .active(|s| s.bg(c(press())))
             }
         })
+}
+
+/// A tinted status badge, like "Ready for review": the tone's text on its
+/// own soft fill, with a dot.
+pub fn badge(tone: Tone, label: impl Into<SharedString>) -> Div {
+    let (text, fill, _) = tone;
+    div()
+        .h(px(22.))
+        .px(px(8.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(px(6.))
+        .rounded(px(6.))
+        .bg(c(fill))
+        .text_size(px(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(text))
+        .child(div().size(px(6.)).rounded_full().bg(c(text)))
         .child(label.into())
 }
 
-/// Just the lit top edge, for small controls.
-pub fn edge() -> Vec<BoxShadow> {
-    vec![BoxShadow {
-        color: ca(0xFFFFFF, if theme().light { 0.7 } else { 0.04 }),
-        offset: point(px(0.), px(1.)),
-        blur_radius: px(0.),
-        spread_radius: px(0.),
-        inset: true,
-    }]
+/// A keyboard hint, like "⌘K".
+pub fn kbd(text: impl Into<SharedString>) -> Div {
+    div()
+        .h(px(18.))
+        .px(px(5.))
+        .flex()
+        .items_center()
+        .rounded(px(4.))
+        .border_1()
+        .border_color(c(line()))
+        .text_size(px(10.5))
+        .font_family(MONO)
+        .text_color(c(faint()))
+        .child(text.into())
 }
 
-/// A stat card: a quiet label with a status dot, the figure, and a note.
-pub fn stat(dot: Option<u32>, label: &'static str, value: String, note: String) -> Div {
+/// A stat card: a quiet label with its icon on a soft tile in `tone`, the
+/// figure, and a note.
+pub fn stat(
+    (icon, tone): (IconName, u32),
+    label: &'static str,
+    value: String,
+    note: String,
+) -> Div {
     div()
         .flex_1()
         .flex_basis(px(0.))
@@ -225,23 +268,30 @@ pub fn stat(dot: Option<u32>, label: &'static str, value: String, note: String) 
         .border_1()
         .border_color(c(line()))
         .rounded(px(CARD_R))
-        .shadow(sheen())
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(7.))
-                .text_size(px(12.))
+                .justify_between()
+                .text_size(px(12.5))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(muted()))
-                .when_some(dot, |d, col| {
-                    d.child(div().size(px(6.)).rounded_full().bg(c(col)))
-                })
-                .child(label),
+                .child(label)
+                .child(
+                    div()
+                        .size(px(26.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(7.))
+                        .bg(ca(tone, 0.12))
+                        .text_color(c(tone))
+                        .child(Icon::new(icon).size(px(14.))),
+                ),
         )
         .child(
             div()
-                .mt(px(10.))
+                .mt(px(6.))
                 .text_size(px(26.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(value),

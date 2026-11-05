@@ -197,7 +197,7 @@ impl Shell {
                     .gap(px(8.))
                     .when(!self.trail.is_empty(), |d| {
                         d.child(
-                            ui::ghost("back", "\u{2190} Back")
+                            ui::ghost_i("back", IconName::ArrowLeft, "Back")
                                 .gap(px(6.))
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new("Back (⌘[)")
@@ -233,7 +233,12 @@ impl Shell {
                         if tries > 1 {
                             let race = job.race;
                             d.child(
-                                ui::ghost("compare", format!("Compare {tries} tries")).on_click(
+                                ui::ghost_i(
+                                    "compare",
+                                    IconName::Columns2,
+                                    format!("Compare {tries} tries"),
+                                )
+                                .on_click(
                                     cx.listener(move |this, _, _, cx| {
                                         this.go(Place::Race(race), cx)
                                     }),
@@ -244,7 +249,7 @@ impl Shell {
                             && matches!(job.status, Status::Running | Status::Review)
                         {
                             d.child(
-                                ui::ghost("race-it", "Race it")
+                                ui::ghost_i("race-it", IconName::Swords, "Race it")
                                     .tooltip(|window, cx| {
                                         gpui_kit::component::tooltip::Tooltip::new(
                                             "Try the same job on other engines and keep the best",
@@ -272,15 +277,17 @@ impl Shell {
                             ),
                         |d| {
                             let id = job.id;
-                            d.child(ui::ghost("retry", "Try again").on_click(
-                                cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
-                            ))
+                            d.child(
+                                ui::ghost_i("retry", IconName::RotateCcw, "Try again").on_click(
+                                    cx.listener(move |this, _, _, cx| this.retry_job(id, cx)),
+                                ),
+                            )
                         },
                     )
                     .when(running, |d| {
                         let id = job.id;
                         d.child(
-                            ui::ghost("stop", "Stop")
+                            ui::ghost_i("stop", IconName::CircleStop, "Stop")
                                 .text_color(c(ui::RED))
                                 .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
                         )
@@ -289,24 +296,29 @@ impl Shell {
                         let id = job.id;
                         let open = self.term_open == Some(id);
                         d.child(
-                            ui::ghost("terminal", if open { "Hide terminal" } else { "Terminal" })
-                                .tooltip(|window, cx| {
-                                    gpui_kit::component::tooltip::Tooltip::new(
-                                        "A shell in this job's own branch (⌃`)",
-                                    )
-                                    .build(window, cx)
-                                })
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.toggle_term(id, window, cx)
-                                })),
+                            ui::ghost_i(
+                                "terminal",
+                                IconName::SquareTerminal,
+                                if open { "Hide terminal" } else { "Terminal" },
+                            )
+                            .tooltip(|window, cx| {
+                                gpui_kit::component::tooltip::Tooltip::new(
+                                    "A shell in this job's own branch (⌃`)",
+                                )
+                                .build(window, cx)
+                            })
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| this.toggle_term(id, window, cx),
+                            )),
                         )
                     })
                     .when(!running, |d| {
                         let path = job.folder.path.clone();
                         d.child(
-                            ui::ghost("open-folder", "Open folder").on_click(cx.listener(
-                                move |_, _, _, cx| cx.reveal_path(std::path::Path::new(&path)),
-                            )),
+                            ui::ghost_i("open-folder", IconName::FolderOpen, "Open folder")
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    cx.reveal_path(std::path::Path::new(&path))
+                                })),
                         )
                     }),
             );
@@ -417,7 +429,6 @@ impl Shell {
                                     .bg(ca(ui::panel(), 0.85))
                                     .border_1()
                                     .border_color(c(ui::line()))
-                                    .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
                                     .child(t),
@@ -868,7 +879,6 @@ pub(super) fn typing(now: f64) -> Div {
         .bg(ca(ui::panel(), 0.85))
         .border_1()
         .border_color(c(ui::line()))
-        .shadow(ui::lift())
         .flex()
         .items_center()
         .gap(px(5.));

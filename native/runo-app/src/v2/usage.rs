@@ -1,6 +1,7 @@
 //! Usage: what the crew cost and did over the last 30 days, from the jobs kept
 //! on this computer.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::*;
 
 use super::data::Member;
@@ -92,19 +93,19 @@ impl Shell {
             .flex()
             .gap(px(12.))
             .child(ui::stat(
-                None,
+                (IconName::Wallet, ui::t_violet()),
                 "Spend",
                 format!("${spend:.2}"),
                 "reported by engines".into(),
             ))
             .child(ui::stat(
-                Some(ui::t_blue()),
+                (IconName::LayoutDashboard, ui::t_blue()),
                 "Jobs",
                 recent.len().to_string(),
                 format!("{} running", self.crew.store.running().count()),
             ))
             .child(ui::stat(
-                Some(ui::t_green()),
+                (IconName::CircleCheck, ui::t_green()),
                 "Success rate",
                 if ended == 0 {
                     "—".into()
@@ -114,7 +115,7 @@ impl Shell {
                 format!("{ok} of {ended} finished"),
             ))
             .child(ui::stat(
-                None,
+                (IconName::Timer, ui::t_amber()),
                 "Time at work",
                 hours(busy),
                 "across the crew".into(),

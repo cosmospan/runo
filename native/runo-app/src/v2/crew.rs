@@ -93,7 +93,7 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::solid("crew-make", "Make a bot").on_click(cx.listener(|this, _, _, cx| {
+                        ui::solid_i("crew-make", IconName::Plus, "Make a bot").on_click(cx.listener(|this, _, _, cx| {
                             this.maker_open = !this.maker_open;
                             cx.notify();
                         })),
@@ -201,7 +201,6 @@ impl Shell {
             .border_1()
             .border_color(c(ui::line()))
             .rounded(px(ui::CARD_R + 2.))
-            .shadow(ui::sheen())
             .hover(|s| s.border_color(c(ui::line_hi())))
             .child(
                 div()
@@ -343,7 +342,7 @@ impl Shell {
                     })
                     .child(div().flex_1())
                     .child(
-                        ui::ghost(("crew-chat", key), "Chat")
+                        ui::ghost_i(("crew-chat", key), IconName::MessageCircle, "Chat")
                             .h(px(30.))
                             .text_size(px(12.5))
                             .on_click(
@@ -352,7 +351,7 @@ impl Shell {
                     )
                     .when(mode != Mode::Ask, |d| {
                         d.child(
-                            ui::solid(("crew-job", key), "Give a job")
+                            ui::solid_i(("crew-job", key), IconName::Plus, "Give a job")
                                 .h(px(30.))
                                 .text_size(px(12.5))
                                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -487,7 +486,6 @@ impl Shell {
                     .rounded_full()
                     .border_2()
                     .border_color(c(if on { ui::ink() } else { ui::panel() }))
-                    .shadow(ui::lift())
                     .bg(linear_gradient(
                         135.,
                         linear_color_stop(c(l.0), 0.0),
@@ -614,7 +612,7 @@ impl Shell {
                                     .text_color(c(ui::muted()))
                                     .child("Dress a Fin, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
-                            .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
+                            .child(ui::ghost_i("surprise", IconName::Sparkles, "Surprise me").on_click(cx.listener(|this, _, _, cx| {
                                 this.maker = surprise(this.clock.elapsed().as_nanos() as u64);
                                 cx.notify();
                             }))),

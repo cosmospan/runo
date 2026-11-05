@@ -91,8 +91,7 @@ fn switch(on: bool) -> Div {
                 .left(px(if on { 16. } else { 2. }))
                 .size(px(14.))
                 .rounded_full()
-                .bg(c(0xFFFFFF))
-                .shadow(ui::lift()),
+                .bg(c(0xFFFFFF)),
         )
 }
 
@@ -183,7 +182,6 @@ fn segment(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -
                     .border_1()
                     .border_color(c(ui::line_hi()))
                     .text_color(c(ui::ink()))
-                    .shadow(ui::lift())
             } else {
                 d.text_color(c(ui::muted()))
                     .hover(|s| s.text_color(c(ui::ink())))
