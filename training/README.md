@@ -3,8 +3,8 @@
 Squad's intelligence layer (`native/runo-app/src/v2/brain/`) picks the kind of
 job and the bot in three steps, each used only when the one before isn't sure:
 
-1. **The tiny classifier**, built into the app: about 5,500 word and
-   letter-pattern weights (140 KB) from `train_tiny.py`. Microseconds, no
+1. **The tiny classifier**, built into the app: about 15,000 word and
+   letter-pattern weights (370 KB) from `train_tiny.py`. Microseconds, no
    download, always on.
 2. **The keyword rules.**
 3. **Smart Fin**, only if the person turns it on: Squad's own small model
@@ -17,8 +17,9 @@ Scores (`SquadCode v2 brain eval` and `eval hard`):
 | | Plain (53) | Messy (120) |
 | --- | --- | --- |
 | Rules | 51 | 70 |
-| Tiny classifier, then rules | 53 | 105 |
-| Fin 0.8B (Smart Fin) | 53 | 117 |
+| Tiny classifier, then rules (seeds only) | 53 | 105 |
+| Tiny classifier, then rules (seeds + teacher) | 53 | 117 |
+| Fin 0.8B (Smart Fin, seeds only) | 53 | 117 |
 
 ## The pieces
 
@@ -26,7 +27,8 @@ Scores (`SquadCode v2 brain eval` and `eval hard`):
 | --- | --- |
 | `eval/route.jsonl`, `eval/route_hard.jsonl` | The fixed test sets: 53 plain sentences and 120 messy ones. Every model is scored on both before it ships, and neither is ever trained on. |
 | `seeds/*.txt`, `build_data.py` | 380 hand-written job sentences, and the script that turns them into about 1,900 labelled examples with no API key. |
-| `make_data.py` | Writes training examples: varied job sentences for each kind of job, labelled, from a teacher model. |
+| `make_data.py` | Writes training examples from a teacher model: varied job sentences, each labelled with its real kind, an honest confidence and a reason. |
+| `data/teacher.jsonl` | The teacher's 3,600 examples (cost $4.83), so training needs no key. |
 | `train_tiny.py` | Trains the tiny classifier in seconds, with no packages, and writes its weights into the app. |
 | `train_lora.py` | Fine-tunes the base model with LoRA on the examples. |
 | `requirements.txt` | Python packages for the two scripts. |

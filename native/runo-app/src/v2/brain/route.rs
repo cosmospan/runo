@@ -325,7 +325,7 @@ pub fn by_tiny(text: &str, crew: &[Member]) -> Route {
 
 /// Without a model: the tiny classifier when it's sure, since it reads the
 /// whole sentence; else the keyword rules when they're sure; else the tiny
-/// classifier's best guess. 105 of the 120 messy test sentences and all 53
+/// classifier's best guess. 117 of the 120 messy test sentences and all 53
 /// plain ones, against 70 and 51 for the rules alone.
 pub fn built_in(text: &str, crew: &[Member]) -> Route {
     let tiny = by_tiny(text, crew);

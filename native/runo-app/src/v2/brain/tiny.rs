@@ -1,6 +1,6 @@
 //! Fin's tiny router: a word and letter-pattern classifier built into the app.
 //!
-//! No neural net, no download, no server: about 5,500 weights (140 KB) that
+//! No neural net, no download, no server: about 15,000 weights (370 KB) that
 //! `training/train_tiny.py` learns from the same examples the small model is
 //! trained on. It answers in microseconds and is used when the keyword rules
 //! aren't sure of a job.
