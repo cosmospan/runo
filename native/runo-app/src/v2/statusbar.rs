@@ -1,0 +1,496 @@
+//! The status bar along the bottom of the page, and the engines popover it
+//! opens.
+//!
+//! The bar names every engine in play today, Claude Code, Codex, Gemini or any
+//! other, each with a dot for whether it's ready and a small meter for the
+//! plan window closest to its limit. On the right is what the crew cost and
+//! used today. Clicking anywhere on it opens the popover: for each engine, its
+//! plan windows with what's left and when they reset, and today's cost, tokens
+//! and jobs.
+
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::*;
+
+use super::home::cost;
+use super::store::{self, Store};
+use super::ui::{self, c, ca};
+use super::{Pane, Place, Shell};
+
+/// How many engines the bar names before the popover has to show the rest.
+const BAR_ENGINES: usize = 4;
+
+/// One engine's day.
+struct Day {
+    /// Index into `agent::PROVIDERS`.
+    i: usize,
+    ready: bool,
+    spend: f64,
+    tokens: u64,
+    jobs: usize,
+    usage: Option<crate::usage::Usage>,
+}
+
+/// The engines in play today: the default one first, then every engine a job
+/// ran on today, in the order they first ran.
+fn engines_today(st: &crate::settings::AppSettings, store: &Store) -> Vec<Day> {
+    let today = store::now() / 86_400;
+    let mut order = vec![super::engine::index_of(st, "")];
+    let todays: Vec<_> = store
+        .jobs
+        .iter()
+        .filter(|j| j.started / 86_400 == today)
+        .collect();
+    for j in &todays {
+        if let Some(i) = crate::agent::PROVIDERS.iter().position(|p| p.id == j.agent) {
+            if !order.contains(&i) {
+                order.push(i);
+            }
+        }
+    }
+    order
+        .into_iter()
+        .map(|i| {
+            let id = crate::agent::PROVIDERS[i].id;
+            let mine = todays.iter().filter(|j| j.agent == id);
+            let (mut spend, mut tokens, mut jobs) = (0.0, 0, 0);
+            for j in mine {
+                spend += cost(&j.summary).unwrap_or(0.);
+                tokens += j.tokens;
+                jobs += 1;
+            }
+            Day {
+                i,
+                ready: super::engine::ready(st, i),
+                spend,
+                tokens,
+                jobs,
+                usage: crate::usage::get(id),
+            }
+        })
+        .collect()
+}
+
+/// The colour for a share of a window used: blue, then amber near the limit,
+/// red when it's used up.
+fn used_color(used: f32) -> u32 {
+    if used >= 100. {
+        ui::RED
+    } else if used >= 80. {
+        ui::AMBER
+    } else {
+        ui::BLUE
+    }
+}
+
+/// A small meter for a share used, `w` wide.
+fn meter(used: f32, w: f32, h: f32) -> Div {
+    div()
+        .w(px(w))
+        .h(px(h))
+        .flex_none()
+        .rounded_full()
+        .bg(c(ui::line()))
+        .child(
+            div()
+                .h_full()
+                .rounded_full()
+                .bg(c(used_color(used)))
+                .w(relative((used / 100.).clamp(0.02, 1.))),
+        )
+}
+
+impl Shell {
+    fn toggle_usage(&mut self, cx: &mut Context<Self>) {
+        self.usage_open = !self.usage_open;
+        // A fresh read of the plans each time it opens, unless one ran lately.
+        if self.usage_open && !self.crew.store.demo {
+            crate::usage::refresh(false);
+        }
+        cx.notify();
+    }
+
+    /// The status bar along the bottom of the page.
+    pub(super) fn statusbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let st = cx.global::<crate::settings::AppSettings>();
+        let days = engines_today(st, &self.crew.store);
+        let spend: f64 = days.iter().map(|d| d.spend).sum::<f64>() + 0.0;
+        let tokens: u64 = days.iter().map(|d| d.tokens).sum();
+        let open = self.usage_open;
+
+        let mut left = div().flex().items_center().gap(px(2.)).min_w_0();
+        for d in days.iter().take(BAR_ENGINES) {
+            let p = &crate::agent::PROVIDERS[d.i];
+            let head = d.usage.as_ref().and_then(|u| u.headline().cloned());
+            let dot = if !d.ready {
+                ui::RED
+            } else if head.as_ref().is_some_and(|w| w.used >= 80.) {
+                ui::AMBER
+            } else {
+                ui::GREEN
+            };
+            left = left.child(
+                div()
+                    .id(("status-engine", d.i))
+                    .h(px(22.))
+                    .px(px(8.))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .rounded(px(6.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(div().size(px(7.)).rounded_full().bg(c(dot)))
+                    .child(p.name)
+                    .map(|el| match &head {
+                        Some(w) => el.child(meter(w.used, 28., 4.)).child(
+                            div()
+                                .font_family(ui::MONO)
+                                .text_size(px(10.5))
+                                .text_color(c(if w.used >= 80. {
+                                    ui::t_amber()
+                                } else {
+                                    ui::faint()
+                                }))
+                                .child(format!("{:.0}%", w.used)),
+                        ),
+                        None if !d.ready => {
+                            el.child(div().text_color(c(ui::t_red())).child("not found"))
+                        }
+                        None => el,
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx))),
+            );
+        }
+        if days.len() > BAR_ENGINES {
+            left = left.child(
+                div()
+                    .px(px(6.))
+                    .text_color(c(ui::faint()))
+                    .child(format!("+{}", days.len() - BAR_ENGINES)),
+            );
+        }
+
+        let right = div()
+            .id("status-today")
+            .h(px(22.))
+            .px(px(8.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            .child(div().text_color(c(ui::faint())).child("Today"))
+            .child(
+                div()
+                    .text_color(c(ui::body()))
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(format!("${spend:.2}")),
+            )
+            .child(div().size(px(3.)).rounded_full().bg(c(ui::faint())))
+            .child(format!("{} tokens", crate::health::token_count(tokens)))
+            .child(
+                Icon::new(if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronUp
+                })
+                .size(px(12.))
+                .text_color(c(ui::faint())),
+            )
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx)));
+
+        div()
+            .h(px(30.))
+            .flex_none()
+            .w_full()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .px(px(10.))
+            .bg(c(ui::panel()))
+            .border_t_1()
+            .border_color(c(ui::line()))
+            .text_size(px(11.5))
+            .text_color(c(ui::muted()))
+            .child(left)
+            .child(div().flex_1())
+            .child(right)
+    }
+
+    /// The engines popover, over the status bar: each engine's plan windows,
+    /// what's left of them and when they reset, and its day.
+    pub(super) fn usage_popover(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let st = cx.global::<crate::settings::AppSettings>();
+        let days = engines_today(st, &self.crew.store);
+        let now = crate::usage::now_secs();
+        let spend: f64 = days.iter().map(|d| d.spend).sum::<f64>() + 0.0;
+        let tokens: u64 = days.iter().map(|d| d.tokens).sum();
+        let jobs: usize = days.iter().map(|d| d.jobs).sum();
+        let reading = crate::usage::busy();
+
+        // Today across every engine, as three figures.
+        let figure = |label: &'static str, value: String| {
+            div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(11.))
+                        .text_color(c(ui::faint()))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(16.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(value),
+                )
+        };
+        let totals = div()
+            .flex()
+            .gap(px(12.))
+            .px(px(16.))
+            .py(px(12.))
+            .border_b_1()
+            .border_color(c(ui::line2()))
+            .child(figure("Spent today", format!("${spend:.2}")))
+            .child(figure("Tokens", crate::health::token_count(tokens)))
+            .child(figure("Jobs", jobs.to_string()));
+
+        let mut list = div().flex().flex_col();
+        for (k, d) in days.iter().enumerate() {
+            let p = &crate::agent::PROVIDERS[d.i];
+            let default = k == 0;
+            let mut card =
+                div()
+                    .px(px(16.))
+                    .py(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(div().size(px(8.)).rounded_full().bg(c(if d.ready {
+                                ui::GREEN
+                            } else {
+                                ui::RED
+                            })))
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(p.name),
+                            )
+                            .when(default, |el| {
+                                el.child(
+                                    div()
+                                        .px(px(6.))
+                                        .rounded(px(4.))
+                                        .bg(ca(ui::RUNO, 0.18))
+                                        .text_size(px(10.5))
+                                        .text_color(c(ui::t_violet()))
+                                        .child("Default"),
+                                )
+                            })
+                            .child(div().flex_1())
+                            .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
+                                format!(
+                                    "${:.2} · {} · {} job{}",
+                                    d.spend,
+                                    crate::health::token_count(d.tokens),
+                                    d.jobs,
+                                    if d.jobs == 1 { "" } else { "s" }
+                                ),
+                            )),
+                    );
+            match d.usage.as_ref().map(|u| &u.reading) {
+                Some(crate::usage::Reading::Limits(windows)) if !windows.is_empty() => {
+                    for w in windows {
+                        let left = (100. - w.used).max(0.);
+                        let resets = w
+                            .resets_at
+                            .map(|at| format!(" · resets in {}", crate::usage::left(at, now)))
+                            .unwrap_or_default();
+                        card = card.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(5.))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .text_size(px(11.5))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .text_color(c(ui::body()))
+                                                .child(format!("{} window", w.label)),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_color(c(if w.used >= 80. {
+                                                    ui::t_amber()
+                                                } else {
+                                                    ui::muted()
+                                                }))
+                                                .child(format!("{left:.0}% left{resets}")),
+                                        ),
+                                )
+                                .child(meter(w.used, 296., 5.).w_full()),
+                        );
+                    }
+                }
+                Some(crate::usage::Reading::Note(text)) => card = card.child(note(text)),
+                Some(crate::usage::Reading::Problem { long, .. }) => {
+                    card = card.child(note(long).text_color(c(ui::t_amber())))
+                }
+                _ if !d.ready => {}
+                _ => {
+                    card = card.child(note(if reading {
+                        "Reading its plan…"
+                    } else {
+                        "This engine doesn't share its plan limits."
+                    }))
+                }
+            }
+            if !d.ready {
+                card = card.child(
+                    note("Not found on this computer. Set it up under Engines.")
+                        .text_color(c(ui::t_red())),
+                );
+            }
+            list = list.child(card);
+        }
+
+        let link = |id: &'static str, label: &'static str| {
+            div()
+                .id(id)
+                .h(px(28.))
+                .px(px(10.))
+                .flex()
+                .items_center()
+                .rounded(px(6.))
+                .text_size(px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(ui::body()))
+                .cursor_pointer()
+                .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                .child(label)
+        };
+        let foot = div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .px(px(8.))
+            .py(px(6.))
+            .border_t_1()
+            .border_color(c(ui::line2()))
+            .bg(c(ui::bg()))
+            .child(
+                link(
+                    "usage-refresh",
+                    if reading { "Reading…" } else { "Refresh" },
+                )
+                .on_click(cx.listener(|_, _, _, cx| {
+                    crate::usage::refresh(true);
+                    cx.notify();
+                })),
+            )
+            .child(div().flex_1())
+            .child(
+                link("usage-engines", "Engines").on_click(cx.listener(|this, _, _, cx| {
+                    this.usage_open = false;
+                    this.go(Place::Settings(Pane::Engines), cx)
+                })),
+            )
+            .child(
+                link("usage-page", "Usage history").on_click(cx.listener(|this, _, _, cx| {
+                    this.usage_open = false;
+                    this.go(Place::Usage, cx)
+                })),
+            );
+
+        div()
+            .absolute()
+            .inset_0()
+            // A click anywhere else puts it away.
+            .child(
+                div()
+                    .id("usage-backdrop")
+                    .absolute()
+                    .inset_0()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.usage_open = false;
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .id("usage-popover")
+                    .absolute()
+                    .left(px(super::sidebar::WIDTH + 8.))
+                    .bottom(px(36.))
+                    .w(px(360.))
+                    .max_h(px(560.))
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .rounded(px(12.))
+                    .bg(c(ui::raised()))
+                    .border_1()
+                    .border_color(c(ui::line_hi()))
+                    .shadow(vec![BoxShadow {
+                        color: ca(0x000000, 0.5),
+                        offset: point(px(0.), px(12.)),
+                        blur_radius: px(32.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+                    .on_click(|_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .px(px(16.))
+                            .pt(px(14.))
+                            .flex()
+                            .items_center()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child("Engines"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::faint()))
+                                    .child("Plan limits and today"),
+                            ),
+                    )
+                    .child(totals)
+                    .child(list)
+                    .child(foot),
+            )
+    }
+}
+
+/// A quiet line under an engine.
+fn note(text: impl Into<SharedString>) -> Div {
+    div()
+        .text_size(px(11.5))
+        .text_color(c(ui::faint()))
+        .child(text.into())
+}

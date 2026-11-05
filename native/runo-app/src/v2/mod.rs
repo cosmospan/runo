@@ -31,6 +31,7 @@ pub mod server;
 mod ship;
 mod sidebar;
 mod start;
+mod statusbar;
 mod store;
 mod term;
 mod theme;
@@ -434,6 +435,8 @@ pub struct Shell {
     home_tab: u8,
     /// The bot maker is open on Crew.
     maker_open: bool,
+    /// The engines popover over the status bar is open.
+    usage_open: bool,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
     /// The Settings pane last open, where the sidebar's Settings goes back to.
@@ -684,7 +687,9 @@ impl Shell {
         // Learn which agents are installed and the models they offer.
         crate::caps::refresh();
         let store = if std::env::var_os("RUNO_V2_DEMO").is_some() {
-            demo::seed()
+            let mut s = demo::seed();
+            demo::usage(&mut s);
+            s
         } else {
             Store::load()
         };
@@ -761,6 +766,7 @@ impl Shell {
             setup_step: 0,
             home_tab: 0,
             maker_open: false,
+            usage_open: false,
             engine_sel: None,
             settings_pane: Pane::General,
             applied_theme: ui::theme().id,
@@ -1917,10 +1923,14 @@ impl Render for Shell {
                             .overflow_hidden()
                             .child(div().size_full().child(body)),
                     )
-                    .when(!setup, |d| d.children(project_drawer)),
+                    .when(!setup, |d| d.children(project_drawer))
+                    .when(!setup, |d| d.child(self.statusbar(cx))),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.
+            .when(self.usage_open && !setup, |d| {
+                d.child(self.usage_popover(cx))
+            })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(

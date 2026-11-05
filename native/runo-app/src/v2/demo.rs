@@ -417,3 +417,21 @@ pub fn seed() -> Store {
         demo: true,
     }
 }
+
+/// Tokens for the made-up jobs, and plan windows for the engines that report
+/// them, so the status bar and its popover have something to show.
+pub(super) fn usage(store: &mut Store) {
+    for j in &mut store.jobs {
+        j.tokens = 38_000 + j.id * 61_700 % 420_000;
+    }
+    let now = crate::usage::now_secs();
+    let window = |kind: &str, used: f32, resets: i64| crate::planlimit::PlanLimit {
+        status: crate::planlimit::Status::Allowed,
+        kind: kind.into(),
+        resets_at: Some(now + resets),
+        used: Some(used),
+    };
+    crate::usage::note_live("claude", &window("five_hour", 42., 2 * 3600 + 900), now);
+    crate::usage::note_live("claude", &window("seven_day", 18., 4 * 86_400), now);
+    crate::usage::note_live("codex", &window("five_hour", 86., 47 * 60), now);
+}
