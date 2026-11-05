@@ -18,7 +18,7 @@ Scores (`SquadCode v2 brain eval` and `eval hard`):
 | --- | --- | --- |
 | Rules | 51 | 70 |
 | Tiny classifier, then rules | 53 | 105 |
-| Fin 0.8B | 53 | not scored yet |
+| Fin 0.8B (Smart Fin) | 53 | 117 |
 
 ## The pieces
 
