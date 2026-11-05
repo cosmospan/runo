@@ -5,7 +5,7 @@ to a crew of coding bots: short and long, typos, pasted errors, questions.
 Each becomes one chat example in the same format `SquadCode v2 brain export`
 writes, so both can be trained on together.
 
-Sentences that appear in eval/route.jsonl are dropped, so the test set stays
+Sentences that appear in eval/route.jsonl or eval/route_hard.jsonl are dropped, so the test set stays
 unseen.
 
     python make_data.py --out synth.jsonl --per-kind 600
@@ -82,7 +82,8 @@ def main() -> None:
 
     held_out = {
         json.loads(l)["text"].strip().lower()
-        for l in (HERE / "eval" / "route.jsonl").read_text().splitlines()
+        for f in ("route.jsonl", "route_hard.jsonl")
+        for l in (HERE / "eval" / f).read_text().splitlines()
         if l.strip()
     }
     import anthropic

@@ -59,6 +59,8 @@ pub fn examples(store: &Store, crew: &[Member]) -> Vec<String> {
 
 /// The fixed set of sentences every model is scored on before it ships.
 pub const CASES: &str = include_str!("../../../../../training/eval/route.jsonl");
+/// Messier sentences, none of them trained on: where models differ.
+pub const HARD: &str = include_str!("../../../../../training/eval/route_hard.jsonl");
 
 /// How a router did on a set of cases: right, out of, and the ones it missed
 /// as (sentence, expected, got).
@@ -146,5 +148,32 @@ mod tests {
             s.percent(),
             s.missed
         );
+    }
+
+    /// The tiny classifier is built in, so it must beat the rules on the
+    /// messy sentences and not lose ground on the plain ones. The trainer
+    /// (training/train_tiny.py) prints the same scores, so a mismatch here
+    /// means the two compute features differently.
+    #[test]
+    fn the_tiny_classifier_beats_the_rules_on_messy_sentences() {
+        let crew = Member::CREW;
+        let rules = score(HARD, |t| route::by_rules(t, &crew).mode);
+        let tiny = score(HARD, |t| route::by_tiny(t, &crew).mode);
+        let both = score(HARD, |t| route::built_in(t, &crew).mode);
+        assert!(
+            tiny.right >= 100,
+            "tiny got {}/{}: {:#?}",
+            tiny.right,
+            tiny.total,
+            tiny.missed
+        );
+        assert!(
+            both.right > rules.right + 20,
+            "rules {} vs both {}",
+            rules.right,
+            both.right
+        );
+        let plain = score(CASES, |t| route::built_in(t, &crew).mode);
+        assert!(plain.right == plain.total, "{:#?}", plain.missed);
     }
 }

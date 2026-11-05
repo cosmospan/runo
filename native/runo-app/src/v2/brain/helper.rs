@@ -407,8 +407,10 @@ mod tests {
 
     #[test]
     fn someone_elses_server_is_left_to_them() {
-        let mut st = AppSettings::default();
-        st.brain_model = "qwen3:0.6b".into();
+        let mut st = AppSettings {
+            brain_model: "qwen3:0.6b".into(),
+            ..Default::default()
+        };
         assert!(!applies(&st));
         st.brain_model = MODEL.into();
         st.brain_url = "http://127.0.0.1:11434/v1".into();

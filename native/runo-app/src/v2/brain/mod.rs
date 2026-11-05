@@ -26,6 +26,7 @@ pub mod model;
 pub mod place;
 pub mod route;
 pub mod teach;
+pub mod tiny;
 
 pub use place::{place, JobAsk, Site, Sites};
 

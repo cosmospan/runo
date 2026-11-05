@@ -40,7 +40,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
             }
             // From a terminal, wait for Squad's own server to load when the
             // rules aren't sure, rather than answering with the rules.
-            if route::by_rules(&rest, &crew).sure < route::Route::SURE {
+            if route::built_in(&rest, &crew).sure < route::Route::SURE {
                 helper::ensure(&st, std::time::Duration::from_secs(30));
             }
             let r = route::route(&st, &rest);
@@ -101,6 +101,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
         }
         "eval" => {
             let cases = match args.get(1) {
+                Some(h) if h == "hard" => teach::HARD.to_string(),
                 Some(p) => std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?,
                 None => teach::CASES.to_string(),
             };
@@ -111,6 +112,23 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 rules.total,
                 rules.percent()
             );
+            for (name, s) in [
+                (
+                    "Tiny",
+                    teach::score(&cases, |t| route::by_tiny(t, &crew).mode),
+                ),
+                (
+                    "Built in (tiny, then rules)",
+                    teach::score(&cases, |t| route::built_in(t, &crew).mode),
+                ),
+            ] {
+                out.push_str(&format!(
+                    "\n{name}: {}/{} ({:.0}%)",
+                    s.right,
+                    s.total,
+                    s.percent()
+                ));
+            }
             let Some(m) = model::Local::from_settings(&st) else {
                 out.push_str("\nSmart Fin is off, so only the rules were scored.");
                 return Ok(out);

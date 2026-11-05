@@ -1,20 +1,33 @@
 # Training Squad's own model
 
-Squad's intelligence layer (`native/runo-app/src/v2/brain/`) works with rules
-alone. When Smart Fin is on and the rules aren't sure, it asks a small model on the person's
-computer first, and uses the answer only if it checks out. This folder trains
-that model: a small open base model fine-tuned on Squad's own jobs.
+Squad's intelligence layer (`native/runo-app/src/v2/brain/`) picks the kind of
+job and the bot in three steps, each used only when the one before isn't sure:
 
-Nothing here runs on its own, and nothing has been trained yet. See the
-proposal for the base model, the data, where training runs and what it costs.
+1. **The tiny classifier**, built into the app: about 5,500 word and
+   letter-pattern weights (140 KB) from `train_tiny.py`. Microseconds, no
+   download, always on.
+2. **The keyword rules.**
+3. **Smart Fin**, only if the person turns it on: Squad's own small model
+   (Qwen3.5-0.8B fine-tuned here, 505 MB), downloaded once and run by a
+   `llama-server` that Squad starts on demand and stops when idle. Its answer
+   is used only if it checks out.
+
+Scores (`SquadCode v2 brain eval` and `eval hard`):
+
+| | Plain (53) | Messy (120) |
+| --- | --- | --- |
+| Rules | 51 | 70 |
+| Tiny classifier, then rules | 53 | 105 |
+| Fin 0.8B | 53 | not scored yet |
 
 ## The pieces
 
 | File | What it does |
 | --- | --- |
-| `eval/route.jsonl` | The fixed test set. Every model is scored on it before it ships, and it is never trained on. |
+| `eval/route.jsonl`, `eval/route_hard.jsonl` | The fixed test sets: 53 plain sentences and 120 messy ones. Every model is scored on both before it ships, and neither is ever trained on. |
 | `seeds/*.txt`, `build_data.py` | 380 hand-written job sentences, and the script that turns them into about 1,900 labelled examples with no API key. |
 | `make_data.py` | Writes training examples: varied job sentences for each kind of job, labelled, from a teacher model. |
+| `train_tiny.py` | Trains the tiny classifier in seconds, with no packages, and writes its weights into the app. |
 | `train_lora.py` | Fine-tunes the base model with LoRA on the examples. |
 | `requirements.txt` | Python packages for the two scripts. |
 

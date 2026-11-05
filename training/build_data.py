@@ -3,7 +3,7 @@
 seeds/<kind>.txt holds hand-written job sentences, one per line, for each kind
 of job. Each seed is written out as is and as a few variants a real person
 might type: lowercase, a typo, "can you…" in front, a note on the end. Any
-sentence that is also in eval/route.jsonl is dropped, so the test set stays
+sentence that is also in eval/route.jsonl or eval/route_hard.jsonl is dropped, so the test set stays
 unseen.
 
     python build_data.py --out work/data/synth.jsonl
@@ -61,7 +61,8 @@ def main() -> None:
 
     held_out = {
         json.loads(l)["text"].strip().lower()
-        for l in (HERE / "eval" / "route.jsonl").read_text().splitlines()
+        for f in ("route.jsonl", "route_hard.jsonl")
+        for l in (HERE / "eval" / f).read_text().splitlines()
         if l.strip()
     }
     rng = random.Random(7)

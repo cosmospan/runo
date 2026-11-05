@@ -1,0 +1,5561 @@
+#kinds	ask build fix review test tidy
+b:"_on	-1 -1 6 -2 -1 -1
+b:"_too	-1 -1 6 -2 -1 -1
+b:'soft_unicode'_from	-1 -2 7 -1 -1 -2
+b:'string'_is	-1 -2 5 -1 -1 -1
+b:'user_id'_in	-1 -1 6 -1 -1 -1
+b:,_add	-2 11 -4 -3 1 -3
+b:,_avatars	-1 -1 5 -1 -1 -1
+b:,_check	-1 -2 -1 6 -1 -1
+b:,_how	6 -1 -2 -2 -1 -1
+b:,_is	-3 -1 -2 7 -1 -1
+b:,_it	-1 -2 9 -1 -1 -2
+b:,_look	-1 -1 -1 5 -1 -1
+b:,_make	-1 -1 -5 -2 -5 14
+b:,_stabilize	0 0 -2 -1 -3 7
+b:,_the	-4 -3 19 -5 -3 -5
+b:,_upgrade	-1 -1 -1 -1 -1 5
+b:,_what	6 -1 -2 -2 -1 -1
+b:,_what's	6 -1 -2 -2 -1 -1
+b:-_day	-1 6 -1 -1 -1 -2
+b:-_fns	-2 -5 -2 -2 -2 12
+b:-_side	0 5 -2 -1 -3 0
+b:._12	-2 -1 -1 -1 -1 6
+b:._calculatetotal	-2 -2 8 -2 -1 -2
+b:._json	1 -2 -3 -2 -1 7
+b:._logs	-3 -2 -3 -2 -2 11
+b:._py	-1 -1 6 -1 -1 -1
+b:._ts	12 -1 -3 -3 -2 -2
+b:/_await	-1 -1 -3 -1 -1 7
+b:/_session	-1 -1 6 -1 -1 -1
+b:100_before	-1 -3 10 -3 -1 -1
+b:100k_rows	-1 -1 -5 -6 16 -2
+b:10_seconds	0 5 -2 0 -1 -1
+b:10mb_fail	-2 -3 14 -3 -3 -2
+b:12_and	-2 -1 -1 -1 -1 6
+b:16_in	-1 -4 -1 -1 -1 7
+b:2000_line	-2 -2 -2 -2 -1 10
+b:22_?	-3 0 -2 -1 7 -1
+b:3_.	-2 -1 -1 -1 -1 6
+b:401_even	-1 -1 7 -1 -3 -1
+b:404_for	0 -2 -2 -7 12 0
+b:7_-	-1 6 -1 -1 -1 -2
+b::_'user_id'	-1 -1 6 -1 -1 -1
+b::_:	-1 -2 6 -1 -1 -1
+b::_cannot	-2 -3 10 -1 -2 -2
+b::_the	-1 -3 9 -1 -1 -3
+b::_type	-1 -2 5 -1 -1 -1
+b:?_!	12 -5 -2 -2 -2 -1
+b:?_asap	11 -1 -4 0 -2 -3
+b:?_in	21 -5 -6 -1 -4 -6
+b:?_on	13 -2 -5 0 -2 -3
+b:?_thanks	15 -3 -9 4 -2 -4
+b:?_try	-3 0 -2 -1 7 -1
+b:?_ty	14 -3 -5 2 -3 -4
+b:?_when	13 -3 -7 1 -2 -3
+b:`_data	-1 -1 -1 -2 -1 6
+b:`_folder	1 -1 -2 -2 -1 5
+b:`_misc	-2 -1 -4 -2 -2 12
+b:`_to	-1 -1 -1 -2 -1 6
+b:a_"	-1 8 -2 -1 -2 -1
+b:a_7	-1 6 -1 -1 -1 -2
+b:a_bom	0 -2 6 0 -2 -1
+b:a_dashboard	-1 7 -3 -1 -1 -1
+b:a_feedback	-1 5 -2 -1 -1 -1
+b:a_go	-2 7 -2 -1 -2 -1
+b:a_hook	-1 -2 -4 -2 -2 11
+b:a_leaderboard	0 5 -1 -1 -2 -1
+b:a_new	6 -1 -1 -1 -2 -1
+b:a_png	-1 -5 10 -1 -2 -2
+b:a_quick	-4 -1 -1 7 -1 -1
+b:a_security	-1 -1 -2 7 -1 -2
+b:a_test	-1 -9 -2 -1 14 -1
+b:a_theme	-2 10 -3 -2 -2 -2
+b:a_valid	-1 -1 5 -1 -2 -1
+b:a_way	-1 6 -2 -1 -1 -1
+b:accepts_invalid	-2 -2 13 -3 -3 -2
+b:access_control	-1 -1 -5 11 -2 -2
+b:accessibility_of	0 -1 -4 -3 10 -1
+b:account_,	-1 -2 9 -1 -1 -2
+b:actions_to	-1 -3 -1 0 -1 6
+b:actually_work	-1 -3 -1 -1 9 -3
+b:add_a	1 27 -10 -7 -3 -7
+b:add_an	-3 16 -5 -3 -2 -4
+b:add_avatars	-1 6 -2 -1 -1 -1
+b:add_contract	0 -4 -1 0 8 -2
+b:add_csv	-1 7 -1 -1 -3 -1
+b:add_filters	0 5 -1 -1 -3 0
+b:add_server	0 5 -2 -1 -3 0
+b:add_sound	-1 8 -4 -1 -2 -1
+b:add_sso	-1 8 -2 0 -4 -1
+b:add_support	-1 6 -1 -1 -3 -1
+b:add_tagging	-1 7 -2 -1 -2 -1
+b:add_tests	-1 -8 -2 -2 15 -2
+b:add_tetss	0 -5 0 -1 7 -1
+b:add_tsets	0 -7 -1 -1 9 -1
+b:add_unit	0 -4 0 0 5 0
+b:admin_impersonation	-4 -1 -2 8 -1 -1
+b:admins_can't	-1 -2 -1 -1 7 -1
+b:admins_invite	-1 7 -2 -1 -2 -1
+b:after_the	-1 -1 7 -1 -2 -1
+b:against_bots	-6 0 -2 9 -1 0
+b:all_api	-1 -3 -1 -1 9 -3
+b:all_github	-1 -3 -1 0 -1 6
+b:all_the	0 -3 -9 -5 -4 21
+b:allow_guest	-3 18 -3 -4 -5 -3
+b:allow_guset	-1 8 -1 -2 -2 -1
+b:already_done	-2 -2 -5 -1 -1 12
+b:already_in	-1 -2 8 -1 -1 -3
+b:an_empty	-1 -2 -1 -1 6 -2
+b:an_rss	0 6 0 -1 -4 0
+b:and_compare	-1 -1 -3 -1 7 -2
+b:and_fix	-3 -4 -3 -2 -4 16
+b:and_loads	-1 -2 -2 -4 9 -1
+b:and_point	-1 -1 -2 6 -1 -1
+b:and_report	-1 -1 -1 -1 6 -2
+b:and_tell	-6 -2 -2 5 8 -3
+b:and_the	-1 -4 -4 -2 5 7
+b:android_14	-1 -1 6 -1 -1 -1
+b:any_code	9 -1 -1 -3 -1 -3
+b:any_personal	-1 -2 -1 7 -2 -1
+b:any_secrets	-4 -1 -2 8 0 -1
+b:any_xss	-5 0 -1 9 0 -3
+b:anything_in	-3 -1 -2 8 -1 -1
+b:api_clients	-1 -1 -2 -1 -1 6
+b:api_code	-1 -1 -3 -1 -1 7
+b:api_docs	-1 -3 -1 -1 9 -3
+b:api_doesn't	-1 -1 -2 11 -6 -1
+b:api_returns	-1 -3 5 -6 6 -2
+b:api_tokens	-6 -1 -2 11 -1 -1
+b:api_versioned	10 0 -2 -4 -1 -2
+b:app_and	0 -4 -1 0 8 -2
+b:app_crashes	-1 -1 7 -1 -2 -2
+b:app_for	-1 0 -1 7 -4 -1
+b:apply_rustfmt	-1 -3 -2 -1 -2 10
+b:are_already	-2 -2 -5 -1 -1 12
+b:are_being	-3 -3 13 -2 -2 -3
+b:are_public	6 -2 -1 -2 -1 -1
+b:are_reported	5 -1 -1 -1 -1 -1
+b:are_sanitized	-2 -2 -3 9 -2 -2
+b:are_stretched	-6 -4 20 -5 -3 -3
+b:are_the	6 -1 -2 -1 -1 -1
+b:are_there	-2 -1 -1 8 -1 -3
+b:are_we	-1 -2 -3 8 -1 -1
+b:around_the	-1 -3 -1 -1 7 -1
+b:as_garbage	-2 -2 8 -1 -1 -1
+b:as_json	-1 8 -3 -1 -2 -2
+b:async_/	-1 -1 -3 -1 -1 7
+b:at_once	-1 11 -5 -1 -1 -3
+b:at_the	-3 -2 12 3 -6 -4
+b:audio_cuts	-2 -2 10 -3 -2 -2
+b:audit_of	-2 -2 -2 9 -1 -2
+b:audit_our	-1 -1 -1 7 -1 -2
+b:audit_the	-1 -2 -8 18 -3 -4
+b:auth_changes	-4 0 -1 7 0 -1
+b:auth_test	-1 -1 -4 -2 -6 14
+b:autocomplete_shows	-1 -1 5 -1 -1 -2
+b:avatars_are	-4 -3 16 -4 -2 -3
+b:avatars_to	-1 8 -3 -1 -2 -2
+b:avtaars_are	-2 -1 7 -2 -1 -1
+b:await_in	-1 -1 -3 -1 -1 7
+b:back_to	-1 -1 8 -2 -1 -2
+b:backwards_compatibility	-4 0 -1 6 0 0
+b:badge_never	-1 -1 6 -1 -1 -2
+b:bar_jumps	-1 -1 8 -2 -1 -2
+b:be_closed	-1 -1 8 -2 -2 -2
+b:be_spoofed	-1 0 -1 7 -3 -1
+b:before_20	-1 -3 10 -3 -1 -1
+b:before_i	-3 -2 -5 14 -2 -2
+b:being_sent	-3 -3 13 -2 -2 -3
+b:benchmarks_and	-1 -1 -3 -1 7 -2
+b:between_the	3 -4 -1 -1 7 -3
+b:biggest_?	6 -1 -2 -1 -1 -1
+b:blocks_everyone	-1 -2 7 -1 -2 -2
+b:blurry_on	-1 -1 6 -2 -1 -1
+b:bot_replies	-1 -1 7 -1 -1 -3
+b:bots_?	-6 0 -2 9 -1 0
+b:bottom_of	-1 -1 7 -2 -1 -2
+b:branch_?	-3 -1 -2 9 -1 -2
+b:branch_for	-1 -1 -1 5 -2 -1
+b:branches_in	0 0 -6 -2 9 -1
+b:break_backwards	-4 0 -1 6 0 0
+b:breaks_the	-1 -1 9 -1 -2 -4
+b:brute_force	-4 -1 -2 8 -1 -1
+b:bucket_policies	-1 -1 -4 9 -1 -2
+b:build_a	-4 27 -8 -4 -7 -5
+b:bump_all	-2 -1 -3 -1 -1 8
+b:but_debug	-1 -1 7 -2 -1 -1
+b:button_copies	-2 -1 7 -1 -1 -2
+b:button_does	-3 -1 8 -2 -1 -1
+b:by_email	-1 7 -2 -1 -2 -1
+b:by_every	-1 14 -5 -1 -2 -5
+b:by_price	-1 -2 7 -2 -1 -1
+b:by_removing	-1 -1 -3 -1 -1 7
+b:callbacks_with	-1 -1 -3 -1 -1 7
+b:can't_be	-1 -1 8 -2 -2 -2
+b:can't_delete	-1 -2 7 -1 -1 -2
+b:can't_see	-1 -2 -1 -1 7 -1
+b:can_be	-1 0 -1 7 -3 -1
+b:cart_.	12 -1 -3 -3 -2 -2
+b:cehck_the	-1 -1 -1 6 -2 -1
+b:change_their	-1 6 -2 -1 -1 -1
+b:changed_in	10 -1 -2 -4 -2 -2
+b:changes_?	-4 0 -1 7 0 -1
+b:characters_like	-1 -1 5 -1 -1 -1
+b:chcek_the	0 -1 -2 6 -2 -1
+b:check_accessibility	0 -1 -2 -2 6 0
+b:check_if	-3 -3 -4 15 -3 -2
+b:check_that	-3 -4 -5 1 13 -2
+b:check_the	-3 -4 -8 13 6 -4
+b:ci_?	10 -1 -2 -3 -1 -2
+b:class_components	-1 -2 -1 -1 -1 6
+b:clean_up	-4 -2 -8 -4 -3 22
+b:cli_with	0 -1 -2 -1 6 -2
+b:client_?	6 0 -1 -2 -1 -2
+b:client_with	-1 -1 -3 -1 -2 9
+b:closed_on	-1 -1 8 -2 -2 -2
+b:code_?	6 -1 -1 -2 0 -2
+b:code_generates	7 0 -1 -2 -1 -2
+b:code_in	-2 -2 -4 -3 -2 14
+b:code_that	9 -1 -1 -3 -1 -3
+b:cold_start	-1 -2 8 -2 -1 -1
+b:commented_out	-1 -1 -2 -2 -1 6
+b:comments_feature	-5 0 -1 9 0 -3
+b:committed_keys	0 -1 -1 6 -3 -1
+b:compare_with	-1 -1 -3 -1 7 -2
+b:compatibility_?	-4 0 -1 6 0 0
+b:components_to	-1 -2 -1 -1 -2 7
+b:compose_up	-1 -2 7 -1 -1 -3
+b:condition_in	0 0 5 -2 -1 -2
+b:config_for	7 -1 -1 -2 -1 -2
+b:config_loading	-2 -1 -3 -1 -1 9
+b:config_parsing	-1 -1 7 -1 -1 -3
+b:console_.	-3 -2 -3 -2 -2 11
+b:control_on	-1 -1 -5 11 -2 -2
+b:convert_class	-1 -2 -1 -1 -1 6
+b:convert_the	-1 -1 -2 -1 -1 6
+b:copies_the	-2 1 6 -2 -2 -2
+b:copy_button	-2 -1 7 -1 -1 -2
+b:corner_of	-1 6 -3 -1 -1 -1
+b:correct_?	-6 -1 -4 14 -2 -1
+b:correctly_in	-1 -3 -3 -1 10 -3
+b:cors_setup	-1 -1 -3 11 -4 -2
+b:could_you	-11 0 4 3 1 4
+b:counter_goes	-2 -1 11 -2 -2 -4
+b:cover_the	0 0 -6 -2 9 -1
+b:coverage_on	-1 -3 -6 -3 15 -2
+b:covers_the	-2 -2 9 -1 -3 -2
+b:create_a	-3 25 -5 -5 -7 -5
+b:credentials_anywhere	-1 -1 -1 6 -2 -1
+b:cron_job	-1 1 6 -1 -2 -2
+b:csp_headers	-1 -1 -3 6 -1 -1
+b:csv_import	-1 6 -1 -1 -2 -1
+b:curious_,	8 -1 -2 -2 -1 -2
+b:custom_http	-1 -1 -2 -1 -1 6
+b:cut_off	-1 -1 7 -2 -1 -2
+b:cuts_out	-2 -2 10 -3 -2 -2
+b:daily_signups	-1 7 -3 -1 -1 -1
+b:dark_mode	-2 0 4 -3 6 -5
+b:dashboard_showing	-1 6 -3 -1 -1 -1
+b:data_`	-1 -1 -1 -2 -1 6
+b:data_as	-1 8 -3 -1 -2 -2
+b:database_with	-1 7 -1 0 -4 -1
+b:date_-	-2 -5 -2 -2 -2 12
+b:date_formatting	0 -4 0 0 5 0
+b:date_helper	-1 -1 -3 -1 -1 7
+b:date_range	0 5 -1 -1 -3 0
+b:day_free	-1 6 -1 -1 -1 -2
+b:dead_code	-1 -1 -2 -2 -1 7
+b:debug_is	-1 -1 7 -2 -1 -1
+b:deduplicate_the	-1 -1 -3 -1 -1 7
+b:delete_for	-1 6 -1 -2 -2 -1
+b:delete_the	-2 -1 -4 -4 -1 11
+b:delpoy_script	5 -1 -1 -1 -1 -2
+b:dependencies_for	-1 -1 -1 7 -1 -2
+b:dependencies_thanks	-1 -1 -1 -1 -1 5
+b:dependency_versions	-1 -1 -1 -1 -1 6
+b:deploy_script	10 -1 -2 -1 -2 -4
+b:diff_for	-1 -1 -1 6 -2 -1
+b:do_a	-6 -3 -3 16 -2 -3
+b:do_i	9 -7 -1 -1 -1 0
+b:do_the	6 -1 -1 -1 -2 -1
+b:do_we	11 -2 -3 -3 -2 -2
+b:dockerfile_to	-1 -2 -1 -1 -1 6
+b:docs_examples	-1 -2 -1 -1 5 -2
+b:does_nothing	-2 -1 5 -1 -1 -1
+b:does_the	19 -3 -10 -5 4 -5
+b:does_this	7 -1 -1 -2 -1 -1
+b:doesn't_expose	-1 -1 -1 6 -4 0
+b:doesn't_show	-2 -1 8 -2 -1 -2
+b:don't_load	-1 -3 7 -1 -2 -1
+b:don't_use	-2 -1 -4 -4 -1 11
+b:drop_support	-1 -9 -1 -3 -3 17
+b:drop_supprot	-1 -1 0 -1 -2 6
+b:duplicate_a	-1 6 -1 -1 -1 -3
+b:duplicate_api	-1 -1 -2 -1 -1 7
+b:duplicate_rows	-1 -3 8 -1 -1 -2
+b:e2e_tests	-1 -1 -3 -1 -2 9
+b:edits_made	-2 -1 8 -1 -1 -2
+b:effects_when	-1 6 -3 -1 -1 0
+b:email_is	-1 -1 -8 -2 15 -2
+b:email_queue	-1 6 -2 -1 -2 -1
+b:emails_are	-3 -2 10 -2 -2 -2
+b:emails_from	5 -1 -2 -1 -1 -1
+b:emails_point	-1 -2 9 -1 -1 -3
+b:empty_database	-1 -2 -1 -1 6 -2
+b:empty_input	0 -7 0 0 8 0
+b:encryption_of	-1 -1 -3 8 -1 -2
+b:end_and	-2 -1 -2 -1 9 -3
+b:end_to	-2 -1 -2 -1 9 -3
+b:endpoint_that	-1 8 -3 -1 -2 -1
+b:endpoints_for	0 -1 -1 6 -3 -1
+b:endpoints_nobody	-1 -1 -2 -1 -1 5
+b:enough_to	-3 -1 -2 7 0 -1
+b:error_:	-1 -1 5 -1 -1 -1
+b:error_branches	0 0 -6 -2 9 -1
+b:error_messages	-1 -1 -2 -1 -1 6
+b:error_ts2322	-1 -2 5 -1 -1 -1
+b:errors_are	5 -1 -1 -1 -1 -1
+b:eslint_warnings	-1 -1 -3 -1 -1 8
+b:even_with	-1 -1 7 -1 -3 -1
+b:every_column	-1 10 -3 -1 -2 -4
+b:every_few	-2 -3 12 -2 -2 -3
+b:every_file	-1 -3 -3 -2 -1 10
+b:every_night	-1 -1 6 -1 -2 -2
+b:every_route	-1 -1 -2 -1 7 -2
+b:every_screen	-1 -2 -2 -1 7 -1
+b:examples_actually	-1 -2 -1 -1 5 -2
+b:expire_immediately	-2 -2 13 -2 -5 -2
+b:explain_how	9 0 -5 -2 -1 -1
+b:explain_the	19 -3 -5 -5 -2 -4
+b:export_their	-1 8 -3 -1 -2 -2
+b:export_works	0 -2 -2 -1 7 -1
+b:expose_other	-1 -1 -1 6 -4 0
+b:extract_the	-1 -1 -3 -1 -2 7
+b:fail_randomly	-1 0 -3 -1 -5 11
+b:fail_sielntly	-1 -2 6 -1 -1 -1
+b:fail_silently	-1 -2 8 -2 -2 -1
+b:fails_?	5 -1 -2 -1 -1 0
+b:fails_with	-1 -3 12 -1 -2 -4
+b:fake_data	3 7 -1 -1 -6 -2
+b:feature_?	-5 0 -1 9 0 -3
+b:feature_flags	3 -1 -3 -4 -1 6
+b:feature_safe	-4 -1 -2 7 -1 -1
+b:feed_for	0 6 0 -1 -4 0
+b:feedback_widget	-1 5 -2 -1 -1 -1
+b:few_minutes	-1 -2 6 -1 -1 -2
+b:few_seconds	-1 -2 7 -1 -2 -2
+b:file_into	-2 -2 -2 -2 -1 10
+b:file_paths	-1 -1 -2 6 -1 -1
+b:file_upload	-2 -2 -2 9 -1 -2
+b:files_"	-1 -1 6 -2 -1 -1
+b:files_at	-1 8 -3 -1 -1 -2
+b:files_to	-1 -1 -2 -1 -1 6
+b:files_with	0 -2 5 0 -2 -1
+b:filter_resets	-1 -1 5 -2 -1 -1
+b:filters_for	0 5 -1 -1 -3 0
+b:fix_all	-2 -2 -5 -2 -2 14
+b:fix_clippy	-1 -3 -2 -1 -2 10
+b:fix_the	-3 -2 21 -5 -3 -9
+b:fix_what	-2 -1 -1 -1 -1 6
+b:flags_we	-1 -1 -3 -2 -1 8
+b:flaky_,	-1 -1 -4 -2 -6 14
+b:flow_end	-2 -1 -2 -1 9 -3
+b:flow_safe	-6 0 -2 9 -1 0
+b:flow_when	5 -2 -2 -1 1 -1
+b:font_looks	-1 -1 7 -2 -1 -1
+b:for_ci	10 -1 -2 -3 -1 -2
+b:for_committed	0 -1 -1 6 -3 -1
+b:for_contacts	-1 6 -1 -1 -3 -1
+b:for_date	0 5 -1 -1 -3 0
+b:for_empty	0 -7 0 0 8 0
+b:for_insecure	-1 -1 -1 7 -4 -1
+b:for_missing	-1 -3 -3 -1 8 -1
+b:for_node	-2 -10 -2 -4 -5 23
+b:for_projects	-1 5 -1 -2 -1 -1
+b:for_risks	-1 -1 -3 11 -4 -2
+b:for_security	-1 -1 -1 6 -2 -1
+b:for_some	-1 -2 7 -2 -2 -1
+b:for_sql	-1 -1 -2 6 -1 -1
+b:for_subscriptions	-1 5 0 -1 -2 -1
+b:for_the	-8 14 -19 -17 43 -13
+b:for_unicode	-1 -6 0 -1 9 -1
+b:for_users	-3 -3 9 -6 5 -3
+b:force_logins	-5 -1 -2 10 -1 -1
+b:form_accepts	-2 -2 13 -3 -3 -2
+b:form_logic	-1 -2 -4 -2 -2 11
+b:form_twice	-1 -1 5 -1 -1 -1
+b:format_consistent	-1 -1 -2 -1 -1 6
+b:free_trial	-1 6 -1 -1 -1 -2
+b:from_'markupsafe'	-1 -2 7 -1 -1 -2
+b:from_?	6 -1 -2 -2 -1 -1
+b:from_moment	-2 -4 -2 -1 -1 10
+b:from_npm	-2 -3 -3 -2 -2 11
+b:from_the	-1 -1 7 -2 -1 -2
+b:from_users	-1 -1 -3 8 -2 -1
+b:function_components	-1 -2 -1 -1 -2 6
+b:game_saves	-1 -2 -2 -4 9 -1
+b:game_stutters	-1 -2 7 -1 -2 -2
+b:generates_invoices	7 0 -1 -2 -1 -2
+b:get_"	-1 -1 6 -2 -1 -1
+b:get_logged	-1 -2 8 -1 -1 -2
+b:get_rid	-2 -1 -3 -2 -2 10
+b:github_actions	-1 -3 -1 0 -1 6
+b:go_service	-2 -2 9 -2 -2 -2
+b:go_version	-1 -1 -1 -1 -2 7
+b:go_worker	-2 7 -2 -1 -2 -1
+b:goes_negative	-1 -1 5 -1 -1 -2
+b:goroutines_under	-2 -2 9 -2 -2 -2
+b:growing_until	-1 -1 7 -1 -1 -2
+b:guest_checkout	-2 15 -2 -3 -5 -3
+b:guset_checkout	-1 8 -1 -2 -2 -1
+b:handle_routing	7 -1 -1 -2 -2 -1
+b:handler_and	-1 0 -1 6 -3 -1
+b:handler_with	0 0 -6 -2 9 -1
+b:handlers_/	-1 -1 6 -1 -1 -1
+b:handles_100k	-1 -1 -3 -3 9 -1
+b:has_blank	-1 -1 7 -1 -2 -2
+b:has_the	-1 0 7 -1 -1 -2
+b:hashing_code	-1 -1 -1 6 -1 -2
+b:how_are	10 -2 -2 -4 -1 -1
+b:how_do	20 -8 -3 -3 -4 -2
+b:how_does	12 -1 -4 -3 -2 -2
+b:how_errors	5 -1 -1 -1 -1 -1
+b:how_is	12 -1 -4 -4 -1 -2
+b:how_the	13 -1 -6 -2 -1 -1
+b:how_we	-6 -1 -2 11 -1 -1
+b:http_client	-1 -1 -3 -1 -2 9
+b:i'm_curious	8 -1 -2 -2 -1 -2
+b:i'm_new	7 -1 -1 -2 -1 -2
+b:i_add	7 -7 0 0 0 0
+b:i_change	-1 -1 6 -2 -1 -1
+b:i_changed	-4 -1 -1 7 -1 -1
+b:i_merge	-2 -1 -2 7 -1 -1
+b:i_need	-5 0 7 -5 5 -2
+b:i_start	6 -1 -1 -2 0 -2
+b:if_file	-2 -2 -3 9 -2 -2
+b:if_it	-1 0 -1 7 -3 -1
+b:impersonation_feature	-2 0 -1 5 -1 0
+b:impleemnt_offline	-1 6 -1 -1 -2 -1
+b:implement_a	-2 14 -4 -2 -3 -3
+b:implement_infinite	-1 6 -3 -1 -1 -1
+b:implement_rate	-1 9 -4 -2 -2 -1
+b:import_for	-1 6 -1 -1 -2 -1
+b:import_name	-1 -2 6 -1 -1 -2
+b:importer_handles	-1 -1 -3 -3 9 -1
+b:importerror_:	-1 -2 7 -1 -1 -2
+b:imports_in	-2 -4 -5 -3 -2 16
+b:in_cart	12 -1 -3 -3 -2 -2
+b:in_comments	-2 14 -3 -3 -2 -5
+b:in_emails	-2 -3 11 -2 -1 -3
+b:in_every	-2 -5 -6 -2 6 8
+b:in_handlers	-1 -1 6 -1 -1 -1
+b:in_india	-2 -3 13 -4 -3 -1
+b:in_orderservice	-2 -2 8 -2 -1 -2
+b:in_package	-2 -1 -3 -1 -1 8
+b:in_prod	3 -2 -6 -4 4 5
+b:in_the	-3 2 -14 26 -9 -1
+b:in_this	-3 -1 -2 9 -1 -2
+b:in_use	-1 -3 10 -1 -2 -4
+b:in_with	-2 11 0 -2 -4 -3
+b:increase_coverage	-1 -2 -3 -1 8 -1
+b:infinite_redirect	-1 -2 5 -1 -1 -1
+b:injection_in	-1 -1 -2 6 -1 -1
+b:input_on	-2 -2 9 -1 -3 -2
+b:input_to	0 -7 0 0 8 0
+b:into_a	-2 0 -4 -2 -2 11
+b:into_pieces	-1 -2 -2 -2 -1 8
+b:into_smaller	-1 -1 -4 -1 -2 10
+b:invalid_emails	-1 -1 5 -1 -1 -1
+b:invisible_on	-1 -1 5 -1 -2 -1
+b:invite_teammates	-1 7 -2 -1 -2 -1
+b:invoices_?	7 0 -1 -2 -1 -2
+b:ios_when	-1 -1 5 -1 -1 -1
+b:is_broken	-1 -1 7 -2 -1 -2
+b:is_cut	-1 -1 7 -2 -1 -2
+b:is_fine	-1 -1 7 -2 -1 -1
+b:is_flaky	-1 -1 -4 -2 -6 14
+b:is_invalidated	6 0 -4 -1 0 -1
+b:is_invisible	-1 -1 5 -1 -2 -1
+b:is_it	-3 -1 -2 9 -1 -2
+b:is_not	-1 -2 7 -1 -2 -2
+b:is_our	-6 -1 -4 14 -2 -1
+b:is_sent	-1 -1 -8 -2 15 -2
+b:is_the	22 -5 -19 16 -6 -8
+b:is_there	6 -2 -2 3 -1 -3
+b:is_wrong	-1 -2 8 -2 -2 -1
+b:it_black	-1 -4 8 -1 -1 -1
+b:it_can	-1 0 -1 7 -3 -1
+b:it_just	-1 -2 9 -1 -1 -2
+b:it_possible	-1 7 -1 -1 -1 -4
+b:it_reliable	-1 0 -3 -1 -3 8
+b:it_safe	-3 -1 -2 9 -1 -2
+b:its_own	-2 -2 9 -1 -1 -4
+b:job_queue	-1 0 9 -3 -1 -4
+b:job_runs	-1 -1 6 -1 -2 -2
+b:jquery_dependency	-1 -1 -2 -1 -1 5
+b:jumps_back	-1 -1 8 -2 -1 -2
+b:just_spins	-1 -2 9 -1 -1 -2
+b:jwt_validation	-3 -1 -2 7 -1 -1
+b:keeps_growing	-1 -1 7 -1 -1 -2
+b:keyboard_covers	-2 -2 9 -1 -3 -2
+b:keyerror_:	-1 -1 6 -1 -1 -1
+b:large_files	-2 -3 11 -2 -1 -3
+b:last_deploy	-1 -1 6 -1 -2 -1
+b:last_month	6 0 -1 -2 -1 -1
+b:latest_versions	-1 -3 -1 0 -1 6
+b:leaderboard_for	0 5 -1 -1 -2 -1
+b:leaking_any	-4 -1 -2 7 0 -1
+b:leaks_goroutines	-1 -1 6 -2 -1 -1
+b:let_admins	-1 10 -3 -2 -3 -2
+b:let_people	-1 8 -3 -1 -2 -1
+b:let_users	-2 13 -4 -2 -2 -2
+b:like_i'm	7 -1 -1 -2 -1 -2
+b:like_é	-2 -2 9 -2 -2 -2
+b:limiter_blocks	-1 -2 7 -1 -2 -2
+b:limiting_enough	-3 -1 -2 7 0 -1
+b:limiting_on	-1 6 -2 -1 -1 -1
+b:line_88	-1 -1 6 -1 -1 -1
+b:line_file	-2 -2 -2 -2 -1 10
+b:link_404s	-2 -1 13 -3 -3 -4
+b:link_says	-1 -2 5 -1 -1 -1
+b:links_expire	-2 -2 13 -2 -5 -2
+b:links_in	-2 -3 11 -2 -1 -3
+b:load_on	-1 -3 8 -1 -2 -1
+b:loading_code	-2 -1 -4 -2 -2 11
+b:log_any	-1 -2 -1 7 -2 -1
+b:logged_out	-1 -2 8 -1 -1 -2
+b:logging_format	-1 -1 -2 -1 -1 6
+b:logic_?	8 -1 -3 -2 -1 -1
+b:logic_into	-1 -2 -4 -2 -2 11
+b:logic_retries	-1 -1 9 -3 -2 -2
+b:login_flow	-1 -1 -2 -1 7 -2
+b:login_stopped	-1 -1 5 -1 -2 -1
+b:login_with	-1 -2 5 -1 -1 -1
+b:logins_?	-5 -1 -2 10 -1 -1
+b:logs_everywhere	-3 -2 -3 -2 -2 11
+b:look_at	-1 0 -1 7 -3 -1
+b:look_for	-3 -3 -3 16 -3 -4
+b:look_over	-3 -4 -9 26 -5 -5
+b:looks_blurry	-1 -1 6 -2 -1 -1
+b:loop_after	-1 -2 6 -1 -1 -1
+b:made_offline	-2 -1 8 -1 -1 -2
+b:magic_numbers	-1 -2 -3 -1 -3 9
+b:make_a	-1 7 -1 0 -4 -1
+b:make_it	-2 6 -5 -2 -7 10
+b:make_sure	-3 -8 -5 -3 27 -8
+b:make_the	-3 10 -12 -4 -6 14
+b:makes_it	-1 -5 10 -1 -2 -2
+b:many_open	-1 -1 6 -2 -1 -1
+b:map_doesn't	-2 -1 8 -2 -1 -2
+b:markdown_in	-1 8 -2 -2 -1 -3
+b:me_how	10 -2 -2 -2 -2 -2
+b:me_if	-1 0 -1 7 -3 -1
+b:me_like	7 -1 -1 -2 -1 -2
+b:me_through	13 -1 -3 -2 -2 -5
+b:me_what	-2 -1 -1 -1 6 -1
+b:memory_usage	-1 -1 5 -1 -1 -1
+b:merge_,	-2 -1 -2 7 -1 -1
+b:merge_the	-3 -1 -2 9 -1 -2
+b:messages_consistent	-1 -1 -2 -1 -2 7
+b:migrate_from	-1 -4 -2 -1 -1 9
+b:migrations_run	0 -2 -2 -1 7 -2
+b:misc_`	-2 -1 -4 -2 -2 12
+b:missing_permission	0 -1 -1 6 -3 -1
+b:missing_users	0 -2 -2 -7 12 0
+b:mobile_app	1 8 -4 5 -7 -3
+b:modal_can't	-1 -1 6 -1 -1 -2
+b:mode_for	-1 11 -1 -3 -4 -2
+b:mode_renders	-1 -3 -3 -1 10 -3
+b:mode_text	-1 -1 7 -1 -2 -1
+b:moment_to	-2 -4 -2 -1 -1 10
+b:move_from	-2 -3 -3 -2 -2 11
+b:multiple_files	-1 8 -3 -1 -1 -2
+b:my_pr	-1 -1 -2 6 -1 -1
+b:name_'soft_unicode'	-1 -2 7 -1 -1 -2
+b:naming_consistent	-1 -1 -3 -1 -1 6
+b:nan_for	-1 -2 7 -2 -2 -1
+b:navigation_to	0 5 -2 -1 -1 -1
+b:need_a	-1 6 -2 -1 -1 -1
+b:need_you	-5 0 7 -5 5 -2
+b:never_clears	-1 -1 6 -1 -1 -2
+b:new_endpoints	0 -1 -1 6 -3 -1
+b:new_pricing	0 5 -3 -1 -1 -1
+b:new_signup	-4 0 -1 6 -1 0
+b:no_data	0 -3 -3 -1 9 -1
+b:nobody_calls	-1 -1 -2 -1 -1 5
+b:node_16	-2 -10 -2 -4 -5 23
+b:node_22	-3 0 -2 -1 7 -1
+b:notifications_badge	-1 -1 8 -2 -2 -2
+b:npm_to	-2 -3 -3 -2 -2 11
+b:nullpointerexception_in	-1 -1 5 -1 -1 -1
+b:numbers_with	-1 -2 -3 -1 -3 9
+b:of_backups	-1 -1 -3 9 -2 -2
+b:of_the	6 -6 -11 -2 6 7
+b:of_what	-4 -1 -1 7 -1 -1
+b:off_at	-1 -1 7 -2 -1 -2
+b:offline_mode	3 10 -3 -3 -4 -3
+b:old_api	-1 -1 -3 -1 -1 7
+b:old_payments	6 0 -1 -2 -1 -2
+b:old_v1	-2 -1 -3 -2 -2 10
+b:on_an	-1 -2 -2 -1 9 -3
+b:on_android	-1 -1 6 -1 -1 -1
+b:on_cold	-1 -2 8 -2 -1 -1
+b:on_files	0 -2 5 0 -2 -1
+b:on_ios	-1 -1 5 -1 -1 -1
+b:on_iphone	-1 -1 6 -1 -2 -1
+b:on_node	-3 0 -2 -1 7 -1
+b:on_the	-7 19 -3 2 1 -12
+b:one_:	-8 8 4 -6 -2 4
+b:one_request	-1 -2 6 -1 -2 -1
+b:open_files	-1 -1 6 -2 -1 -1
+b:opening_large	-2 -2 10 -2 -1 -2
+b:orders_list	0 6 -3 0 -1 -1
+b:orderservice_.	-2 -2 8 -2 -1 -2
+b:organize_imports	-2 -4 -5 -3 -2 16
+b:orgs'_data	-1 -2 -1 -1 7 -1
+b:other_users'	-1 -1 -2 11 -6 -1
+b:our_dependencies	-1 -1 -1 7 -1 -2
+b:our_go	-2 -2 9 -2 -2 -2
+b:our_jwt	-6 -1 -4 14 -2 -1
+b:out_after	-1 -1 6 -2 -1 -1
+b:out_code	-1 -1 -2 -2 -1 8
+b:out_every	-1 -2 8 -1 -1 -2
+b:out_on	-1 -2 8 -2 -1 -1
+b:over_10mb	-2 -3 14 -3 -3 -2
+b:over_my	-1 -1 -2 6 -1 -1
+b:over_the	-2 -2 -7 20 -5 -3
+b:own_messages	-1 -1 8 -1 -1 -3
+b:package_.	-2 -1 -3 -1 -1 8
+b:package_?	8 -1 -2 -3 -1 -2
+b:page_2	-2 -8 21 -5 -4 -3
+b:page_for	-1 7 -3 -1 -1 -1
+b:page_with	-1 -2 -5 -3 12 -2
+b:pagination_skips	-1 -4 12 -3 -2 -2
+b:part_of	7 0 -1 -2 -1 -2
+b:pass_on	-3 0 -2 -1 7 -1
+b:password_reset	-3 -2 -2 -3 13 -3
+b:paths_from	-1 -1 -2 6 -1 -1
+b:payments_client	6 0 -1 -2 -1 -2
+b:payments_module	-1 -3 -6 -3 15 -2
+b:pdf_has	-1 -1 7 -1 -2 -2
+b:people_sign	-1 8 -3 -1 -2 -1
+b:permission_checks	0 -1 -1 6 -3 -1
+b:personal_data	-1 -2 -1 7 -2 -1
+b:pgaination_skips	-1 -2 6 -2 -1 -1
+b:pick_a	-2 10 -3 -2 -2 -2
+b:pin_dependency	-3 -3 -3 -3 -3 14
+b:player_scores	-1 8 -4 -1 -2 -1
+b:please_add	-1 7 -3 -1 0 -1
+b:please_build	-1 5 -2 -1 -1 -1
+b:please_check	0 -1 -1 6 -3 -1
+b:please_is	-3 -1 -3 8 -1 -1
+b:please_let	0 5 -2 -1 -1 -1
+b:please_review	-1 -1 -2 5 -1 -2
+b:please_the	-1 -2 12 -3 -2 -5
+b:pls_add	-2 6 -4 -2 4 -3
+b:pls_implement	-1 5 -2 -1 -1 -1
+b:pls_simplify	-1 -1 -2 -1 -1 5
+b:pls_the	-3 -2 12 -2 -2 -3
+b:png_with	-1 -5 10 -1 -2 -2
+b:point_out	-1 -1 -2 6 -1 -1
+b:point_to	-1 -2 9 -1 -1 -3
+b:policies_in	-1 -1 -4 9 -1 -2
+b:port_already	-1 -2 8 -1 -1 -3
+b:possible_to	-1 7 -1 -1 -1 -4
+b:pr_and	-1 -1 -2 6 -1 -1
+b:pr_touches	-1 -1 -1 5 -1 -1
+b:pressing_enter	-1 -1 6 -1 -1 -2
+b:previous_query	-1 -1 7 -2 -1 -2
+b:price_puts	-1 -2 7 -2 -1 -1
+b:pricing_logic	5 -1 -2 -1 -1 -1
+b:processes_the	-2 7 -2 -1 -2 -1
+b:product_page	-1 -3 7 -1 -2 -1
+b:product_pages	0 5 -2 -1 -3 0
+b:public_?	6 -2 -1 -2 -1 -1
+b:public_api	-1 9 -4 1 -3 -2
+b:puts_100	-2 -3 11 -3 -2 -2
+b:py_line	-1 -1 6 -1 -1 -1
+b:python_3	-2 -1 -1 -1 -1 6
+b:question_:	15 -3 -5 -3 -2 -2
+b:queue_workers	6 -1 -3 -1 -1 -1
+b:quick_one	-8 8 4 -6 -2 4
+b:quick_question	15 -3 -5 -3 -2 -2
+b:quick_review	-3 -1 0 6 0 0
+b:race_condition	0 0 5 -2 -1 -2
+b:rails_to	-3 -4 -5 -2 -2 17
+b:randomly_,	-1 0 -3 -1 -5 11
+b:range_and	0 5 -1 -1 -3 0
+b:rate_limiter	0 -7 6 -2 5 -2
+b:rate_limiting	-5 5 -4 9 -2 -2
+b:reading_this	6 -1 -1 -2 0 -2
+b:redirect_loop	-1 -2 5 -1 -1 -1
+b:reduce_the	-1 -1 -3 -1 -1 7
+b:reducer_in	7 -1 -2 -2 -1 -1
+b:refactor_the	-1 -1 -3 -1 -2 8
+b:reivew_how	-4 -1 -1 7 -1 -1
+b:reivew_the	-1 -1 -3 6 -1 -1
+b:release_build	-1 -1 6 -2 -1 -1
+b:remove_the	-2 -2 -4 -3 -2 12
+b:removing_unused	-1 -1 -3 -1 -1 7
+b:rename_`	-1 -1 -1 -2 -1 6
+b:rename_the	-2 -1 -4 -2 -2 12
+b:renders_correctly	-1 -3 -3 -1 10 -3
+b:reomve_console	-1 -1 -1 -1 -1 5
+b:replace_magic	-1 -2 -3 -1 -3 9
+b:replace_the	-1 -1 -2 -1 -1 7
+b:replies_to	-1 -1 7 -1 -1 -3
+b:repo_?	-5 -1 -2 10 0 -1
+b:report_what	-1 -1 -1 -1 6 -2
+b:reported_to	5 -1 -1 -1 -1 -1
+b:reports_code	-1 -1 -1 -2 -1 5
+b:reports_page	-1 4 -6 10 -5 -3
+b:reproduces_the	-1 -2 -2 0 6 -1
+b:reset_email	-1 -1 -8 -2 15 -2
+b:reset_links	-1 -1 7 -1 -3 -1
+b:resets_when	-2 -2 10 -3 -2 -2
+b:results_from	-1 -1 6 -2 -1 -2
+b:retries_forever	-2 -1 12 -3 -3 -3
+b:retry_logic	-1 -1 7 -2 -2 -2
+b:returns_401	-1 -1 7 -1 -3 -1
+b:returns_404	0 -1 -2 -5 9 0
+b:returns_within	-1 -1 -2 -1 6 -1
+b:review_of	-3 -1 0 6 0 0
+b:review_the	-6 -5 -9 37 -8 -8
+b:rid_of	-2 -1 -3 -2 -2 10
+b:route_returns	-1 -1 -2 -1 6 -1
+b:routing_?	8 -1 -1 -2 -2 -1
+b:rows_show	-1 -3 8 -1 -1 -2
+b:rss_feed	0 6 0 -1 -4 0
+b:run_on	-1 -2 -2 -1 9 -3
+b:run_the	-2 -3 -7 -3 19 -5
+b:rustfmt_and	-1 -3 -2 -1 -2 10
+b:s3_?	9 -1 -1 -3 -1 -3
+b:s3_bucket	-1 -1 -4 9 -1 -2
+b:safe_?	-5 -1 -2 10 -1 -1
+b:safe_against	-6 0 -2 9 -1 0
+b:safe_to	-3 -1 -2 9 -1 -2
+b:save_button	-3 -1 8 -2 -1 -1
+b:saves_and	-1 -2 -2 -4 9 -1
+b:scripts_folder	-1 0 -3 -1 -3 9
+b:scroll_on	-1 6 -3 -1 -1 -1
+b:secrets_in	-4 -1 -2 8 0 -1
+b:security_audit	-1 -1 -2 7 -1 -2
+b:security_issues	-1 -1 -1 5 -2 -1
+b:seeds_the	-1 7 -1 0 -4 -1
+b:segfault_when	-2 -2 8 -2 -1 -2
+b:send_emails	5 -1 -2 -1 -1 -1
+b:sent_twice	-2 -2 8 -1 -1 -2
+b:server_-	0 5 -2 -1 -3 0
+b:service_?	5 -2 -1 -2 0 -1
+b:service_into	-1 -1 -3 -1 -2 8
+b:service_leaks	-1 -1 7 -2 -1 -1
+b:session_.	-1 -1 6 -1 -1 -1
+b:settings_screen	-1 -1 6 -1 -2 -1
+b:setup_for	-1 -1 -3 11 -4 -2
+b:share_link	-2 -1 7 -2 -1 -2
+b:shared_form	-1 -2 -4 -2 -2 11
+b:shared_package	5 0 -1 -2 -1 -1
+b:show_up	-3 -5 17 -3 -2 -4
+b:showing_daily	-1 6 -3 -1 -1 -1
+b:shows_results	-1 -1 6 -2 -1 -2
+b:sigabrt_on	-1 -1 5 -1 -1 -1
+b:sign_in	-1 13 -5 -1 -3 -2
+b:signup_flow	-4 -5 -2 6 6 -1
+b:signup_form	-2 -2 13 -3 -3 -2
+b:signup_page	-1 -2 -5 -3 12 -2
+b:simplify_the	-3 -2 -5 -2 -3 14
+b:size_by	-1 -1 -3 -1 -1 7
+b:skips_page	-2 -6 18 -5 -3 -2
+b:smaller_modules	-1 -1 -4 -1 -2 10
+b:smoke_test	-1 -1 -4 -1 10 -3
+b:soft_delete	-1 6 -1 -2 -2 -1
+b:some_products	-1 -2 7 -2 -2 -1
+b:sortable_by	-1 10 -4 -1 -1 -4
+b:sorting_by	-2 -3 11 -3 -2 -2
+b:sound_effects	-1 6 -3 -1 -1 0
+b:split_this	-1 -1 -1 -2 -1 6
+b:sql_injection	-1 -1 -2 6 -1 -1
+b:sso_with	-1 8 -2 0 -4 -1
+b:stabilize_them	0 0 -2 -1 -3 7
+b:staging_deploy	-1 0 -2 -1 5 -2
+b:start_reading	6 -1 -1 -2 0 -2
+b:still_use	6 0 -1 -2 -1 -2
+b:stop_brute	-4 -1 -2 8 -1 -1
+b:stopped_working	-1 -1 5 -1 -2 -1
+b:store_api	-6 -1 -2 11 -1 -1
+b:structure_to	6 -1 -1 -1 -1 -1
+b:summarize_what	10 -1 -2 -4 -2 -2
+b:support_for	-2 -3 -2 -4 -6 16
+b:support_markdown	-1 8 -2 -2 -1 -3
+b:support_uploading	-1 11 -5 -1 -1 -3
+b:supprot_for	-1 -1 0 -1 -2 6
+b:sure_all	-1 -3 -1 -1 9 -3
+b:sure_dark	-1 -3 -3 -1 10 -3
+b:sure_the	-1 -2 -2 -1 9 -3
+b:table_sortable	-1 10 -4 -1 -1 -4
+b:tagging_to	-1 7 -2 -1 -2 -1
+b:talks_to	9 -2 -1 -3 -1 -2
+b:teammates_by	-1 10 -3 -2 -3 -2
+b:tell_me	10 -4 -6 2 4 -6
+b:test_every	-1 -1 -2 -1 7 -2
+b:test_for	-1 -13 -1 -1 18 -1
+b:test_is	-1 -1 -4 -2 -6 14
+b:test_suite	-3 0 -1 0 6 -1
+b:test_that	-2 -4 -3 -2 12 -2
+b:test_the	-4 -2 -8 -4 25 -7
+b:tests_around	-1 -3 -1 -1 7 -1
+b:tests_fail	-1 0 -3 -1 -5 9
+b:tests_for	-3 -10 -5 -5 27 -4
+b:tetss_for	-1 -10 -2 -2 15 -1
+b:text_is	-1 -1 7 -1 -2 -1
+b:that_admins	-1 -2 -1 -1 7 -1
+b:that_are	-2 -2 -5 -1 -1 12
+b:that_breaks	-1 -1 9 -1 -2 -4
+b:that_processes	-2 7 -2 -1 -2 -1
+b:that_reproduces	-1 -2 -2 0 6 -1
+b:that_seeds	-1 7 -1 0 -4 -1
+b:that_talks	7 -1 -1 -2 -1 -2
+b:that_the	-3 -5 -5 1 15 -3
+b:the_`	2 -1 -5 -3 -2 10
+b:the_access	-1 -1 -7 14 -2 -3
+b:the_admin	-4 -1 -3 9 -1 -1
+b:the_api	5 -9 6 -2 8 -8
+b:the_app	6 -4 11 -6 0 -5
+b:the_auth	-5 -1 -6 5 -7 14
+b:the_benchmarks	-1 -1 -3 -1 7 -2
+b:the_biggest	6 -1 -2 -1 -1 -1
+b:the_blog	0 6 0 -1 -4 0
+b:the_bot	-2 -2 9 -1 -1 -4
+b:the_bottom	-1 -1 7 -2 -1 -2
+b:the_camera	-1 -1 5 -1 -1 -1
+b:the_cli	0 -1 -2 -1 6 -2
+b:the_code	7 0 -1 -2 -1 -2
+b:the_commented	-1 -1 -2 -2 -1 6
+b:the_comments	-5 0 -1 9 0 -3
+b:the_config	3 -3 1 -5 -4 7
+b:the_corner	-1 6 -3 -1 -1 -1
+b:the_cors	-1 -1 -3 11 -4 -2
+b:the_counter	-2 -1 11 -2 -2 -4
+b:the_cron	-1 -1 6 -1 -2 -2
+b:the_csp	-1 -1 -5 11 -2 -2
+b:the_custom	-1 -1 -2 -1 -1 6
+b:the_database	1 5 -2 -1 -1 -2
+b:the_delpoy	5 -1 -1 -1 -1 -2
+b:the_deploy	10 -1 -2 -1 -2 -4
+b:the_dockerfile	-1 -2 -2 0 -1 6
+b:the_duplicate	-1 -1 -2 -1 -1 7
+b:the_e2e	-1 0 -3 -1 -5 11
+b:the_email	-1 6 -2 -1 -2 -1
+b:the_encryption	-1 -1 -3 8 -1 -2
+b:the_end	-1 -1 7 -1 -2 -2
+b:the_env	0 -1 -1 6 -3 -1
+b:the_error	-1 -1 -8 -3 8 4
+b:the_eslint	-1 -1 -4 -2 -2 11
+b:the_export	0 -3 -3 -1 9 -1
+b:the_feature	-1 -1 -3 -3 -1 10
+b:the_feed	-1 7 -3 -1 -1 -1
+b:the_file	-2 2 -3 9 -2 -3
+b:the_filter	-1 -1 5 -2 -1 -1
+b:the_flow	5 -1 -2 -1 -1 0
+b:the_folder	5 -1 -1 -1 -1 -1
+b:the_font	-1 -1 7 -2 -1 -1
+b:the_gallery	0 5 -2 -1 -1 -1
+b:the_game	-2 5 3 -7 4 -4
+b:the_go	-1 -2 -3 -2 1 7
+b:the_importer	0 -4 0 -6 13 -3
+b:the_input	-2 -2 9 -1 -3 -2
+b:the_job	-1 0 9 -3 -1 -4
+b:the_jquery	-1 -1 -3 -2 -1 8
+b:the_last	9 -1 5 -5 -4 -3
+b:the_latest	-1 -1 -2 0 -2 5
+b:the_logging	-1 -2 -3 1 -2 7
+b:the_login	-1 -1 -2 -1 7 -2
+b:the_map	-2 -1 8 -2 -1 -2
+b:the_migrations	-1 -2 -1 -1 7 -2
+b:the_minor	-1 -1 -2 -1 -1 5
+b:the_mobile	1 8 -4 5 -7 -3
+b:the_modal	-1 -1 6 -1 -1 -2
+b:the_naming	-1 -1 -3 -1 -1 6
+b:the_new	-7 6 -7 19 -8 -3
+b:the_notifications	-1 -1 8 -2 -2 -2
+b:the_old	3 -3 -6 -5 -3 14
+b:the_password	-2 -2 -10 4 14 -3
+b:the_payments	-1 -3 -6 -3 15 -2
+b:the_pdf	-1 -1 7 -1 -2 -2
+b:the_player	-1 8 -4 -1 -2 -1
+b:the_pr	-1 -1 -4 9 -2 -1
+b:the_previous	-1 -1 7 -2 -1 -2
+b:the_price	-1 -2 6 -2 0 -1
+b:the_product	-1 3 5 -2 -4 -1
+b:the_public	-1 9 -4 -2 -2 -1
+b:the_queue	6 -1 -3 -1 -1 -1
+b:the_race	-1 0 9 -3 -1 -4
+b:the_rate	-4 -6 -4 9 6 -2
+b:the_reducer	7 -1 -2 -2 -1 -1
+b:the_release	-1 -1 6 -2 -1 -1
+b:the_repo	-6 -2 -6 19 -2 -3
+b:the_reports	-1 3 -6 7 -5 2
+b:the_retry	-2 -3 8 -3 2 -3
+b:the_s3	-1 -1 -4 9 -1 -2
+b:the_save	-3 -1 8 -2 -1 -1
+b:the_screen	-1 -1 7 -2 -1 -2
+b:the_scripts	-1 0 -3 -1 -3 9
+b:the_settings	-1 -1 7 -1 -2 -1
+b:the_share	-2 -1 7 -2 -1 -2
+b:the_shared	4 -2 -5 -4 -3 10
+b:the_signup	-1 -6 -6 -4 19 -2
+b:the_staging	-1 0 -3 -1 7 -2
+b:the_summarize	0 -5 0 0 5 0
+b:the_sync	-2 -1 8 -1 -1 -2
+b:the_table	-1 14 -5 -1 -2 -5
+b:the_test	-5 0 -2 -1 9 -1
+b:the_todos	-2 -1 -4 -1 -1 9
+b:the_typo	-1 -1 9 -1 -2 -4
+b:the_upload	0 0 -5 -2 9 -1
+b:the_user	-1 -1 -4 -1 -2 10
+b:the_utils	-1 0 -2 -2 -1 6
+b:the_web	2 5 -7 -8 3 3
+b:the_worker	-1 -1 5 -1 -1 -1
+b:the_wrnog	-1 -1 5 -1 -1 -1
+b:the_wrong	-2 -1 12 -2 -2 -4
+b:their_account	-1 -2 7 -1 -1 -2
+b:their_data	-1 8 -3 -1 -2 -2
+b:their_latest	-1 -3 -1 0 -1 6
+b:their_username	-1 6 -2 -1 -1 -1
+b:theme_color	-1 7 -2 -1 -1 -1
+b:there_any	1 -1 -1 7 -1 -5
+b:this_2000	-2 -2 -2 -2 -1 10
+b:this_branch	-1 -1 -1 5 -2 -1
+b:this_change	-3 -1 -2 7 -1 -1
+b:this_code	6 -1 -1 -2 0 -2
+b:through_the	13 -1 -3 -2 -2 -5
+b:tidy_up	-1 0 -3 -1 -3 9
+b:times_out	-1 -2 8 -2 -1 -1
+b:timezone_is	-2 -3 13 -4 -3 -1
+b:to_8	-4 -5 -6 -3 -3 21
+b:to_a	-1 -2 -1 -1 -1 6
+b:to_add	0 5 -2 0 -2 -2
+b:to_date	-2 -5 -2 -2 -2 12
+b:to_duplicate	-1 6 0 -1 -1 -4
+b:to_end	-2 -1 -2 -1 9 -3
+b:to_function	-1 -2 -1 -1 -2 6
+b:to_its	-2 -2 9 -1 -1 -4
+b:to_localhost	-1 -2 8 -1 -1 -3
+b:to_me	7 -1 -1 -2 -1 -2
+b:to_merge	-3 -1 -2 9 -1 -2
+b:to_pnpm	-2 -3 -3 -2 -2 11
+b:to_python	-2 -1 -1 -1 -1 6
+b:to_s3	9 0 -1 -3 -1 -3
+b:to_something	-1 -1 -1 -3 -1 6
+b:to_stop	-5 -1 -2 10 -1 -1
+b:to_the	-2 23 -9 -3 -6 -3
+b:to_their	-1 -3 -1 0 -1 6
+b:to_type	-1 -2 5 -1 -1 -1
+b:to_typescript	-1 -1 -2 -1 -1 6
+b:to_zero	-1 -1 8 -2 -1 -2
+b:todos_that	-2 -1 -4 -1 -1 9
+b:too_many	-1 -1 6 -2 -1 -1
+b:touches_payments	-1 -1 -1 5 -1 -1
+b:transparency_makes	0 -4 7 -1 -1 -1
+b:try_it	-3 0 -2 -1 7 -1
+b:try_the	-2 -1 -2 -1 9 -3
+b:ts2322_:	-1 -2 5 -1 -1 -1
+b:tsets_for	-1 -10 -2 -2 17 -1
+b:type_'number'	-1 -2 5 -1 -1 -1
+b:type_'string'	-1 -2 5 -1 -1 -1
+b:typo_that	-1 -1 9 -1 -2 -4
+b:under_load	-2 -2 9 -2 -2 -2
+b:unicode_names	0 -5 0 -1 7 -1
+b:until_the	-1 -1 7 -1 -1 -2
+b:unused_dependencies	-2 -1 -2 -2 -1 8
+b:unused_libraries	-1 -1 -2 -1 -1 5
+b:up_as	-2 -2 9 -2 -2 -2
+b:up_dead	-1 -1 -2 -2 -1 7
+b:up_fails	-1 -2 8 -1 -1 -3
+b:up_in	-1 -3 8 -1 -1 -2
+b:up_the	-5 -3 -11 -4 -6 28
+b:update_the	-1 -2 -1 -1 -1 6
+b:upgrade_rails	-1 -2 -3 -1 -1 9
+b:upgrade_to	-2 -1 -1 -1 -1 6
+b:upgrdae_rails	-1 -2 -2 -1 -1 7
+b:upload_handler	-2 -1 -7 5 7 -3
+b:uploading_a	-1 -5 10 -1 -2 -2
+b:uploading_multiple	-1 11 -5 -1 -1 -3
+b:uploads_over	-2 -3 14 -3 -3 -2
+b:usage_keeps	-1 -1 5 -1 -1 -1
+b:use_anymore	-2 -1 -4 -4 -1 11
+b:use_the	6 0 -1 -2 -1 -2
+b:user_service	-1 -1 -3 -1 -2 8
+b:users'_data	-1 -1 -2 11 -6 -1
+b:users_are	-1 -1 -3 8 -2 -1
+b:users_can't	-1 -2 9 -1 -1 -2
+b:users_get	-1 -2 7 -1 -1 -2
+b:users_in	-2 -3 13 -4 -3 -1
+b:users_pick	-1 9 -3 -2 -2 -2
+b:users_with	0 -3 -2 -1 8 -1
+b:usesync_does	6 -1 -1 -1 -1 -1
+b:v1_endpoints	-2 -1 -3 -2 -2 10
+b:validation_correct	-3 -1 -2 7 -1 -1
+b:variable_?	7 -7 0 0 0 0
+b:verify_the	-1 -4 -6 -2 15 -2
+b:version_and	-1 -1 -1 -1 -2 7
+b:versioned_?	10 0 -2 -4 -1 -2
+b:versions_in	-1 -1 -2 -1 -1 6
+b:walk_me	15 -2 -3 -2 -2 -6
+b:way_for	-1 6 -2 -1 -1 -1
+b:we_don't	-2 -1 -4 -4 -1 11
+b:we_get	-1 -1 6 -2 -1 -1
+b:we_leaking	-4 -1 -2 7 0 -1
+b:we_log	-1 -2 -1 7 -2 -1
+b:we_need	-1 6 -2 -1 -1 -1
+b:we_send	6 -1 -2 -2 -1 -1
+b:we_store	-6 -1 -2 11 -1 -1
+b:web_app	2 5 -7 -8 3 3
+b:what's_in	8 -1 -2 -3 -1 -2
+b:what's_the	12 -1 -5 -2 -2 -2
+b:what_breaks	-3 -2 -2 -1 8 0
+b:what_changed	10 -1 -2 -4 -2 -2
+b:what_does	10 -1 -2 -2 -2 -2
+b:what_happens	6 -3 -2 -2 2 -1
+b:what_i	-4 -1 -1 7 -1 -1
+b:what_usesync	6 -1 -1 -1 -1 -1
+b:when_a	10 -2 -4 -1 -1 -1
+b:when_i	-2 -2 11 -3 -2 -2
+b:when_opening	-2 -2 10 -2 -1 -2
+b:when_the	-5 5 19 -6 -6 -7
+b:where's_the	10 -1 -2 -3 -1 -2
+b:where_do	7 -1 -2 -2 -1 -1
+b:where_is	11 -1 -5 -3 -1 -1
+b:whether_we	-1 -1 -1 6 -1 -1
+b:which_files	6 -1 -1 -2 -1 -1
+b:why_is	9 -2 -2 -4 0 -1
+b:widget_in	-1 6 -3 -1 -1 -1
+b:with_"	-1 -2 8 -1 -2 -2
+b:with_a	-1 -2 13 -1 -5 -3
+b:with_async	-1 -1 -3 -1 -1 7
+b:with_axe	-1 -2 -5 -3 12 -2
+b:with_fake	-1 7 -1 0 -4 -1
+b:with_fetch	-1 -1 -3 -1 -2 9
+b:with_github	-1 13 -5 -1 -3 -2
+b:with_google	-1 -2 6 -1 -1 -1
+b:with_main	-1 -1 -4 -1 10 -2
+b:with_missing	0 -1 -2 -1 6 -2
+b:with_no	0 -3 -3 -1 9 -1
+b:with_okta	-1 8 -2 0 -4 -1
+b:with_port	-1 -2 8 -1 -1 -3
+b:with_transparency	0 -4 7 -1 -1 -1
+b:within_200ms	-1 -1 -3 -1 8 -2
+b:worker_dies	-1 -1 5 -1 -1 -1
+b:worker_service	5 -2 -1 -2 0 -1
+b:worker_that	-2 7 -2 -1 -2 -1
+b:workers_scale	6 -1 -3 -1 -1 -1
+b:working_after	-1 -1 7 -1 -2 -1
+b:works_for	0 -2 -2 -1 7 -1
+b:would_i	6 -1 -1 -2 0 -2
+b:write_tests	-1 -1 -2 -1 7 -1
+b:wrong_for	-1 -2 8 -2 -2 -1
+b:you_add	-3 17 -8 -5 7 -7
+b:you_allow	-1 6 -1 -1 -2 -1
+b:you_audit	0 -1 -4 8 -1 -2
+b:you_fix	-2 -1 5 -2 -2 1
+b:you_get	1 -5 -5 2 2 5
+b:you_is	-3 -1 -2 7 -1 -1
+b:you_look	-1 -2 -3 10 -2 -2
+b:you_review	-2 -1 -2 8 -2 -2
+b:you_summarize	10 -1 -2 -4 -2 -2
+b:you_support	-1 5 -1 -1 -1 -2
+b:you_tell	11 -2 -3 -2 -2 -2
+b:you_the	-3 -4 25 -6 -8 -4
+b:you_to	-5 0 7 -5 5 -2
+b:you_upgrade	-1 -1 -1 -1 -1 6
+b:you_verify	0 -1 -3 -1 6 -1
+b:é_show	-2 -2 9 -2 -2 -2
+c: "to	-1 -1 6 -2 -1 -1
+c: 'ma	-1 -2 7 -1 -1 -2
+c: 'nu	-1 -2 5 -1 -1 -1
+c: 'so	-1 -2 7 -1 -1 -2
+c: 'st	-1 -2 5 -1 -1 -1
+c: 'us	-1 -1 6 -1 -1 -1
+c: 10 	0 5 -2 0 -1 -1
+c: 100	-4 -5 9 -10 14 -4
+c: 10m	-2 -3 14 -3 -3 -2
+c: 14 	-1 -1 6 -1 -1 -1
+c: 16 	-2 -10 -2 -4 -5 23
+c: 20 	-2 -3 11 -3 -2 -2
+c: 200	-3 -3 -5 -3 6 8
+c: 22?	-3 0 -2 -1 7 -1
+c: 3.1	-2 -1 -1 -1 -1 6
+c: 401	-1 -1 7 -1 -3 -1
+c: 404	-3 -3 11 -10 9 -5
+c: 7-d	-1 6 -1 -1 -1 -2
+c: 88 	-1 -1 6 -1 -1 -1
+c: `da	-1 -1 -1 -2 -1 6
+c: `mi	-2 -1 -4 -2 -2 12
+c: a "	-1 8 -2 -1 -2 -1
+c: a 7	-1 6 -1 -1 -1 -2
+c: a c	0 2 -6 1 1 3
+c: a d	-3 13 0 -3 -3 -4
+c: a f	-2 9 2 -3 -3 -3
+c: a g	-2 8 -2 -1 -2 -1
+c: a h	-1 -2 -4 -2 -2 11
+c: a l	-2 14 -6 -4 -5 3
+c: a m	-1 7 -1 -2 -2 -1
+c: a n	6 -1 -1 -1 -2 -1
+c: a p	2 12 4 -4 -6 -9
+c: a q	-4 -1 -1 7 -1 -1
+c: a r	-2 12 -6 -2 0 -2
+c: a s	-4 17 -9 4 -6 -2
+c: a t	-3 4 -5 -3 11 -4
+c: a v	-1 -1 7 -1 -3 -1
+c: a w	-1 8 -2 -2 -1 -2
+c: acc	-4 -8 10 5 5 -9
+c: act	-1 -1 -2 -4 7 3
+c: add	-15 105 -44 -29 17 -34
+c: adm	-7 13 -8 7 1 -5
+c: afe	-1 -2 10 -2 -2 -2
+c: aft	-5 -7 33 -6 -7 -7
+c: aga	-6 -1 -2 12 -1 -1
+c: all	-8 26 -16 -14 -6 18
+c: alr	-4 -4 5 -2 -3 8
+c: an 	-6 25 -4 -8 3 -10
+c: and	-15 3 -19 -8 27 13
+c: any	-8 -11 -8 43 -11 -5
+c: api	0 -5 -7 5 9 -2
+c: app	6 16 -6 -7 -11 2
+c: are	19 -18 19 5 -17 -8
+c: aro	-1 -3 -1 -1 7 -1
+c: as 	-5 8 11 -4 -5 -5
+c: asa	4 -1 5 -1 -7 0
+c: asy	-1 -1 -3 -1 -1 7
+c: at 	-5 9 10 2 -8 -7
+c: aud	-6 -3 -1 29 -9 -11
+c: aut	-6 7 -2 2 -11 10
+c: ava	-5 5 13 -5 -4 -5
+c: avt	-2 -1 7 -2 -1 -1
+c: axe	-1 -2 -5 -3 12 -2
+c: bac	-4 -6 13 8 -1 -10
+c: bad	-1 -2 9 -2 -2 -3
+c: bar	-1 4 6 -2 -2 -4
+c: bas	-1 -2 -2 -1 1 6
+c: be 	-3 -1 7 5 -5 -3
+c: bef	-5 -6 2 21 -5 -6
+c: bei	-3 -3 13 -2 -2 -3
+c: ben	-1 -1 -3 -1 7 -2
+c: bet	2 -1 -2 -2 6 -3
+c: big	6 -1 -2 -1 -1 -1
+c: bla	-2 -5 15 -3 -3 -3
+c: blo	-2 9 6 -2 -7 -3
+c: blu	-1 -1 6 -2 -1 -1
+c: bom	0 -2 6 0 -2 -1
+c: bot	-7 1 13 5 -5 -8
+c: bra	-6 -4 -10 14 5 1
+c: bre	-9 -4 6 4 6 -3
+c: bro	-1 -1 7 -2 -1 -2
+c: bru	-4 -1 -2 8 -1 -1
+c: buc	-1 -1 -4 9 -1 -2
+c: bug	-1 -3 -2 -1 8 -1
+c: bui	-2 28 -1 -6 -10 -9
+c: bum	-2 -1 -3 -1 -1 8
+c: bun	-1 -1 -3 -1 -1 7
+c: but	-8 5 25 -7 -7 -7
+c: by 	-6 20 8 -8 -8 -4
+c: cal	-2 -5 0 -4 -2 13
+c: cam	-1 -1 5 -1 -1 -1
+c: can	-3 -5 24 0 -6 -9
+c: car	11 -3 -2 -5 2 -4
+c: ceh	-2 -2 -4 10 0 -2
+c: cha	-3 -4 -1 24 -7 -8
+c: chc	-1 -1 -3 6 0 -1
+c: che	-12 17 -25 30 9 -19
+c: ci?	10 -1 -2 -3 -1 -2
+c: cla	-1 -3 -4 -2 -2 13
+c: cle	-5 -4 1 -6 -5 20
+c: cli	2 -4 -10 -7 -1 20
+c: clo	-3 1 11 -3 -2 -4
+c: cod	13 -8 -23 5 -14 27
+c: col	-4 19 4 -5 -5 -9
+c: com	-18 12 -8 10 -1 4
+c: con	-7 -17 -19 -5 -11 60
+c: cop	-5 0 10 -4 -4 3
+c: cor	-10 -1 -7 19 8 -9
+c: cou	-12 -2 14 1 -1 1
+c: cov	-3 -5 -2 -6 22 -5
+c: cra	-2 2 12 -4 -4 -3
+c: cre	-5 27 -8 1 -9 -6
+c: csp	-1 -1 -5 11 -2 -2
+c: cur	8 0 -3 -2 -1 -2
+c: cus	-1 1 -3 -1 -1 6
+c: cut	-3 -3 17 -5 -3 -3
+c: dai	-1 7 -3 -1 -1 -1
+c: dan	-4 0 -1 7 0 -1
+c: dar	-2 0 4 -3 6 -5
+c: das	-1 7 -3 -1 -1 -1
+c: dat	-1 6 -15 4 5 1
+c: dea	-1 -1 -2 -2 -1 7
+c: deb	-1 -1 7 -2 -1 -1
+c: ded	-1 -1 -3 -1 -1 7
+c: del	1 3 0 -6 -4 6
+c: dep	1 -9 -9 -4 -1 22
+c: die	-1 -1 7 -1 -1 -2
+c: dif	2 -2 -2 5 -3 -2
+c: do 	33 -14 -10 8 -9 -9
+c: doc	-2 -5 2 -2 7 0
+c: doe	31 -10 1 2 -9 -14
+c: don	-1 -6 -4 -4 -4 20
+c: dro	-4 -6 5 -6 -7 19
+c: e2e	-1 -1 -4 -2 -2 10
+c: edi	-2 2 7 -2 -2 -3
+c: eff	-1 6 -3 -1 -1 0
+c: ema	-2 6 15 -13 7 -13
+c: emp	-1 -9 0 -1 14 -2
+c: enc	-1 -1 -3 9 -2 -2
+c: end	-4 6 -6 -3 8 -1
+c: eno	-5 -1 -2 10 -1 -1
+c: env	7 -8 -1 6 -3 -1
+c: err	1 -5 7 -7 4 -1
+c: esl	-1 -1 -4 -2 -2 11
+c: eve	-6 3 17 -14 -2 1
+c: exa	-1 -2 -1 -1 7 -2
+c: exp	34 1 -5 -7 -9 -14
+c: ext	-2 0 -5 -2 -2 11
+c: fai	-3 -5 22 -8 -8 1
+c: fak	3 7 -1 -1 -6 -2
+c: fea	-6 0 -8 13 -4 6
+c: fee	-2 19 -7 -3 -6 -2
+c: fet	-1 -1 -3 -1 -2 9
+c: few	-3 -6 19 -3 -3 -4
+c: fil	-5 -2 3 7 -22 19
+c: fin	-2 -2 10 -2 -2 -2
+c: fix	-9 -10 13 -7 -6 19
+c: fla	3 1 -8 -7 -9 20
+c: flo	-4 -4 -9 7 12 -2
+c: fol	8 -1 -10 -4 -7 15
+c: fon	-1 -1 7 -2 -1 -1
+c: for	-25 8 -14 26 19 -14
+c: fre	-2 10 0 -1 -4 -3
+c: fro	-3 -12 9 0 -10 15
+c: fun	3 -9 -1 -3 5 5
+c: gal	0 5 -2 -1 -1 -1
+c: gam	-2 5 3 -7 4 -4
+c: gar	-2 -2 8 -1 -1 -1
+c: gen	8 0 -2 -2 -1 -2
+c: get	5 -10 5 -5 -4 9
+c: git	-3 9 -8 1 -5 6
+c: go 	-6 3 7 -2 -4 2
+c: goe	-2 -1 11 -2 -2 -4
+c: goo	-1 -2 6 -1 -1 -1
+c: gor	-2 -2 9 -2 -2 -2
+c: gro	-1 -1 7 -1 -1 -2
+c: gue	-3 18 -3 -4 -5 -3
+c: gus	-1 8 -1 -2 -2 -1
+c: han	2 -6 -3 4 13 -9
+c: hap	7 -3 -2 -2 2 -1
+c: har	-2 -2 -1 7 -2 -1
+c: has	-3 -2 14 3 -5 -6
+c: hea	-1 -1 -4 10 -2 -2
+c: hel	-2 -6 1 -3 4 5
+c: hoo	0 -5 -4 -3 2 11
+c: how	73 -16 -23 -8 -14 -12
+c: htt	-1 -1 -3 -1 -2 9
+c: i a	7 -7 -1 4 -1 -1
+c: i c	-5 -2 5 5 -1 -2
+c: i m	-2 -1 -2 7 -1 -1
+c: i n	-5 0 7 -5 5 -2
+c: i s	6 -1 -1 -2 0 -2
+c: i'm	15 -3 -4 -4 -2 -4
+c: if 	1 -4 -6 20 -7 -4
+c: imm	-3 -3 15 -3 -5 -2
+c: imp	-16 41 -9 -11 -3 -2
+c: in 	-3 3 13 5 -18 0
+c: inc	-1 -3 -4 -2 12 -2
+c: ind	-2 -4 16 -4 -3 -2
+c: inj	-1 -1 -2 6 -1 -1
+c: inp	-2 -9 9 -2 5 -2
+c: ins	-1 -2 2 7 -4 -1
+c: int	-6 -5 -13 -8 -1 33
+c: inv	5 7 27 -13 -13 -14
+c: iph	-1 -1 6 -1 -2 -1
+c: is 	21 -27 17 20 -15 -17
+c: iss	-1 -1 -1 5 -2 -1
+c: it 	-12 -4 10 13 -8 1
+c: its	-2 -2 9 -1 -1 -4
+c: jav	-1 -1 -2 -1 -1 6
+c: job	2 0 17 -6 -5 -8
+c: jqu	-1 -1 -3 -2 -1 8
+c: jso	-1 8 -3 -1 -2 -2
+c: jum	-1 -1 8 -2 -1 -2
+c: jus	3 -3 8 -3 -2 -3
+c: jwt	-6 -1 -4 14 -2 -1
+c: kee	-2 -2 10 -2 -2 -2
+c: key	-4 2 13 3 -9 -5
+c: lam	-1 -2 8 -2 -1 -1
+c: lan	0 5 -3 -1 -1 -1
+c: lar	-2 -3 11 -2 -1 -3
+c: las	13 -2 4 -6 -5 -4
+c: lat	-2 1 -3 -1 -5 10
+c: lau	-1 -1 6 -1 -1 -1
+c: lea	-6 7 2 7 -5 -4
+c: let	-5 41 -14 -6 -9 -7
+c: lib	3 -2 -3 -2 -2 6
+c: lik	5 -3 8 -3 -2 -4
+c: lim	-6 -2 1 7 3 -4
+c: lin	-10 -9 44 -12 -9 -4
+c: lis	-3 20 -5 -2 -5 -5
+c: loa	-6 -10 10 -10 9 6
+c: loc	1 -2 9 -2 -2 -3
+c: log	-6 -8 15 2 -7 3
+c: loo	-8 -10 -1 45 -15 -12
+c: mad	-2 -2 7 3 -2 -4
+c: mag	-1 -4 2 -1 -4 9
+c: mai	-1 -4 -4 -2 14 -3
+c: mak	-9 11 -13 -11 9 14
+c: man	6 -3 5 -4 -2 -3
+c: map	-3 1 8 -3 -2 -2
+c: mar	-4 13 6 -5 -3 -6
+c: me 	32 -7 -11 -2 1 -13
+c: mea	-1 -1 -1 -2 -1 6
+c: mer	-5 -2 -4 18 -3 -3
+c: mes	-2 -3 7 -2 -2 2
+c: met	-1 5 -1 -1 -2 -1
+c: mig	-4 -3 -6 2 4 6
+c: mis	-2 -4 -6 3 13 -4
+c: mob	5 3 -2 0 -6 1
+c: mod	-5 6 -3 -14 10 7
+c: mom	-2 -4 -2 -1 -1 10
+c: mon	6 -1 1 -3 -1 -2
+c: mov	-2 -3 -5 -2 -2 15
+c: mul	-1 11 -5 -1 -1 -3
+c: my 	-2 -3 -6 16 -3 -3
+c: nam	-2 -9 4 -3 3 7
+c: nan	-1 -2 7 -2 -2 -1
+c: nav	0 5 -2 -1 -1 -1
+c: nee	-2 5 5 -7 3 -4
+c: neg	-2 -1 11 -2 -2 -4
+c: nev	-1 -2 10 -2 -2 -4
+c: new	5 12 -11 13 -12 -7
+c: nig	-1 -1 6 -1 -2 -2
+c: no 	-1 -3 -1 -2 8 -2
+c: nob	-1 -1 -2 -1 -1 5
+c: nod	-5 -10 -4 -5 2 22
+c: not	-5 6 18 -5 -7 -7
+c: npm	-2 -3 -3 -2 -2 11
+c: nul	-2 -3 11 -2 -2 -2
+c: num	-1 -2 -3 -1 -3 9
+c: of 	0 -2 -10 8 0 5
+c: off	-1 7 16 -7 -7 -8
+c: okt	-1 8 -2 0 -4 -1
+c: old	3 -3 -7 -6 -4 17
+c: on 	-17 3 42 -14 8 -23
+c: onc	-1 11 -5 -1 -1 -3
+c: one	-11 6 17 -10 -5 3
+c: ope	-5 -5 19 2 -4 -7
+c: ord	-4 8 11 -4 -5 -6
+c: org	0 -7 -7 -5 4 15
+c: oth	-2 -2 -2 11 -3 -1
+c: our	-11 -2 10 19 -7 -9
+c: out	-6 -10 25 -2 -7 0
+c: ove	-5 -4 4 22 -10 -7
+c: own	-2 -2 9 -1 -1 -4
+c: pac	9 -2 -5 -5 -2 6
+c: pag	-12 22 29 -9 -12 -18
+c: pan	1 -2 5 -1 -1 -2
+c: par	5 -2 7 -3 -1 -6
+c: pas	-8 -3 3 1 14 -7
+c: pat	-1 -1 -2 6 -1 -1
+c: pau	-1 -2 9 -3 -2 -2
+c: pay	6 2 -8 2 7 -9
+c: pdf	-1 3 6 -2 -3 -2
+c: peo	-1 8 -3 -1 -2 -1
+c: per	2 -5 -4 17 -7 -3
+c: pga	-1 -2 10 -3 -2 -2
+c: pic	-2 10 0 -2 -2 -3
+c: pie	-2 -2 -2 -2 -1 10
+c: pin	-3 -3 -3 -3 -3 14
+c: pla	-1 7 -4 -1 1 -1
+c: ple	-14 4 6 5 -2 1
+c: pls	-12 7 11 -13 2 5
+c: png	-1 -5 10 -1 -2 -2
+c: pnp	-2 -3 -3 -2 -2 11
+c: poi	1 -4 8 3 -3 -5
+c: pol	-1 -1 -4 9 -1 -2
+c: por	-1 1 9 -2 -2 -4
+c: pos	-2 12 2 -3 -3 -6
+c: pr 	-2 -2 -5 14 -3 -2
+c: pre	-2 -2 12 -1 -3 -4
+c: pri	4 7 7 -8 -4 -5
+c: pro	-3 25 5 -5 -11 -11
+c: pub	5 7 -5 0 -4 -3
+c: put	-2 -3 11 -3 -2 -2
+c: que	16 6 6 -11 -5 -12
+c: rac	-1 -1 8 0 -1 -5
+c: rai	-3 -4 -5 -2 -2 17
+c: ran	1 4 -1 -3 -9 9
+c: rat	-6 2 0 6 3 -4
+c: rea	2 7 -1 -6 -7 5
+c: rec	5 2 -5 -3 2 -3
+c: red	10 -5 -2 -2 -5 4
+c: ref	-2 2 -4 -2 -3 9
+c: rei	-5 -1 -4 13 -2 -2
+c: rel	-2 -2 2 -3 -6 10
+c: rem	-7 -6 -13 -8 -6 41
+c: ren	-4 0 -9 -6 5 15
+c: reo	-3 2 -4 -3 0 7
+c: rep	-5 -5 -20 18 -4 16
+c: req	0 3 5 -2 -4 -2
+c: res	-4 1 13 -9 7 -8
+c: ret	-4 -1 21 -17 12 -10
+c: rev	-13 -8 -16 59 -10 -12
+c: rid	-2 -1 -3 -2 -2 10
+c: ris	-2 -2 -5 16 -5 -3
+c: rou	8 -3 -6 -1 5 -4
+c: row	-4 -5 7 -8 14 -5
+c: rss	0 6 0 -1 -4 0
+c: run	1 -7 0 -7 24 -11
+c: rus	-1 -5 -3 -2 2 9
+c: s3 	-1 1 -4 9 -2 -3
+c: s3?	9 -1 -1 -3 -1 -3
+c: saf	-14 -2 -3 28 -3 -5
+c: san	-2 -2 -3 9 -2 -2
+c: sav	-2 -1 5 -6 8 -3
+c: say	-1 -2 9 -1 -2 -2
+c: sca	6 -1 -3 -1 -1 -1
+c: sco	-1 8 -4 -1 -2 -1
+c: scr	8 11 2 -11 -7 -3
+c: sec	-8 4 2 18 -8 -7
+c: see	-2 5 -2 -2 3 -2
+c: seg	-2 -2 8 -2 -1 -2
+c: sen	8 -5 0 -7 11 -7
+c: ser	6 1 6 -8 -7 3
+c: set	0 -1 3 9 -7 -4
+c: sha	2 -2 2 -5 -5 8
+c: sho	-9 -3 39 -9 -7 -11
+c: sie	-1 -2 6 -1 -1 -1
+c: sig	-9 6 5 -5 14 -11
+c: sil	-1 -2 8 -2 -2 -1
+c: sim	-3 2 -6 -3 -4 14
+c: siz	-1 -1 -3 -1 -1 7
+c: ski	-2 -6 18 -5 -3 -2
+c: sma	-2 -1 -5 -2 -3 13
+c: smo	-1 -1 -4 -1 10 -3
+c: sof	-1 6 -1 -2 -2 -1
+c: som	-2 -3 9 -5 -3 4
+c: sor	-3 11 7 -4 -4 -7
+c: sou	-1 8 -4 -1 -2 -1
+c: spi	-2 -3 8 -2 -2 1
+c: spl	-1 -1 -1 -2 -1 6
+c: spo	-1 0 -1 7 -3 -1
+c: sql	-1 -1 0 6 -2 -2
+c: sso	-1 8 -2 0 -4 -1
+c: sta	8 0 0 -7 -1 1
+c: sti	8 -1 -1 -2 -1 -3
+c: sto	-5 -3 -3 22 -6 -5
+c: str	1 -2 23 -7 -8 -7
+c: stu	0 -2 7 -1 -2 -2
+c: sub	-2 6 4 -2 -3 -3
+c: sui	-3 0 -1 0 6 -1
+c: sum	9 -4 -4 -5 7 -3
+c: sup	-2 23 -12 -10 -13 13
+c: sur	-3 -6 -6 -3 27 -8
+c: syn	-2 -1 8 -1 -1 -2
+c: tab	2 15 -2 -4 -3 -9
+c: tag	-1 7 -2 -1 -2 -1
+c: tak	5 -1 -1 -2 -1 -2
+c: tal	12 -2 -2 -3 -1 -3
+c: tea	-1 10 -3 -2 -3 -2
+c: tel	10 -4 -6 2 4 -6
+c: tes	-15 -38 -31 -19 101 3
+c: tet	-1 -12 -4 -3 22 -2
+c: tex	-3 -3 14 -3 -3 -3
+c: tha	-7 24 -6 -12 8 -7
+c: the	-10 -29 28 6 -11 16
+c: thi	7 -8 -7 14 -9 2
+c: thr	12 -3 0 -3 -3 -1
+c: tid	-1 0 -3 -1 -3 9
+c: tim	-2 -8 22 -7 0 -5
+c: to 	-12 26 -10 -21 -20 37
+c: tod	-5 2 -6 3 -2 7
+c: tok	-7 -3 6 13 -5 -3
+c: tou	-1 -1 -1 5 -1 -1
+c: tra	-1 -6 9 3 -2 -3
+c: tri	-1 6 -1 -1 -1 -2
+c: try	-5 -2 -4 -2 16 -3
+c: ts2	-1 -2 5 -1 -1 -1
+c: tse	-1 -13 -6 -4 28 -3
+c: twc	-2 -1 6 -1 -1 -1
+c: twi	-3 -3 17 -3 -3 -4
+c: ty 	7 6 -3 2 -1 -10
+c: typ	-5 -6 22 -4 -5 -2
+c: ues	0 5 0 -1 -2 -2
+c: und	-2 1 8 -2 -2 -3
+c: uni	-1 -10 -1 -1 14 -1
+c: unt	-1 -1 7 -1 -1 -2
+c: unu	-4 -3 -7 -5 -3 22
+c: up 	-10 -10 12 -9 -10 28
+c: upd	-2 -5 2 -2 -2 9
+c: upg	-8 -9 -6 -6 -9 38
+c: upl	-3 6 9 0 0 -12
+c: usa	-1 -1 5 -1 -1 -1
+c: use	4 8 7 -12 -4 -2
+c: uti	0 -1 -2 -2 -1 5
+c: v1 	1 -1 -4 -3 -2 9
+c: val	-7 -3 4 13 -4 -3
+c: var	7 -7 0 0 0 0
+c: ver	4 -11 -21 -14 17 25
+c: vul	-1 -1 -1 7 -1 -2
+c: wal	15 -2 -3 -2 -2 -6
+c: war	-3 -4 -7 -4 -4 22
+c: way	-1 6 -2 -1 -1 -1
+c: we 	3 -3 -8 16 -9 1
+c: web	2 5 -5 -6 5 -1
+c: wha	65 -16 -23 -14 1 -13
+c: whe	32 -7 25 -17 -16 -17
+c: whi	22 -2 -6 -7 -1 -6
+c: whr	7 -1 -2 -2 -1 -1
+c: why	11 -2 -2 -4 -1 -2
+c: wid	-1 5 -1 -2 -1 -1
+c: wit	-17 12 15 -24 20 -5
+c: wor	11 -4 0 -7 11 -11
+c: wou	6 -1 -1 -2 0 -2
+c: wri	-3 -6 -7 -5 24 -4
+c: wrn	-2 -2 9 -2 -2 -2
+c: wro	-4 -3 20 -5 -4 -5
+c: xss	-5 0 -1 9 0 -3
+c: you	-10 -4 4 -1 4 8
+c: zer	-1 -1 8 -2 -1 -2
+c: é s	-2 -2 9 -2 -2 -2
+c:" on	-1 -1 6 -2 -1 -1
+c:"too	-1 -1 6 -2 -1 -1
+c:' da	-2 -4 -3 10 1 -2
+c:' fr	-1 -2 7 -1 -1 -2
+c:' in	-1 -1 7 -1 -1 -2
+c:' is	-1 -2 5 -1 -1 -1
+c:'m c	8 -1 -2 -2 -1 -2
+c:'m n	7 -1 -1 -2 -1 -2
+c:'mar	-1 -2 7 -1 -1 -2
+c:'num	-1 -2 5 -1 -1 -1
+c:'s i	8 -1 -2 -3 -1 -2
+c:'s t	27 -3 -9 -7 -3 -5
+c:'sof	-1 -2 7 -1 -1 -2
+c:'str	-1 -2 5 -1 -1 -1
+c:'t b	-1 -1 8 -2 -2 -2
+c:'t d	-1 -2 9 -1 -1 -2
+c:'t e	-1 -1 -2 11 -6 -1
+c:'t l	-1 -3 7 -1 -2 -1
+c:'t s	-3 -3 7 -3 5 -3
+c:'t u	-2 -1 -4 -4 -1 11
+c:'use	-1 -1 6 -1 -1 -1
+c:, ad	-2 11 -4 -3 1 -3
+c:, av	-1 -1 5 -1 -1 -1
+c:, ch	-2 -2 -2 8 -2 -1
+c:, cr	-1 6 -2 -1 -1 -1
+c:, ho	6 -1 -2 -2 -1 -1
+c:, is	-3 -1 -2 7 -1 -1
+c:, it	-1 -2 9 -1 -1 -2
+c:, lo	-1 -1 -1 5 -1 -1
+c:, ma	-1 -1 -5 -2 -5 14
+c:, re	-2 -2 -5 5 -2 6
+c:, st	-1 -1 0 -1 -6 10
+c:, th	-5 -3 17 -6 -3 0
+c:, up	-2 -2 -2 -1 -1 7
+c:, wh	20 -3 -6 -5 -2 -4
+c:, wr	-1 -2 -1 -1 5 -1
+c:-day	-1 6 -1 -1 -1 -2
+c:-fns	-2 -5 -2 -2 -2 12
+c:-sid	0 5 -2 -1 -3 0
+c:.12 	-2 -1 -1 -1 -1 6
+c:.cal	-2 -2 8 -2 -1 -2
+c:.jso	1 -2 -3 -2 -1 7
+c:.log	-3 -2 -3 -2 -2 11
+c:.py 	-1 -1 6 -1 -1 -1
+c:.ts 	12 -1 -3 -3 -2 -2
+c:/awa	-1 -1 -3 -1 -1 7
+c:/ses	-1 -1 6 -1 -1 -1
+c:0 be	-1 -3 10 -3 -1 -1
+c:0 li	-2 -2 -2 -2 -1 10
+c:00 b	-2 -3 11 -3 -2 -2
+c:00 l	-2 -2 -2 -2 -1 10
+c:000 	-3 -2 1 -3 -2 9
+c:00k 	-1 -1 -5 -6 16 -2
+c:00ms	-1 -1 -3 -1 8 -2
+c:01 e	-1 -1 7 -1 -3 -1
+c:04 f	0 -2 -2 -7 12 0
+c:04s 	-2 -1 13 -3 -3 -4
+c:0k r	-1 -1 -5 -6 16 -2
+c:0mb 	-2 -3 14 -3 -3 -2
+c:0ms 	-1 -1 -2 -1 6 -1
+c:1 en	-2 -1 -3 -2 -2 10
+c:1 ev	-1 -1 7 -1 -3 -1
+c:10 s	0 5 -2 0 -1 -1
+c:100 	-2 -3 11 -3 -2 -2
+c:100k	-1 -1 -5 -6 16 -2
+c:10mb	-2 -3 14 -3 -3 -2
+c:12 a	-2 -1 -1 -1 -1 6
+c:16 i	-1 -4 -1 -1 -1 7
+c:2 an	-2 -1 -1 -1 -1 6
+c:2000	-2 -2 -2 -2 -1 10
+c:200m	-1 -1 -3 -1 8 -2
+c:22: 	-1 -2 5 -1 -1 -1
+c:22? 	-3 0 -2 -1 7 -1
+c:2322	-1 -2 5 -1 -1 -1
+c:2: t	-1 -2 5 -1 -1 -1
+c:2? t	-3 0 -2 -1 7 -1
+c:2e t	-1 -1 -4 -2 -2 10
+c:3 bu	-1 -1 -4 9 -1 -2
+c:3.12	-2 -1 -1 -1 -1 6
+c:322:	-1 -2 5 -1 -1 -1
+c:3? t	5 -1 -1 -2 0 -2
+c:4 fo	0 -2 -2 -7 12 0
+c:401 	-1 -1 7 -1 -3 -1
+c:404 	0 -2 -2 -7 12 0
+c:404s	-2 -1 13 -3 -3 -4
+c:6 in	-1 -4 -1 -1 -1 7
+c:7-da	-1 6 -1 -1 -1 -2
+c:: 'u	-1 -1 6 -1 -1 -1
+c:: ca	-1 -3 12 -2 -2 -3
+c:: th	-1 -3 9 -1 -1 -3
+c:: ty	-1 -2 5 -1 -1 -1
+c:: wh	7 -1 -3 -2 -1 -1
+c:? as	11 -1 -4 0 -2 -3
+c:? in	21 -5 -6 -1 -4 -6
+c:? on	13 -2 -5 0 -2 -3
+c:? th	15 -3 -9 4 -2 -4
+c:? tr	-3 0 -2 -1 7 -1
+c:? ty	14 -3 -5 2 -3 -4
+c:? wh	13 -3 -7 1 -2 -3
+c:_id'	-1 -1 6 -1 -1 -1
+c:_uni	-1 -2 7 -1 -1 -2
+c:` fo	0 -1 -4 -3 -2 10
+c:` to	-1 -1 -1 -2 -1 6
+c:`dat	-1 -1 -1 -2 -1 6
+c:`mis	-2 -1 -4 -2 -2 12
+c:a 7-	-1 6 -1 -1 -1 -2
+c:a as	-2 10 -2 -1 -3 -2
+c:a bo	0 -2 6 0 -2 -1
+c:a ch	1 -3 -5 2 2 4
+c:a da	-2 10 0 -2 -2 -3
+c:a fe	-1 7 1 -3 -2 -2
+c:a go	-2 7 -2 -1 -2 -1
+c:a ho	-1 -2 -4 -2 -2 11
+c:a la	0 5 -3 -1 -1 -1
+c:a le	-1 9 -2 -2 -3 -1
+c:a mi	-1 5 0 -1 -2 -1
+c:a ne	6 -1 -1 -1 -2 -1
+c:a pn	-1 -5 10 -1 -2 -2
+c:a pr	-1 12 -2 -1 -2 -5
+c:a qu	-4 -1 -1 7 -1 -1
+c:a re	-2 12 -6 -2 0 -2
+c:a sc	-2 7 -1 2 -4 -2
+c:a se	3 0 -3 5 -2 -3
+c:a sm	-1 0 -2 -1 -1 5
+c:a te	-1 -9 -2 1 13 -2
+c:a th	-2 10 -3 -2 -2 -2
+c:a ti	-1 -1 7 -2 -2 -2
+c:a va	-1 -1 7 -1 -3 -1
+c:a wa	-1 6 -2 -1 -1 -1
+c:a` t	-1 -1 -1 -2 -1 6
+c:aars	-2 -1 7 -2 -1 -1
+c:abas	6 3 -5 -4 6 -6
+c:abil	-1 -1 -4 6 -5 5
+c:able	6 15 1 -8 -10 -3
+c:abrt	-1 -1 5 -1 -1 -1
+c:acce	-3 -6 1 7 7 -6
+c:acco	-1 -2 9 -1 -1 -2
+c:ace 	-3 -5 1 -2 -5 14
+c:ack 	-4 1 19 -3 -6 -7
+c:acka	9 -2 -5 -5 -2 6
+c:acks	-1 -1 -3 -1 -1 7
+c:acku	-1 -1 -3 9 -2 -2
+c:ackw	-4 0 -1 6 0 0
+c:act 	-2 -1 -5 -3 3 8
+c:acte	-1 -1 5 -1 -1 -1
+c:acti	-1 1 -1 -3 -2 6
+c:acto	-1 1 -3 -1 -3 8
+c:acts	-1 6 -1 -1 -3 -1
+c:actu	-1 -3 -1 -2 9 -3
+c:ad c	-1 -1 -2 -2 -1 7
+c:ad h	-2 -2 -8 7 8 -4
+c:ad o	-1 -3 11 -2 -2 -2
+c:add 	-15 106 -46 -29 18 -34
+c:ade 	-8 -8 -1 -1 -8 25
+c:ader	-2 6 -5 4 0 -3
+c:adge	-1 -2 9 -2 -2 -3
+c:adin	1 2 8 -8 -6 3
+c:admi	-7 13 -8 7 1 -5
+c:ads 	-3 -2 11 -7 5 -4
+c:ady 	-3 -4 3 -2 -3 8
+c:ae r	-1 -2 -2 -1 -1 7
+c:aes 	-1 -3 5 -1 1 -2
+c:afe 	-9 -1 -4 18 -2 -3
+c:afe'	-1 -2 7 -1 -1 -2
+c:afe?	-5 -1 -2 10 -1 -1
+c:afet	-1 -2 10 -2 -2 -2
+c:afte	-5 -7 33 -6 -7 -7
+c:agai	-6 -1 -2 12 -1 -1
+c:age 	-17 9 17 1 4 -15
+c:age.	-2 -1 -3 -1 -1 8
+c:age?	8 -1 -2 -3 -1 -2
+c:ages	-2 2 15 -6 -8 0
+c:aggi	-1 7 -2 -1 -2 -1
+c:agic	-1 -4 2 -1 -4 9
+c:agin	-2 -1 9 -4 4 -5
+c:ags 	4 -2 -3 -4 -1 7
+c:ail 	-9 8 -3 -9 9 3
+c:ails	1 -13 28 -11 -9 4
+c:aily	-1 7 -3 -1 -1 -1
+c:ain 	33 -8 -14 -9 7 -9
+c:aina	-1 -2 6 -2 -1 -1
+c:ains	-6 -1 -2 11 -1 -1
+c:ait 	-1 -1 -3 -1 -1 7
+c:ak b	-4 0 -1 6 0 0
+c:ake 	-6 23 -24 -11 5 14
+c:akes	-1 -6 10 3 -3 -3
+c:akin	-4 -1 -2 7 0 -1
+c:aks 	-5 -4 13 -4 5 -5
+c:aky,	-1 -1 -4 -2 -6 14
+c:al d	-1 -2 -1 7 -2 -1
+c:alcu	3 -3 6 -4 2 -3
+c:ale 	6 -1 -1 -2 -3 1
+c:alho	-2 -3 11 -2 -1 -3
+c:alid	-3 -7 22 5 -9 -8
+c:alis	1 -2 5 -2 -2 -1
+c:alk 	15 -2 -3 -2 -2 -6
+c:alks	9 -2 -1 -3 -1 -2
+c:all 	-5 2 -12 -8 1 22
+c:allb	-1 -2 -3 2 -2 6
+c:alle	-3 1 -4 -3 -4 12
+c:allo	-4 26 -4 -6 -7 -5
+c:alls	0 -2 2 -4 -3 7
+c:ally	1 -3 2 -3 7 -4
+c:alre	-3 -4 3 -2 -3 8
+c:als 	-3 -4 2 5 -3 2
+c:ame 	-7 7 4 -14 -2 12
+c:amer	-1 -1 5 -1 -1 -1
+c:ames	0 -5 0 -1 7 -1
+c:amin	-1 -1 -3 -1 -1 6
+c:amma	-1 10 -3 -2 -3 -2
+c:ampl	-1 -2 -1 -1 5 -2
+c:an a	-1 5 0 -1 -3 -1
+c:an b	-1 0 -1 7 -3 -1
+c:an e	-2 6 -4 -2 6 -4
+c:an f	-1 -2 7 -2 -2 -1
+c:an i	0 -5 -1 0 7 0
+c:an o	-1 10 -3 -2 -2 -1
+c:an r	0 6 0 -1 -4 0
+c:an u	-6 3 -5 -6 -6 20
+c:an't	-4 -6 16 -4 4 -6
+c:ance	0 -4 -6 6 1 3
+c:anch	-5 -3 -10 14 5 -2
+c:and 	-14 6 -28 -6 28 15
+c:andl	3 -6 -8 5 13 -8
+c:ando	-1 -1 -3 -1 -5 10
+c:andr	-1 -2 8 -2 -2 -2
+c:ange	-5 3 -6 30 -10 -11
+c:anic	-1 -2 5 -1 -1 -1
+c:anit	-2 -2 -3 9 -2 -2
+c:aniz	1 -4 -5 -4 -3 16
+c:ank 	-1 -1 8 -2 -2 -2
+c:anks	1 -7 7 0 -2 0
+c:anno	-2 -3 13 -2 -2 -3
+c:ansp	0 -4 7 -1 -1 -1
+c:ants	-1 -2 -3 -1 -3 10
+c:any 	-1 -6 1 19 -5 -9
+c:anym	-4 -2 5 -6 -2 9
+c:anyt	1 -3 -6 17 -3 -6
+c:anyw	-2 -2 -1 7 -2 -1
+c:ap d	-2 -1 8 -2 -1 -2
+c:api 	0 -5 -8 5 9 -2
+c:app 	8 13 -1 -9 -5 -6
+c:appe	6 -3 -2 -2 2 -1
+c:appl	-1 1 -3 -2 -4 9
+c:ar j	-1 -1 8 -2 -1 -2
+c:arac	-2 -2 9 -2 -2 -2
+c:arba	-2 -2 8 -1 -1 -1
+c:ard 	-3 15 4 -4 -7 -5
+c:ardc	-2 -2 -1 7 -2 -1
+c:ards	-4 0 -1 6 0 0
+c:are 	17 -19 23 2 -11 -12
+c:ared	4 -2 -5 -4 -3 10
+c:aren	0 -4 7 -1 -1 -1
+c:arge	-2 -3 11 -2 -1 -3
+c:aria	7 -7 0 0 0 0
+c:ariz	10 -8 -4 -4 10 -3
+c:ark 	-2 3 3 -3 6 -6
+c:arkd	-2 11 -2 -3 -2 -3
+c:arks	-1 -1 -4 -1 10 -2
+c:arku	-1 -2 7 -1 -1 -2
+c:arni	-2 -3 -5 -3 -3 15
+c:arou	-1 -3 -1 -1 7 -1
+c:ars 	-8 3 28 -8 -6 -8
+c:arsi	-1 -1 9 -1 -2 -4
+c:art 	9 -8 10 -8 5 -7
+c:art.	12 -1 -3 -3 -2 -2
+c:as b	-1 -1 7 -1 -2 -2
+c:as g	-3 -2 11 -2 -2 -2
+c:as j	-1 8 -3 -1 -2 -2
+c:as t	-1 0 7 -1 -1 -2
+c:asap	4 -1 5 -1 -7 0
+c:ase 	-11 0 1 -4 17 -2
+c:ashb	-1 7 -3 -1 -1 -1
+c:ashe	-2 -1 11 -2 -3 -3
+c:ashi	-1 -1 -1 6 -1 -2
+c:assw	-5 -2 2 2 8 -6
+c:ast 	9 -2 6 -5 -4 -3
+c:asyn	-1 -1 -3 -1 -1 7
+c:at a	0 0 -8 -4 3 9
+c:at b	-6 0 5 -3 5 -1
+c:at c	14 0 -7 -7 -4 4
+c:at d	10 -1 -2 -2 -2 -2
+c:at h	7 -3 -3 -2 2 -2
+c:at i	-2 -2 -1 6 -1 -1
+c:at o	-1 11 -5 -1 -1 -3
+c:at p	-2 12 -3 -2 -3 -2
+c:at r	-2 5 -4 -1 4 -2
+c:at s	-2 12 -2 -1 -5 -2
+c:at t	8 -9 5 0 7 -11
+c:at u	7 -1 -1 -1 -1 -1
+c:at's	21 -2 -7 -5 -3 -4
+c:ata 	-7 9 -6 13 -1 -8
+c:ata`	-1 -1 -1 -2 -1 6
+c:atab	6 3 -5 -4 6 -6
+c:atar	-5 5 13 -5 -4 -5
+c:ate 	-5 17 -10 -15 -13 26
+c:ate-	-2 -5 -2 -2 -2 12
+c:ated	11 -1 -5 -2 -1 -1
+c:atel	-2 -2 13 -2 -5 -2
+c:ates	6 5 -3 -5 -7 5
+c:atet	-2 -2 8 -2 -1 -2
+c:aths	-1 -1 -2 6 -1 -1
+c:atib	-4 0 -1 6 0 0
+c:atio	-17 9 6 9 10 -17
+c:ativ	-1 -1 5 -1 -1 -2
+c:atoi	-4 0 -1 7 -1 -1
+c:atti	0 -4 0 0 5 0
+c:atur	-8 0 -8 12 0 4
+c:audi	-6 -3 -1 29 -9 -11
+c:ault	-2 -3 11 -2 -1 -3
+c:ausi	-1 -2 9 -3 -2 -2
+c:auth	-5 2 -7 7 -9 12
+c:avas	-1 -1 -2 -1 -1 6
+c:avat	-5 5 13 -5 -4 -5
+c:ave 	-1 3 7 -3 -3 -3
+c:aves	-1 0 -2 -4 9 -1
+c:avig	0 5 -2 -1 -1 -1
+c:avta	-2 -1 7 -2 -1 -1
+c:awai	-1 -1 -3 -1 -1 7
+c:axe 	-1 -2 -5 -3 12 -2
+c:ay f	-2 12 -3 -2 -2 -3
+c:ayer	-1 8 -4 -1 -2 -1
+c:ayme	5 -2 -7 3 9 -8
+c:ays 	-1 -2 9 -1 -2 -2
+c:b ac	-1 -3 -1 0 -1 6
+c:b ap	2 5 -7 -8 3 3
+c:b fa	-3 -4 17 -4 -4 -3
+c:b qu	-1 0 9 -3 -1 -4
+c:b ru	-1 -1 6 -1 -2 -2
+c:back	-5 -2 8 9 -5 -5
+c:badg	-1 -2 9 -2 -2 -3
+c:bage	-2 -2 8 -1 -1 -1
+c:bar 	-2 4 9 -3 -3 -5
+c:base	8 0 -7 -6 6 -1
+c:be c	-1 -1 8 -2 -2 -2
+c:be s	-1 0 -1 7 -3 -1
+c:befo	-5 -6 2 20 -5 -6
+c:bein	-3 -3 13 -2 -2 -3
+c:benc	-1 -1 -3 -1 7 -2
+c:ber 	-1 5 -2 -1 -1 -1
+c:ber'	-1 -2 5 -1 -1 -1
+c:bers	-1 -2 -3 -1 -3 9
+c:betw	2 -1 -2 -2 6 -3
+c:bigg	6 -1 -2 -1 -1 -1
+c:bile	5 3 -3 1 -6 1
+c:bili	-6 -3 -9 10 4 3
+c:blac	-1 -4 8 -1 -1 -1
+c:blan	-1 -1 8 -2 -2 -2
+c:ble 	-8 31 5 -9 -10 -9
+c:ble?	7 -7 0 0 0 0
+c:blem	-1 -2 -2 9 -2 -2
+c:blic	5 7 -5 0 -4 -3
+c:bloc	-1 -2 7 -1 -2 -2
+c:blog	-1 10 -1 -1 -5 -2
+c:blur	-1 -1 6 -2 -1 -1
+c:boar	-2 18 2 -6 -8 -5
+c:body	-1 -1 -2 -1 -1 5
+c:bom 	0 -2 6 0 -2 -1
+c:bot 	-2 2 9 -2 -2 -5
+c:bots	-6 0 -2 9 -1 0
+c:bott	-1 -1 7 -2 -1 -2
+c:bran	-5 -3 -10 14 5 -2
+c:brea	-8 -3 6 4 6 -4
+c:brok	-1 -1 7 -2 -1 -2
+c:brt 	-1 -1 5 -1 -1 -1
+c:brut	-4 -1 -2 8 -1 -1
+c:bscr	-1 6 -1 -2 -2 -1
+c:buck	-1 -1 -4 9 -1 -2
+c:bug 	-2 -4 5 -3 7 -3
+c:buil	-2 28 -1 -6 -10 -9
+c:bump	-2 -1 -3 -1 -1 8
+c:but 	-2 -2 9 -2 -2 -2
+c:butt	-6 5 16 -5 -5 -5
+c:by e	-2 24 -7 -2 -5 -7
+c:by p	-2 -4 14 -4 -2 -2
+c:by r	-1 -1 -3 -1 -1 7
+c:c ap	-1 9 -4 2 -3 -2
+c:c do	7 -1 -1 -1 -1 -1
+c:c in	-2 -2 -4 -3 0 11
+c:c li	-1 -2 5 -1 -1 -1
+c:c lo	-2 -1 8 -1 -1 -2
+c:c nu	-1 -2 -3 -1 -3 9
+c:c re	-2 -1 12 -3 -3 -3
+c:c/aw	-1 -1 -3 -1 -1 7
+c:c` f	-2 -1 -4 -2 -2 12
+c:cae 	-1 -1 -2 -1 -1 6
+c:calc	3 -3 6 -4 2 -3
+c:cale	6 -1 1 -2 -2 -2
+c:calh	-1 -2 8 -1 -1 -3
+c:call	1 -4 1 -3 -6 12
+c:came	-1 -1 5 -1 -1 -1
+c:can 	3 2 -3 5 -7 0
+c:can'	-4 -6 16 -4 4 -6
+c:cann	-2 -3 13 -2 -2 -3
+c:cart	11 -6 -3 -5 6 -4
+c:cate	-2 2 1 -5 -5 8
+c:cati	-3 6 3 -4 2 -4
+c:ccep	-2 -2 13 -3 -3 -2
+c:cces	-1 -3 -12 10 10 -4
+c:ccou	-1 -2 9 -1 -1 -2
+c:ce c	-1 -1 7 0 -1 -3
+c:ce i	-2 -1 2 -3 -3 7
+c:ce l	-6 -3 7 8 -2 -3
+c:ce m	-1 -2 -3 -1 -3 9
+c:ce p	-2 -4 11 1 -3 -2
+c:ce s	-1 -1 6 -2 -1 -1
+c:ce t	-3 -3 -3 -3 -3 13
+c:ce.c	-2 -2 8 -2 -1 -2
+c:ce? 	5 -2 -1 -2 0 -1
+c:cehc	-2 -2 -4 10 0 -2
+c:cek 	-1 -1 -3 6 0 -1
+c:cept	-3 -5 21 -5 -5 -4
+c:cer 	11 -1 -3 -3 -2 -2
+c:ces?	7 0 -1 -2 -1 -2
+c:cess	-3 4 -14 9 8 -5
+c:ch e	6 -2 -1 -2 1 -1
+c:ch f	6 -3 -3 2 1 -3
+c:ch p	6 0 -2 -2 -1 -2
+c:ch? 	-3 -1 -2 9 -1 -2
+c:chan	0 -5 -13 26 -4 -5
+c:char	-3 -3 13 -3 -2 -2
+c:chce	-1 -1 -3 6 0 -1
+c:chec	-12 17 -25 30 9 -19
+c:ched	-6 -4 20 -5 -3 -3
+c:ches	-2 -1 -7 2 7 1
+c:chma	-1 -1 -4 -1 10 -2
+c:ci? 	10 -1 -2 -3 -1 -2
+c:cie 	-2 -1 7 -1 -1 -1
+c:cies	-4 -4 -7 13 -4 6
+c:cing	4 8 -5 -3 -2 -2
+c:ck a	0 8 -8 -6 10 -4
+c:ck i	-3 0 -4 14 -4 -3
+c:ck o	-8 8 5 -6 -2 3
+c:ck q	15 -3 -5 -3 -2 -2
+c:ck r	-4 -1 -1 7 -1 -1
+c:ck t	-8 -12 -7 24 13 -10
+c:ck w	-2 3 -3 5 -2 -2
+c:ckag	9 -2 -5 -5 -2 6
+c:cker	-1 -4 9 -1 -2 0
+c:cket	-1 1 -3 6 1 -4
+c:ckou	-4 22 -1 -8 -5 -5
+c:cks 	-2 -3 4 4 -6 4
+c:ckup	-1 -1 -3 9 -2 -2
+c:ckwa	-4 0 -1 6 0 0
+c:clas	-2 -2 -3 -2 -2 10
+c:clea	-5 -4 1 -6 -5 19
+c:cli 	-1 1 -3 -1 5 -2
+c:clie	4 -3 -5 -5 -3 12
+c:clip	-1 -3 -2 -1 -2 10
+c:clos	-2 -2 11 -2 -2 -3
+c:code	11 -17 -17 6 -7 24
+c:cold	-1 -2 8 -2 -1 -1
+c:colo	-1 7 -2 -1 -1 -1
+c:colu	-1 10 0 -2 -2 -5
+c:comm	-10 21 -9 13 -10 -5
+c:comp	-9 -6 4 -1 6 6
+c:cond	-2 3 14 -2 -4 -8
+c:conf	5 -6 0 -7 0 7
+c:cons	-7 -9 -16 -7 -9 48
+c:cont	-2 1 -8 12 3 -6
+c:conv	-2 -3 -3 -2 -2 13
+c:copy	-2 -1 7 -1 -1 -2
+c:core	0 7 -5 -1 0 -1
+c:corn	-1 6 -3 -1 -1 -1
+c:corr	-7 -5 -7 11 12 -4
+c:cors	-3 -2 3 9 -5 -2
+c:coul	-11 0 4 3 1 4
+c:coun	-2 -4 19 -3 -3 -6
+c:cove	-3 -5 -2 -6 22 -5
+c:cras	-2 -2 12 -2 -3 -3
+c:crea	-4 24 -8 -7 1 -6
+c:cred	-2 -2 -1 7 -2 -1
+c:cree	-3 -1 10 -4 4 -5
+c:cret	-4 2 -3 7 -1 -1
+c:crip	11 7 -12 -8 -11 14
+c:crol	-1 5 1 -2 -2 -2
+c:cryp	-1 -1 -3 8 -1 -2
+c:cs e	2 -3 -2 -2 9 -3
+c:csp 	-1 -1 -5 11 -2 -2
+c:ct t	-2 -6 -7 -3 3 14
+c:ct? 	-6 -1 -4 14 -2 -1
+c:cter	-1 -1 5 -1 -1 -1
+c:ctio	2 -5 -1 -2 -2 8
+c:ctly	-2 -5 -4 -4 19 -4
+c:ctor	-1 1 -3 -1 -3 8
+c:cts 	-4 20 0 -2 -9 -5
+c:ctua	-1 -3 -1 -2 9 -3
+c:ctur	7 -1 -1 -2 -1 -2
+c:cula	3 -3 6 -4 2 -3
+c:cure	-1 -1 -1 7 -4 -1
+c:curi	6 -4 -5 11 -4 -5
+c:cust	-1 1 -3 -1 -1 6
+c:cut 	-1 -1 7 -2 -1 -2
+c:cuts	-2 -2 10 -3 -2 -2
+c:cy m	-1 -5 10 -1 -2 -2
+c:cy v	-3 -3 -3 -3 -3 14
+c:d 14	-1 -1 6 -1 -1 -1
+c:d a 	-4 64 -21 -13 -12 -14
+c:d an	-5 19 -7 -6 6 -7
+c:d ap	-1 -1 -3 -1 -1 7
+c:d as	-2 -2 8 -1 -2 -2
+c:d au	-1 9 -3 -3 -2 -1
+c:d av	-1 8 -3 -1 -2 -2
+c:d ca	-1 0 6 -1 -1 -2
+c:d co	-5 -6 -1 -6 10 9
+c:d cr	-3 -3 6 5 -3 -3
+c:d cs	-1 7 -1 -1 -3 -1
+c:d de	-2 -2 -2 -3 -1 11
+c:d dr	-1 9 -2 -1 -2 -3
+c:d ef	-1 8 -4 -1 -2 -1
+c:d em	4 -3 11 -5 -4 -3
+c:d fi	1 1 -6 -4 -7 15
+c:d fo	-2 13 -6 -4 -10 10
+c:d ha	-3 -3 -9 13 7 -5
+c:d i 	6 -1 -1 -2 0 -2
+c:d in	12 -1 -4 -1 -2 -2
+c:d ke	-1 3 -2 6 -4 -2
+c:d li	-1 -1 -3 -1 -1 7
+c:d lo	-1 -2 -2 -4 9 -1
+c:d mo	-2 2 1 -2 -4 5
+c:d na	0 5 -2 -1 -1 -1
+c:d of	-3 -2 0 -3 -2 9
+c:d on	-2 -4 16 -3 -3 -4
+c:d ou	-2 -4 6 -3 -2 6
+c:d pa	15 10 -7 -7 -5 -7
+c:d po	-1 -1 -2 6 -1 -1
+c:d re	-5 -5 0 -2 18 -6
+c:d se	-1 9 -3 -1 -4 -1
+c:d sh	-1 7 -3 -1 -1 -1
+c:d so	3 7 -5 -3 -2 -1
+c:d ss	-1 8 -2 0 -4 -1
+c:d st	-1 2 7 -2 -4 -2
+c:d su	-1 6 -2 -2 1 -2
+c:d ta	-1 7 -2 -1 -2 -1
+c:d te	-9 -14 -7 1 35 -7
+c:d th	-2 -8 -3 -3 11 5
+c:d ts	0 -7 -1 -1 10 -1
+c:d un	0 -4 0 0 5 0
+c:d v1	-2 -1 -3 -2 -2 10
+c:d wo	-1 -1 7 -1 -2 -1
+c:d yo	-16 0 10 -2 5 3
+c:d' i	-1 -1 6 -1 -1 -1
+c:d? o	5 0 -2 -1 0 -1
+c:d? t	5 -1 -1 -2 -1 -1
+c:dae 	-1 -2 -2 -1 -1 7
+c:dail	-1 7 -3 -1 -1 -1
+c:dal 	-1 -1 6 -1 -1 -2
+c:dang	-4 0 -1 7 0 -1
+c:dark	-2 0 4 -3 6 -5
+c:dash	-1 8 -3 -1 -1 -1
+c:data	2 10 -13 6 5 -9
+c:date	-1 -11 -2 -10 -5 29
+c:dati	-3 3 -4 6 -1 -1
+c:dbac	-1 5 -2 -1 -1 -1
+c:dd a	-3 59 -19 -14 -8 -14
+c:dd c	-2 7 -2 -2 3 -4
+c:dd f	0 5 -1 -1 -3 0
+c:dd k	0 5 -2 -1 -1 -1
+c:dd p	-1 8 -6 -1 1 -1
+c:dd s	-3 25 -9 -3 -7 -3
+c:dd t	-3 -9 -6 -5 28 -5
+c:dd u	0 -4 0 0 5 0
+c:de 1	-2 -10 -2 -4 -5 23
+c:de 2	-3 0 -2 -1 7 -1
+c:de f	-2 10 -2 2 -5 -3
+c:de g	7 0 -2 -2 -1 -2
+c:de i	-2 -2 -4 -3 -2 14
+c:de n	-1 -6 0 -1 9 -1
+c:de o	-2 -1 8 -1 -1 -2
+c:de r	0 -3 -12 -4 3 15
+c:de t	3 -1 1 -5 -9 10
+c:de' 	-1 -2 7 -1 -1 -2
+c:de? 	6 -1 -1 -2 0 -2
+c:dead	-2 -2 2 -2 -1 6
+c:debu	-1 -1 7 -2 -1 -1
+c:dedu	-1 -1 -3 -1 -1 7
+c:dele	-4 3 1 -5 -4 8
+c:delp	5 -1 -1 -1 -1 -2
+c:denc	-7 -7 -8 0 -6 28
+c:dent	-1 -1 -1 6 -2 -1
+c:depe	-7 -7 -9 -1 -7 30
+c:depl	8 -2 0 -4 4 -8
+c:der 	-3 -3 -1 -2 -5 12
+c:derb	-1 9 -2 -2 -3 -1
+c:deri	0 7 -2 -1 -3 -2
+c:ders	-2 2 3 2 3 -9
+c:df h	-1 -1 7 -1 -2 -2
+c:dge 	-1 -4 9 -2 2 -3
+c:dget	-1 6 -3 -1 -1 -1
+c:dia 	-2 -3 10 -3 -2 -1
+c:diat	-2 -2 12 -2 -5 -2
+c:dies	-1 -1 7 -1 -1 -2
+c:diff	2 -2 -2 5 -3 -2
+c:ding	2 10 4 -9 -8 2
+c:dio 	-2 -2 10 -3 -2 -2
+c:dit 	-4 -1 -12 32 -7 -9
+c:dits	-2 -1 8 -1 -1 -2
+c:dle 	9 -2 -4 -3 -3 3
+c:dler	-5 -4 -3 9 3 -1
+c:dles	-1 -1 -4 -5 13 -2
+c:dme 	-1 0 -2 -1 -3 7
+c:dmin	-7 13 -8 7 1 -5
+c:do a	-1 -4 -3 15 -3 -4
+c:do i	10 -7 -1 -1 -1 -1
+c:do t	6 -1 -1 -1 -2 -1
+c:do w	11 -2 -3 -3 -2 -2
+c:docs	-2 -1 -1 -1 9 -3
+c:does	31 -10 1 2 -9 -14
+c:doml	-1 0 -3 -1 -5 11
+c:don'	1 -5 1 -3 -3 8
+c:done	-2 -2 -5 -1 -1 12
+c:dos 	-2 -1 -4 -1 -1 9
+c:down	2 7 4 -5 -4 -5
+c:dpoi	0 8 -8 1 -7 6
+c:droi	-1 -2 8 -2 -2 -2
+c:drop	-4 -6 5 -6 -7 19
+c:ds c	-5 -2 -2 3 9 -1
+c:ds o	-2 -3 14 -3 -3 -2
+c:ds t	-1 10 -2 -1 -4 -2
+c:duce	5 -3 -6 -3 4 4
+c:duct	-1 2 14 -4 -7 -3
+c:dule	-4 -6 -8 -5 11 11
+c:dupl	-2 2 1 -4 -4 7
+c:dy c	-2 -1 -3 -2 -2 10
+c:dy d	-2 -2 -5 -1 -1 12
+c:dy i	-1 -3 10 -1 -2 -4
+c:dy u	-1 0 -3 -1 -3 9
+c:e 'n	-1 -2 5 -1 -1 -1
+c:e 's	-2 -3 12 -1 -2 -3
+c:e 16	-2 -10 -2 -4 -5 23
+c:e 2 	-2 -8 21 -5 -4 -3
+c:e 20	-2 -3 11 -3 -2 -2
+c:e 22	-3 0 -2 -1 7 -1
+c:e 88	-1 -1 6 -1 -1 -1
+c:e `d	-1 -1 -1 -2 -1 6
+c:e `m	-2 -1 -4 -2 -2 12
+c:e a 	-2 42 -14 -10 -4 -12
+c:e ac	-1 -1 -7 14 -2 -3
+c:e ad	-5 6 -7 10 -2 -3
+c:e af	-1 -2 7 -1 -2 -2
+c:e ag	-6 0 -2 9 -1 0
+c:e al	-1 -8 -8 -4 6 14
+c:e an	1 2 -12 3 -6 13
+c:e ap	4 -7 9 6 -2 -11
+c:e as	-2 -2 6 -2 -1 1
+c:e au	-5 -1 -6 5 -7 14
+c:e ba	6 -1 1 -2 -2 -2
+c:e be	-2 -5 10 0 3 -7
+c:e bi	5 -1 -3 2 0 -2
+c:e bl	0 6 0 -1 -4 0
+c:e bo	0 -3 16 -3 -3 -7
+c:e br	-4 0 -1 6 0 0
+c:e bu	-3 0 11 -9 0 1
+c:e by	-2 13 -7 -2 -3 1
+c:e ca	1 -6 8 -6 2 1
+c:e ch	-3 -1 3 7 -3 -4
+c:e co	-6 0 -6 -3 -1 16
+c:e cr	-1 -1 6 -1 -2 -2
+c:e cs	-3 -5 -5 8 1 4
+c:e cu	-1 2 -4 -1 -2 6
+c:e da	1 4 -2 -6 6 -2
+c:e de	15 -2 -5 -3 -3 -3
+c:e do	15 -6 -12 -8 -2 12
+c:e du	-2 -2 0 -2 -2 7
+c:e e2	-1 -1 -4 -2 -2 10
+c:e en	1 -3 1 13 -7 -5
+c:e er	-2 -3 -3 -4 7 4
+c:e es	-1 -1 -4 -2 -2 11
+c:e ev	-1 -2 8 -1 -2 -2
+c:e ex	0 -2 -4 -2 8 0
+c:e fe	3 6 -8 -6 -3 9
+c:e fi	-9 5 7 0 -7 3
+c:e fl	7 2 -4 -5 -4 4
+c:e fo	-4 19 0 3 -6 -13
+c:e fr	-5 -8 1 -5 -4 21
+c:e fu	5 -7 -2 -1 7 -1
+c:e ga	-2 10 1 -7 2 -5
+c:e ge	6 -2 4 -4 -2 -1
+c:e go	-1 -2 -3 -2 1 7
+c:e he	-1 -2 1 -2 -1 5
+c:e ho	11 2 -5 -3 -3 -2
+c:e i 	-3 -2 -6 14 -2 -3
+c:e i'	7 -1 -1 -2 -1 -2
+c:e if	-1 0 -1 7 -3 -1
+c:e im	-2 -9 5 -13 5 15
+c:e in	-8 3 4 -12 -11 25
+c:e is	16 -7 7 -3 -7 -6
+c:e it	-3 5 -4 0 -8 9
+c:e jo	-1 0 9 -3 -1 -4
+c:e jq	-1 -1 -3 -2 -1 8
+c:e ke	-1 0 7 -1 -2 -2
+c:e la	7 -2 2 -3 -6 2
+c:e le	-6 3 6 4 -3 -4
+c:e li	-2 -2 12 1 3 -12
+c:e lo	-9 -8 -6 18 4 1
+c:e ma	0 -5 3 -6 0 7
+c:e me	-1 6 -2 1 -2 -2
+c:e mi	-5 -4 -6 4 7 4
+c:e mo	1 17 2 -2 -14 -3
+c:e na	-1 -6 -1 -2 6 5
+c:e ne	-10 10 4 16 -11 -9
+c:e no	-1 -2 9 -2 -2 -3
+c:e of	1 -1 8 -2 -2 -3
+c:e ol	3 -3 -6 -5 -3 14
+c:e on	-3 -5 4 -5 16 -7
+c:e ot	-2 -2 -2 11 -3 -1
+c:e pa	-12 -2 -8 6 30 -13
+c:e pd	-1 -1 7 -1 -2 -2
+c:e pl	-1 8 -4 -1 -2 -1
+c:e pr	1 -1 23 0 -12 -11
+c:e pu	5 5 6 -8 -4 -4
+c:e qu	6 -1 -3 -1 -1 -1
+c:e ra	-8 -5 -2 2 -1 13
+c:e re	7 -9 -8 14 -3 0
+c:e ro	7 -4 7 -3 -3 -4
+c:e ru	4 -3 -2 -2 6 -3
+c:e s3	-1 -1 -4 9 -1 -2
+c:e sa	-7 -6 7 10 3 -8
+c:e sc	-1 6 3 -5 -7 5
+c:e se	8 -5 7 2 -5 -7
+c:e sh	0 -6 19 -9 -8 4
+c:e si	-4 5 -10 -7 14 1
+c:e so	-1 15 -5 -1 -2 -5
+c:e sp	-1 0 -1 7 -3 -1
+c:e st	-11 -9 21 10 0 -11
+c:e su	-3 -11 -6 -3 32 -8
+c:e sy	-2 -1 8 -1 -1 -2
+c:e ta	5 13 -7 -2 -1 -7
+c:e te	-7 2 -5 -11 22 -1
+c:e th	3 -2 -42 -11 -29 81
+c:e ti	-1 -2 1 -1 5 -1
+c:e to	-4 12 -9 4 -9 6
+c:e tr	-2 5 -1 2 -1 -3
+c:e ts	-1 -2 -1 -1 5 -1
+c:e ty	-3 -3 11 2 -4 -3
+c:e un	-3 -3 -1 0 -2 9
+c:e up	1 -2 -3 5 6 -6
+c:e us	5 1 -8 -5 -1 7
+c:e ut	-1 -1 -2 -2 -1 7
+c:e ve	-1 -1 -5 -2 11 -2
+c:e we	0 1 -10 4 7 -2
+c:e wh	5 0 -2 -9 6 0
+c:e wi	-3 6 -10 -5 18 -5
+c:e wo	16 -4 2 -6 -3 -5
+c:e wr	-3 -2 17 -3 -3 -6
+c:e é 	-2 -2 9 -2 -2 -2
+c:e' f	-1 -2 7 -1 -1 -2
+c:e's 	9 -3 -1 -5 -2 2
+c:e-fn	-2 -5 -2 -2 -2 12
+c:e.ca	-2 -2 8 -2 -1 -2
+c:e.js	-2 -1 -3 -1 -1 8
+c:e.lo	-3 -2 -3 -2 -2 11
+c:e2e 	-1 -1 -4 -2 -2 10
+c:e: m	-1 1 -4 -1 -1 6
+c:e: t	-2 -3 9 -1 0 -3
+c:ead 	-3 -3 7 -3 -2 5
+c:eade	-1 8 -5 4 -5 -2
+c:eadi	5 -1 2 -3 -1 -2
+c:eady	-3 -4 3 -2 -3 8
+c:eak 	-4 0 -1 6 0 0
+c:eaki	-4 -1 -2 7 0 -1
+c:eaks	-5 -4 13 -4 5 -5
+c:eamm	-1 10 -3 -2 -3 -2
+c:ean 	-4 -2 -8 -4 -3 22
+c:ears	-1 -2 9 -2 -2 -3
+c:ease	-16 0 8 2 9 -2
+c:eate	-3 26 -5 -5 -7 -5
+c:eatu	-7 0 -7 13 -4 5
+c:eb a	2 5 -7 -8 3 3
+c:ebug	-1 -1 7 -2 -1 -1
+c:eces	-1 -2 -2 -2 -1 8
+c:eck 	-10 -16 -21 38 21 -11
+c:ecko	-4 22 -1 -7 -5 -5
+c:ecks	0 -1 -1 6 -3 -1
+c:ecre	-4 -1 -2 8 0 -1
+c:ect?	-6 -1 -4 14 -2 -1
+c:ectl	-2 -4 -4 -4 17 -4
+c:ects	-2 12 -5 0 -3 -2
+c:ecur	-3 -4 -3 20 -7 -3
+c:ed c	-4 -4 -4 8 -5 9
+c:ed d	-2 -1 -2 -2 -1 8
+c:ed f	2 4 -6 -4 -7 11
+c:ed i	11 -1 -3 -2 -3 -3
+c:ed k	0 -1 -1 6 -3 -1
+c:ed l	-1 -1 -3 -1 -1 7
+c:ed o	-4 -5 14 -5 -4 3
+c:ed p	7 4 -2 -3 -2 -3
+c:ed t	1 -2 -4 9 -2 -3
+c:ed w	-1 -1 7 -1 -2 -1
+c:ed y	-5 0 7 -5 5 -2
+c:ed? 	41 -4 -10 -14 -5 -7
+c:edba	-1 5 -2 -1 -1 -1
+c:eden	-2 -2 -1 7 -2 -1
+c:edia	-2 -2 13 -2 -5 -2
+c:edit	-2 2 7 -2 -2 -3
+c:eds 	-1 8 -1 0 -4 -1
+c:educ	6 -1 -5 -3 -2 5
+c:edup	-1 -1 -3 -1 -1 7
+c:ee o	-1 -2 -1 -1 7 -1
+c:ee t	-1 6 -1 -1 -1 -2
+c:eed 	-6 18 2 -8 -1 -4
+c:eedb	-1 6 -3 -1 -1 -1
+c:eeds	-1 8 -1 0 -4 -1
+c:eemn	-1 6 -1 -1 -2 -1
+c:een 	-1 -1 8 -6 8 -8
+c:eeps	-2 -2 10 -2 -2 -2
+c:efac	-1 -1 -3 -1 -2 8
+c:effe	-1 6 -3 -1 -1 0
+c:efor	-5 -6 2 20 -5 -6
+c:egat	-1 -1 8 -1 -1 -3
+c:egfa	-2 -2 8 -2 -1 -2
+c:ehck	-2 -2 -4 10 0 -2
+c:ehre	8 -1 -2 -2 -1 -1
+c:eing	-3 -3 14 -2 -2 -3
+c:eir 	0 10 1 -5 -6 0
+c:eive	-5 -1 -4 13 -2 -2
+c:eiw 	-1 -1 -3 7 0 -1
+c:ek t	-1 -1 -3 6 0 -1
+c:el f	-1 5 0 -1 -2 -1
+c:elea	-1 -1 6 -2 -1 -1
+c:elet	-4 3 1 -5 -4 8
+c:elia	-1 0 -3 -1 -3 8
+c:ell 	10 -4 -6 2 4 -6
+c:elnt	-1 -2 6 -1 -1 -1
+c:elpe	-1 -5 -3 -1 4 6
+c:elpo	5 -1 -1 -1 -1 -2
+c:ely 	-2 -2 13 -2 -5 -2
+c:emai	-4 7 9 -12 7 -8
+c:embe	-1 5 -2 -1 -1 -1
+c:eme 	-2 10 -3 -2 -2 -2
+c:emen	-1 42 -14 -9 -10 -8
+c:emnt	-1 6 -1 -2 -2 1
+c:emor	-1 -1 7 -1 -1 -2
+c:emov	-6 -5 -9 -7 -5 31
+c:empt	-1 -9 0 -1 14 -2
+c:ems 	-1 -3 -1 9 -2 -2
+c:en a	8 1 2 -3 -4 -3
+c:en f	-1 -1 6 -2 -1 -1
+c:en i	-2 -3 14 -3 -3 -3
+c:en o	-3 -3 13 -3 -2 -3
+c:en t	-6 3 22 -7 0 -12
+c:en w	-2 -3 9 -2 0 -2
+c:enam	-3 -2 -5 -5 -3 18
+c:enci	-3 -3 -3 4 -3 8
+c:encr	-1 -1 -3 8 -1 -2
+c:ency	-5 -4 5 -5 -7 17
+c:end 	1 -5 5 -6 14 -9
+c:ende	-8 -6 -12 -1 1 25
+c:endp	0 9 -9 0 -7 6
+c:ener	7 -1 1 -3 -1 -3
+c:enin	-2 -2 10 -2 -1 -2
+c:enou	-3 -1 -2 7 0 -1
+c:ens 	-1 -5 1 11 -1 -5
+c:ent 	-6 30 -17 -18 -9 19
+c:ent?	13 -2 -2 -4 -2 -4
+c:ente	-2 -2 4 -3 -2 6
+c:enti	-2 1 -1 6 -3 -1
+c:entl	-2 -3 11 -2 -2 -2
+c:entr	6 0 -2 -1 -1 -1
+c:ents	-6 9 -19 0 14 2
+c:env 	0 -1 -1 6 -3 -1
+c:envi	5 -5 0 0 0 0
+c:eomv	-2 -1 -2 -2 -1 9
+c:eopl	-1 8 -3 -1 -2 -1
+c:epen	-7 -7 -9 -1 -7 30
+c:epla	-2 -4 -7 -3 -4 19
+c:eplc	-1 -1 -2 -1 -1 6
+c:epli	-1 -1 7 -1 -1 -3
+c:eplo	8 -2 0 -4 4 -8
+c:epo 	2 -1 -4 8 -2 -3
+c:epo?	-5 -1 -2 10 0 -1
+c:epor	2 5 -10 5 -1 -1
+c:epro	-1 -2 -2 0 6 -1
+c:eps 	-2 -2 10 -2 -2 -2
+c:epti	-2 -2 8 -2 -1 -2
+c:epts	-2 -2 13 -3 -3 -2
+c:eque	0 3 5 -2 -4 -2
+c:er 1	-2 -3 14 -3 -3 -2
+c:er a	-3 -2 5 9 -5 -4
+c:er b	-2 -4 6 -2 -2 4
+c:er c	-1 -6 21 0 -6 -9
+c:er d	1 -1 6 -2 -2 -2
+c:er g	-2 -1 11 -2 -2 -4
+c:er h	-1 -1 -5 -6 16 -2
+c:er i	9 -2 2 -5 -1 -3
+c:er l	-2 2 8 -2 -2 -3
+c:er m	-3 -1 -8 9 -4 7
+c:er o	-3 2 -3 -3 7 1
+c:er p	-1 1 6 -2 -2 -1
+c:er r	-1 -1 6 -2 -1 -1
+c:er s	9 5 2 -9 -10 2
+c:er t	-6 1 -6 15 3 -7
+c:er u	-2 -2 2 11 -7 -2
+c:er w	-2 -2 -5 2 7 -1
+c:er' 	-1 -2 7 -1 -1 -2
+c:er's	3 4 -5 -2 1 -1
+c:er-s	0 5 -2 -1 -3 0
+c:er? 	8 0 -3 -2 -1 -2
+c:er_i	-1 -1 6 -1 -1 -1
+c:era 	-1 -1 5 -1 -1 -1
+c:erab	-1 -1 -1 7 -1 -2
+c:erag	-1 -3 -6 -3 15 -2
+c:erat	8 -2 -2 -2 1 -2
+c:erbo	-1 9 -2 -2 -3 -1
+c:ere 	21 -8 -13 8 -8 0
+c:ere'	9 -3 -1 -5 -2 2
+c:erex	-1 -2 7 -2 -1 -1
+c:erge	-5 -2 -4 18 -3 -4
+c:erif	-2 -4 -7 -4 21 -4
+c:erin	0 7 -2 -1 -3 -2
+c:ermi	4 -2 -2 6 -4 -2
+c:erna	-1 6 -2 -1 -1 -1
+c:ero 	-1 -1 8 -2 -1 -2
+c:erro	-2 -9 25 -9 1 -5
+c:ers 	-15 19 28 -14 2 -19
+c:ers'	-1 -1 -2 11 -6 -1
+c:ers/	-1 -1 6 -1 -1 -1
+c:erse	-2 -2 8 -2 -1 -2
+c:ersi	7 -7 -10 -10 -8 27
+c:erso	-5 -2 -3 14 -2 -2
+c:ert 	-2 -3 -3 -2 -2 13
+c:ervi	1 -6 13 -7 -5 4
+c:ery 	-10 15 4 -11 2 0
+c:eryo	-1 -2 7 -1 -2 -2
+c:eryw	-3 -2 -3 -2 -2 11
+c:es 1	-1 -1 -5 -6 16 -2
+c:es a	7 1 7 -10 9 -13
+c:es b	-1 7 -1 6 -5 -6
+c:es c	-1 -1 -3 -2 -3 10
+c:es d	0 -3 6 -1 -2 -1
+c:es f	0 -6 8 10 -6 -7
+c:es h	6 -1 -1 -2 -1 -1
+c:es i	-2 -7 2 11 5 -10
+c:es n	-5 -2 19 -4 -3 -5
+c:es o	-4 -5 18 -1 -7 -1
+c:es p	-1 0 -2 5 -2 -1
+c:es t	15 1 2 -14 0 -3
+c:es u	-2 -2 9 -2 -2 -2
+c:es" 	-1 -1 6 -2 -1 -1
+c:es? 	9 -1 -5 3 -2 -4
+c:escr	-1 -1 -2 -1 -1 6
+c:eset	-4 -4 9 -6 10 -5
+c:esli	-1 -1 -4 -2 -2 11
+c:esn'	-4 -2 7 9 -7 -3
+c:esrs	-1 6 0 -1 -1 -2
+c:ess 	-3 -1 5 11 -5 -7
+c:essa	-2 -3 7 -2 -2 2
+c:esse	-2 7 -3 2 -3 -1
+c:essi	0 -6 5 -5 12 -6
+c:est 	-21 -6 -18 -18 58 5
+c:est?	6 -1 -2 -1 -1 -1
+c:esti	14 1 -6 -4 -3 -3
+c:ests	0 -16 -11 -9 36 1
+c:esul	-1 -1 6 -2 -1 -2
+c:esyn	6 -1 -1 -1 -1 -1
+c:et "	-1 -1 6 -2 -1 -1
+c:et a	0 5 -8 0 0 2
+c:et c	-1 8 -1 -2 -2 -1
+c:et e	-1 -1 -8 -2 15 -2
+c:et i	-1 7 -3 1 -1 -1
+c:et l	-2 -4 16 -2 -4 -3
+c:et p	-2 12 -9 8 -4 -4
+c:et r	-1 -2 -5 -3 2 9
+c:et u	-3 18 -6 -3 -3 -4
+c:etch	-7 -5 17 -6 -4 6
+c:ete 	-6 7 6 -7 -6 6
+c:ethi	-1 -1 2 -3 -1 5
+c:etot	-2 -2 8 -2 -1 -2
+c:etr 	-1 -2 10 -2 -2 -2
+c:etri	0 5 10 -5 -7 -4
+c:etry	-2 -3 8 -3 2 -3
+c:ets 	-9 -10 0 2 24 -6
+c:etss	-1 -12 -4 -3 22 -2
+c:etti	-1 1 6 -2 -3 -1
+c:etup	-1 -1 -3 11 -4 -2
+c:etur	-4 0 2 -4 10 -4
+c:etwe	2 -1 -2 -2 6 -3
+c:eue 	4 5 3 -5 -1 -6
+c:evei	-1 -1 -3 7 0 -1
+c:even	5 -3 9 -3 -4 -3
+c:ever	-14 3 33 -16 -3 -3
+c:evie	-12 -8 -14 54 -10 -11
+c:evio	-1 -1 7 -2 -1 -2
+c:ew e	7 -8 -1 6 -3 -1
+c:ew h	-6 -1 -2 11 -1 -1
+c:ew m	-2 -3 6 3 -2 -3
+c:ew o	-4 1 -1 5 -1 -1
+c:ew s	-7 -1 5 8 -3 -2
+c:ew t	-8 -4 -10 45 -11 -12
+c:exam	-1 -2 -1 -1 5 -2
+c:exce	-2 -2 8 -2 -1 -2
+c:expi	-2 -2 13 -2 -5 -2
+c:expl	35 -3 -12 -9 -4 -7
+c:expo	-3 7 -3 3 2 -5
+c:ext 	-3 -4 19 -4 -4 -4
+c:extr	-1 -1 -3 -1 -2 7
+c:eybo	-2 2 8 -2 -4 -3
+c:eyer	-1 -1 6 -1 -1 -1
+c:eys 	-1 0 -1 6 -4 -1
+c:ezon	1 -5 9 -5 2 -2
+c:f an	-1 -1 -1 5 -1 -1
+c:f at	-1 -1 7 -2 -1 -2
+c:f ba	-1 -1 -3 9 -2 -2
+c:f fi	-2 -2 -3 9 -2 -2
+c:f fo	-1 -1 -1 6 -2 -1
+c:f ha	-1 -1 7 -1 -2 -2
+c:f it	-1 0 -1 7 -3 -1
+c:f th	6 -6 -11 -2 6 7
+c:f wh	-4 -1 -1 7 -1 -1
+c:fact	-1 1 -3 -1 -3 8
+c:fail	-3 -5 22 -8 -8 1
+c:fake	3 7 -1 -1 -6 -2
+c:faul	-2 -2 8 -2 -1 -2
+c:fe a	-6 0 -2 9 -1 0
+c:fe t	-3 -1 -2 9 -1 -2
+c:fe' 	-1 -2 7 -1 -1 -2
+c:fe? 	-5 -1 -2 10 -1 -1
+c:feat	-6 0 -8 13 -4 5
+c:fect	-1 6 -3 -1 -1 0
+c:fed 	-1 0 -1 7 -3 -1
+c:feed	-2 19 -7 -3 -6 -2
+c:fetc	-1 -1 -3 -1 -2 9
+c:fetr	-1 -2 10 -2 -2 -2
+c:few 	-3 -6 19 -3 -3 -4
+c:ff a	-1 -1 6 -2 0 -2
+c:ff f	-1 -1 -1 6 -2 -1
+c:ffec	-1 6 -3 -1 -1 0
+c:ffli	1 8 5 -4 -5 -5
+c:fig 	3 -5 1 -6 0 8
+c:file	-2 -10 -4 9 -19 25
+c:fine	3 -2 8 -4 -2 -3
+c:fix 	-9 -8 13 -6 -9 20
+c:flag	4 2 -4 -5 -2 6
+c:flak	-1 -1 -4 -2 -6 14
+c:flin	1 8 5 -4 -5 -5
+c:flow	-4 -5 -9 11 12 -5
+c:fmt 	-1 -3 -2 -1 -2 10
+c:fns 	-2 -5 -2 -2 -2 12
+c:fold	6 -2 -10 -3 -7 15
+c:font	-1 -1 7 -2 -1 -1
+c:for 	-14 16 -34 29 24 -22
+c:forc	-5 -1 -2 10 -1 -1
+c:fore	-7 -7 14 17 -8 -8
+c:form	-6 -7 9 -4 -3 11
+c:free	-1 6 0 -1 -1 -2
+c:from	-1 -11 3 1 -8 17
+c:fron	-1 0 6 -1 -1 -2
+c:ft d	-1 6 -1 -2 -2 -1
+c:ft_u	-1 -2 7 -1 -1 -2
+c:fter	-5 -7 33 -6 -7 -7
+c:ful 	-1 -1 -1 -2 -1 6
+c:func	3 -9 -1 -3 5 5
+c:fy t	-4 -6 -14 -5 17 12
+c:g a 	-1 -5 10 -1 -2 -2
+c:g af	-2 -1 10 -2 -3 -2
+c:g an	-7 2 -5 15 -4 -1
+c:g by	-2 -3 11 -3 -2 -2
+c:g co	-2 -3 -10 3 -5 17
+c:g da	-5 6 -4 5 -1 -2
+c:g de	-1 -1 -4 -1 10 -3
+c:g en	-6 -2 4 9 -2 -3
+c:g fo	10 5 4 -8 -12 1
+c:g he	0 -4 0 0 5 0
+c:g in	-5 -5 4 9 0 -3
+c:g is	-2 -3 15 -4 -2 -3
+c:g ja	-1 -1 -2 -1 -1 6
+c:g la	-2 -3 11 -2 -1 -3
+c:g lo	5 -5 -9 -5 1 12
+c:g me	-1 -1 -1 -2 -1 6
+c:g mu	-1 11 -5 -1 -1 -3
+c:g on	-2 9 -1 -3 -3 -2
+c:g pa	-2 6 6 -3 -3 -4
+c:g pe	0 -1 -1 6 -3 -1
+c:g se	-3 -3 13 -2 -2 -3
+c:g st	7 2 -2 -3 -1 -3
+c:g te	-2 -1 7 -1 -1 -2
+c:g th	6 -1 0 -2 0 -2
+c:g to	1 11 0 -3 -4 -5
+c:g us	0 -2 -2 -7 12 0
+c:g wi	-1 -5 10 -1 -2 -2
+c:g' i	-1 -2 5 -1 -1 -1
+c:gabr	-1 -1 6 -1 -1 -1
+c:gaes	-1 -1 6 -1 -1 -1
+c:gain	-7 -3 3 9 0 -2
+c:gall	0 5 -2 -1 -1 -1
+c:game	-2 5 3 -7 4 -4
+c:gani	1 -4 -5 -4 -3 16
+c:garb	-2 -2 8 -1 -1 -1
+c:ge 2	-2 -8 21 -5 -4 -3
+c:ge b	-4 0 -1 6 0 0
+c:ge f	-3 4 8 -4 -3 -3
+c:ge k	-1 -1 7 -1 -1 -2
+c:ge n	-1 -2 9 -2 -2 -3
+c:ge o	-2 -3 -4 -3 14 -3
+c:ge p	-1 -1 6 -2 -1 -1
+c:ge t	-6 11 -8 15 -5 -8
+c:ge w	-1 -1 -6 -4 12 0
+c:ge, 	-2 -1 -2 7 -1 -1
+c:ge.j	-2 -1 -3 -1 -1 8
+c:ge? 	8 -1 -2 -3 -1 -2
+c:ged 	5 -5 5 2 -4 -4
+c:gene	8 0 -2 -2 -1 -2
+c:ges 	-3 0 10 6 -10 -3
+c:ges?	-4 0 -1 7 0 -1
+c:gest	6 -1 -2 -1 -1 -1
+c:get 	4 -5 2 -4 -5 8
+c:gfau	-2 -2 8 -2 -1 -2
+c:gful	-1 -1 -1 -2 -1 6
+c:gged	-1 -2 8 -1 -1 -2
+c:gges	6 -1 -2 -1 -1 -1
+c:ggin	-1 10 -5 -3 -5 4
+c:gh t	12 -2 -5 5 -3 -7
+c:ght 	2 -4 8 -3 1 -4
+c:gic 	-3 -7 6 -7 -5 17
+c:gic?	8 -1 -3 -2 -1 -1
+c:gin 	-4 -2 10 -3 3 -5
+c:gina	-2 -1 12 -3 -3 -3
+c:ging	-2 9 -9 0 0 2
+c:gins	-5 -1 -2 10 -1 -1
+c:gith	-2 9 -7 1 -4 3
+c:gle 	-1 3 5 -2 -2 -2
+c:gn i	-1 14 -5 -1 -3 -2
+c:gnab	-1 -2 5 -1 -1 -1
+c:gnup	-7 -3 3 -2 14 -6
+c:go s	-2 -2 9 -2 -2 -2
+c:go v	-1 -1 -1 -1 -2 7
+c:go w	-2 6 -3 -1 1 -1
+c:goes	-2 -1 11 -2 -2 -4
+c:goog	-1 -2 6 -1 -1 -1
+c:goro	-2 -2 9 -2 -2 -2
+c:grad	-6 -7 -3 -5 -6 27
+c:grat	-5 -2 -6 2 7 3
+c:grda	-1 -2 -2 -1 -1 7
+c:grow	-1 -1 7 -1 -1 -2
+c:gs e	-3 -2 -3 -2 -2 11
+c:gs s	-2 -3 11 -2 -3 -2
+c:gs w	-4 -3 -1 -1 -4 12
+c:gs' 	-1 -2 -1 -1 7 -1
+c:gues	-3 18 -3 -4 -5 -3
+c:guse	-1 8 -1 -2 -2 -1
+c:h "c	-1 -1 6 -1 -1 -1
+c:h a 	-1 -2 13 -1 -5 -3
+c:h an	0 6 -1 0 -3 -1
+c:h as	-1 0 -3 -1 -1 6
+c:h ax	-1 -2 -5 -3 12 -2
+c:h ba	-1 5 -1 -1 -2 -1
+c:h ch	-4 0 -1 7 0 -1
+c:h co	-1 -1 -2 6 -1 -1
+c:h da	6 -1 -2 -1 -1 -1
+c:h en	5 2 -2 -3 0 -2
+c:h fa	-3 7 -2 -1 0 -2
+c:h fe	-1 -1 -3 -1 -2 9
+c:h fi	8 -1 -1 -2 -2 -1
+c:h fo	-1 -1 -1 5 -2 -1
+c:h gi	-1 13 -5 -1 -3 -2
+c:h go	-1 -2 6 -1 -1 -1
+c:h ma	-2 -3 1 -2 8 -3
+c:h mi	0 -1 -2 -1 5 -2
+c:h na	-1 -2 -3 -1 -2 7
+c:h no	-1 2 -5 -2 8 -2
+c:h ok	-1 8 -2 0 -4 -1
+c:h pa	6 -1 -1 -2 0 -2
+c:h po	-1 -1 8 -1 -1 -3
+c:h te	-1 -1 -7 -3 -2 13
+c:h th	15 -2 0 -3 -3 -7
+c:h to	-5 -1 -2 10 -1 -1
+c:h tr	-1 -5 10 -1 -2 -2
+c:h? t	-1 -1 -1 5 -1 -1
+c:hand	3 -6 -8 5 13 -8
+c:hang	-2 -1 -3 23 -7 -10
+c:hank	1 -7 7 0 -2 0
+c:happ	7 -3 -2 -2 2 -1
+c:hara	-2 -2 9 -2 -2 -2
+c:hard	-2 -2 -1 7 -2 -1
+c:hare	2 -2 2 -5 -5 8
+c:has 	-2 -1 15 -3 -3 -5
+c:hash	-1 -1 -1 6 -1 -2
+c:hat 	36 21 -33 -20 13 -16
+c:hat'	21 -2 -7 -5 -3 -4
+c:hboa	-1 7 -3 -1 -1 -1
+c:hcek	-1 -1 -3 6 0 -1
+c:hck 	-2 -2 -4 10 0 -2
+c:he `	2 -1 -5 -3 -2 10
+c:he a	2 -17 2 19 -2 -4
+c:he b	10 -2 8 -8 0 -7
+c:he c	-1 -14 16 8 -13 5
+c:he d	15 -5 -11 -6 -1 8
+c:he e	-5 0 -21 5 -1 22
+c:he f	3 7 11 -5 -12 -4
+c:he g	-4 8 -4 -5 2 3
+c:he i	3 -3 7 -11 13 -9
+c:he j	-2 -1 6 -5 -2 4
+c:he l	4 -8 1 -6 4 4
+c:he m	-8 6 0 5 -1 -1
+c:he n	-11 3 9 15 -12 -3
+c:he o	3 0 -3 -4 -6 10
+c:he p	-5 11 6 1 12 -24
+c:he q	6 -1 -3 -1 -1 -1
+c:he r	-1 -12 -4 21 -2 -1
+c:he s	-5 -27 31 -7 16 -8
+c:he t	-9 12 -5 -5 5 2
+c:he u	0 -1 -17 -1 8 12
+c:he w	-4 0 16 -9 4 -8
+c:head	-1 -1 -4 10 -2 -2
+c:heck	-11 12 -25 31 10 -18
+c:hed 	-6 -4 20 -5 -3 -3
+c:heir	0 10 1 -5 -6 0
+c:help	-2 -6 1 -3 4 5
+c:hem 	-1 -1 -5 4 -6 9
+c:heme	-2 10 -3 -2 -2 -2
+c:hen 	-2 -2 36 -12 -10 -10
+c:her 	-3 -4 -3 16 -4 -2
+c:here	32 -11 -14 2 -11 3
+c:heth	-1 -1 -1 6 -1 -1
+c:hich	22 -4 -5 -7 -1 -5
+c:hin 	-1 -1 -3 -1 8 -2
+c:hing	-8 -8 6 24 -9 -6
+c:his 	7 -7 -8 11 -6 3
+c:hmar	-1 -1 -4 -1 10 -2
+c:hone	-1 -1 6 -1 -2 -1
+c:hook	2 -4 -5 -3 3 7
+c:host	-2 -3 11 -2 -1 -3
+c:how 	67 -24 6 -14 -17 -18
+c:howi	-1 6 -3 -1 -1 -1
+c:hows	-2 -2 13 -3 -3 -3
+c:hre 	7 -2 1 -3 -1 -3
+c:hree	6 -1 -4 -2 -1 3
+c:hrou	13 -1 -3 -2 -2 -5
+c:hs f	-2 -2 -3 9 -2 -2
+c:http	-1 -1 -3 -1 -2 9
+c:hub 	-2 9 -7 1 -4 3
+c:hy i	9 -2 -2 -4 0 -1
+c:i ad	7 -7 0 0 0 0
+c:i ch	-5 -2 5 5 -1 -2
+c:i cl	-1 -1 -2 -1 -1 7
+c:i co	-1 -1 -3 -1 -1 7
+c:i do	-3 -4 -3 10 3 -4
+c:i me	-2 -1 -2 7 -1 -1
+c:i ne	-5 0 7 -5 5 -2
+c:i re	-1 -3 5 -8 9 -2
+c:i st	6 -1 -1 -2 0 -2
+c:i to	-6 -1 -2 11 -1 -1
+c:i ve	10 0 -2 -4 -1 -2
+c:i wi	0 -1 -2 -1 6 -2
+c:i'm 	15 -3 -4 -4 -2 -4
+c:iabl	6 -7 -4 -2 -5 12
+c:ial 	-1 6 -1 -1 -1 -2
+c:iate	-2 -1 12 -2 -5 -2
+c:ibil	-5 -2 -5 4 9 -1
+c:ible	-2 8 4 -2 -3 -5
+c:ic a	-1 9 -4 2 -3 -2
+c:ic i	-2 -2 -4 -3 0 11
+c:ic l	-1 -2 5 -1 -1 -1
+c:ic n	-1 -2 -3 -1 -3 9
+c:ic r	-1 -1 9 -3 -2 -2
+c:ic? 	13 -2 -4 -4 -2 -2
+c:icat	-4 8 4 -8 -3 3
+c:ice 	-8 -11 39 -11 -8 -1
+c:ice.	-2 -2 8 -2 -1 -2
+c:ice?	5 -2 -1 -2 0 -1
+c:ices	6 3 -2 -2 -2 -3
+c:ich 	22 -4 -5 -7 -1 -5
+c:icie	-1 -1 -4 9 -1 -2
+c:icin	4 8 -5 -3 -2 -2
+c:ick 	2 14 -4 -4 -6 -1
+c:icke	-2 3 6 -2 -2 -3
+c:icod	-1 -8 6 -2 7 -3
+c:id 1	-1 -1 6 -1 -1 -1
+c:id e	-2 -2 13 -3 -3 -2
+c:id o	-2 -1 -3 -2 -2 10
+c:id t	-1 -1 5 -1 -2 -1
+c:id' 	-1 -1 6 -1 -1 -1
+c:idat	-1 -3 -4 8 -4 4
+c:ide 	0 5 -2 -1 -3 0
+c:idge	-1 6 -3 -1 -1 -1
+c:idy 	-1 0 -3 -1 -3 9
+c:iece	-1 -2 -2 -2 -1 8
+c:ieln	-1 -2 6 -1 -1 -1
+c:ient	4 -3 -5 -5 -3 12
+c:ies 	-7 -8 22 9 -18 2
+c:iew 	-13 -5 -15 55 -11 -12
+c:if a	-1 -1 -1 5 -1 -1
+c:if f	-2 -2 -3 9 -2 -2
+c:if i	-1 0 -1 7 -3 -1
+c:iff 	-1 -1 -1 6 -2 -1
+c:ify 	-4 -5 -11 -4 12 12
+c:ig f	13 -2 -3 -3 -2 -3
+c:ig l	-3 -4 -6 -2 2 13
+c:ig p	-1 0 8 -1 -2 -3
+c:igab	-1 -1 5 -1 -1 -1
+c:igat	0 5 -2 -1 -1 -1
+c:igge	6 -1 -2 -1 -1 -1
+c:ign 	-1 14 -5 -1 -3 -2
+c:igna	-1 -2 3 -2 5 -2
+c:ignu	-7 -3 3 -2 14 -6
+c:iion	-1 -1 6 -2 -1 -2
+c:ike 	5 -3 8 -3 -2 -4
+c:il i	-2 0 -9 -3 15 -2
+c:il q	-2 7 -2 -1 -2 -1
+c:il r	-1 0 -3 -1 -5 11
+c:il s	-2 -3 14 -3 -3 -2
+c:il t	-2 -1 6 -2 2 -2
+c:ild 	-2 29 2 -10 -11 -8
+c:ile 	-2 -4 -20 12 -15 29
+c:ilen	-1 -2 8 -2 -2 -1
+c:iles	4 -1 13 -2 -10 -4
+c:ilit	-5 -3 -6 10 8 -4
+c:iliz	-1 0 -3 -1 -5 11
+c:ill 	6 0 -1 -2 -1 -2
+c:ils 	-5 -13 31 -13 -10 9
+c:ils?	5 -1 -2 -1 -1 0
+c:ily 	-1 7 -3 -1 -1 -1
+c:ime 	-1 -1 7 -1 -2 -2
+c:imes	-2 -3 10 -2 -2 -2
+c:imez	0 -5 9 -5 3 -2
+c:imit	-6 -2 1 7 3 -4
+c:imme	-2 -2 13 -2 -5 -2
+c:impe	-4 -1 -2 8 -1 -1
+c:impl	-9 49 -19 -12 -14 5
+c:impo	-4 -8 7 -12 10 8
+c:in 2	-1 -1 -3 -1 8 -2
+c:in a	-1 6 -2 -3 1 -1
+c:in c	7 10 -7 -2 0 -8
+c:in d	-2 -3 -3 -3 -3 14
+c:in e	-4 -10 4 -5 6 10
+c:in f	-2 -1 -2 -1 9 -3
+c:in h	11 -2 0 -4 -2 -3
+c:in i	-7 -4 10 6 -4 -2
+c:in o	-2 -2 8 -2 -1 -2
+c:in p	4 -4 -8 -7 2 12
+c:in s	-1 1 9 -2 -3 -4
+c:in t	13 -1 -21 29 -13 -7
+c:in u	-1 -3 10 -1 -2 -4
+c:in w	4 8 4 -4 -7 -5
+c:inat	-3 -4 19 -5 -4 -3
+c:incr	-1 -2 -3 -1 8 -1
+c:indi	-2 -3 13 -4 -3 -1
+c:ine 	-3 5 13 -9 -9 2
+c:ines	-2 -2 9 -2 -2 -2
+c:ing 	-29 13 50 4 -22 -15
+c:ing'	-1 -2 5 -1 -1 -1
+c:ing?	8 -1 -1 -2 -2 -1
+c:ings	-4 -4 0 -1 -7 16
+c:init	-1 5 2 -2 -3 -2
+c:inje	-1 -1 -2 6 -1 -1
+c:ink 	-3 0 18 -4 -4 -6
+c:inks	-4 -5 24 -4 -6 -5
+c:inor	-1 -1 -2 -1 -1 5
+c:inpu	-2 -9 9 -2 5 -2
+c:ins 	-4 5 5 -4 2 -6
+c:ins?	-5 -1 -2 10 -1 -1
+c:inse	-1 -1 -1 7 -4 -1
+c:inst	-7 -2 1 10 -2 -2
+c:int 	-3 6 -1 -2 -7 6
+c:inte	-2 -1 3 -3 6 -3
+c:into	-5 -4 -11 -7 -6 33
+c:ints	3 -3 -5 2 -6 10
+c:inut	-1 -2 6 -1 -1 -2
+c:inva	3 -5 18 -6 -6 -5
+c:invi	-4 11 6 -4 -6 -5
+c:invo	6 0 2 -3 -1 -4
+c:io c	-2 -2 10 -3 -2 -2
+c:ion 	-24 -6 15 26 -5 -6
+c:ion.	-1 -1 6 -1 -1 -1
+c:ion:	14 -4 -3 -3 -2 -3
+c:ion?	6 -1 -2 -2 -1 -1
+c:ione	10 0 -2 -4 -1 -2
+c:ions	-3 8 -7 -9 -6 17
+c:ious	7 -2 5 -4 -2 -4
+c:ipho	-1 -1 6 -1 -2 -1
+c:iple	-1 11 -5 -1 -1 -3
+c:ippy	-1 -3 -2 -1 -2 10
+c:ips 	-3 -2 15 -2 -4 -3
+c:ipt 	13 1 -8 -4 -5 5
+c:ipti	-1 6 -1 -2 -2 -1
+c:ipts	-1 0 -4 -2 -4 11
+c:ir a	-1 -2 9 -1 -1 -2
+c:ir d	-1 8 -3 -1 -2 -2
+c:ir l	-1 -3 -1 0 -1 6
+c:ir u	-1 6 -2 -1 -1 -1
+c:ire 	-2 -2 13 -2 -5 -2
+c:irec	-1 -3 5 2 -2 -1
+c:is 2	-2 -2 -2 -2 -1 10
+c:is b	-3 -3 11 3 -4 -3
+c:is f	-3 -3 1 0 -8 13
+c:is i	2 -2 1 6 -4 -4
+c:is n	2 -2 7 -2 -2 -2
+c:is o	-7 -2 -1 13 -2 -1
+c:is s	-1 -1 -8 -2 15 -2
+c:is t	34 -9 -23 18 -8 -12
+c:is w	-2 -4 14 -4 -3 -1
+c:isc`	-2 -1 -4 -2 -2 12
+c:isib	-1 -1 5 -1 -2 -1
+c:isks	-1 -1 -3 11 -4 -2
+c:issi	2 -5 -7 4 10 -4
+c:issu	-1 -1 -1 5 -2 -1
+c:ist 	-2 21 -7 -4 -4 -4
+c:iste	-3 -5 -2 -4 -4 18
+c:it b	-1 -5 10 -2 -3 1
+c:it c	-1 0 -1 7 -3 -1
+c:it i	-1 -2 0 -2 -1 6
+c:it j	-1 -2 9 -1 -1 -2
+c:it o	-3 -3 -3 16 -3 -5
+c:it p	-1 7 -1 -1 -1 -4
+c:it r	-1 -1 -4 -2 -6 14
+c:it s	-3 -1 -3 12 -1 -3
+c:it t	-2 -6 -11 19 1 -1
+c:ite 	-10 13 -7 -9 23 -11
+c:iter	-1 -7 8 -3 5 -3
+c:ith 	-16 13 17 -23 12 -3
+c:ithi	-1 -1 -3 -1 8 -2
+c:ithu	-2 9 -7 1 -4 3
+c:itie	-1 -1 -1 7 -1 -2
+c:itin	-6 8 -6 8 -2 -2
+c:itio	-1 -1 6 0 -1 -3
+c:itiz	-2 -2 -3 9 -2 -2
+c:its 	-5 -3 24 -4 -4 -9
+c:itte	-1 -1 -2 10 -4 -2
+c:ity 	-3 -4 -7 13 6 -5
+c:ity?	-4 0 -1 6 0 0
+c:ive 	-2 -1 6 2 -2 -3
+c:ivew	-5 -1 -4 13 -2 -2
+c:ix a	-3 -2 -6 1 -2 13
+c:ix c	-1 -3 -2 -1 -2 10
+c:ix t	-3 -2 23 -5 -3 -9
+c:ix w	-2 -1 -1 -1 -1 6
+c:ize 	6 -14 -14 -9 1 30
+c:ized	4 -2 -4 8 -3 -2
+c:java	-1 -1 -2 -1 -1 6
+c:ject	-2 11 -4 4 -3 -5
+c:job 	-2 0 18 -5 -4 -7
+c:jque	-1 -1 -3 -2 -1 8
+c:json	-1 7 -6 -3 -3 6
+c:jump	-1 -1 8 -2 -1 -2
+c:just	3 -3 8 -3 -2 -3
+c:jwt 	-6 -1 -4 14 -2 -1
+c:k 40	-2 -1 13 -3 -3 -4
+c:k a 	-2 10 -3 -2 -2 -2
+c:k ac	-1 -2 -5 -3 12 -2
+c:k at	-1 0 -1 7 -3 -1
+c:k ba	-4 0 -1 6 0 0
+c:k fo	-3 -3 -4 20 -4 -5
+c:k ha	-1 0 -1 6 -3 -1
+c:k if	-3 -3 -4 15 -3 -2
+c:k me	15 -2 -3 -2 -2 -6
+c:k mo	-2 0 4 -3 6 -5
+c:k on	-8 8 5 -7 -1 3
+c:k ov	-3 -4 -9 26 -5 -5
+c:k qu	15 -3 -5 -3 -2 -2
+c:k re	-4 -1 -1 7 -1 -1
+c:k ro	-1 -1 -5 -6 16 -2
+c:k sa	-1 -2 5 -1 -1 -1
+c:k si	-1 -1 -2 -1 6 -1
+c:k th	-8 -11 -17 31 14 -9
+c:k to	-1 -1 8 -2 -1 -2
+c:k wh	-3 -5 2 5 0 0
+c:k wi	-1 6 -3 -1 -1 -1
+c:kage	9 -2 -5 -5 -2 6
+c:kdow	-1 8 -2 -2 -1 -3
+c:ke a	-1 7 -1 0 -4 -1
+c:ke d	3 7 -1 -1 -6 -2
+c:ke i	5 5 -7 -4 -8 9
+c:ke s	-3 -8 -5 -3 27 -8
+c:ke t	-4 10 -15 -5 4 11
+c:ke é	-2 -2 9 -2 -2 -2
+c:keep	-2 -2 10 -2 -2 -2
+c:ken 	-2 -3 15 -3 -4 -3
+c:kens	-6 -1 -2 13 -2 -2
+c:ker 	1 2 17 -5 -5 -9
+c:kerf	-1 -2 -2 0 -1 6
+c:kers	5 -1 1 -2 -2 -2
+c:kes 	-2 -8 16 2 -5 -4
+c:ket 	0 -2 -2 7 2 -4
+c:keyb	-2 2 8 -2 -4 -3
+c:keye	-1 -1 6 -1 -1 -1
+c:keys	-1 0 -1 6 -4 -1
+c:king	-2 -2 3 7 -3 -3
+c:kips	-2 -6 18 -5 -3 -2
+c:kout	-4 22 -1 -8 -5 -5
+c:ks a	-1 -1 -4 -1 10 -2
+c:ks b	-1 -1 7 -2 -1 -1
+c:ks e	-3 -4 20 -3 -6 -3
+c:ks f	1 -2 -3 -1 7 -1
+c:ks g	-1 -1 7 -2 -1 -1
+c:ks i	-1 -4 10 0 -2 -3
+c:ks t	7 -3 7 0 -4 -7
+c:ks w	-1 -1 -3 0 -2 6
+c:kta 	-1 8 -2 0 -4 -1
+c:kups	-2 -3 4 8 -3 -4
+c:kwar	-4 0 -1 6 0 0
+c:ky, 	-1 -1 -4 -2 -6 14
+c:l ap	-1 -3 -1 -1 9 -3
+c:l ca	-2 -2 7 -2 2 -3
+c:l da	-1 -2 -1 7 -2 -1
+c:l fo	-1 5 0 -1 -2 -1
+c:l gi	-1 -3 -1 0 -1 6
+c:l is	-1 -1 -8 -2 15 -2
+c:l me	10 -4 -6 2 4 -6
+c:l on	-2 9 -11 12 -4 -4
+c:l qu	-2 8 0 -1 -3 -2
+c:l ra	-1 0 -3 -1 -5 11
+c:l si	-2 -3 14 -3 -3 -2
+c:l th	-2 -4 -2 -6 -5 19
+c:l us	6 0 -1 -2 -1 -2
+c:lace	-2 -4 -7 -3 -4 19
+c:lack	-1 -1 7 -1 -2 -2
+c:lags	4 -2 -3 -4 -1 7
+c:lain	38 -4 -12 -10 -5 -7
+c:laky	-1 -1 -4 -2 -6 14
+c:land	0 5 -3 -1 -1 -1
+c:lank	-1 -1 8 -2 -2 -2
+c:larg	-2 -3 11 -2 -1 -3
+c:lass	-2 -2 -3 -2 -2 10
+c:last	13 -2 4 -6 -5 -4
+c:late	5 -3 3 -5 -7 7
+c:laye	-1 8 -4 -1 -2 -1
+c:lbac	-1 -2 -3 2 -2 6
+c:lcae	-1 -1 -2 -1 -1 6
+c:lcul	3 -3 6 -4 2 -3
+c:ld a	-5 34 -13 -8 -10 1
+c:ld c	-1 -1 7 -2 -1 -1
+c:ld i	6 -1 -1 -2 0 -2
+c:ld p	6 0 -1 -2 -1 -2
+c:ld s	2 -2 6 -4 -3 1
+c:ld v	-2 -1 -3 -2 -2 10
+c:ld y	-11 0 4 3 1 4
+c:lder	6 -2 -11 1 -7 14
+c:le a	1 9 -5 4 -8 -1
+c:le b	-2 13 -2 -1 -2 -6
+c:le f	-1 11 -5 0 -1 -3
+c:le i	-1 -1 -1 -4 -2 9
+c:le o	-2 -3 8 -2 1 -2
+c:le p	-2 2 -3 8 -4 -2
+c:le r	11 -2 -2 -3 -2 -2
+c:le s	-3 26 -12 -3 -5 -3
+c:le t	-4 5 0 -4 -2 4
+c:le u	-2 2 -3 9 -2 -3
+c:le.l	-3 -2 -3 -2 -2 11
+c:lead	-1 9 -2 -2 -3 -1
+c:leak	-5 -2 4 8 -2 -3
+c:lean	-4 -2 -8 -4 -3 22
+c:lear	-1 -2 9 -2 -2 -3
+c:leas	-15 3 11 4 -3 0
+c:leem	-1 6 -1 -1 -2 -1
+c:leme	-5 40 -12 -7 -8 -7
+c:lems	-1 -2 -2 9 -2 -2
+c:lent	-1 -2 9 -2 -2 -2
+c:ler 	-6 -7 -14 11 1 15
+c:lers	-2 2 5 -2 -2 -2
+c:lery	0 5 -2 -1 -1 -1
+c:les 	-1 -7 -5 -3 10 5
+c:les"	-1 -1 6 -2 -1 -1
+c:let 	-5 41 -14 -6 -9 -7
+c:lete	-5 3 7 -6 -5 6
+c:lhos	-2 -3 11 -2 -1 -3
+c:li w	0 -1 -2 -1 6 -2
+c:liab	-1 0 -3 -1 -3 8
+c:libr	3 -2 -3 -2 -2 6
+c:lic 	-1 9 -4 2 -3 -2
+c:lic?	6 -2 -1 -2 -1 -1
+c:lica	-2 1 2 -4 -4 8
+c:lici	-1 -1 -4 9 -1 -2
+c:lid 	-3 -4 24 -5 -7 -5
+c:lida	-1 -3 -4 8 -4 4
+c:lien	4 -3 -5 -5 -3 12
+c:lies	-2 0 9 0 -2 -5
+c:lify	-3 -2 -5 -2 -3 14
+c:like	5 -3 8 -3 -2 -4
+c:limi	-6 -2 1 7 3 -4
+c:line	-2 6 9 -8 -8 3
+c:link	-7 -6 41 -8 -10 -11
+c:lint	-2 -2 -5 -3 2 10
+c:lipp	-1 -3 -2 -1 -2 10
+c:list	-4 24 -3 -5 -6 -6
+c:lit 	-1 -1 -1 -2 -1 6
+c:liti	-1 -1 -1 7 -1 -2
+c:lity	-5 -2 -5 4 9 -1
+c:lize	1 -1 -4 -1 -6 10
+c:lk m	15 -2 -3 -2 -2 -6
+c:lks 	9 -2 -1 -3 -1 -2
+c:ll a	-2 0 -2 -2 9 -3
+c:ll g	-1 -3 -1 0 -1 6
+c:ll m	10 -4 -6 2 4 -6
+c:ll o	-1 6 -3 -1 -1 -1
+c:ll t	0 -3 -9 -5 -4 21
+c:ll u	6 0 -1 -2 -1 -2
+c:llba	-1 -2 -3 2 -2 6
+c:ller	-3 5 -7 -3 -5 12
+c:llow	-4 26 -4 -6 -7 -5
+c:llpo	-2 -2 8 -2 -1 -2
+c:lls 	0 0 1 -4 -4 6
+c:lly 	-2 -3 3 -3 8 -4
+c:lner	-1 -1 -1 7 -1 -2
+c:lntl	-1 -2 6 -1 -1 -1
+c:load	-9 -4 19 -9 9 -6
+c:loca	1 -2 9 -2 -2 -3
+c:lock	3 -4 11 -2 -3 -4
+c:log 	-2 7 -2 5 -6 -3
+c:logi	-3 -7 9 -1 1 1
+c:logs	-4 -1 0 -3 -3 10
+c:look	-8 -8 -6 46 -13 -11
+c:loop	0 -2 5 -1 -2 -1
+c:lose	-3 -2 16 -3 -3 -5
+c:low 	-10 20 -10 1 9 -10
+c:loy 	8 -2 2 -4 4 -8
+c:lper	-1 -5 -3 -1 4 6
+c:lpoi	-1 -2 6 -1 -1 -1
+c:lpoy	5 -1 -1 -1 -1 -2
+c:lrea	-3 -4 3 -2 -3 8
+c:ls a	-8 4 6 2 -1 -3
+c:ls f	5 -1 -4 -3 -1 4
+c:ls i	-4 7 -5 0 1 0
+c:ls p	-2 -3 12 -2 -2 -4
+c:ls s	-2 -3 5 -2 -3 5
+c:ls t	3 -10 13 -10 -9 12
+c:ls w	-2 -3 13 -2 -2 -5
+c:ls? 	5 -1 -2 -1 -1 0
+c:lt w	-2 -3 11 -2 -1 -3
+c:ltip	-2 12 -5 -1 -2 -3
+c:lts 	-1 -1 6 -2 -1 -2
+c:lumn	-1 10 -1 -1 -2 -5
+c:lurr	-1 -1 6 -2 -1 -1
+c:ly i	-1 -3 -1 -1 9 -3
+c:ly o	-2 -2 7 -2 1 -1
+c:ly r	-1 -3 -2 -1 -2 10
+c:ly s	-2 9 0 -2 -2 -2
+c:ly w	-1 -3 -1 -1 9 -3
+c:ly, 	-1 0 -3 -1 -5 11
+c:m 'm	-1 -2 7 -1 -1 -2
+c:m ac	-2 -2 13 -3 -3 -2
+c:m cu	8 -1 -2 -2 -1 -2
+c:m ev	0 5 -2 0 -1 -1
+c:m ht	-1 -1 -3 -1 -2 9
+c:m lo	-1 -2 -4 -2 -2 11
+c:m mo	-2 -5 -2 -2 -2 12
+c:m ne	7 -1 -1 -2 -1 -2
+c:m np	-2 -3 -3 -2 -2 11
+c:m of	-1 -1 7 -2 -1 -2
+c:m th	-1 -1 7 -2 -1 -2
+c:m to	-2 -3 -3 -2 -2 11
+c:m tw	-1 -1 5 -1 -1 -1
+c:m us	-1 -1 -3 8 -2 -1
+c:made	-2 -2 7 3 -2 -4
+c:magi	-1 -4 2 -1 -4 9
+c:mail	-4 8 11 -11 8 -12
+c:main	-2 -5 -6 -2 13 2
+c:make	-9 11 -13 -11 9 14
+c:mall	-2 -1 -5 -2 -3 13
+c:many	2 -1 6 -3 -1 -2
+c:map 	-3 1 8 -3 -2 -2
+c:mari	10 -8 -4 -4 10 -3
+c:mark	-7 13 8 -7 5 -11
+c:mat 	-1 -1 -2 -1 -1 7
+c:mate	-1 10 -3 -2 -3 -2
+c:matt	0 -5 -1 -1 8 -1
+c:mb f	-2 -3 14 -3 -3 -2
+c:mber	-2 2 1 -2 -5 7
+c:me '	-1 -2 7 -1 -1 -2
+c:me `	-1 -1 -1 -2 -1 6
+c:me a	-1 0 -3 -1 -3 9
+c:me c	-1 10 -3 -2 -2 -2
+c:me h	10 -2 -1 -2 -3 -2
+c:me i	-2 3 -2 6 -4 -2
+c:me l	8 -1 -2 -2 -1 -2
+c:me p	-1 2 5 -3 -2 -1
+c:me s	-2 -3 5 -5 7 -3
+c:me t	13 -3 -7 -5 -4 6
+c:me w	0 0 -3 -2 9 -3
+c:mean	-1 -1 -1 -2 -1 6
+c:medi	-2 -2 13 -2 -5 -2
+c:memb	-1 5 -2 -1 -1 -1
+c:memo	-1 -1 7 -1 -1 -2
+c:ment	0 46 -30 -4 -2 -9
+c:mera	-1 -1 5 -1 -1 -1
+c:merg	-5 -2 -4 18 -3 -3
+c:mes 	-2 -8 9 -2 5 -3
+c:mess	-2 -3 7 -2 -2 2
+c:metr	-1 5 -1 -1 -2 -1
+c:mezo	0 -5 9 -5 2 -2
+c:min 	-5 5 -5 10 -3 -2
+c:ming	-1 -1 -3 -1 -1 6
+c:mino	-1 -1 -2 -1 -1 5
+c:mins	-2 8 -4 -3 4 -3
+c:minu	-1 -2 6 -1 -1 -2
+c:misc	-2 -1 -4 -2 -2 12
+c:miss	2 -5 -7 4 10 -4
+c:mite	0 -7 6 -2 5 -2
+c:miti	-5 5 -4 9 -2 -2
+c:mits	-1 -1 6 -1 -1 -2
+c:mitt	-1 -1 -2 10 -4 -2
+c:mly,	-1 0 -3 -1 -5 11
+c:mmar	9 -4 -4 -5 7 -3
+c:mmat	-1 10 -3 -2 -3 -2
+c:mmed	-2 -2 13 -2 -5 -2
+c:mmen	-9 20 -7 3 -5 -3
+c:mmit	-1 -1 -2 10 -4 -2
+c:mnt 	-1 6 -1 -2 -2 1
+c:mobi	5 3 -5 1 -5 1
+c:moda	-1 -1 6 -1 -1 -2
+c:mode	0 13 -2 -7 1 -4
+c:modu	-4 -6 -8 -5 11 11
+c:moke	-1 -1 -4 -1 10 -3
+c:mome	-2 -4 -2 -2 -2 12
+c:mont	6 -1 1 -3 -1 -2
+c:more	-5 -2 7 -6 -3 9
+c:mory	-1 -1 7 -1 -1 -2
+c:move	-7 -7 -11 -8 -6 39
+c:movi	-1 -1 -3 -1 -1 7
+c:mp a	-2 -1 -3 -1 -1 8
+c:mpar	-1 -1 -3 -1 7 -2
+c:mpat	-4 0 -1 6 0 0
+c:mper	-4 -1 -2 8 -1 -1
+c:mple	-8 45 -9 -11 -5 -12
+c:mpli	-3 -2 -5 -2 -3 14
+c:mpon	-3 -2 -3 -4 0 12
+c:mpor	-4 -8 7 -12 10 8
+c:mpos	0 -2 7 -1 -1 -3
+c:mps 	-1 -1 8 -2 -1 -2
+c:mpty	-1 -9 0 -1 14 -2
+c:mt a	-1 -3 -2 -1 -2 10
+c:mult	-1 11 -5 -1 -1 -3
+c:mve 	-2 -1 -2 -2 -1 9
+c:my p	-1 -1 -2 6 -1 -1
+c:n 20	-1 -1 -3 -1 8 -2
+c:n 3.	-2 -1 -1 -1 -1 6
+c:n a 	6 -2 -2 -2 2 -3
+c:n an	-4 6 -1 -5 2 2
+c:n be	-2 -1 -2 10 -3 -1
+c:n br	-3 -1 -2 9 -1 -2
+c:n ca	12 -1 -3 -3 -2 -2
+c:n ch	-1 0 -1 6 -3 -1
+c:n co	-12 5 7 6 -3 -2
+c:n de	-3 -3 -3 -3 -3 14
+c:n do	5 -2 7 -4 -3 -3
+c:n em	-2 -5 10 -2 5 -5
+c:n ev	-3 -6 -6 -3 6 12
+c:n fe	-4 -1 -2 7 -1 -1
+c:n fi	-1 -3 12 -2 -3 -3
+c:n fl	-2 0 -2 -1 8 -3
+c:n fo	-1 -2 7 -2 -2 -1
+c:n ha	-2 -1 5 2 -2 -2
+c:n ho	13 -1 -6 -2 -1 -1
+c:n i 	-2 -2 11 -3 -2 -2
+c:n im	-5 -1 -2 10 -1 -1
+c:n in	-9 18 21 -9 -4 -17
+c:n io	-1 -1 5 -1 -1 -1
+c:n ip	-1 -1 8 -1 -2 -2
+c:n is	-1 -1 7 -2 -1 -2
+c:n jo	-1 1 6 -1 -2 -2
+c:n la	-1 -1 6 -1 -1 -1
+c:n me	-2 -2 9 -1 -1 -4
+c:n no	-3 0 -2 -1 7 -1
+c:n of	2 0 -4 8 -2 -3
+c:n on	-2 9 -3 -5 5 -4
+c:n op	-2 -3 11 -2 -1 -3
+c:n or	-2 3 6 -2 -2 -2
+c:n pa	0 -1 -3 -2 -1 8
+c:n rs	-1 6 1 -1 -4 -1
+c:n sk	-2 -8 21 -5 -4 -3
+c:n st	-1 -1 5 -1 -2 -1
+c:n su	0 5 -1 0 -3 -1
+c:n te	-1 -7 -1 -1 11 -1
+c:n th	-3 21 -10 20 5 -33
+c:n to	-2 19 -7 -2 -5 -3
+c:n up	-6 -4 -6 -5 -4 24
+c:n us	-1 0 9 -1 -2 -4
+c:n vu	-1 -1 -1 7 -1 -2
+c:n wh	6 -2 -3 -1 2 -1
+c:n wi	-5 8 25 -7 -12 -8
+c:n yo	5 -4 -7 1 -1 5
+c:n't 	-6 -12 24 2 -7 0
+c:n.py	-1 -1 6 -1 -1 -1
+c:n: w	9 -1 -3 -2 -1 -2
+c:nabl	-1 -2 5 -1 -1 -1
+c:nal 	-1 -2 -1 7 -2 -1
+c:name	-6 -5 1 -8 0 17
+c:nami	-1 -1 -3 -1 -1 6
+c:nan 	-1 -2 7 -2 -2 -1
+c:nati	-8 -4 16 5 -5 -4
+c:navi	0 5 -2 -1 -1 -1
+c:nc d	7 -1 -1 -1 -1 -1
+c:nc l	-2 -1 8 -1 -1 -2
+c:nc/a	-1 -1 -3 -1 -1 7
+c:nce 	2 5 -11 4 -1 0
+c:nch 	-2 1 3 7 -6 -3
+c:nch?	-3 -1 -2 9 -1 -2
+c:nche	-1 0 -6 -3 8 2
+c:nchm	-1 -1 -3 -1 7 -2
+c:ncie	-3 -3 -3 4 -3 8
+c:ncre	-1 -2 -3 -1 8 -1
+c:ncry	-1 -1 -3 8 -1 -2
+c:ncti	3 -8 -1 -3 4 5
+c:ncy 	-5 -5 4 -6 -8 19
+c:nd a	-2 -2 -1 -1 8 -3
+c:nd c	-2 -2 1 -2 9 -3
+c:nd e	5 7 -6 -2 -2 -2
+c:nd f	-3 0 -4 -2 -6 15
+c:nd l	-1 -2 -2 -4 9 -1
+c:nd m	-2 3 1 -3 -5 5
+c:nd p	2 0 -2 5 -2 -2
+c:nd r	-2 -1 -2 -1 8 -3
+c:nd s	-1 8 -2 -2 0 -2
+c:nd t	-10 -11 -11 1 31 -1
+c:nden	-7 -7 -8 0 -6 28
+c:nder	-3 -1 6 -3 6 -5
+c:ndia	-2 -3 13 -4 -3 -1
+c:ndle	3 -6 -8 2 11 -3
+c:ndom	-1 0 -3 -1 -5 11
+c:ndpo	0 9 -8 1 -7 6
+c:ndro	-1 -2 8 -2 -2 -2
+c:nds 	-1 3 6 -2 -3 -3
+c:ne 8	-1 -1 6 -1 -1 -1
+c:ne a	-1 -2 9 -1 -2 -2
+c:ne f	-2 -2 -4 -3 -2 13
+c:ne i	-2 -4 12 -4 -3 0
+c:ne m	3 10 -3 -3 -4 -3
+c:ne r	-1 -2 7 -1 -2 -2
+c:ne: 	-8 8 4 -6 -2 4
+c:ned?	15 -1 -3 -6 -1 -3
+c:need	-2 5 5 -7 3 -4
+c:nega	-1 -1 8 -1 -1 -3
+c:nent	-2 -2 -3 -4 0 12
+c:ner 	-1 6 -3 -1 -1 -1
+c:nera	7 -2 -3 5 -2 -5
+c:nes 	-1 -2 10 -2 -2 -2
+c:neve	-1 -2 10 -2 -2 -4
+c:new 	5 13 -11 13 -13 -7
+c:nfig	5 -6 0 -7 0 7
+c:ng a	-8 -6 15 7 0 -7
+c:ng b	-2 -4 15 -4 -2 -2
+c:ng c	-3 1 -12 4 -6 16
+c:ng d	-2 5 -8 3 8 -5
+c:ng e	-6 -1 4 9 -2 -3
+c:ng f	-2 5 2 -2 -8 5
+c:ng h	0 -4 0 0 5 0
+c:ng i	-5 -6 13 7 -5 -5
+c:ng j	-1 -1 -2 -1 -1 6
+c:ng l	5 -4 7 -3 -2 -4
+c:ng m	-3 10 -3 -4 -2 2
+c:ng o	-2 9 2 -3 -3 -3
+c:ng p	-1 5 -4 4 -3 -2
+c:ng r	-1 -1 -2 6 -1 -1
+c:ng s	3 -2 11 -4 -3 -5
+c:ng t	5 14 7 -8 -7 -10
+c:ng u	-3 -4 2 -9 9 4
+c:ng w	3 -7 10 -1 -1 -3
+c:ng' 	-1 -2 5 -1 -1 -1
+c:ng? 	8 -1 -1 -2 -2 -1
+c:nge 	-1 8 4 1 -6 -5
+c:nged	6 -2 -3 3 -2 -2
+c:nger	-4 0 -1 7 0 -1
+c:nges	-6 -2 -6 19 -2 -3
+c:ngs 	-5 -5 4 -2 -8 16
+c:nico	-1 -8 6 -2 7 -3
+c:nig 	5 1 -2 -3 -3 2
+c:nigh	-1 -1 6 -1 -2 -2
+c:ning	-7 -7 8 -8 -7 22
+c:niti	-2 -2 -3 9 -2 -2
+c:nize	1 -4 -5 -4 -3 16
+c:njec	-1 -1 -2 6 -1 -1
+c:nk 4	-2 -1 13 -3 -3 -4
+c:nk p	-1 -1 7 -1 -2 -2
+c:nk s	-1 -2 5 -1 -1 -1
+c:nks 	-2 -12 30 -4 -7 -5
+c:nmen	7 -6 0 0 0 0
+c:nnot	-2 -3 13 -2 -2 -3
+c:no d	0 -3 -3 -1 9 -1
+c:nobo	-1 -1 -2 -1 -1 5
+c:node	-5 -10 -4 -5 2 22
+c:nog 	-2 -2 9 -2 -2 -2
+c:nor 	-1 -1 -2 -1 -1 5
+c:not 	-3 -5 20 -3 -4 -5
+c:noti	-2 5 6 -2 -3 -3
+c:noug	-3 -1 -2 7 0 -1
+c:npm 	-3 -6 -6 -3 -3 22
+c:nput	-2 -9 9 -2 5 -2
+c:ns 4	-1 -3 5 -6 6 -2
+c:ns b	-1 -2 9 -2 -2 -3
+c:ns c	2 -3 -2 -3 6 -1
+c:ns i	-1 9 -6 2 -7 3
+c:ns r	1 -2 -2 -1 8 -3
+c:ns s	0 5 -2 -1 -1 0
+c:ns t	-3 0 7 -2 -4 3
+c:ns w	1 0 -5 -2 6 1
+c:ns? 	-5 -1 -2 10 -1 -1
+c:nsec	-1 -1 -1 7 -4 -1
+c:nsis	-2 -4 -7 -3 -4 20
+c:nsol	-4 -3 -4 -3 -3 16
+c:nspa	0 -4 7 -1 -1 -1
+c:nst 	-6 -1 -2 11 -1 -1
+c:nsta	-1 -2 -3 -1 -3 10
+c:nt a	-5 21 -11 -5 0 0
+c:nt i	-1 6 -1 -1 -2 -1
+c:nt l	-1 -1 7 -2 -1 -1
+c:nt o	1 9 -4 2 -6 -3
+c:nt r	0 9 -4 -2 -2 -1
+c:nt s	-1 7 -1 -2 -2 -1
+c:nt t	-8 -1 16 -6 -8 7
+c:nt v	7 -7 0 0 0 0
+c:nt w	-4 -4 -5 -5 -4 22
+c:nt, 	-1 -2 9 -1 -1 -2
+c:nt? 	13 -2 -2 -4 -2 -4
+c:ntac	-1 6 -1 -1 -3 -1
+c:nted	-1 -1 -2 -2 -1 8
+c:nter	-4 -4 21 -5 -1 -7
+c:nth 	6 -1 1 -3 -1 -2
+c:ntia	-1 -1 -1 6 -2 -1
+c:ntil	-1 -1 7 -1 -1 -2
+c:ntim	-1 -1 5 -1 -1 -1
+c:ntly	-2 -3 14 -3 -3 -2
+c:nto 	-5 -4 -11 -7 -6 33
+c:ntra	0 -4 -1 0 8 -2
+c:ntro	-1 -1 -5 11 -2 -2
+c:ntry	6 0 -2 -1 -1 -1
+c:nts 	-3 4 -28 0 3 24
+c:null	-2 -3 11 -2 -2 -2
+c:numb	-2 -4 2 -2 -3 8
+c:nup 	-6 -9 6 -1 15 -5
+c:nups	-1 7 -3 -1 -1 -1
+c:nuse	-4 -4 -4 -4 -3 19
+c:nute	-1 -2 6 -1 -1 -2
+c:nv f	0 -1 -1 6 -3 -1
+c:nval	3 -5 18 -6 -6 -5
+c:nver	-2 -3 -3 -2 -2 13
+c:nvir	5 -5 0 0 0 0
+c:nvis	-1 -1 7 -1 -2 -1
+c:nvit	-3 13 -1 -2 -4 -4
+c:nvoi	6 0 2 -3 -1 -4
+c:ny c	9 -1 -1 -3 -1 -3
+c:ny o	-1 -1 6 -2 -1 -1
+c:ny p	-1 -2 -1 7 -2 -1
+c:ny s	-5 -1 -2 10 0 -1
+c:ny x	-5 0 -1 9 0 -3
+c:nymo	-4 -2 5 -6 -2 9
+c:nyth	1 -3 -6 17 -3 -6
+c:nywh	-2 -2 -1 7 -2 -1
+c:o 8 	-4 -5 -6 -3 -3 21
+c:o a 	-8 -5 -8 13 -5 13
+c:o ad	0 5 -2 0 -2 -2
+c:o ch	-1 5 -1 -1 -1 -2
+c:o cu	-2 -2 10 -3 -2 -2
+c:o da	-2 -8 -5 -3 7 10
+c:o du	-1 7 0 -1 -1 -4
+c:o en	-2 -1 -2 -1 9 -3
+c:o fu	-1 -2 -1 -1 -2 6
+c:o i 	9 -7 -1 -1 -1 0
+c:o it	-2 -2 9 -1 -1 -4
+c:o lo	-1 -3 9 -1 -1 -3
+c:o ma	-1 -2 5 -2 2 -3
+c:o me	4 -2 -3 7 -2 -4
+c:o no	-1 6 -1 -1 -1 -1
+c:o pi	-2 -2 -2 -2 -1 10
+c:o pn	-2 -3 -3 -2 -2 11
+c:o py	-2 -1 -1 -1 -1 6
+c:o s3	9 0 -1 -3 -1 -3
+c:o se	8 -3 7 -4 -4 -4
+c:o sm	-1 -1 -4 -1 -1 9
+c:o so	-1 -1 -1 -3 -1 6
+c:o st	-5 -1 -2 10 -1 -1
+c:o th	2 18 -1 -6 -10 -2
+c:o ve	-1 -1 -1 -1 -2 7
+c:o we	11 -1 -2 -3 -2 -3
+c:o wi	-1 8 -2 0 -4 -1
+c:o wo	-2 6 -3 -1 1 -1
+c:o ze	-1 -1 8 -2 -1 -2
+c:oad 	-5 -5 8 3 5 -7
+c:oadi	-4 5 1 -4 -5 7
+c:oads	-3 -2 11 -7 5 -4
+c:oard	-2 18 2 -6 -8 -5
+c:ob q	-1 0 9 -3 -1 -4
+c:ob r	-1 -1 6 -1 -2 -2
+c:obil	5 3 -5 1 -5 1
+c:oble	-1 -2 -2 9 -2 -2
+c:obod	-1 -1 -2 -1 -1 5
+c:ocal	1 -2 9 -2 -2 -3
+c:oces	-2 7 -2 -1 -2 -1
+c:ocke	0 -5 5 -2 1 1
+c:ocks	-1 -2 7 -1 -2 -2
+c:ocom	-1 -1 7 -2 -1 -2
+c:ocs 	-2 -1 -1 -1 9 -3
+c:odal	-1 -1 6 -1 -1 -2
+c:ode 	1 -16 -22 -8 1 44
+c:ode'	-1 -2 7 -1 -1 -2
+c:ode?	6 -1 -1 -2 0 -2
+c:odos	-2 -1 -4 -1 -1 9
+c:oduc	-1 0 12 -5 -2 -4
+c:odul	-4 -6 -8 -5 11 11
+c:ody 	-2 -1 -3 -1 -1 8
+c:oes 	32 -8 4 -8 -4 -17
+c:oesn	-4 -2 7 9 -7 -3
+c:of b	-1 -1 -3 9 -2 -2
+c:of e	-1 6 -3 -1 -1 -1
+c:of t	6 -6 -11 -2 6 7
+c:of w	-4 -1 -1 7 -1 -1
+c:ofed	-1 0 -1 7 -3 -1
+c:off 	-2 -2 9 -4 3 -4
+c:offl	1 8 5 -4 -5 -5
+c:oft 	-1 6 -1 -2 -2 -1
+c:oft_	-1 -2 7 -1 -1 -2
+c:og a	-2 0 -1 6 -2 -1
+c:ogge	-1 -2 8 -1 -1 -2
+c:oggi	0 3 -4 -2 -3 6
+c:ogic	6 -5 1 -8 -2 7
+c:ogin	-8 -3 7 7 3 -6
+c:ogle	-1 -1 6 -1 -2 -1
+c:ogs 	-4 -1 0 -3 -3 10
+c:oice	6 0 2 -3 -1 -4
+c:oid 	-1 -2 8 -2 -2 -2
+c:oin 	-4 -1 -1 6 2 -1
+c:oint	1 3 5 2 -11 0
+c:ojec	-1 10 -2 -2 -2 -3
+c:ok a	-1 0 -1 7 -3 -1
+c:ok f	-3 -3 -3 16 -3 -4
+c:ok h	-1 0 -1 7 -3 -1
+c:ok o	-3 -4 -9 26 -5 -5
+c:ok s	-1 -1 -2 -1 6 -1
+c:oke 	-1 0 -4 -1 9 -3
+c:oken	-8 -5 13 11 -6 -5
+c:oks 	1 2 6 -3 -3 -2
+c:okta	-1 8 -2 0 -4 -1
+c:ol o	-1 0 -6 11 -2 -2
+c:old 	1 -5 1 -8 -6 16
+c:olde	6 -2 -10 -3 -7 15
+c:ole.	-3 -2 -3 -2 -2 11
+c:olic	-1 -1 -4 9 -1 -2
+c:oll 	-1 5 1 -2 -2 -2
+c:olor	-1 7 -2 -1 -1 -1
+c:olum	-1 10 -1 -1 -2 -5
+c:om '	-1 -2 7 -1 -1 -2
+c:om h	-1 -1 -3 -1 -2 9
+c:om m	-2 -5 -2 -2 -2 12
+c:om n	-2 -3 -3 -2 -2 11
+c:om o	-2 1 7 -2 -2 -2
+c:om t	-1 -1 7 -2 -1 -2
+c:om u	-2 -2 -3 9 -2 -2
+c:om? 	6 -1 -2 -2 -1 -1
+c:omen	-2 -4 -2 -2 -2 12
+c:omly	-1 0 -3 -1 -5 11
+c:omme	-9 20 -7 3 -5 -3
+c:ommi	-1 -1 -2 10 -4 -2
+c:ompa	-5 -2 -4 5 7 -2
+c:ompl	-1 -1 5 -1 -1 -2
+c:ompo	-2 -4 3 -5 -2 10
+c:omve	-2 -1 -2 -2 -1 9
+c:on 3	-2 -1 -1 -1 -1 6
+c:on a	-6 0 3 -5 7 1
+c:on b	-2 -1 -3 10 -1 -2
+c:on c	-8 -8 13 10 -9 2
+c:on d	0 -2 8 -3 -2 -2
+c:on f	-6 -1 3 10 -4 -2
+c:on i	-7 -3 27 -3 -6 -9
+c:on j	-1 1 6 -1 -2 -2
+c:on m	4 -5 1 -5 2 3
+c:on n	-3 0 -2 -1 7 -1
+c:on o	1 7 -7 7 -4 -4
+c:on r	-1 -1 7 -1 -2 -1
+c:on s	-3 -5 20 -5 -4 -4
+c:on t	-11 30 -13 -3 11 -14
+c:on w	-2 1 8 -3 -3 -1
+c:on't	1 -5 1 -3 -3 8
+c:on.p	-1 -1 6 -1 -1 -1
+c:on: 	15 -3 -5 -3 -2 -2
+c:on? 	9 -1 -2 -2 -2 -2
+c:onal	-1 -2 -1 7 -2 -1
+c:onat	-5 0 -2 10 -1 -1
+c:once	-1 11 -5 -1 -1 -3
+c:onds	-1 3 6 -2 -3 -3
+c:one 	-7 -12 32 -12 -6 6
+c:one:	-8 8 4 -6 -2 4
+c:oned	10 0 -2 -4 -1 -2
+c:onen	-3 -2 -3 -4 0 12
+c:onfi	5 -6 0 -7 0 7
+c:ong 	1 -4 19 -6 -4 -6
+c:onme	7 -6 0 0 0 0
+c:ons 	-3 8 -8 -10 -6 19
+c:onsi	-2 -4 -7 -3 -4 20
+c:onso	-4 -3 -4 -3 -3 16
+c:onst	-1 -2 -4 -1 -3 11
+c:ont 	-1 -1 10 -2 -2 -2
+c:onta	-1 6 -1 -1 -3 -1
+c:onth	6 -1 1 -3 -1 -2
+c:ontr	-1 -5 -6 11 6 -4
+c:onve	-2 -3 -3 -2 -2 13
+c:oo m	-1 -1 6 -2 -1 -1
+c:oofe	-1 0 -1 7 -3 -1
+c:oogl	-1 -2 6 -1 -1 -1
+c:ook 	-9 -12 -19 49 -6 -3
+c:oop 	0 -2 5 -1 -2 -1
+c:op a	-1 -2 6 -1 -1 -1
+c:op b	-5 -1 -2 10 -1 -1
+c:op s	-2 -10 -2 -4 -5 23
+c:open	-5 -5 19 2 -4 -7
+c:ople	-1 8 -3 -1 -2 -1
+c:oppe	-1 -1 5 -1 -2 -1
+c:opy 	-2 -1 7 -1 -1 -2
+c:or a	-1 12 -3 0 -6 -2
+c:or b	0 0 -6 -2 9 -1
+c:or c	9 4 -4 1 -5 -5
+c:or d	0 5 -1 -1 -3 0
+c:or e	0 -7 0 0 8 0
+c:or h	-2 -2 -1 7 -2 -1
+c:or i	-1 0 -1 7 -4 -1
+c:or k	-1 -1 -1 7 -1 -2
+c:or m	-2 -4 -5 3 6 4
+c:or n	-3 -4 -3 -6 -6 22
+c:or p	-1 6 -2 2 -3 -2
+c:or r	-2 3 -4 14 -6 -4
+c:or s	0 0 4 8 -7 -5
+c:or t	-11 11 -18 -15 38 -5
+c:or u	-3 -7 8 -7 14 -5
+c:or v	-1 -1 -2 -1 -1 5
+c:or: 	-4 -5 21 -3 -4 -5
+c:orce	-5 -1 -2 10 -1 -1
+c:ord 	-5 0 2 1 8 -6
+c:orde	-5 12 10 -5 -6 -7
+c:ore 	-12 -10 7 25 -10 1
+c:ores	-1 9 -3 -1 -2 -1
+c:orev	-2 -1 12 -3 -3 -3
+c:orga	1 -4 -6 -4 -3 16
+c:orgs	-1 -2 -1 -1 7 -1
+c:ork 	-2 -4 3 -4 12 -5
+c:orke	8 2 1 -5 -1 -5
+c:orki	-1 -1 7 -1 -2 -1
+c:orks	0 -2 -2 -1 7 -1
+c:orm 	-4 0 13 -6 -8 6
+c:orma	1 -7 -4 2 5 4
+c:orne	-1 6 -3 -1 -1 -1
+c:orou	-2 -2 9 -2 -2 -2
+c:orre	-7 -5 -7 11 12 -4
+c:ors 	3 -2 2 8 -6 -4
+c:ort 	-8 37 -3 -16 -5 -5
+c:orta	-1 12 -4 -1 -2 -4
+c:orte	4 -8 5 -9 14 -7
+c:orti	-2 -3 11 -3 -2 -2
+c:orts	-4 -1 -13 7 -8 18
+c:ory 	-1 0 7 -1 -2 -2
+c:os t	-2 -2 -5 -1 -1 12
+c:os w	-1 -1 5 -1 -1 -1
+c:ose 	1 -3 6 5 -5 -4
+c:osed	-1 -1 8 -2 -2 -2
+c:oses	-2 -1 8 -2 -1 -2
+c:ossi	-1 7 -1 -1 -1 -4
+c:ost 	-2 -2 11 -2 -1 -4
+c:ot a	-1 -2 7 -1 -2 -2
+c:ot r	-2 -2 13 -2 -1 -5
+c:otal	-2 -3 10 -3 2 -3
+c:oth 	7 -1 -1 -2 -1 -2
+c:othe	-2 -2 -2 11 -3 -1
+c:othi	-2 -1 5 -1 -1 -1
+c:otif	-2 5 6 -2 -3 -3
+c:ots?	-6 0 -2 9 -1 0
+c:otto	-1 -1 7 -2 -1 -2
+c:ou a	-6 21 -7 4 3 -14
+c:ou c	-3 -2 -7 6 1 5
+c:ou d	-2 -3 1 -2 -1 5
+c:ou e	5 -3 3 -2 -2 0
+c:ou f	-2 -1 5 -2 -2 1
+c:ou g	1 -5 -5 2 2 5
+c:ou i	-3 0 -2 6 2 -3
+c:ou l	-2 -3 2 9 -3 -3
+c:ou r	-4 -3 -8 7 -1 9
+c:ou s	9 4 -3 -6 0 -5
+c:ou t	2 -6 25 -14 1 -6
+c:ou u	-2 -3 2 -2 -2 7
+c:ou v	0 -1 -3 -1 6 -1
+c:ouch	-1 -1 -1 5 -1 -1
+c:ough	10 -2 -5 5 -2 -6
+c:ould	-5 -1 3 1 0 3
+c:ount	-2 -4 19 -3 -3 -6
+c:our 	-11 -2 10 19 -7 -9
+c:ous 	-4 -1 7 3 -1 -2
+c:ous,	8 -1 -2 -2 -1 -2
+c:out 	-10 11 25 -9 -12 -4
+c:oute	0 -2 -4 1 7 -3
+c:outi	6 -3 7 -4 -3 -3
+c:ove 	-7 -7 -12 -5 -6 38
+c:over	-9 -9 3 15 13 -13
+c:ovin	-1 -1 -3 -1 -1 7
+c:ow a	10 -2 -2 -4 -1 -1
+c:ow d	32 -10 -6 -6 -6 -4
+c:ow e	4 -2 -3 -2 8 -3
+c:ow g	-4 26 -4 -6 -7 -5
+c:ow i	12 -1 -4 -4 0 -2
+c:ow m	1 -1 8 -3 -2 -2
+c:ow s	-6 0 -2 9 -1 0
+c:ow t	13 -1 -6 -2 -1 -1
+c:ow u	-3 -5 17 -3 -2 -4
+c:ow w	-2 -2 -1 10 -1 -2
+c:ow? 	8 -2 -3 -2 -1 -1
+c:own 	-4 6 13 -1 -4 -10
+c:ows 	-7 -8 29 -12 7 -9
+c:oy s	15 -2 -3 -2 -2 -6
+c:p af	-1 -2 6 -1 -1 -1
+c:p al	-2 -1 -3 -1 -1 8
+c:p an	0 -4 -1 0 8 -2
+c:p as	-2 -1 9 -2 -2 -2
+c:p br	-5 -1 -2 10 -1 -1
+c:p cl	-1 -1 -3 -1 -2 9
+c:p cr	-1 -1 7 -1 -2 -2
+c:p de	-1 -1 -2 -2 -1 6
+c:p do	-2 -1 8 -2 -1 -2
+c:p fa	-1 -2 8 -1 -1 -3
+c:p fl	-6 -5 -2 8 6 -1
+c:p fo	-3 -4 9 15 -12 -5
+c:p he	-1 -1 -4 10 -2 -2
+c:p in	-2 -3 11 -2 -1 -3
+c:p pa	-1 -2 -5 -3 12 -2
+c:p su	2 -12 -3 -5 -5 22
+c:p th	-5 -3 -11 -4 -6 28
+c:pack	9 -2 -5 -5 -2 6
+c:page	-11 22 17 -6 -8 -15
+c:pagi	-2 0 12 -3 -3 -3
+c:pani	-1 1 5 -1 -3 -2
+c:pare	-1 -5 4 -1 6 -3
+c:pars	-2 -1 9 -2 0 -4
+c:part	7 0 -1 -2 -1 -2
+c:pass	-8 -2 2 1 14 -7
+c:path	-1 -1 -2 6 -1 -1
+c:pati	-4 0 -1 6 0 0
+c:paus	-1 -2 9 -3 -2 -2
+c:paym	6 -2 -7 3 9 -8
+c:pdat	-2 -5 2 -2 -2 7
+c:pdf 	-1 3 6 -2 -3 -2
+c:pe '	-2 -3 11 -1 -2 -3
+c:ped 	-1 -1 7 -1 -2 -1
+c:peer	-1 -1 6 -1 -1 -1
+c:pend	-7 -7 -8 0 -6 28
+c:peni	-2 -2 10 -2 -1 -2
+c:pens	5 -3 3 -3 1 -4
+c:peop	-1 8 -3 -1 -2 -1
+c:per 	-1 -1 -3 -1 -1 7
+c:perm	4 -2 -2 6 -4 -2
+c:pers	-5 -6 -3 14 3 -2
+c:pesc	-1 -1 -2 -1 -1 6
+c:pgai	-1 -2 6 -2 -1 -1
+c:pgra	-6 -7 -3 -5 -6 27
+c:pgrd	-1 -2 -2 -1 -1 7
+c:phon	-1 -1 6 -1 -2 -1
+c:pi c	-2 -2 -4 -3 -2 14
+c:pi d	-3 -4 -3 10 3 -4
+c:pi r	2 -4 4 -9 8 -2
+c:pi t	-6 -1 -2 11 -1 -1
+c:pi v	10 0 -2 -4 -1 -2
+c:pick	-2 10 0 -2 -2 -3
+c:piec	-1 -2 -2 -2 -1 8
+c:pin 	-3 -3 -3 -3 -3 14
+c:pins	-1 -2 9 -1 -1 -2
+c:pire	-2 -2 13 -2 -5 -2
+c:plac	-2 -4 -7 -3 -4 19
+c:plai	35 -3 -12 -9 -4 -7
+c:play	-1 7 -4 -1 1 -1
+c:plca	-1 -1 -2 -1 -1 6
+c:ple 	-3 28 -10 -3 -6 -5
+c:plea	-14 4 6 5 -2 1
+c:plee	-1 6 -1 -1 -2 -1
+c:plem	-5 39 -12 -7 -8 -7
+c:ples	-1 -2 -1 -1 8 -2
+c:plet	-1 -1 5 -1 -1 -2
+c:plic	-2 1 2 -4 -4 8
+c:plie	-1 -1 7 -1 -1 -4
+c:plif	-3 -2 -5 -2 -3 14
+c:plit	-1 -1 -1 -2 -1 6
+c:ploa	-3 6 9 0 0 -12
+c:ploy	8 -2 0 -4 4 -8
+c:pls 	-12 7 11 -13 2 5
+c:ply 	-1 -3 -2 -1 -2 10
+c:pm t	-2 -3 -3 -2 -2 11
+c:png 	-1 -5 10 -1 -2 -2
+c:pnpm	-2 -3 -3 -2 -2 11
+c:po t	-1 -1 9 -1 -2 -4
+c:po? 	-5 -1 -2 10 0 -1
+c:poin	0 3 6 2 -11 0
+c:poli	-1 -1 -4 9 -1 -2
+c:pone	-3 -2 -2 -5 0 12
+c:poof	-1 0 -1 7 -3 -1
+c:port	-7 29 -9 -20 2 6
+c:pose	1 -3 6 5 -5 -4
+c:poss	-1 7 -1 -1 -1 -4
+c:post	-1 5 3 -2 -3 -2
+c:poy 	5 -1 -1 -1 -1 -2
+c:pp a	0 -3 -1 -1 7 -2
+c:pp c	-1 -1 7 -1 -2 -2
+c:pp f	-1 0 -1 7 -4 -1
+c:pp s	8 -2 -3 -2 -1 -1
+c:pped	-1 -1 7 -1 -2 -1
+c:ppen	6 -3 -2 -2 2 -1
+c:pply	-1 -3 -2 -1 -2 10
+c:ppor	-2 23 -11 -7 -11 8
+c:ppy 	-1 -3 -2 -1 -2 10
+c:pr a	-1 -1 -3 8 -1 -1
+c:pr t	-1 -1 -1 5 -1 -1
+c:pres	-3 -1 6 1 -1 -2
+c:prev	-1 -1 6 1 -2 -3
+c:pric	2 4 8 -7 -3 -4
+c:prob	-1 -2 -3 11 -2 -2
+c:proc	-2 7 -2 -1 -2 -1
+c:prod	2 -2 6 -9 2 1
+c:proj	-2 13 -2 -2 -2 -5
+c:prot	1 1 -1 -3 -4 5
+c:ps b	-1 -1 8 -2 -1 -2
+c:ps g	-1 -1 7 -1 -1 -2
+c:ps p	-2 -6 18 -5 -3 -2
+c:psaf	-1 -2 7 -1 -1 -2
+c:pt f	-1 -1 -2 -1 -1 6
+c:pt t	-1 7 -1 -1 -3 -1
+c:ptio	-4 3 7 5 -5 -5
+c:pts 	-3 -3 9 -5 -7 9
+c:pty 	-1 -9 0 -1 14 -2
+c:publ	5 7 -5 0 -4 -3
+c:put 	-2 -9 9 -2 5 -2
+c:puts	-2 -3 11 -3 -2 -2
+c:py b	-2 -1 7 -1 -1 -2
+c:py l	-1 -1 6 -1 -1 -1
+c:py w	-1 -3 -2 -1 -2 10
+c:ql i	-1 -1 -2 6 -1 -1
+c:quer	-3 -1 6 -4 -3 5
+c:ques	14 4 0 -5 -6 -5
+c:queu	4 5 3 -5 -1 -6
+c:r 10	-2 -3 14 -3 -3 -2
+c:r ac	-1 -2 9 -1 -1 -2
+c:r an	-3 -2 1 14 -5 -4
+c:r ap	-1 9 -2 -1 -3 -2
+c:r ba	-1 -2 -1 -1 -1 6
+c:r bl	-1 -2 7 -1 -2 -2
+c:r br	0 0 -6 -2 9 -1
+c:r ci	10 -1 -2 -3 -1 -2
+c:r cl	-1 -2 9 -2 -2 -3
+c:r co	-2 3 4 10 -9 -7
+c:r da	-1 14 -3 -2 -5 -2
+c:r de	1 -2 -2 8 -2 -3
+c:r di	-1 -1 7 -1 -1 -2
+c:r em	0 -6 -1 0 8 0
+c:r go	-3 -3 20 -4 -4 -6
+c:r ha	-3 -3 -5 3 10 -3
+c:r in	8 -3 4 2 -6 -6
+c:r ju	-1 -1 8 -2 -1 -2
+c:r jw	-6 -1 -4 14 -2 -1
+c:r kn	-1 -1 -1 5 -1 -2
+c:r la	-2 -5 7 -2 -2 5
+c:r li	-1 6 -2 -1 -1 -1
+c:r lo	-2 -2 9 -2 -2 -2
+c:r me	-1 1 -3 -1 -2 6
+c:r mi	-2 -3 -3 3 7 -2
+c:r mo	-1 -1 -4 -1 -2 10
+c:r my	-1 -1 -2 6 -1 -1
+c:r no	-2 -9 -2 -4 -5 23
+c:r of	-1 6 -3 -1 -1 -1
+c:r on	-2 -3 5 -2 0 2
+c:r or	-1 -2 -1 -1 7 -1
+c:r pa	-2 -2 10 -3 -2 -2
+c:r pr	-1 6 -1 -2 -2 -1
+c:r re	-1 4 5 -2 -3 -2
+c:r ri	-1 -1 -3 11 -4 -2
+c:r sc	-1 8 -4 -1 -2 -1
+c:r se	3 -3 -5 4 -4 6
+c:r so	-1 -2 8 -2 -2 -2
+c:r sq	-1 -1 -2 6 -1 -1
+c:r st	11 -3 -2 -3 -1 -2
+c:r th	-16 14 -28 1 39 -10
+c:r to	-1 1 -2 5 -2 -1
+c:r ts	-1 -2 5 -1 -1 -1
+c:r un	-1 -6 0 -1 9 -1
+c:r us	-5 1 6 4 -1 -6
+c:r ve	-2 -1 -3 -1 -1 8
+c:r we	1 1 -3 8 -4 -2
+c:r wh	-3 3 6 -3 -2 -1
+c:r wi	0 0 -6 -2 9 -1
+c:r's 	3 4 -5 -2 1 -1
+c:r-si	0 5 -2 -1 -3 0
+c:r: '	-1 -1 6 -1 -1 -1
+c:r: c	-1 -3 10 -1 -2 -3
+c:r_id	-1 -1 6 -1 -1 -1
+c:ra o	-1 -1 5 -1 -1 -1
+c:rabi	-1 -1 -1 7 -1 -2
+c:race	-2 -2 12 0 -2 -6
+c:ract	-2 -6 2 -3 5 4
+c:rade	-5 -6 -8 -4 -6 29
+c:rage	-2 -5 -5 2 13 -3
+c:rail	-3 -4 -5 -2 -2 17
+c:ranc	-5 -3 -10 14 5 -2
+c:rand	-1 0 -3 -1 -5 11
+c:rans	-1 -6 9 3 -2 -3
+c:rash	-2 -2 11 -2 -3 -2
+c:rate	6 -4 -5 1 0 2
+c:rati	-3 0 -5 3 12 -6
+c:rbag	-2 -2 8 -1 -1 -1
+c:rboa	0 5 -1 -1 -2 -1
+c:rce 	-5 -2 1 8 0 -2
+c:rd c	-2 -2 9 -1 -3 -2
+c:rd f	0 5 -1 -1 -2 -1
+c:rd h	-1 -1 -1 6 -1 -2
+c:rd r	-3 -3 4 -4 11 -4
+c:rd s	-1 7 -3 -1 -1 -1
+c:rdae	-1 -2 -2 -1 -1 7
+c:rder	-4 11 11 -4 -6 -7
+c:rds 	-4 0 -1 6 0 0
+c:re 2	-2 -3 11 -3 -2 -2
+c:re a	2 -10 -10 17 3 -2
+c:re b	-3 -2 12 -2 -2 -3
+c:re d	11 -4 -6 -4 8 -5
+c:re f	7 1 -5 -8 -3 9
+c:re i	7 -6 3 12 -8 -7
+c:re l	-2 -1 11 -2 -2 -4
+c:re p	11 -2 -1 -4 -2 -2
+c:re r	5 -1 -1 -1 -1 -1
+c:re s	-13 -8 17 21 -10 -7
+c:re t	9 -5 -5 7 5 -10
+c:re v	-1 -1 -2 -1 6 -1
+c:re w	0 -4 -8 6 6 0
+c:re's	9 -3 -1 -5 -2 2
+c:re? 	-2 -1 -1 8 -1 -3
+c:read	0 -3 8 -6 -7 9
+c:reak	-8 -3 6 4 6 -4
+c:reas	-1 -1 -3 -2 8 -2
+c:reat	-3 26 -5 -5 -7 -5
+c:rect	-9 -8 -3 12 13 -6
+c:red 	7 -3 -6 -5 -3 9
+c:red?	6 0 -2 -2 0 -1
+c:rede	-2 -2 -1 7 -2 -1
+c:redu	6 -2 -5 -3 -2 5
+c:ree 	5 5 -5 -4 -2 2
+c:reen	-3 -1 10 -4 4 -5
+c:refa	-1 -1 -3 -1 -2 8
+c:reiv	-5 -1 -4 13 -2 -2
+c:rele	-1 -1 6 -2 -1 -1
+c:reli	-1 -1 -3 -1 -5 11
+c:rema	-1 -1 -2 -1 -1 6
+c:remo	-6 -5 -9 -7 -5 31
+c:rena	-3 -2 -5 -5 -3 18
+c:renc	2 -2 9 -2 -5 -3
+c:rend	-1 1 -4 -1 8 -3
+c:reom	-2 -1 -2 -2 -1 9
+c:repl	-4 -6 -2 -4 -6 21
+c:repo	-1 3 -17 23 -3 -5
+c:repr	-1 -2 -2 0 6 -1
+c:requ	0 3 5 -2 -4 -2
+c:res 	-4 10 -2 0 0 -4
+c:rese	-4 -4 9 -6 10 -5
+c:ress	-3 -1 14 -4 -1 -6
+c:resu	-1 -1 6 -2 -1 -2
+c:retc	-6 -4 23 -6 -3 -4
+c:retr	-1 -4 19 -7 -1 -6
+c:rets	-5 -1 -2 10 0 -1
+c:retu	-3 0 3 -9 13 -4
+c:reve	-3 -2 9 3 -4 -4
+c:revi	-13 -10 -7 52 -11 -11
+c:rexc	-2 -2 8 -2 -1 -2
+c:rfil	-1 -2 -2 0 -1 5
+c:rgan	1 -4 -5 -4 -3 16
+c:rge 	-5 -3 9 7 -2 -5
+c:rge,	-2 -1 -2 7 -1 -1
+c:rgs'	-1 -2 -1 -1 7 -1
+c:riab	7 -7 0 0 0 0
+c:rice	-2 -3 13 -4 -1 -2
+c:rici	4 8 -5 -3 -2 -2
+c:rid 	-2 -1 -3 -2 -2 10
+c:ries	4 -2 8 -6 -6 2
+c:rifi	-1 -1 -2 -1 6 -1
+c:rify	-1 -4 -6 -2 15 -2
+c:ring	-2 7 2 -2 -5 -1
+c:riou	8 -1 -2 -2 -1 -2
+c:ript	11 6 -12 -8 -11 14
+c:risk	-2 -2 -5 16 -5 -3
+c:rite	-3 -6 -7 -5 24 -4
+c:rity	-3 -3 -3 15 -3 -3
+c:rize	10 -8 -4 -4 10 -3
+c:rk m	-2 0 4 -3 6 -5
+c:rkdo	-1 8 -2 -2 -1 -3
+c:rker	7 2 5 -6 -2 -5
+c:rkin	-1 -1 7 -1 -2 -1
+c:rks 	-1 -4 -6 -2 16 -3
+c:rkup	-1 -2 7 -1 -1 -2
+c:rm a	-2 -2 13 -3 -3 -2
+c:rm e	0 5 -2 0 -1 -1
+c:rm l	-1 -2 -4 -2 -2 11
+c:rm t	-1 -1 6 -1 -1 -2
+c:rmat	-1 -6 -3 -2 6 5
+c:rmis	4 -2 -2 6 -4 -2
+c:rnam	-1 6 -2 -1 -1 -1
+c:rner	-1 6 -3 -1 -1 -1
+c:rnin	-2 -3 -5 -3 -3 15
+c:rnog	-2 -2 9 -2 -2 -2
+c:rns 	-3 1 3 -7 10 -4
+c:robl	-1 -2 -3 10 -2 -2
+c:roce	-2 7 -2 -1 -2 -1
+c:rod 	3 -2 -6 -3 4 4
+c:rodu	-1 0 12 -5 -2 -4
+c:roid	-1 -2 8 -2 -2 -2
+c:roje	-1 10 -2 -2 -2 -3
+c:roke	-1 -1 7 -2 -1 -2
+c:rol 	-1 -1 -5 11 -2 -2
+c:roll	-1 5 1 -2 -2 -2
+c:rom 	-7 -10 6 3 -8 17
+c:rom?	6 -1 -2 -2 -1 -1
+c:rong	-4 -3 20 -5 -4 -5
+c:ront	-1 0 6 -1 -1 -2
+c:rop 	-2 -6 -3 -5 -6 21
+c:ror 	-3 -3 2 -5 7 2
+c:ror:	-4 -5 21 -3 -4 -5
+c:rors	5 -1 -1 -1 -1 -1
+c:rot 	-1 1 -1 -2 -3 5
+c:roug	13 -1 -3 -2 -2 -5
+c:roun	2 -4 1 -2 5 -2
+c:rout	7 -5 4 -3 4 -6
+c:rowi	-1 -1 7 -1 -1 -2
+c:rows	-4 -5 10 -8 14 -5
+c:rrec	-7 -5 -7 11 12 -4
+c:rror	-2 -9 25 -9 1 -5
+c:rry 	-1 -1 7 -2 -1 -1
+c:rs a	-4 -3 20 0 -4 -9
+c:rs c	-2 -4 6 -2 8 -5
+c:rs e	-3 5 11 -4 -4 -5
+c:rs f	-1 8 -2 -2 -2 -1
+c:rs g	-1 -2 8 -1 -1 -2
+c:rs i	-2 -4 11 0 -3 -2
+c:rs l	-2 3 6 -2 -3 -2
+c:rs p	-1 9 -3 -2 -2 -2
+c:rs s	5 -2 -5 10 -5 -3
+c:rs t	-5 8 14 -6 -3 -8
+c:rs w	-1 -4 -6 -2 5 8
+c:rs' 	-1 -1 -2 11 -6 -1
+c:rs/s	-1 -1 6 -1 -1 -1
+c:rser	-2 -2 8 -2 0 -2
+c:rsin	-2 -2 8 -2 -2 0
+c:rsio	8 -6 -9 -9 -7 24
+c:rson	-5 -2 -3 14 -2 -2
+c:rss 	0 6 -1 -1 -4 1
+c:rt a	-1 -2 8 -1 -1 -3
+c:rt c	-1 -2 -1 -1 -2 7
+c:rt f	-3 4 -3 -5 -8 15
+c:rt i	-1 -1 6 -2 -1 -1
+c:rt m	-2 14 -3 -3 -2 -5
+c:rt n	-1 -2 7 -1 -1 -2
+c:rt o	10 -3 4 -3 -2 -4
+c:rt r	6 -1 -1 -2 0 -2
+c:rt t	-3 10 -7 -3 0 3
+c:rt u	-1 11 -5 -1 -1 -3
+c:rt w	-3 -1 -5 -3 16 -5
+c:rt.t	12 -1 -3 -3 -2 -2
+c:rtab	-1 10 -4 -1 -1 -4
+c:rted	5 -1 -1 -1 -1 -1
+c:rter	0 -8 6 -8 15 -6
+c:rtin	-2 -3 11 -3 -2 -2
+c:rts 	-4 -1 -13 7 -8 19
+c:ruct	6 -1 -1 -1 -1 -1
+c:run 	-1 -5 -9 -4 28 -8
+c:runs	-1 -1 6 -1 0 -2
+c:runt	-1 -1 5 -1 -1 -1
+c:rust	-1 -5 -3 -2 2 9
+c:rute	-4 -1 -2 8 -1 -1
+c:rvic	1 -6 13 -7 -5 4
+c:ry b	-1 -2 -1 0 5 -1
+c:ry c	-1 14 -5 -1 -2 -5
+c:ry d	-1 -1 -3 -2 -1 8
+c:ry f	-3 -6 8 -4 -4 9
+c:ry i	-3 0 -2 -1 7 -1
+c:ry l	-1 -1 9 -2 -3 -2
+c:ry n	-1 -1 6 -1 -2 -2
+c:ry o	-1 -1 7 -2 -1 -1
+c:ry p	3 6 -5 -2 -1 -1
+c:ry r	-1 -1 -1 -1 7 -2
+c:ry s	-1 -3 -3 -1 10 -3
+c:ry t	-2 -1 0 -2 8 -3
+c:ry u	-1 -1 7 -1 -1 -2
+c:ryon	-1 -2 7 -1 -2 -2
+c:rypt	-1 -1 -3 8 -1 -2
+c:rywh	-3 -2 -3 -2 -2 11
+c:s 10	-3 -4 6 -9 14 -4
+c:s 20	-2 -2 -2 -2 -1 10
+c:s 40	-1 -3 5 -8 9 -2
+c:s ac	-1 -3 -1 -1 9 -3
+c:s ad	-2 6 -4 -2 4 -3
+c:s an	-8 -5 -1 3 24 -13
+c:s ar	13 -16 26 -6 -5 -13
+c:s as	-3 2 -2 -1 -2 6
+c:s at	-2 10 2 -3 -3 -4
+c:s ba	-3 -1 23 -5 -5 -8
+c:s be	-1 -5 -5 9 6 -3
+c:s bl	-3 -2 16 -4 -3 -4
+c:s br	-2 -3 7 4 -3 -3
+c:s bu	-2 -2 6 2 -2 -2
+c:s by	-1 11 -3 -2 -3 -2
+c:s ca	-2 -3 7 -3 5 -4
+c:s ch	0 -3 -4 6 4 -2
+c:s cl	6 -1 -2 -2 -1 1
+c:s co	-1 -11 -18 8 7 15
+c:s cu	-1 -1 7 -2 -1 -2
+c:s do	4 -4 7 -2 -2 -2
+c:s ed	-2 -1 8 -1 -1 -2
+c:s er	-1 0 6 -1 -1 -2
+c:s ev	-2 -6 11 -4 -6 7
+c:s ex	-4 4 9 -4 1 -6
+c:s fa	-2 3 -1 -2 -7 9
+c:s fe	-5 6 -1 9 -5 -3
+c:s fi	0 -2 7 -2 -1 -2
+c:s fl	-1 -1 -5 -2 -6 15
+c:s fo	-9 -31 -11 5 50 -4
+c:s fr	4 -3 2 6 -4 -5
+c:s ga	-2 -2 9 -2 -2 -2
+c:s ge	6 -3 7 -3 -4 -3
+c:s go	-2 -2 9 -2 -2 -2
+c:s gr	-1 -1 7 -1 -1 -2
+c:s ha	8 -1 -1 -2 -2 -1
+c:s ho	-4 0 0 7 0 -2
+c:s im	-2 9 0 -2 -2 -3
+c:s in	-15 -6 10 17 -16 9
+c:s it	-4 -7 12 7 -3 -5
+c:s js	-1 8 -3 -1 -2 -2
+c:s li	-3 3 9 -2 -3 -3
+c:s ma	-2 -1 8 -1 -1 -3
+c:s mo	-2 -3 -6 -3 15 -1
+c:s na	-1 -2 7 -2 -2 -1
+c:s ne	1 2 9 -4 -3 -5
+c:s no	-5 -3 12 -4 -4 4
+c:s on	-9 -2 4 -2 5 4
+c:s ou	-9 -6 15 10 -5 -5
+c:s ov	-3 0 14 -4 -4 -3
+c:s ow	-2 -2 9 -1 -1 -4
+c:s pa	-5 -3 14 12 -12 -7
+c:s pi	-2 10 -3 -2 -2 -2
+c:s po	-2 -3 11 -2 -1 -3
+c:s qu	-1 -2 6 -2 2 -3
+c:s re	2 3 6 -5 -6 -1
+c:s ru	1 -2 -2 -2 8 -3
+c:s sc	5 -2 4 -2 -3 -2
+c:s se	-3 2 -10 7 10 -5
+c:s sh	-2 -5 12 -2 -1 -3
+c:s ta	-1 -2 6 -1 -1 -2
+c:s te	7 -2 -1 -2 -1 -1
+c:s th	55 -2 8 -12 -27 -23
+c:s to	3 5 -2 -15 -15 25
+c:s tw	-1 -1 5 -1 -1 -1
+c:s ty	-4 6 0 0 0 -1
+c:s un	-2 -2 9 -2 -2 -2
+c:s we	2 -2 -5 -1 -3 10
+c:s wh	-4 9 11 -3 -9 -3
+c:s wi	-5 -10 8 -6 6 7
+c:s wr	-2 -3 13 -4 -2 -1
+c:s" o	-1 -1 6 -2 -1 -1
+c:s' d	-2 -4 -3 10 1 -2
+c:s, w	6 -1 -1 -2 -1 -1
+c:s/se	-1 -1 6 -1 -1 -1
+c:s232	-1 -2 5 -1 -1 -1
+c:s3 b	-1 -1 -4 9 -1 -2
+c:s3? 	9 -1 -1 -3 -1 -3
+c:s? t	6 -1 -5 4 -2 -2
+c:safe	-15 -4 1 27 -4 -5
+c:sage	-3 -3 10 -3 -3 2
+c:sani	-2 -2 -3 9 -2 -2
+c:sap 	4 -1 5 -1 -7 0
+c:save	-3 3 4 -6 7 -4
+c:says	-1 -2 9 -1 -2 -2
+c:sc` 	-2 -1 -4 -2 -2 12
+c:scal	6 -1 -3 -1 -1 -1
+c:scor	-2 12 -5 -1 -3 -1
+c:scre	-3 -1 10 -4 4 -5
+c:scri	11 7 -12 -8 -11 14
+c:scro	-1 5 1 -2 -2 -2
+c:se a	-3 5 -8 -3 0 9
+c:se b	-2 4 5 -3 -2 -2
+c:se c	-3 -6 -10 0 19 -1
+c:se d	0 -4 0 -1 -2 7
+c:se i	-5 2 -2 6 -4 4
+c:se o	1 -2 -1 7 -5 0
+c:se r	-2 -2 -3 6 1 0
+c:se t	10 -6 13 -8 1 -10
+c:se u	-1 -4 11 -1 -2 -2
+c:se w	-1 7 0 0 -4 -2
+c:seco	-1 3 6 -2 -3 -3
+c:secr	-4 -1 -2 8 -1 -1
+c:secu	-3 -4 -3 20 -7 -3
+c:sed 	-5 -4 1 -6 -3 17
+c:see 	-1 -2 -1 -1 7 -1
+c:seed	-1 7 -1 0 -4 -1
+c:segf	-2 -2 8 -2 -1 -2
+c:send	6 -1 -2 -2 -1 -1
+c:sent	2 -5 3 -6 12 -6
+c:ser 	3 -3 -5 -2 -2 9
+c:ser_	-1 -1 6 -1 -1 -1
+c:sern	-1 6 -2 -1 -1 -1
+c:sers	-11 9 13 0 1 -13
+c:serv	4 -1 12 -9 -8 2
+c:ses 	-5 2 7 -2 -2 -1
+c:sesy	6 -1 -1 -1 -1 -1
+c:set 	-4 5 -2 -6 10 -4
+c:sets	-3 -15 3 -7 26 -5
+c:sett	-1 1 6 -2 -3 -1
+c:setu	-1 -1 -3 11 -4 -2
+c:shar	2 -2 2 -5 -5 8
+c:shbo	-1 7 -3 -1 -1 -1
+c:shes	-2 -2 11 -2 -3 -2
+c:shin	-1 -1 -1 6 -1 -2
+c:show	-9 -4 39 -9 -7 -11
+c:sibi	-1 -2 -5 -3 12 -2
+c:sibl	-2 6 4 -2 -2 -5
+c:side	-1 5 0 -1 -3 -1
+c:siel	-1 -2 6 -1 -1 -1
+c:siga	-1 -1 5 -1 -1 -1
+c:sign	-7 5 4 -6 15 -11
+c:sile	-1 -2 8 -2 -2 -1
+c:simp	-3 2 -6 -3 -4 14
+c:sing	-3 -7 18 -7 9 -10
+c:sion	10 -10 -9 -2 -12 22
+c:sist	-2 -4 -7 -3 -4 20
+c:size	1 0 -4 -2 -1 6
+c:skip	-2 -6 18 -5 -3 -2
+c:sks 	-1 -1 -3 11 -4 -2
+c:slin	-1 -1 -4 -2 -2 11
+c:smal	-2 -1 -5 -2 -3 13
+c:smok	-1 -1 -4 -1 10 -3
+c:sn't	-4 -2 7 9 -7 -3
+c:so w	-1 8 -2 0 -4 -1
+c:soft	-2 5 5 -2 -3 -3
+c:sole	-3 -2 -3 -2 -2 11
+c:some	-2 -3 9 -5 -3 4
+c:son 	-3 9 -6 -3 -3 6
+c:sona	-7 -2 -3 17 -3 -2
+c:sort	-2 7 8 -4 -3 -5
+c:soun	-1 8 -4 -1 -2 -1
+c:sp h	-1 -1 -5 11 -2 -2
+c:spar	0 -4 7 -1 -1 -1
+c:spin	-1 -2 9 -1 -1 -2
+c:spli	-1 -1 -1 -2 -1 6
+c:spoo	-1 0 -1 7 -3 -1
+c:sql 	-1 -1 0 6 -2 -2
+c:srs 	-1 6 0 -1 -1 -2
+c:ss b	-1 0 6 -2 1 -4
+c:ss c	-2 -3 -8 12 -4 4
+c:ss f	-1 -4 -3 -3 11 -1
+c:ss h	-5 0 -1 9 0 -3
+c:ss o	-3 0 -2 -1 7 -1
+c:ss t	-1 -1 -3 -1 -1 6
+c:ssag	-2 -2 5 -2 -2 3
+c:sses	-3 6 -4 1 -3 3
+c:ssib	-1 5 -6 -4 12 -5
+c:ssin	0 -5 1 -4 12 -5
+c:ssio	3 -5 2 7 -3 -4
+c:sso 	-1 8 -2 0 -4 -1
+c:ssue	-1 -1 -1 5 -2 -1
+c:sswo	-5 -2 2 1 8 -5
+c:st b	-6 0 -2 9 -1 0
+c:st c	-2 16 -4 -5 -1 -5
+c:st d	-1 -1 7 -1 -2 -1
+c:st e	2 3 -6 -3 6 -2
+c:st f	-2 -10 -2 -4 20 -2
+c:st i	-2 -1 -1 -2 -7 13
+c:st m	10 -1 -2 -4 -2 -2
+c:st s	-6 -3 7 -2 8 -4
+c:st t	-6 -9 -12 -6 41 -9
+c:st v	-1 -4 -2 -1 -3 11
+c:st? 	8 -1 -2 -2 -2 -1
+c:stab	0 0 -2 -1 -3 7
+c:stag	-1 0 -3 -1 7 -2
+c:stan	-1 -2 -3 -1 -3 10
+c:star	5 -3 6 -4 -2 -3
+c:sten	-3 -5 -2 -4 -4 18
+c:stfm	-1 -3 -2 -1 -2 10
+c:stil	6 0 -1 -2 -1 -2
+c:stio	14 1 -6 -4 -3 -3
+c:stom	-1 1 -3 -1 -1 6
+c:stop	-6 -2 3 9 -2 -2
+c:stor	1 -2 -6 13 -4 -2
+c:stre	-6 -2 22 -6 -4 -4
+c:stri	2 -1 7 -2 -2 -3
+c:stru	6 -1 -1 -1 -1 -1
+c:sts 	-3 -8 -12 -11 34 -1
+c:stut	-1 -2 7 -1 -2 -2
+c:subs	-1 6 -1 -2 -2 -1
+c:sues	-1 -1 -1 5 -2 -1
+c:suit	-3 0 -1 0 6 -1
+c:sult	-1 -1 6 -2 -1 -2
+c:summ	9 -4 -4 -5 7 -3
+c:supp	-2 23 -12 -10 -13 13
+c:sure	-3 -8 -5 -3 27 -8
+c:swor	-5 -2 2 1 8 -5
+c:t "t	-1 -1 6 -2 -1 -1
+c:t a 	-3 18 -8 -2 -3 -1
+c:t ac	-1 -1 -3 -1 -1 6
+c:t ad	-2 8 -4 -3 4 -3
+c:t af	-2 -2 10 -3 -2 -2
+c:t al	-1 -2 8 -1 -1 -3
+c:t an	-2 1 -3 -2 -3 9
+c:t ar	1 -2 -6 -2 -2 11
+c:t be	-3 2 7 0 -3 -3
+c:t bl	-1 -5 10 -1 -2 -2
+c:t bo	-6 -1 1 8 -1 -1
+c:t br	-6 -4 5 -4 5 3
+c:t ch	10 25 -7 -12 -9 -7
+c:t cl	0 -2 -1 -1 -1 6
+c:t co	-4 2 -7 -1 -1 11
+c:t de	-5 2 21 -6 -6 -6
+c:t do	10 -1 -2 -2 -2 -2
+c:t em	-2 1 -9 -3 15 -2
+c:t ev	-2 -4 6 -2 6 -4
+c:t ex	3 -2 -3 9 -6 -1
+c:t fo	-6 0 -6 -11 4 18
+c:t ha	6 -3 1 -3 1 -3
+c:t i 	-4 -1 -1 7 -1 -1
+c:t im	-1 -2 7 -1 -1 -2
+c:t in	-4 15 -6 -3 -4 3
+c:t is	-1 -4 11 -6 -10 11
+c:t ju	-1 -2 9 -1 -1 -2
+c:t li	1 0 12 -4 -6 -3
+c:t lo	-3 -5 26 -9 -4 -6
+c:t ma	-2 14 -3 -3 -2 -5
+c:t mo	6 0 -1 -2 -1 -1
+c:t na	-1 -2 7 -1 -1 -2
+c:t of	9 5 0 1 -9 -6
+c:t on	-4 9 19 -7 -8 -8
+c:t ou	-2 -3 -4 15 -3 -4
+c:t pa	-2 7 6 -3 -6 -2
+c:t pe	-1 11 -4 -1 -2 -2
+c:t po	-2 12 -7 7 -3 -7
+c:t pr	-2 6 -4 5 -3 -2
+c:t ra	-1 9 -4 -2 -2 -1
+c:t re	3 1 0 -7 1 2
+c:t ri	-2 -1 -3 -2 -2 10
+c:t sa	-3 1 -3 9 -1 -3
+c:t sh	-3 -1 7 1 -1 -2
+c:t so	-1 6 -1 -2 -2 -1
+c:t sp	-1 -2 9 -1 -1 -2
+c:t su	-3 0 -1 0 5 -1
+c:t ta	13 -3 -1 -4 -2 -4
+c:t te	-1 -10 -1 -1 15 -2
+c:t th	-19 8 -28 11 27 2
+c:t to	-3 -11 4 -6 6 11
+c:t ts	0 -4 0 -1 6 -1
+c:t tw	-3 -3 13 -2 -2 -3
+c:t up	-1 11 -5 -1 -1 -3
+c:t us	2 13 -10 -7 -5 7
+c:t va	1 -8 -4 14 -2 -1
+c:t ve	-1 -4 -2 -1 -2 8
+c:t wa	-2 -2 -5 -2 -2 14
+c:t wh	-5 0 10 -5 7 -6
+c:t wi	-2 1 -4 -2 -1 7
+c:t wo	0 -3 -3 -1 9 -1
+c:t's 	20 -3 -3 -6 -3 -4
+c:t, i	-1 -2 9 -1 -1 -2
+c:t.ts	12 -1 -3 -3 -2 -2
+c:t_un	-1 -2 7 -1 -1 -2
+c:ta a	-1 11 -3 -1 -3 -2
+c:ta` 	-1 -1 -1 -2 -1 6
+c:taar	-2 -1 7 -2 -1 -1
+c:taba	6 3 -5 -4 6 -6
+c:tabi	0 0 -2 -1 -3 7
+c:tabl	1 24 -1 -5 -5 -14
+c:tact	-1 6 -1 -1 -3 -1
+c:tagg	-1 7 -2 -1 -2 -1
+c:tagi	-1 0 -3 -1 7 -2
+c:takl	5 -1 -1 -2 -1 -2
+c:tal 	-3 -1 9 -4 2 -4
+c:talk	11 -2 -2 -3 -1 -3
+c:tant	-1 -2 -3 -1 -3 10
+c:tars	-5 5 13 -5 -4 -5
+c:tart	5 -3 6 -4 -2 -3
+c:tch 	-1 -1 -3 -1 -2 9
+c:tche	-6 -4 20 -5 -3 -3
+c:te a	-9 31 -12 -9 -3 2
+c:te f	-3 -4 -7 5 1 8
+c:te h	-2 -1 0 -2 -2 5
+c:te l	-6 4 -2 5 3 -5
+c:te p	-4 -1 1 -1 7 -3
+c:te r	-3 -1 11 -4 3 -5
+c:te s	0 6 3 -3 -3 -3
+c:te t	-9 0 -9 -13 7 24
+c:te-f	-2 -5 -2 -2 -2 12
+c:team	-1 10 -3 -2 -3 -2
+c:ted 	9 -3 -9 5 -6 4
+c:ted?	6 -1 -2 -2 -1 -1
+c:tell	10 -4 -6 2 4 -6
+c:tely	-2 -2 13 -2 -5 -2
+c:tent	-2 -4 -7 -3 -4 20
+c:ter 	-9 -24 58 -21 16 -20
+c:tere	-1 -2 7 -2 -1 -1
+c:terr	-1 -2 6 1 -2 -2
+c:ters	-3 2 11 -4 -2 -4
+c:tes 	4 10 6 -3 -7 -9
+c:test	-17 -44 -34 -20 102 13
+c:teto	-2 -2 8 -2 -1 -2
+c:tets	-1 -12 -4 -3 22 -2
+c:text	-3 -3 14 -3 -3 -3
+c:tfmt	-1 -3 -2 -1 -2 10
+c:th "	-1 -2 8 -1 -2 -2
+c:th a	-3 -3 4 -6 5 2
+c:th c	-5 0 -2 10 -2 -1
+c:th f	-2 6 -4 -2 -6 7
+c:th g	-2 11 0 -2 -4 -3
+c:th m	-2 -4 -1 -2 14 -5
+c:th n	-1 -5 -6 -2 6 8
+c:th o	2 7 -2 -1 -4 -1
+c:th p	-1 -3 8 -1 2 -4
+c:th t	0 -7 3 -7 0 10
+c:than	0 -8 10 -1 -2 0
+c:that	-8 32 -16 -11 10 -7
+c:the 	-8 -42 36 -2 6 10
+c:thei	0 10 1 -5 -6 0
+c:them	-3 9 -8 2 -8 7
+c:ther	0 -9 -4 24 -8 -3
+c:thin	-7 -8 3 17 0 -5
+c:this	7 -7 -6 11 -7 3
+c:thro	13 -2 0 -2 -2 -6
+c:ths 	-1 -1 -2 6 -1 -1
+c:thub	-2 9 -7 1 -4 3
+c:tial	-1 -1 -1 6 -2 -1
+c:tibi	-4 0 -1 6 0 0
+c:tidy	-1 0 -3 -1 -3 9
+c:ties	-1 -2 2 6 -2 -3
+c:tifi	-2 5 6 -2 -3 -3
+c:tiio	-1 -1 6 -2 -1 -2
+c:til 	0 -1 7 -1 -2 -2
+c:till	6 0 -1 -2 -1 -2
+c:time	-3 -10 28 -8 -1 -7
+c:tine	-2 -2 9 -2 -2 -2
+c:ting	-2 0 12 2 -5 -8
+c:tion	-7 7 10 12 -1 -21
+c:tipl	-1 11 -5 -1 -1 -3
+c:tive	-1 -1 5 -1 -1 -2
+c:tize	-2 -2 -3 9 -2 -2
+c:tly 	-4 -8 10 -8 15 -6
+c:to 8	-4 -5 -6 -3 -3 21
+c:to a	-3 3 -7 -3 -5 15
+c:to b	-1 7 -1 -1 -2 -2
+c:to c	-1 6 0 -1 -1 -2
+c:to d	-3 2 -2 -2 -2 8
+c:to e	-2 -1 -2 -1 9 -3
+c:to f	-1 -2 -1 -1 -2 7
+c:to i	-2 -1 9 -1 -1 -5
+c:to l	-2 0 10 -2 -2 -4
+c:to m	4 -4 -5 7 1 -4
+c:to n	-2 6 3 -2 -3 -3
+c:to p	-6 -1 -4 -6 -8 24
+c:to s	7 -1 -12 1 -5 10
+c:to t	-5 16 -7 -5 -5 6
+c:to z	-1 -1 8 -2 -1 -2
+c:toco	-1 -1 7 -2 -1 -2
+c:todo	-2 3 -5 -1 -2 8
+c:toin	-4 -1 -1 7 0 -1
+c:toke	-7 -3 6 13 -5 -3
+c:tom 	-2 -2 4 -3 -3 7
+c:ton 	-6 8 15 -6 -5 -6
+c:too 	-1 -1 6 -2 -1 -1
+c:top 	-5 -1 -2 10 -1 -1
+c:topp	-1 -1 5 -1 -2 -1
+c:tor 	-2 6 -5 -2 -5 8
+c:tore	1 -1 -5 9 -2 -2
+c:tota	-2 -3 10 -3 2 -3
+c:touc	-1 -1 -1 5 -1 -1
+c:tp c	-1 -1 -3 -1 -2 9
+c:trac	-1 -5 -3 -2 6 5
+c:tran	-1 -6 9 3 -2 -3
+c:tret	-6 -4 23 -6 -3 -4
+c:tria	-1 6 -1 -1 -1 -2
+c:tric	-1 5 -1 -1 -2 -1
+c:trie	1 0 11 -4 -5 -3
+c:trin	-1 -2 5 -1 -1 -1
+c:trol	-1 -1 -5 11 -2 -2
+c:truc	6 -1 -1 -1 -1 -1
+c:try 	-1 -5 2 -6 17 -7
+c:ts 1	-2 -3 11 -3 -2 -2
+c:ts a	3 0 -4 -4 9 -4
+c:ts c	5 -1 -2 -5 -1 3
+c:ts f	-12 -23 -7 4 31 7
+c:ts g	8 -1 -1 -2 -2 -1
+c:ts i	-8 -6 1 0 -7 20
+c:ts m	-3 -5 3 -4 14 -5
+c:ts n	-3 2 -4 -3 -3 9
+c:ts o	-4 -5 15 -6 1 -2
+c:ts p	-1 4 -5 12 -6 -3
+c:ts t	-5 9 3 -4 -6 3
+c:ts w	-3 10 4 -3 -3 -4
+c:ts23	-1 -2 5 -1 -1 -1
+c:ts? 	-5 0 -2 9 -1 0
+c:tset	-1 -13 -6 -4 28 -3
+c:tss 	-2 -10 -4 -3 21 -3
+c:tted	-1 -1 -2 10 -4 -2
+c:tter	-1 -2 6 -2 1 -2
+c:ttin	-2 -3 6 -2 2 -2
+c:ttom	-1 -1 7 -2 -1 -2
+c:tton	-6 5 16 -5 -5 -5
+c:ttp 	-1 -1 -3 -1 -2 9
+c:tual	-1 -3 -1 -2 9 -3
+c:tup 	-1 -1 -3 11 -4 -2
+c:ture	-2 -3 -11 12 2 2
+c:turn	-3 1 3 -7 10 -4
+c:tus 	0 6 -1 -1 -3 -1
+c:tutt	-1 -2 7 -1 -2 -2
+c:twci	-2 -1 6 -1 -1 -1
+c:twee	2 -1 -2 -2 6 -3
+c:twic	-3 -3 17 -3 -3 -4
+c:ty a	-2 -2 -2 9 -1 -2
+c:ty d	-1 -2 -2 -1 9 -3
+c:ty i	-1 -8 -1 5 6 -1
+c:ty o	-1 -2 -5 -3 12 -2
+c:ty? 	-4 0 -1 6 0 0
+c:type	-4 -5 13 -3 -3 2
+c:typo	-1 -1 9 -1 -2 -4
+c:u ad	-3 17 -8 -5 7 -7
+c:u al	-1 6 -1 -1 -2 -1
+c:u au	-1 -1 -1 8 -2 -3
+c:u ch	-1 -2 -5 8 3 -3
+c:u fi	-2 -1 5 -2 -2 1
+c:u ge	1 -5 -5 2 2 5
+c:u is	-3 -1 -2 7 -1 -1
+c:u lo	-1 -2 -1 10 -3 -3
+c:u re	-4 -3 -7 7 -3 10
+c:u su	10 4 -3 -5 -2 -4
+c:u te	11 -2 -4 -2 0 -3
+c:u th	-3 -4 25 -6 -8 -4
+c:u to	-5 0 7 -5 5 -2
+c:u up	-2 -3 1 -2 -2 7
+c:u ve	0 -1 -3 -1 6 -1
+c:uall	-1 -3 -1 -2 9 -3
+c:ub a	-1 -3 -1 0 -1 6
+c:ubli	5 7 -5 0 -4 -3
+c:ubsc	-1 6 -1 -2 -2 -1
+c:uce 	-1 -1 -3 -1 -1 7
+c:ucer	7 -1 -2 -2 -1 -1
+c:uces	-1 -2 -2 0 6 -1
+c:uche	-1 -1 -1 5 -1 -1
+c:ucke	-1 -1 -4 9 -1 -2
+c:uct 	-1 3 5 -2 -4 -1
+c:ucts	-1 -1 7 -2 -2 -1
+c:uctu	6 -1 -1 -1 -1 -1
+c:udio	-2 -2 10 -3 -2 -2
+c:udit	-4 -1 -12 32 -7 -9
+c:ue w	6 0 -3 -1 -1 -1
+c:uery	-3 -1 6 -4 -3 5
+c:uesr	-1 6 0 -1 -1 -2
+c:uest	11 22 -3 -9 -12 -9
+c:ueue	4 5 3 -5 -1 -6
+c:ug i	-2 -2 6 -2 2 -2
+c:ugh 	12 -2 -5 5 -3 -7
+c:uild	-2 28 -1 -6 -10 -9
+c:uite	-3 0 -1 0 6 -1
+c:ul i	-1 -1 -1 -2 -1 6
+c:ulat	3 -3 6 -4 2 -3
+c:uld 	-6 3 1 1 -1 2
+c:ule 	-2 -4 -3 -3 15 -3
+c:ules	-2 -2 -6 1 -5 14
+c:ullp	-2 -2 8 -2 -1 -2
+c:ulne	-1 -1 -1 7 -1 -2
+c:ult 	-2 -3 11 -2 -1 -3
+c:ulti	-1 11 -5 -1 -1 -3
+c:ults	-1 -1 6 -2 -1 -2
+c:umbe	-2 -4 2 -2 -3 8
+c:umma	9 -4 -4 -5 7 -3
+c:umn 	-1 7 -2 0 -1 -3
+c:ump 	-2 -1 -3 -1 -1 8
+c:umps	-1 -1 8 -2 -1 -2
+c:un o	-1 -2 -2 -1 9 -3
+c:un t	-2 -3 -7 -3 19 -5
+c:unct	3 -9 -1 -3 5 5
+c:unde	-2 -2 11 -2 -3 -2
+c:unic	-1 -8 6 -2 7 -3
+c:unit	0 -4 0 0 5 0
+c:uns 	-1 -1 6 -1 0 -2
+c:unt,	-1 -2 9 -1 -1 -2
+c:unte	-2 -2 13 -2 -2 -4
+c:unti	-2 -2 12 -2 -2 -3
+c:unus	-4 -3 -7 -4 -2 20
+c:up a	-2 -2 9 -2 -2 -2
+c:up d	-1 -1 -2 -2 -1 7
+c:up f	-8 -11 16 13 -3 -8
+c:up i	-1 -3 8 -1 -1 -2
+c:up p	-1 -2 -5 -3 12 -2
+c:up t	-5 -3 -11 -4 -6 28
+c:upda	-2 -5 2 -2 -2 7
+c:upgr	-7 -9 -5 -6 -7 35
+c:upli	-2 1 2 -4 -4 8
+c:uplo	-3 6 9 0 0 -12
+c:uppo	-1 24 -11 -9 -10 8
+c:uppr	-1 0 -1 -2 -3 5
+c:ups 	-2 6 -6 8 -2 -3
+c:upsa	-1 -2 7 -1 -1 -2
+c:ur d	-1 -1 -1 7 -1 -2
+c:ur g	-2 -2 9 -2 -2 -2
+c:ur j	-6 -1 -4 14 -2 -1
+c:ur l	-1 -2 8 -2 -1 -1
+c:ure 	-1 -10 -16 8 23 -4
+c:ure?	-5 0 -1 9 0 -3
+c:urio	8 -1 -2 -2 -1 -2
+c:urit	-3 -3 -3 15 -3 -3
+c:urns	-3 1 3 -7 10 -4
+c:urry	-1 -1 6 -2 -1 -1
+c:us o	0 5 -1 -1 -3 0
+c:us q	-1 -1 7 -2 -1 -2
+c:us, 	8 -1 -2 -2 -1 -2
+c:usag	-1 -1 5 -1 -1 -1
+c:use 	3 -5 8 -7 -4 5
+c:used	-4 -3 -7 -4 -2 20
+c:user	-7 15 8 -5 -5 -7
+c:uses	6 -1 -1 -1 -1 -1
+c:uset	-1 8 -1 -2 -2 -1
+c:usin	0 -2 9 -3 -2 -2
+c:ust 	3 -5 7 -4 3 -4
+c:ustf	-1 -3 -2 -1 -2 10
+c:usto	-1 1 -3 -1 -1 6
+c:ut a	-2 -2 10 -3 -2 -2
+c:ut c	-1 -1 -2 -2 -1 8
+c:ut d	-1 -1 7 -2 -1 -1
+c:ut e	-1 -2 8 -1 -1 -2
+c:ut o	-5 -5 27 -5 -6 -6
+c:ut p	-1 -2 1 5 -1 -2
+c:ut t	0 -7 2 0 7 -1
+c:ute 	-7 -2 -5 7 11 -3
+c:uth 	-5 -2 -6 8 -7 13
+c:utin	6 -3 7 -4 -3 -3
+c:utoc	-1 -1 7 -2 -1 -2
+c:uts 	-3 -5 23 -7 -4 -4
+c:utte	-1 -2 7 -1 -2 -2
+c:utto	-6 5 16 -5 -5 -5
+c:v1 e	-2 -1 -3 -2 -2 10
+c:vali	-4 -7 20 8 -9 -7
+c:vari	7 -7 0 0 0 0
+c:vata	-5 5 13 -5 -4 -5
+c:ve b	0 -1 8 -2 -2 -2
+c:ve c	-3 -2 -2 -2 -2 10
+c:ve f	-2 -3 -3 -2 -2 11
+c:ve t	-4 3 -10 2 -4 13
+c:ve u	-2 -2 -2 -3 -1 11
+c:veiw	-1 -1 -3 7 0 -1
+c:ven 	2 -3 6 -2 -1 -2
+c:ver 	-9 -7 24 13 -6 -15
+c:ver-	0 5 -2 -1 -3 0
+c:vera	-1 -3 -6 -3 15 -2
+c:veri	-2 -5 -8 -4 20 -1
+c:vers	6 -8 -1 -11 -11 25
+c:vert	-2 -3 -3 -2 -2 13
+c:very	-11 6 11 -11 2 3
+c:ves 	-1 0 -2 -4 9 -1
+c:vew 	-5 -1 -4 13 -2 -2
+c:vice	1 -6 13 -7 -6 5
+c:view	-13 -5 -14 54 -10 -11
+c:viga	0 5 -2 -1 -1 -1
+c:ving	-1 -1 -3 -1 -1 7
+c:viou	-1 -1 7 -2 -1 -2
+c:viro	5 -5 0 0 0 0
+c:visi	-1 -1 5 -1 -2 -1
+c:vite	-3 13 -1 -2 -4 -4
+c:voic	6 0 2 -3 -1 -4
+c:vtaa	-2 -1 7 -2 -1 -1
+c:vuln	-1 -1 -1 7 -1 -2
+c:w ar	10 -2 -2 -4 -1 -1
+c:w do	32 -10 -6 -6 -6 -4
+c:w en	5 -9 -3 5 5 -3
+c:w er	5 -1 -1 -1 -1 -1
+c:w gu	-4 26 -4 -6 -7 -5
+c:w ho	-6 -1 -2 11 -1 -1
+c:w is	12 -1 -4 -4 -1 -2
+c:w ma	1 -1 8 -3 -2 -2
+c:w mi	-1 -2 8 -1 -1 -2
+c:w my	0 -1 -3 6 -1 -1
+c:w of	-4 1 -1 6 -1 -1
+c:w pr	0 5 -3 -1 -1 -1
+c:w sa	-6 0 -2 9 -1 0
+c:w se	-1 -2 7 -1 -2 -2
+c:w si	-6 0 -2 9 -1 0
+c:w th	5 -8 -21 48 -11 -13
+c:w up	-3 -5 17 -3 -2 -4
+c:w we	-6 -1 -2 11 -1 -1
+c:wait	-1 -1 -3 -1 -1 7
+c:walk	15 -2 -3 -2 -2 -6
+c:ward	-4 0 -1 6 0 0
+c:warn	-3 -3 -6 -3 -4 19
+c:way 	-1 6 -2 -1 -1 -1
+c:wcie	-2 -1 6 -1 -1 -1
+c:we d	-2 -1 -4 -4 -1 11
+c:we g	-1 -1 6 -2 -1 -1
+c:we h	5 -1 -1 -1 -1 -1
+c:we l	-7 -2 -3 16 -2 -2
+c:we n	-1 6 -2 -1 -1 -1
+c:we s	0 -2 -4 10 -2 -2
+c:web 	2 5 -7 -8 3 3
+c:ween	2 -1 -2 -2 6 -3
+c:what	65 -16 -23 -14 1 -13
+c:when	-2 -2 36 -12 -10 -10
+c:wher	31 -7 -14 -6 -8 3
+c:whet	-1 -2 -1 7 -2 -1
+c:whic	22 -4 -5 -7 -1 -5
+c:whre	7 -1 -2 -2 -1 -1
+c:why 	11 -2 -2 -4 -1 -2
+c:wice	-3 -3 17 -3 -3 -4
+c:widg	-1 6 -3 -1 -1 -1
+c:with	-17 12 15 -24 20 -5
+c:wn i	-3 11 4 -4 -3 -5
+c:wn m	-2 -2 9 -1 -1 -4
+c:wn v	-1 -1 -1 6 -1 -2
+c:word	-5 -2 2 1 8 -5
+c:work	8 -5 6 -9 13 -13
+c:woul	6 -1 -1 -2 0 -2
+c:writ	-3 -6 -7 -5 24 -4
+c:wrno	-2 -2 9 -2 -2 -2
+c:wron	-4 -3 20 -5 -4 -5
+c:ws r	-1 -1 7 -2 -1 -2
+c:ws s	-1 -3 8 -1 -1 -2
+c:wt v	-6 -1 -4 14 -2 -1
+c:x al	-2 -2 -5 -2 -2 14
+c:x cl	-1 -3 -2 -1 -2 10
+c:x th	-3 -2 23 -5 -3 -9
+c:x wh	-2 -1 -1 -1 -1 6
+c:xamp	-1 -2 -1 -1 5 -2
+c:xcep	-2 -2 8 -2 -1 -2
+c:xpir	-2 -2 13 -2 -5 -2
+c:xpla	35 -3 -12 -9 -4 -7
+c:xpor	-2 8 -3 -4 6 -5
+c:xpos	-1 -1 -1 6 -4 0
+c:xss 	-5 0 -1 9 0 -3
+c:xt i	-1 -1 7 -1 -2 -1
+c:xtra	-1 -1 -3 -1 -2 7
+c:y 10	0 5 -2 0 -1 -1
+c:y au	-2 -2 -2 9 -1 -2
+c:y ba	-1 -3 -2 -1 8 -1
+c:y bu	-2 -1 9 -2 -2 -2
+c:y ca	-2 0 -3 -2 -2 10
+c:y co	8 12 -6 -4 -3 -8
+c:y da	-1 -2 -2 -1 9 -3
+c:y de	-1 -1 -3 -2 -1 8
+c:y do	0 -2 -5 -2 -2 11
+c:y em	-1 7 -2 -1 -2 -1
+c:y ev	-1 14 -5 -1 -2 -5
+c:y fe	-2 -4 15 -2 -3 -4
+c:y fi	-2 -4 -5 -3 -2 16
+c:y fo	-1 7 -2 -1 -1 -2
+c:y fr	-1 6 -1 -1 -1 -2
+c:y in	-3 -14 6 -4 19 -5
+c:y is	8 -3 -3 2 -2 -2
+c:y it	-3 0 -2 -1 7 -1
+c:y li	-1 -1 6 -1 -1 -1
+c:y lo	-2 -1 12 -3 -3 -3
+c:y ma	-1 -5 10 -1 -2 -2
+c:y ni	-1 -1 6 -1 -2 -2
+c:y of	-1 -2 -5 -3 12 -2
+c:y on	-3 -3 18 -5 -1 -4
+c:y op	-1 -1 6 -2 -1 -1
+c:y pa	-1 7 -3 -1 -1 -1
+c:y pe	-2 -2 2 6 -2 -2
+c:y pr	-2 -3 5 5 -2 -3
+c:y re	-1 -1 -1 -1 -1 6
+c:y ro	-1 -1 -3 -1 8 -2
+c:y ru	-1 -3 -2 -1 -2 10
+c:y sc	14 -4 -7 -1 7 -9
+c:y se	-4 -1 -2 8 0 -1
+c:y si	-1 7 -3 -1 -1 -1
+c:y th	-8 -9 -14 -7 30 7
+c:y up	-1 0 -3 -1 -3 9
+c:y us	-1 -1 5 -1 -1 -1
+c:y ve	-3 -1 -3 -3 -3 14
+c:y wa	-1 -3 -2 -1 -2 10
+c:y wo	-1 -3 -1 -1 9 -3
+c:y xs	-5 0 -1 9 0 -3
+c:y, a	-6 11 3 -2 -1 -5
+c:y, c	-2 3 -6 3 2 0
+c:y, m	-1 -2 -5 -2 -5 16
+c:y, r	-2 -2 -5 5 -2 6
+c:y, s	-1 -1 -2 -1 -6 10
+c:y, t	-5 -3 18 -5 0 -5
+c:y, u	-2 -2 -2 -1 -1 7
+c:y, w	16 -4 -5 -5 3 -5
+c:yboa	-2 2 8 -2 -3 -3
+c:yer 	-1 8 -4 -1 -2 -1
+c:yerr	-1 -1 6 -1 -1 -1
+c:ymen	5 -2 -7 3 9 -8
+c:ymor	-4 -2 5 -6 -2 9
+c:ync 	5 -3 7 -3 -3 -4
+c:ync/	-1 -1 -3 -1 -1 7
+c:yone	-1 -2 7 -1 -2 -2
+c:you 	-10 -4 4 -1 4 8
+c:ype 	-2 -3 12 -2 -2 -3
+c:ypes	-1 -1 -2 -1 -1 6
+c:ypo 	-1 -1 9 -1 -2 -4
+c:ypti	-1 -1 -3 8 -1 -2
+c:ythi	0 -4 -1 15 -4 -6
+c:ywhe	-4 -4 -4 5 -4 10
+c:ze b	-1 -1 -3 -1 -1 7
+c:ze f	0 -7 0 0 8 0
+c:ze i	-2 -4 -5 -3 0 16
+c:ze t	-1 0 -3 -1 -5 11
+c:ze w	10 -1 -2 -4 -2 -2
+c:zed 	-2 -2 -3 9 -2 -2
+c:zed?	5 -1 -1 -1 -1 -1
+c:zero	-1 -1 8 -2 -1 -2
+c:zone	1 -5 9 -5 2 -2
+c:é sh	-2 -2 9 -2 -2 -2
+first:add	-13 63 -23 -17 7 -17
+first:allow	-3 17 -2 -5 -5 -3
+first:apply	-1 -1 -1 -1 -2 7
+first:are	-7 0 -1 11 0 -2
+first:audio	-1 -2 8 -2 -1 -1
+first:audit	-1 -2 -6 16 -3 -4
+first:avatars	-2 -2 8 -2 -1 -1
+first:avtaars	-2 -1 7 -2 -1 -1
+first:before	-2 -1 -2 7 -1 -1
+first:build	-3 20 -5 -4 -5 -3
+first:cehck	-2 -2 -2 10 -4 -2
+first:check	-8 -10 -13 23 15 -7
+first:clean	-3 -2 -5 -3 -2 15
+first:convert	-1 -2 -2 -1 -1 8
+first:copy	-1 -1 6 -1 -1 -1
+first:could	-11 0 4 3 1 4
+first:create	-2 16 -3 -4 -4 -3
+first:dark	-1 -1 6 -1 -2 -1
+first:delete	-1 -1 -2 -2 -1 7
+first:do	-4 -2 -2 12 -1 -2
+first:drop	-2 -6 -1 -3 -3 15
+first:duplicate	-1 -2 6 -1 -1 -2
+first:emails	-3 -2 10 -1 -2 -2
+first:explain	23 -2 -7 -6 -3 -4
+first:extract	-1 -1 -2 -1 -1 5
+first:fix	-3 -3 10 -5 -4 5
+first:get	-2 -1 -2 -1 -1 6
+first:how	48 -11 -10 -13 -8 -7
+first:i	-6 4 6 -6 4 -3
+first:i'm	8 -1 -2 -2 -1 -2
+first:impleemnt	-1 6 -1 -1 -2 -1
+first:implement	-4 25 -7 -5 -5 -4
+first:increase	0 -1 -2 -1 6 -1
+first:is	-3 -4 -10 31 -5 -8
+first:keyboard	-1 -1 7 -1 -2 -1
+first:let	-4 27 -8 -4 -6 -5
+first:links	-1 -2 6 -1 -1 -2
+first:login	-2 -2 8 -1 -2 -1
+first:look	-5 -4 -8 31 -8 -6
+first:make	-6 12 -11 -6 11 0
+first:migrate	-1 -2 -1 -1 -1 5
+first:move	-1 -2 -2 -2 -1 8
+first:organize	-1 -3 -3 -2 -1 10
+first:our	-3 -3 13 -3 -2 -3
+first:pagination	-1 -3 8 -2 -1 -1
+first:password	-2 -2 10 -2 -4 -1
+first:pgaination	-1 -2 6 -2 -1 -1
+first:pin	-2 -2 -2 -2 -2 10
+first:please	-14 5 1 7 -1 2
+first:pls	-12 7 11 -13 2 5
+first:quick	7 5 -1 -9 -4 1
+first:rate	-1 -1 6 -1 -2 -1
+first:refactor	-1 -1 -2 -1 -2 6
+first:reivew	-5 -1 -3 12 -2 -2
+first:remove	-4 -3 -5 -5 -3 19
+first:rename	-3 -2 -4 -4 -2 14
+first:reomve	-1 -1 -1 -1 -1 5
+first:replace	-2 -2 -4 -2 -3 12
+first:review	-5 -4 -7 28 -6 -6
+first:run	-3 -1 -3 -1 11 -2
+first:signup	-1 -1 8 -2 -2 -1
+first:simplify	-2 -1 -3 -2 -2 9
+first:smoke	-1 0 -2 -1 5 -2
+first:sorting	-1 -2 9 -3 -1 -1
+first:support	-2 15 -5 -3 -2 -4
+first:test	-3 -3 -4 -3 17 -3
+first:the	-24 -19 121 -29 -35 -14
+first:tidy	-1 0 -2 -1 -2 5
+first:timezone	-2 -2 10 -3 -2 -1
+first:upgrade	-3 -3 -4 -2 -4 15
+first:upgrdae	-1 -2 -2 -1 -1 7
+first:uploading	0 -3 6 -1 -1 -1
+first:uploads	-2 -2 10 -2 -2 -1
+first:users	-2 -3 11 -2 -2 -3
+first:verify	-1 -3 -3 -1 9 -1
+first:walk	11 -1 -2 -2 -2 -4
+first:what	31 -6 -6 -7 -6 -6
+first:what's	14 -1 -5 -4 -2 -3
+first:where	21 -2 -6 -7 -2 -4
+first:where's	9 -1 -2 -3 -1 -2
+first:which	20 -3 -4 -6 -4 -4
+first:why	10 -2 -2 -4 -1 -1
+first:write	-2 -3 -3 -3 13 -2
+q?	88 -22 -34 19 -23 -28
+w:!	3 6 -1 -13 9 -4
+w:"	-8 5 36 -10 -12 -11
+w:'markupsafe'	-1 -2 7 -1 -1 -2
+w:'number'	-1 -2 5 -1 -1 -1
+w:'soft_unicode'	-1 -2 7 -1 -1 -2
+w:'string'	-1 -2 5 -1 -1 -1
+w:'user_id'	-1 -1 6 -1 -1 -1
+w:(	-1 -2 5 -1 -1 -1
+w:)	-1 -2 5 -1 -1 -1
+w:,	4 -5 0 2 -19 17
+w:-	0 9 -2 -5 -8 7
+w:.	7 -11 8 -11 -10 18
+w:/	-1 0 7 -4 -4 3
+w:10	0 5 -2 0 -1 -1
+w:100	-2 -3 11 -3 -2 -2
+w:100k	-1 -1 -5 -6 16 -2
+w:10mb	-2 -3 14 -3 -3 -2
+w:12	-2 -1 -1 -1 -1 6
+w:14	-1 -1 6 -1 -1 -1
+w:16	-2 -10 -2 -4 -5 23
+w:2	-2 -8 21 -5 -4 -3
+w:20	-2 -3 11 -3 -2 -2
+w:2000	-2 -2 -2 -2 -1 10
+w:200ms	-1 -1 -3 -1 8 -2
+w:22	-3 0 -2 -1 7 -1
+w:3	-3 -3 6 -2 -3 4
+w:401	-1 -1 7 -1 -3 -1
+w:404	0 -2 -2 -7 12 0
+w:404s	-2 -1 13 -3 -3 -4
+w:7	-1 6 -1 -1 -1 -2
+w:8	-4 -5 -6 -3 -3 21
+w:88	-1 -1 6 -1 -1 -1
+w::	-2 -8 48 -16 -12 -11
+w:?	185 -43 -74 20 -32 -55
+w:[	-1 -2 6 -1 -1 -1
+w:]	-1 -2 6 -1 -1 -1
+w:`	-1 -9 2 -13 -8 29
+w:a	-18 115 -25 -20 -33 -20
+w:accepts	-2 -2 13 -3 -3 -2
+w:access	-1 -1 -7 14 -2 -3
+w:accessibility	0 -1 -4 -3 10 -1
+w:account	-1 -2 9 -1 -1 -2
+w:actions	-1 1 -1 -3 -2 6
+w:actually	-1 -3 -1 -2 9 -3
+w:add	-15 106 -46 -29 18 -34
+w:admin	-5 5 -5 10 -3 -2
+w:admins	-2 8 -4 -3 4 -3
+w:afetr	-1 -2 10 -2 -2 -2
+w:after	-5 -7 33 -6 -7 -7
+w:against	-6 -1 -2 11 -1 -1
+w:all	-4 0 -12 -8 1 22
+w:allow	-4 26 -4 -6 -7 -5
+w:already	-3 -4 3 -2 -3 8
+w:an	-6 25 -4 -8 3 -10
+w:and	-14 5 -28 -6 28 15
+w:android	-1 -2 8 -2 -2 -2
+w:any	-3 -4 -5 22 -3 -7
+w:anymore	-4 -2 5 -6 -2 9
+w:anything	0 -2 -6 16 -3 -5
+w:anywhere	-2 -2 -1 7 -2 -1
+w:api	0 -5 -7 5 9 -2
+w:app	8 15 -1 -10 -6 -6
+w:apply	-1 -3 -2 -1 -2 10
+w:are	19 -18 19 5 -17 -8
+w:around	-1 -3 -1 -1 7 -1
+w:as	-5 8 11 -4 -5 -5
+w:asap	4 -1 5 -1 -7 0
+w:async	-1 -1 -3 -1 -1 7
+w:at	-5 9 10 2 -8 -7
+w:audio	-2 -2 10 -3 -2 -2
+w:audit	-4 -1 -12 32 -7 -9
+w:auth	-5 -1 -6 5 -7 14
+w:autocomplete	-1 -1 5 -1 -1 -2
+w:avatars	-5 5 13 -5 -4 -5
+w:avtaars	-2 -1 7 -2 -1 -1
+w:await	-1 -1 -3 -1 -1 7
+w:axe	-1 -2 -5 -3 12 -2
+w:back	-3 -3 18 -4 -3 -5
+w:backups	-1 -1 -3 9 -2 -2
+w:backwards	-4 0 -1 6 0 0
+w:badge	-1 -2 9 -2 -2 -3
+w:bar	-1 4 6 -2 -2 -4
+w:base	-1 -2 -1 -1 -1 6
+w:be	-3 -1 7 5 -5 -3
+w:before	-5 -6 2 20 -5 -6
+w:being	-3 -3 13 -2 -2 -3
+w:benchmarks	-1 -1 -3 -1 7 -2
+w:between	2 -1 -2 -2 6 -3
+w:biggest	6 -1 -2 -1 -1 -1
+w:black	-1 -4 8 -1 -1 -1
+w:blank	-1 -1 8 -2 -2 -2
+w:blocks	-1 -2 7 -1 -2 -2
+w:blog	-1 10 -1 -1 -5 -2
+w:blurry	-1 -1 6 -2 -1 -1
+w:bom	0 -2 6 0 -2 -1
+w:bot	-2 2 9 -2 -2 -5
+w:bots	-6 0 -2 9 -1 0
+w:bottom	-1 -1 7 -2 -1 -2
+w:branch	-4 -3 -3 17 -3 -4
+w:branches	-1 0 -6 -3 8 2
+w:break	-4 0 -1 6 0 0
+w:breaks	-4 -3 6 -2 7 -4
+w:broken	-1 -1 7 -2 -1 -2
+w:brute	-4 -1 -2 8 -1 -1
+w:bucket	-1 -1 -4 9 -1 -2
+w:bug	-1 -3 -2 -1 8 -1
+w:build	-2 29 0 -10 -10 -8
+w:bump	-2 -1 -3 -1 -1 8
+w:but	-2 -2 9 -2 -2 -2
+w:button	-6 5 16 -5 -5 -5
+w:by	-6 20 8 -8 -8 -4
+w:calculatetotal	-2 -2 8 -2 -1 -2
+w:callbacks	-1 -1 -3 -1 -1 7
+w:calls	0 -2 2 -4 -3 7
+w:camera	-1 -1 5 -1 -1 -1
+w:can	3 2 -3 5 -7 0
+w:can't	-4 -6 16 -4 4 -6
+w:cannot	-2 -3 13 -2 -2 -3
+w:cart	11 -3 -2 -5 2 -3
+w:cehck	-2 -2 -4 10 0 -2
+w:changed	6 -2 -3 3 -2 -2
+w:changes	-6 -2 -6 19 -2 -3
+w:characters	-1 -1 5 -1 -1 -1
+w:chcek	-1 -1 -3 6 0 -1
+w:check	-10 -16 -21 38 21 -11
+w:checkout	-4 22 -1 -7 -5 -5
+w:checks	0 -1 -1 6 -3 -1
+w:ci	10 -1 -2 -3 -1 -2
+w:class	-1 -2 -1 -1 -1 6
+w:clean	-4 -2 -8 -4 -3 22
+w:clears	-1 -2 9 -2 -2 -3
+w:cli	0 1 -3 -1 5 -3
+w:client	5 -2 -4 -3 -2 6
+w:clients	-1 -1 -2 -1 -1 6
+w:clippy	-1 -3 -2 -1 -2 10
+w:closed	-1 -1 8 -2 -2 -2
+w:code	11 -10 -21 4 -12 28
+w:cold	-1 -2 8 -2 -1 -1
+w:color	-1 7 -2 -1 -1 -1
+w:column	-1 10 -3 -1 -2 -4
+w:commented	-1 -1 -2 -2 -1 6
+w:comments	-8 18 -4 5 -3 -9
+w:committed	0 -1 -1 6 -3 -1
+w:compare	-1 -1 -3 -1 7 -2
+w:compatibility	-4 0 -1 6 0 0
+w:components	-2 -7 -3 -3 1 14
+w:compose	0 -2 7 -1 -1 -3
+w:condition	0 0 5 -2 -1 -2
+w:config	3 -5 1 -6 0 8
+w:consistent	-2 -4 -7 -3 -4 20
+w:console	-3 -2 -3 -2 -2 11
+w:constants	-1 -2 -3 -1 -3 10
+w:contacts	-1 6 -1 -1 -3 -1
+w:contract	0 -4 -1 0 8 -2
+w:control	-1 -1 -5 11 -2 -2
+w:convert	-2 -3 -3 -2 -2 13
+w:copy	-2 -1 7 -1 -1 -2
+w:corner	-1 6 -3 -1 -1 -1
+w:correct	-6 -1 -4 14 -2 -1
+w:correctly	-1 -4 -3 -3 14 -3
+w:cors	-2 -2 3 10 -5 -4
+w:could	-11 0 4 3 1 4
+w:counter	-2 -1 11 -2 -2 -4
+w:cover	0 0 -6 -2 9 -1
+w:coverage	-1 -3 -6 -3 15 -2
+w:covers	-2 -2 9 -1 -3 -2
+w:crashes	-2 -2 11 -2 -3 -2
+w:create	-3 26 -5 -5 -7 -5
+w:credentials	-1 -1 -1 6 -2 -1
+w:csp	-1 -1 -5 11 -2 -2
+w:curious	8 -1 -2 -2 -1 -2
+w:custom	-1 -1 -2 -1 -1 6
+w:cut	-1 -1 7 -2 -1 -2
+w:cuts	-2 -2 10 -3 -2 -2
+w:daily	-1 7 -3 -1 -1 -1
+w:dark	-2 0 4 -3 6 -5
+w:dashboard	-1 7 -3 -1 -1 -1
+w:data	-4 7 -8 9 -2 -3
+w:database	6 3 -5 -4 6 -6
+w:date	-4 -4 -3 -5 0 16
+w:dead	-1 -1 -2 -2 -1 7
+w:debug	-1 -1 7 -2 -1 -1
+w:deduplicate	-1 -1 -3 -1 -1 7
+w:delete	-4 3 1 -5 -4 8
+w:delpoy	5 -1 -1 -1 -1 -2
+w:dependencies	-3 -3 -3 4 -3 8
+w:dependency	-4 -4 -5 -4 -3 20
+w:deploy	8 -2 0 -4 4 -8
+w:dies	-1 -1 7 -1 -1 -2
+w:diff	-1 -1 -1 6 -2 -1
+w:do	39 -15 -11 7 -10 -10
+w:docker	0 -1 5 -1 -1 -3
+w:dockerfile	-1 -2 -2 0 -1 6
+w:docs	-2 -1 -1 -1 9 -3
+w:does	35 -8 -6 -7 -2 -12
+w:doesn't	-4 -2 7 9 -7 -3
+w:don't	1 -5 1 -3 -3 8
+w:done	-2 -2 -5 -1 -1 12
+w:drop	-2 -6 -3 -5 -6 21
+w:duplicate	-3 2 6 -3 -3 2
+w:e2e	-1 -1 -4 -2 -2 10
+w:edits	-2 -1 8 -1 -1 -2
+w:effects	-1 6 -3 -1 -1 0
+w:email	-4 12 -13 -5 14 -4
+w:emails	1 -5 24 -6 -6 -8
+w:empty	-1 -9 0 -1 14 -2
+w:encryption	-1 -1 -3 8 -1 -2
+w:end	-4 -4 3 -3 16 -7
+w:endpoint	-2 11 -4 -2 -1 -2
+w:endpoints	2 -3 -4 3 -5 8
+w:enough	-3 -1 -2 7 0 -1
+w:enter	-1 -1 6 -1 -1 -2
+w:env	0 -1 -1 6 -3 -1
+w:error	-4 -5 10 -6 5 0
+w:errors	5 -1 -1 -1 -1 -1
+w:eslint	-1 -1 -4 -2 -2 11
+w:even	2 -2 7 -2 -4 -2
+w:every	-7 11 2 -7 7 -5
+w:everyone	-1 -2 7 -1 -2 -2
+w:everywhere	-3 -2 -3 -2 -2 11
+w:examples	-1 -2 -1 -1 5 -2
+w:expire	-2 -2 13 -2 -5 -2
+w:explain	36 -4 -12 -9 -4 -6
+w:export	-2 8 -3 -4 6 -5
+w:expose	-1 -1 -1 6 -4 0
+w:extract	-1 -1 -3 -1 -2 7
+w:fail	-4 -4 10 -5 -5 8
+w:fails	3 -4 10 -2 -1 -5
+w:fake	3 7 -1 -1 -6 -2
+w:feature	-7 0 -7 13 -4 5
+w:feed	-1 13 -4 -1 -6 -1
+w:feedback	-1 5 -2 -1 -1 -1
+w:fetch	-1 -1 -3 -1 -2 9
+w:few	-3 -6 19 -3 -3 -4
+w:file	-8 -6 -14 12 -8 24
+w:files	4 -1 13 -2 -10 -4
+w:filter	-1 -1 5 -2 -1 -1
+w:filters	0 5 -1 -1 -3 0
+w:fine	-1 -1 7 -2 -1 -1
+w:fix	-9 -8 13 -6 -9 20
+w:flags	4 -2 -3 -4 -1 7
+w:flaky	-1 -1 -4 -2 -6 14
+w:flow	-4 -4 -8 8 12 -4
+w:fns	-2 -5 -2 -2 -2 12
+w:folder	3 -1 -9 -2 -6 16
+w:font	-1 -1 7 -2 -1 -1
+w:for	-14 16 -34 29 24 -22
+w:force	-5 -1 -2 10 -1 -1
+w:forever	-2 -1 12 -3 -3 -3
+w:form	-4 0 13 -7 -8 6
+w:format	-1 -1 -2 -1 -1 6
+w:formatting	0 -4 0 0 5 0
+w:free	-1 6 -1 -1 -1 -2
+w:from	-1 -11 3 1 -8 15
+w:function	3 -8 -1 -3 4 5
+w:gallery	0 5 -2 -1 -1 -1
+w:game	-2 5 3 -7 4 -4
+w:garbage	-2 -2 8 -1 -1 -1
+w:generates	7 0 -1 -2 -1 -2
+w:get	5 -10 5 -5 -4 9
+w:github	-2 9 -7 1 -4 3
+w:go	-6 3 7 -2 -4 2
+w:goes	-2 -1 11 -2 -2 -4
+w:google	-1 -2 6 -1 -1 -1
+w:goroutines	-2 -2 9 -2 -2 -2
+w:growing	-1 -1 7 -1 -1 -2
+w:guest	-3 18 -3 -4 -5 -3
+w:guset	-1 8 -1 -2 -2 -1
+w:handle	9 -1 -2 -3 -2 -1
+w:handler	-3 -2 -8 10 5 -4
+w:handlers	-1 -1 6 -1 -1 -1
+w:handles	-1 -1 -3 -3 9 -1
+w:happens	6 -3 -2 -2 2 -1
+w:has	-2 -1 15 -3 -3 -5
+w:hashing	-1 -1 -1 6 -1 -2
+w:headers	-1 -1 -3 6 -1 -1
+w:helper	-1 -1 -3 -1 -1 7
+w:hook	-1 -5 -4 -2 2 11
+w:how	73 -16 -23 -8 -14 -12
+w:http	-1 -1 -3 -1 -2 9
+w:i	1 -8 9 10 -2 -10
+w:i'm	15 -3 -4 -4 -2 -4
+w:if	1 -4 -6 20 -7 -4
+w:immediately	-2 -2 13 -2 -5 -2
+w:impersonation	-4 -1 -2 8 -1 -1
+w:impleemnt	-1 6 -1 -1 -2 -1
+w:implement	-5 39 -12 -7 -8 -7
+w:import	-2 4 5 -2 -3 -3
+w:importer	0 -6 -1 -7 17 -4
+w:importerror	-1 -2 7 -1 -1 -2
+w:imports	-2 -4 -5 -3 -2 16
+w:in	-3 3 13 5 -18 0
+w:increase	-1 -2 -3 -1 8 -1
+w:india	-2 -3 13 -4 -3 -1
+w:injection	-1 -1 -2 6 -1 -1
+w:input	-2 -9 9 -2 5 -2
+w:insecure	-1 -1 -1 7 -4 -1
+w:into	-5 -4 -11 -7 -6 33
+w:invalid	-2 -4 18 -4 -5 -3
+w:invalidated	6 0 -4 -1 0 -1
+w:invisible	-1 -1 5 -1 -2 -1
+w:invite	-3 13 -1 -2 -4 -4
+w:invoices	6 1 -2 -2 -1 -2
+w:iphone	-1 -1 6 -1 -2 -1
+w:is	21 -27 17 20 -15 -17
+w:issues	-1 -1 -1 5 -2 -1
+w:it	-12 -4 10 13 -8 1
+w:its	-2 -2 9 -1 -1 -4
+w:job	-2 0 18 -5 -4 -7
+w:jquery	-1 -1 -3 -2 -1 8
+w:json	-1 7 -6 -3 -3 6
+w:jumps	-1 -1 8 -2 -1 -2
+w:just	3 -3 8 -3 -2 -3
+w:jwt	-6 -1 -4 14 -2 -1
+w:keeps	-2 -2 10 -2 -2 -2
+w:keyboard	-2 2 8 -2 -3 -3
+w:keyerror	-1 -1 6 -1 -1 -1
+w:keys	-1 0 -1 6 -4 -1
+w:large	-2 -3 11 -2 -1 -3
+w:last	13 -2 4 -6 -5 -4
+w:latest	-1 -4 -2 -1 -3 11
+w:leaderboard	0 5 -1 -1 -2 -1
+w:leaking	-4 -1 -2 7 0 -1
+w:leaks	-1 -1 7 -2 -1 -1
+w:let	-5 41 -14 -6 -9 -7
+w:like	5 -3 8 -3 -2 -4
+w:limiter	0 -7 6 -2 5 -2
+w:limiting	-5 5 -4 9 -2 -2
+w:line	-3 -3 4 -4 -2 8
+w:link	-3 0 18 -4 -4 -6
+w:links	-4 -5 24 -4 -6 -5
+w:list	-1 17 -6 -2 -3 -4
+w:load	-2 -5 16 -4 -2 -3
+w:loading	-2 -1 -4 -2 -2 11
+w:loads	-1 -2 -2 -4 9 -1
+w:localhost	-1 -2 8 -1 -1 -3
+w:log	-1 -2 -1 7 -2 -1
+w:logged	-1 -2 8 -1 -1 -2
+w:logging	0 3 -4 -2 -3 6
+w:logic	6 -5 1 -8 -2 7
+w:login	-4 -2 10 -3 3 -5
+w:logins	-5 -1 -2 10 -1 -1
+w:logs	-4 -1 0 -3 -3 10
+w:look	-7 -7 -13 48 -12 -10
+w:looks	-1 -1 7 -2 -1 -1
+w:loop	0 -2 5 -1 -2 -1
+w:made	-2 -2 7 3 -2 -4
+w:magic	-1 -4 2 -1 -4 9
+w:main	-1 -4 -4 -2 14 -3
+w:make	-9 16 -23 -10 11 15
+w:makes	-1 -5 10 -1 -2 -2
+w:many	2 -1 6 -3 -1 -2
+w:map	-3 1 8 -3 -2 -2
+w:markdown	-1 8 -2 -2 -1 -3
+w:me	32 -4 -12 -3 0 -14
+w:memory	-1 -1 7 -1 -1 -2
+w:merge	-5 -2 -4 16 -2 -3
+w:messages	-2 -2 5 -2 -2 3
+w:migrate	-1 -4 -2 -1 -1 9
+w:migrations	0 -2 -2 -1 7 -2
+w:minor	-1 -1 -2 -1 -1 5
+w:minutes	-1 -2 6 -1 -1 -2
+w:misc	-2 -1 -4 -2 -2 12
+w:missing	-1 -3 -5 -2 14 -3
+w:mobile	5 3 -5 1 -5 1
+w:modal	-1 -1 6 -1 -1 -2
+w:mode	1 10 1 -6 2 -8
+w:module	-2 -4 -3 -3 15 -3
+w:modules	-2 -2 -5 -2 -4 15
+w:moment	-2 -4 -2 -1 -1 10
+w:month	6 -1 1 -3 -1 -2
+w:move	-2 -3 -5 -2 -2 15
+w:multiple	-1 11 -5 -1 -1 -3
+w:my	-2 -3 -6 16 -3 -3
+w:name	-1 -2 8 -1 -2 -2
+w:names	0 -5 0 -1 7 -1
+w:naming	-1 -1 -3 -1 -1 6
+w:nan	-1 -2 7 -2 -2 -1
+w:navigation	0 5 -2 -1 -1 -1
+w:need	-2 5 5 -7 3 -4
+w:negative	-1 -1 5 -1 -1 -2
+w:never	-1 -2 10 -2 -2 -4
+w:new	5 13 -11 13 -13 -7
+w:night	-1 -1 6 -1 -2 -2
+w:no	-1 -3 -1 -2 8 -2
+w:nobody	-1 -1 -2 -1 -1 5
+w:node	-5 -10 -4 -5 2 22
+w:not	-1 -2 7 -1 -2 -2
+w:nothing	-2 -1 5 -1 -1 -1
+w:npm	-2 -3 -3 -2 -2 11
+w:nullpointerexception	-1 -1 5 -1 -1 -1
+w:numbers	-1 -2 -3 -1 -3 9
+w:of	0 -2 -10 8 0 5
+w:off	-2 -1 11 -3 -2 -3
+w:offline	1 8 5 -4 -5 -5
+w:okta	-1 8 -2 0 -4 -1
+w:old	3 -3 -7 -6 -4 17
+w:on	-17 3 42 -14 8 -23
+w:once	-1 11 -5 -1 -1 -3
+w:one	-11 6 17 -10 -5 3
+w:opening	-2 -2 10 -2 -1 -2
+w:opens	-1 -1 6 -1 -1 -2
+w:orders	-2 8 1 -1 -3 -3
+w:orderservice	-2 -2 8 -2 -1 -2
+w:organize	-2 -4 -5 -3 -2 16
+w:orgs'	-1 -2 -1 -1 7 -1
+w:other	-2 -2 -2 11 -3 -1
+w:our	-11 -2 10 19 -7 -9
+w:out	-6 -10 25 -2 -7 0
+w:over	-5 -4 4 22 -10 -7
+w:own	-2 -2 9 -1 -1 -4
+w:package	9 -2 -5 -5 -2 6
+w:page	-9 18 12 -3 -4 -13
+w:pages	-1 4 6 -3 -4 -2
+w:pagination	-2 -2 12 -3 -3 -2
+w:parsing	-1 -1 9 -1 -2 -4
+w:part	7 0 -1 -2 -1 -2
+w:pass	-3 0 0 -1 6 -1
+w:password	-5 -2 2 1 8 -5
+w:paths	-1 -1 -2 6 -1 -1
+w:pausing	-1 -2 9 -3 -2 -2
+w:payments	3 0 -8 0 12 -7
+w:pdf	-1 3 6 -2 -3 -2
+w:people	-1 8 -3 -1 -2 -1
+w:permission	0 -1 -1 6 -3 -1
+w:personal	-1 -2 -1 7 -2 -1
+w:pgaination	-1 -2 6 -2 -1 -1
+w:pick	-2 10 -3 -2 -2 -2
+w:pieces	-1 -2 -2 -2 -1 8
+w:pin	-3 -3 -3 -3 -3 14
+w:player	-1 8 -4 -1 -2 -1
+w:please	-14 4 6 5 -2 1
+w:pls	-12 7 11 -13 2 5
+w:png	-1 -5 10 -1 -2 -2
+w:pnpm	-2 -3 -3 -2 -2 11
+w:point	1 -4 8 3 -3 -5
+w:policies	-1 -1 -4 9 -1 -2
+w:port	-1 -2 8 -1 -1 -3
+w:possible	-1 7 -1 -1 -1 -4
+w:pr	-2 -2 -6 14 -3 -2
+w:pressing	-1 -1 6 -1 -1 -2
+w:previous	-1 -1 7 -2 -1 -2
+w:price	-2 -4 13 -4 -1 -2
+w:pricing	4 8 -5 -3 -2 -2
+w:problems	-1 -2 -2 9 -2 -2
+w:processes	-2 7 -2 -1 -2 -1
+w:prod	3 -2 -6 -4 4 5
+w:product	-1 3 5 -2 -4 -1
+w:products	-1 -1 7 -2 -2 -1
+w:projects	-1 5 -1 -2 -1 -1
+w:public	5 7 -5 0 -4 -3
+w:puts	-2 -3 11 -3 -2 -2
+w:py	-1 -1 6 -1 -1 -1
+w:query	-1 0 9 -2 -2 -3
+w:question	15 -3 -5 -3 -2 -2
+w:queue	4 5 3 -5 -1 -6
+w:race	-1 -1 8 0 -1 -5
+w:rails	-3 -4 -5 -2 -2 17
+w:randomly	-1 0 -3 -1 -5 11
+w:rate	-6 2 0 6 3 -4
+w:reading	5 -1 2 -3 -1 -2
+w:redirect	-1 -2 5 -1 -1 -1
+w:reduce	-1 -1 -3 -1 -1 7
+w:reducer	7 -1 -2 -2 -1 -1
+w:refactor	-1 -1 -3 -1 -2 8
+w:reivew	-5 -1 -4 13 -2 -2
+w:release	-1 -1 6 -2 -1 -1
+w:reliable	-1 0 -3 -1 -3 8
+w:remove	-5 -4 -6 -6 -4 24
+w:removing	-1 -1 -3 -1 -1 7
+w:rename	-3 -2 -5 -5 -3 18
+w:renders	-1 -3 -3 -1 10 -3
+w:reomve	-2 -1 -2 -2 -1 9
+w:replace	-2 -4 -7 -3 -4 19
+w:replcae	-1 -1 -2 -1 -1 6
+w:replies	-1 -1 7 -1 -1 -3
+w:repo	-3 -2 -7 18 -2 -4
+w:report	-2 2 -2 -1 5 -2
+w:reported	5 -1 -1 -1 -1 -1
+w:reports	-1 3 -6 7 -5 2
+w:reproduces	-1 -2 -2 0 6 -1
+w:request	-1 3 6 -1 -4 -2
+w:reset	-3 -3 -1 -3 12 -3
+w:resets	-2 -2 10 -3 -2 -2
+w:results	-1 -1 6 -2 -1 -2
+w:retries	1 0 11 -4 -5 -3
+w:retry	-2 -3 8 -3 2 -3
+w:returns	-3 1 3 -7 10 -4
+w:reveiw	-1 -1 -3 7 0 -1
+w:review	-12 -8 -13 52 -9 -10
+w:rid	-2 -1 -3 -2 -2 10
+w:risks	-1 -1 -3 11 -4 -2
+w:route	-1 -1 -3 -1 8 -2
+w:routing	8 -1 -1 -2 -2 -1
+w:rows	-4 -5 7 -8 14 -5
+w:rss	0 6 0 -1 -4 0
+w:run	3 -5 -10 -5 27 -9
+w:runs	-1 -1 6 -1 -2 -2
+w:runtime	-1 -1 5 -1 -1 -1
+w:rustfmt	-1 -3 -2 -1 -2 10
+w:s3	8 -1 -5 6 -2 -5
+w:safe	-14 -2 -6 28 -3 -4
+w:sanitized	-2 -2 -3 9 -2 -2
+w:save	-3 -1 8 -2 -1 -1
+w:saves	-1 0 -2 -4 9 -1
+w:says	-1 -2 9 -1 -2 -2
+w:scale	6 -1 -3 -1 -1 -1
+w:scores	-1 8 -4 -1 -2 -1
+w:screen	-3 -1 10 -4 4 -5
+w:script	15 3 -4 -3 -4 -7
+w:scripts	-1 0 -4 -2 -4 11
+w:scroll	-1 5 1 -2 -2 -2
+w:seconds	-1 3 6 -2 -3 -3
+w:secrets	-4 -1 -2 8 0 -1
+w:security	-2 -3 -2 13 -3 -3
+w:see	-1 -2 -1 -1 7 -1
+w:seeds	-1 7 -1 0 -4 -1
+w:segfault	-2 -2 8 -2 -1 -2
+w:send	6 -1 -2 -2 -1 -1
+w:sent	-1 -4 3 -5 13 -5
+w:service	3 -5 5 -5 -4 5
+w:session	-2 -1 5 2 -2 -2
+w:settings	-1 1 6 -2 -3 -1
+w:setup	-1 -1 -3 11 -4 -2
+w:share	-2 0 7 -2 -2 -2
+w:shared	4 -2 -5 -4 -3 10
+w:show	-6 -7 29 -5 -4 -6
+w:showing	-1 6 -3 -1 -1 -1
+w:shows	-2 -2 13 -3 -2 -3
+w:side	0 5 -2 -1 -3 0
+w:sielntly	-1 -2 6 -1 -1 -1
+w:sigabrt	-1 -1 5 -1 -1 -1
+w:sign	-1 13 -5 -1 -3 -2
+w:signup	-6 -9 6 -1 15 -5
+w:signups	-1 7 -3 -1 -1 -1
+w:silently	-1 -2 8 -2 -2 -1
+w:simplify	-3 -2 -5 -2 -3 14
+w:size	-1 -1 -3 -1 -1 7
+w:skips	-2 -6 18 -5 -3 -2
+w:smaller	-2 -3 -4 -2 -3 14
+w:smoke	-1 -1 -4 -1 10 -3
+w:soft	-1 6 -1 -2 -2 -1
+w:some	-1 -2 7 -2 -2 -1
+w:something	-1 -1 2 -3 -1 5
+w:sortable	-1 10 -4 -1 -1 -4
+w:sorting	-2 -3 11 -3 -2 -2
+w:sound	-1 8 -4 -1 -2 -1
+w:spins	-1 -2 9 -1 -1 -2
+w:split	-1 -1 -1 -2 -1 6
+w:spoofed	-1 0 -1 7 -3 -1
+w:sql	-1 -1 0 6 -2 -2
+w:sso	-1 8 -2 0 -4 -1
+w:stabilize	0 0 -2 -1 -3 7
+w:staging	-1 0 -3 -1 7 -2
+w:start	5 -3 6 -4 -2 -3
+w:still	6 0 -1 -2 -1 -2
+w:stop	-5 -1 -2 10 -1 -1
+w:stopped	-1 -1 5 -1 -2 -1
+w:store	-2 -1 -3 10 -2 -2
+w:stretched	-6 -4 20 -5 -3 -3
+w:structure	6 -1 -1 -1 -1 -1
+w:stutters	-1 -2 7 -1 -2 -2
+w:subscriptions	-1 5 0 -1 -2 -1
+w:suite	-3 0 -1 0 6 -1
+w:summarize	10 -6 -3 -4 7 -3
+w:support	-1 24 -11 -9 -10 8
+w:supprot	-1 0 -1 -2 -3 5
+w:sure	-3 -8 -5 -3 27 -8
+w:sync	-2 -1 8 -1 -1 -2
+w:table	-2 16 -1 -3 -2 -8
+w:tagging	-1 7 -2 -1 -2 -1
+w:talks	9 -2 -1 -3 -1 -2
+w:teammates	-1 10 -3 -2 -3 -2
+w:tell	10 -4 -6 2 4 -6
+w:test	-14 -22 -21 -10 66 2
+w:tests	-1 -16 -11 -9 36 1
+w:tetss	-1 -12 -4 -3 22 -2
+w:text	-3 -3 14 -3 -3 -3
+w:thanks	1 -7 7 0 -2 0
+w:that	-8 32 -16 -11 10 -7
+w:the	-8 -42 36 -2 6 10
+w:their	0 10 1 -5 -6 0
+w:them	-1 -1 -5 4 -6 9
+w:theme	-2 10 -3 -2 -2 -2
+w:there	3 -3 -2 10 -2 -5
+w:this	7 -7 -6 11 -7 3
+w:through	13 -1 -3 -2 -2 -5
+w:tidy	-1 0 -3 -1 -3 9
+w:times	-2 -3 10 -2 -2 -2
+w:timezone	0 -5 9 -5 2 -2
+w:to	-12 26 -10 -21 -20 37
+w:todos	-2 -1 -4 -1 -1 9
+w:token	-1 -2 8 -1 -3 -1
+w:tokens	-6 -1 -2 13 -2 -2
+w:too	-1 -1 6 -2 -1 -1
+w:touches	-1 -1 -1 5 -1 -1
+w:transparency	0 -4 7 -1 -1 -1
+w:trial	-1 6 -1 -1 -1 -2
+w:try	-5 -2 -4 -2 16 -3
+w:ts	12 -1 -3 -3 -2 -2
+w:ts2322	-1 -2 5 -1 -1 -1
+w:tsets	-1 -13 -6 -4 28 -3
+w:twcie	-2 -1 6 -1 -1 -1
+w:twice	-3 -3 17 -3 -3 -4
+w:ty	7 6 -3 2 -1 -10
+w:type	-2 -3 12 -2 -2 -3
+w:typescript	-1 -1 -2 -1 -1 6
+w:typo	-1 -1 9 -1 -2 -4
+w:uesrs	-1 6 0 -1 -1 -2
+w:under	-2 -2 9 -2 -2 -2
+w:unicode	-1 -6 0 -1 9 -1
+w:unit	0 -4 0 0 5 0
+w:until	-1 -1 7 -1 -1 -2
+w:unused	-4 -3 -7 -4 -2 20
+w:up	-6 -12 11 -10 -11 27
+w:update	-2 -5 2 -2 -2 7
+w:upgrade	-5 -6 -8 -4 -6 29
+w:upgrdae	-1 -2 -2 -1 -1 7
+w:upload	-2 0 -8 7 7 -4
+w:uploading	-2 6 6 -2 -3 -4
+w:uploads	-2 0 13 -3 -4 -3
+w:usage	-1 -1 5 -1 -1 -1
+w:use	3 -4 6 -7 -3 5
+w:user	3 -3 -5 -2 -3 9
+w:username	-1 6 -2 -1 -1 -1
+w:users	-10 11 14 -11 8 -12
+w:users'	-1 -1 -2 11 -6 -1
+w:usesync	6 -1 -1 -1 -1 -1
+w:utils	-1 0 -2 -2 -1 6
+w:v1	1 -1 -4 -3 -2 9
+w:valid	-1 -1 5 -1 -2 -1
+w:validation	-3 -1 -2 7 -1 -1
+w:variable	7 -7 0 0 0 0
+w:verification	-1 -1 -2 -1 6 -1
+w:verify	-1 -4 -6 -2 15 -2
+w:version	2 0 -3 -2 -4 8
+w:versioned	10 0 -2 -4 -1 -2
+w:versions	-3 -5 -4 -2 -3 17
+w:vulnerabilities	-1 -1 -1 7 -1 -2
+w:walk	15 -2 -3 -2 -2 -6
+w:warnings	-2 -3 -5 -3 -3 15
+w:way	-1 6 -2 -1 -1 -1
+w:we	3 -3 -8 16 -9 1
+w:web	2 5 -7 -8 3 3
+w:what	44 -14 -16 -9 4 -9
+w:what's	21 -2 -7 -5 -3 -4
+w:when	-2 -2 36 -12 -10 -10
+w:where	25 -2 -8 -8 -3 -5
+w:where's	10 -1 -2 -3 -1 -2
+w:whether	-1 -1 -1 6 -1 -1
+w:which	22 -4 -5 -7 -1 -5
+w:whree	7 -1 -2 -2 -1 -1
+w:why	11 -2 -2 -4 -1 -2
+w:widget	-1 6 -3 -1 -1 -1
+w:with	-16 13 17 -23 12 -3
+w:within	-1 -1 -3 -1 8 -2
+w:work	5 -4 -3 -3 8 -4
+w:workers	6 -1 -3 -1 -1 -1
+w:working	-1 -1 7 -1 -2 -1
+w:works	0 -2 -2 -1 7 -1
+w:would	6 -1 -1 -2 0 -2
+w:write	-3 -6 -7 -5 24 -4
+w:wrnog	-2 -2 9 -2 -2 -2
+w:wrong	-4 -3 20 -5 -4 -5
+w:xss	-5 0 -1 9 0 -3
+w:you	-10 -4 4 -1 4 8
+w:zero	-1 -1 8 -2 -1 -2
+w:é	-2 -2 9 -2 -2 -2
