@@ -311,6 +311,11 @@ pub fn doer(mode: Mode, crew: &[Member]) -> Member {
 pub fn route(st: &crate::settings::AppSettings, text: &str) -> Route {
     let crew = Member::all();
     let rules = by_rules(text, &crew);
+    // The rules are right almost every time they're sure, and they cost
+    // nothing; the model is only worth its CPU when they aren't.
+    if rules.sure >= Route::SURE {
+        return rules;
+    }
     if let Some(m) = super::model::Local::from_settings(st) {
         if let Some(r) = m.route(text, &crew) {
             return r;

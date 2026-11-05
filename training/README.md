@@ -1,7 +1,7 @@
 # Training Squad's own model
 
 Squad's intelligence layer (`native/runo-app/src/v2/brain/`) works with rules
-alone. When Smart Fin is on, it asks a small model running on the person's
+alone. When Smart Fin is on and the rules aren't sure, it asks a small model on the person's
 computer first, and uses the answer only if it checks out. This folder trains
 that model: a small open base model fine-tuned on Squad's own jobs.
 
