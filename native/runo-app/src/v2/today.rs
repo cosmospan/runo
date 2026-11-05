@@ -130,8 +130,8 @@ impl Shell {
                             .gap(px(10.))
                             .child(
                                 div()
-                                    .text_size(px(22.))
-                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_size(px(26.))
+                                    .font_weight(FontWeight::BOLD)
                                     .child("Jobs"),
                             )
                             .child(
@@ -396,7 +396,8 @@ impl Shell {
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(12.))
+            .rounded(px(ui::CARD_R))
+            .shadow(ui::sheen())
             .child(box_)
     }
 
@@ -427,7 +428,8 @@ impl Shell {
                 .bg(c(ui::panel()))
                 .border_1()
                 .border_color(ca(who.accent(), 0.45))
-                .rounded(px(12.))
+                .rounded(px(ui::CARD_R))
+                .shadow(ui::sheen())
                 .child(face)
                 .child(
                     div()

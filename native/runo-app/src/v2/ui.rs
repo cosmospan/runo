@@ -53,6 +53,120 @@ fn alpha(hex: u32) -> f32 {
     }
 }
 
+/// The gap around the page canvas, between it and the window's edge.
+pub const GAP: f32 = 8.;
+/// The page canvas's corner radius.
+pub const CANVAS_R: f32 = 14.;
+/// A card's corner radius.
+pub const CARD_R: f32 = 14.;
+
+/// The ground under everything: the sidebar sits on it and the page canvas
+/// floats over it. A shade darker than the page in every theme, keeping a
+/// frosted theme's opacity.
+pub fn ground() -> u32 {
+    let t = theme();
+    let (base, k) = if t.light {
+        (t.bg, 0.045)
+    } else {
+        (t.well, 0.3)
+    };
+    super::theme::mix(base & 0xff_ffff, 0x000000, k) | (base & 0xff00_0000)
+}
+
+/// The page canvas's shadow: a soft drop under it and a faint lit top edge.
+pub fn float() -> Vec<BoxShadow> {
+    let light = theme().light;
+    vec![
+        BoxShadow {
+            color: ca(0x000000, if light { 0.07 } else { 0.45 }),
+            offset: point(px(0.), px(6.)),
+            blur_radius: px(24.),
+            spread_radius: px(-4.),
+            inset: false,
+        },
+        BoxShadow {
+            color: ca(0xFFFFFF, if light { 0.6 } else { 0.035 }),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(0.),
+            spread_radius: px(0.),
+            inset: true,
+        },
+    ]
+}
+
+/// A card's lit top edge and a soft shadow, so it reads as lifted.
+pub fn sheen() -> Vec<BoxShadow> {
+    let light = theme().light;
+    vec![
+        BoxShadow {
+            color: ca(0x000000, if light { 0.04 } else { 0.25 }),
+            offset: point(px(0.), px(2.)),
+            blur_radius: px(8.),
+            spread_radius: px(-2.),
+            inset: false,
+        },
+        BoxShadow {
+            color: ca(0xFFFFFF, if light { 0.7 } else { 0.03 }),
+            offset: point(px(0.), px(1.)),
+            blur_radius: px(0.),
+            spread_radius: px(0.),
+            inset: true,
+        },
+    ]
+}
+
+/// A small lifted chip, like the selected row in the sidebar: a hairline ring,
+/// a soft shadow and a lit top edge.
+pub fn chip() -> Vec<BoxShadow> {
+    let mut v = vec![BoxShadow {
+        color: c(line()),
+        offset: point(px(0.), px(0.)),
+        blur_radius: px(0.),
+        spread_radius: px(1.),
+        inset: false,
+    }];
+    v.extend(sheen());
+    v
+}
+
+/// A soft wash of the crew's violet, fading down from the canvas's top edge.
+/// It sits behind the page and catches no clicks.
+pub fn aurora() -> Div {
+    let k = if theme().light { 0.06 } else { 0.09 };
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .h(px(320.))
+        .bg(linear_gradient(
+            180.,
+            linear_color_stop(ca(RUNO, k), 0.),
+            linear_color_stop(ca(RUNO, 0.), 1.),
+        ))
+}
+
+/// A soft coloured glow around a small thing, like a live dot or the
+/// primary button.
+pub fn glow(color: u32, blur: f32) -> Vec<BoxShadow> {
+    vec![BoxShadow {
+        color: ca(color, if theme().light { 0.28 } else { 0.45 }),
+        offset: point(px(0.), px(2.)),
+        blur_radius: px(blur),
+        spread_radius: px(-2.),
+        inset: false,
+    }]
+}
+
+/// Squad Code's own button fill: a violet gradient, the same in every theme.
+pub fn brand() -> Background {
+    linear_gradient(
+        135.,
+        linear_color_stop(c(0x9467FF), 0.),
+        linear_color_stop(c(0x6A3EF0), 1.),
+    )
+}
+
 /// A hairline shadow, for raised controls like the selected tab.
 pub fn lift() -> Vec<BoxShadow> {
     vec![BoxShadow {
@@ -70,7 +184,8 @@ pub fn card() -> Div {
         .bg(c(panel()))
         .border_1()
         .border_color(c(line()))
-        .rounded(px(12.))
+        .rounded(px(CARD_R))
+        .shadow(sheen())
 }
 
 /// A rounded outline button, like "Look first" or "Pause".

@@ -101,7 +101,8 @@ impl Shell {
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(12.))
+            .rounded(px(ui::CARD_R))
+            .shadow(ui::sheen())
             .child(cell(
                 Some(ui::t_blue()),
                 "Running",
@@ -165,7 +166,8 @@ impl Shell {
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(12.))
+            .rounded(px(ui::CARD_R))
+            .shadow(ui::sheen())
             .overflow_hidden()
             .child(table_head(false));
         for (key, label, color, rows, empty) in [

@@ -1903,17 +1903,32 @@ impl Render for Shell {
             }))
             .font_family("Geist")
             .text_color(c(ui::ink()))
-            .bg(c(ui::bg()))
+            // The ground the sidebar sits on; the page floats over it as a canvas.
+            .bg(c(if setup { ui::bg() } else { ui::ground() }))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
                 div()
                     .flex_1()
-                    .h_full()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .when(!setup, |d| d.child(self.topbar(cx)))
+                    // Full height on its own; as a canvas, it stretches between its margins.
+                    .when(setup, |d| d.h_full())
+                    .when(!setup, |d| {
+                        d.my(px(ui::GAP))
+                            .mr(px(ui::GAP))
+                            .rounded(px(ui::CANVAS_R))
+                            .bg(c(ui::bg()))
+                            .border_1()
+                            .border_color(c(ui::line()))
+                            .shadow(ui::float())
+                            .overflow_hidden()
+                            .relative()
+                            // A soft wash of the crew's violet across the top edge.
+                            .child(ui::aurora())
+                            .child(self.topbar(cx))
+                    })
                     .child(
                         div()
                             .flex_1()

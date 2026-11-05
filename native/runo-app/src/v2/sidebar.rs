@@ -5,9 +5,9 @@
 //! replaces the dock, so the bots are always in view and never sit on top of a
 //! page.
 //!
-//! The look: a ground a shade darker than the page, rows without boxes, and the
-//! place you're on marked by a soft tint and a short violet bar on its left
-//! edge. Status colours only show where something is happening.
+//! The look: no ground of its own (it sits on the window's, beside the page
+//! canvas), rows without boxes, and the place you're on lifted out in the
+//! canvas's colour with a short violet bar on its left edge. Status colours only show where something is happening.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -24,7 +24,7 @@ pub(super) const WIDTH: f32 = 252.;
 /// The sidebar's ground, a shade darker than the page so the page reads as
 /// the thing in front.
 fn ground() -> u32 {
-    ui::well()
+    ui::ground()
 }
 
 /// How tall a place row is.
@@ -45,7 +45,11 @@ fn marker() -> Div {
 /// A row's look when it is the place you're on, or when it isn't.
 fn selectable(d: Stateful<Div>, on: bool) -> Stateful<Div> {
     if on {
-        d.bg(c(ui::hover())).text_color(c(ui::ink())).child(marker())
+        // Lifted out of the ground in the canvas's own colour, as if part of it.
+        d.bg(c(ui::bg()))
+            .shadow(ui::chip())
+            .text_color(c(ui::ink()))
+            .child(marker())
     } else {
         d.text_color(c(ui::body()))
             .hover(|s| s.bg(ca(ui::hover(), 0.7)).text_color(c(ui::ink())))
@@ -334,7 +338,7 @@ impl Shell {
                             .size(px(10.))
                             .rounded_full()
                             .border_2()
-                            .border_color(c(if here { ui::hover() } else { ground() }))
+                            .border_color(c(if here { ui::bg() } else { ground() }))
                             .bg(c(color)),
                     )
                 });
@@ -556,9 +560,7 @@ impl Shell {
             .pt(px(if cfg!(target_os = "macos") { 40. } else { 12. }))
             .pb(px(10.))
             .px(px(10.))
-            .bg(c(ui::bg()))
-            .border_r_1()
-            .border_color(c(ui::line2()))
+            // No ground of its own: it sits on the window's, beside the canvas.
             .overflow_y_scroll()
             .child(head)
             .child(search)
@@ -600,70 +602,154 @@ impl Shell {
             Place::Welcome => "Welcome".into(),
         };
         let running = self.crew.store.running().count();
+        // Each step of the path after a chevron; the last, where you are, in full ink.
+        let parts: Vec<&str> = here.split(" / ").collect();
+        let last = parts.len() - 1;
+        let crumbs: Vec<AnyElement> = parts
+            .iter()
+            .enumerate()
+            .flat_map(|(i, part)| {
+                let chev = Icon::new(IconName::ChevronRight)
+                    .size(px(14.))
+                    .flex_none()
+                    .text_color(c(ui::faint()))
+                    .into_any_element();
+                let text = div()
+                    .truncate()
+                    .map(|d| {
+                        if i == last {
+                            d.min_w_0()
+                                .text_color(c(ui::ink()))
+                                .font_weight(FontWeight::SEMIBOLD)
+                        } else {
+                            d.flex_none().text_color(c(ui::muted()))
+                        }
+                    })
+                    .child(part.to_string())
+                    .into_any_element();
+                [chev, text]
+            })
+            .collect();
+        let mono = folder
+            .chars()
+            .next()
+            .unwrap_or('S')
+            .to_uppercase()
+            .to_string();
         div()
-            .h(px(52.))
+            .h(px(54.))
             .flex_none()
             .w_full()
             .flex()
             .items_center()
             .gap(px(10.))
-            .px(px(24.))
-            .bg(c(ui::panel()))
+            .pl(px(20.))
+            .pr(px(14.))
             .border_b_1()
-            .border_color(c(ui::line()))
+            .border_color(c(ui::line2()))
             .text_size(px(13.))
+            // Where you are: the folder as a small tile, then the place.
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(8.))
                     .min_w_0()
-                    .text_color(c(ui::muted()))
-                    .child(folder)
-                    .child(div().text_color(c(ui::faint())).child("/"))
                     .child(
                         div()
-                            .text_color(c(ui::ink()))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .truncate()
-                            .child(here),
-                    ),
+                            .h(px(26.))
+                            .pl(px(4.))
+                            .pr(px(10.))
+                            .flex()
+                            .flex_none()
+                            .items_center()
+                            .gap(px(7.))
+                            .rounded_full()
+                            .bg(ca(ui::ink(), 0.04))
+                            .border_1()
+                            .border_color(c(ui::line2()))
+                            .text_color(c(ui::muted()))
+                            .child(
+                                div()
+                                    .size(px(18.))
+                                    .rounded_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .bg(ca(ui::RUNO, 0.28))
+                                    .text_size(px(10.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(c(ui::t_violet()))
+                                    .child(mono),
+                            )
+                            .child(folder),
+                    )
+                    .children(crumbs),
             )
             .child(div().flex_1())
             .when(running > 0, |d| {
                 d.child(
                     div()
-                        .h(px(24.))
-                        .px(px(9.))
+                        .h(px(26.))
+                        .px(px(10.))
                         .flex()
                         .items_center()
-                        .gap(px(6.))
-                        .rounded(px(6.))
+                        .gap(px(7.))
+                        .rounded_full()
                         .bg(c(ui::run_tone().1))
                         .border_1()
                         .border_color(c(ui::run_tone().2))
                         .text_size(px(12.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(ui::t_blue()))
-                        .child(div().size(px(7.)).rounded_full().bg(c(ui::t_blue())))
+                        .child(
+                            div()
+                                .size(px(7.))
+                                .rounded_full()
+                                .bg(c(ui::t_blue()))
+                                .shadow(ui::glow(ui::BLUE, 6.)),
+                        )
                         .child(format!("{running} running")),
                 )
             })
+            // Search, as a round button: the palette finds places, bots and jobs.
+            .child(
+                div()
+                    .id("top-search")
+                    .size(px(30.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .text_color(c(ui::muted()))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::Search).size(px(14.)))
+                    .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
+            )
             .child(
                 div()
                     .id("top-new")
                     .h(px(30.))
-                    .px(px(12.))
+                    .pl(px(10.))
+                    .pr(px(14.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .rounded(px(7.))
-                    .bg(c(ui::fill()))
-                    .text_color(c(ui::on_fill()))
+                    .gap(px(6.))
+                    .rounded_full()
+                    .bg(ui::brand())
+                    .border_1()
+                    .border_color(ca(0xFFFFFF, 0.14))
+                    .shadow(ui::glow(ui::RUNO, 14.))
+                    .text_color(c(0xFFFFFF))
                     .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
+                    .font_weight(FontWeight::SEMIBOLD)
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::fill_hover())))
+                    .hover(|s| s.opacity(0.92))
+                    .active(|s| s.opacity(0.8))
+                    .child(Icon::new(IconName::Plus).size(px(14.)))
                     .child("New job")
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
             )
