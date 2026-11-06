@@ -59,6 +59,8 @@ pub struct Runtime {
     planning: Vec<(u64, Receiver<crate::agent::Event>)>,
     /// Where jobs can run besides here, for the intelligence layer to choose.
     pub sites: brain::Sites,
+    /// Titles and recaps Peek is writing, by job.
+    peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
 }
 
 impl Runtime {
@@ -79,6 +81,7 @@ impl Runtime {
             queue_at: Instant::now(),
             planning: Vec::new(),
             sites: brain::Sites::default(),
+            peeking: Vec::new(),
         }
     }
 
@@ -94,6 +97,7 @@ impl Runtime {
             || !self.shipping.is_empty()
             || !self.landing.is_empty()
             || !self.planning.is_empty()
+            || !self.peeking.is_empty()
     }
 
     /// Whether `who` is answering a question right now.
@@ -177,6 +181,10 @@ impl Runtime {
             }
             job.goal = goal;
             job.context = context;
+        }
+        // Peek's short title for the card, when Smart Peek is on.
+        if let Some(rx) = brain::tasks::ask(st, &job, false) {
+            self.peeking.push((job.id, rx));
         }
         if let Some((i, race)) = pick {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
@@ -573,7 +581,7 @@ impl Runtime {
             return;
         };
         self.store.offered.push(idea.key.to_string());
-        self.say(brain::fin::line(&brain::fin::Moment::Idea {
+        self.say(brain::voice::line(&brain::voice::Moment::Idea {
             name: idea.name.to_string(),
             why: idea.why,
         }));
@@ -1228,9 +1236,14 @@ impl Runtime {
             }
         });
         for (id, results) in back {
+            let mut retry = None;
             if let Some(job) = self.store.job_mut(id) {
                 job.checks = results;
                 job.checking = false;
+                retry = fix_turn(job);
+            }
+            if let Some(prompt) = retry {
+                self.follow_up(st, id, prompt);
             }
             self.store.save();
         }
@@ -1238,19 +1251,116 @@ impl Runtime {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
                 self.begin_review(*id);
+                self.peek(st, *id, true);
             }
             self.offer_idea();
             self.store.save();
         }
+        self.poll_peek();
         self.poll_goals(st);
         self.poll_queue(st);
         finished
     }
+
+    /// Asks Peek for a job's title, or its recap once it ended, when Smart
+    /// Peek is on.
+    fn peek(&mut self, st: &AppSettings, id: u64, recap: bool) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if let Some(rx) = brain::tasks::ask(st, job, recap) {
+            self.peeking.push((id, rx));
+        }
+    }
+
+    /// Titles and recaps coming back from Peek.
+    fn poll_peek(&mut self) {
+        let mut back = Vec::new();
+        self.peeking.retain(|(id, rx)| match rx.try_recv() {
+            Ok(said) => {
+                back.push((*id, said));
+                false
+            }
+            Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        for (id, said) in back {
+            let Some(job) = self.store.job_mut(id) else {
+                continue;
+            };
+            match said {
+                brain::tasks::Said::Title(t) => job.short = t,
+                brain::tasks::Said::Recap(r, _) => {
+                    job.feed.push(store::Item::Note(r.clone()));
+                    job.recap = r;
+                }
+            }
+            self.store.save();
+        }
+    }
+}
+
+/// How many times a job's failing checks go back to its bot before the
+/// person is asked.
+pub const FIX_TURNS: u8 = 1;
+
+/// When a job's checks failed and it hasn't used its fix turns, notes that in
+/// its feed and gives the words to send its bot. Checks the computer couldn't
+/// run (a full disk, a timeout) aren't the code's fault and send nothing back.
+fn fix_turn(job: &mut store::Job) -> Option<String> {
+    let failed: Vec<&crate::proof::CheckRun> = job
+        .checks
+        .iter()
+        .filter(|c| !c.ok && c.infra.is_empty() && !c.timed_out)
+        .collect();
+    if failed.is_empty() || job.fix_turns >= FIX_TURNS || job.status != Status::Review {
+        return None;
+    }
+    let names: Vec<String> = failed.iter().map(|c| format!("`{}`", c.command)).collect();
+    job.fix_turns += 1;
+    job.feed.push(store::Item::Note(format!(
+        "{} failed, so {} is fixing it before it comes to you.",
+        names.join(" and "),
+        job.bot.name()
+    )));
+    Some(crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failing_checks_go_back_to_the_bot_once() {
+        let failing = crate::proof::CheckRun {
+            command: "cargo test".into(),
+            ok: false,
+            tail: "test parse ... FAILED".into(),
+            ..Default::default()
+        };
+        let mut job = store::Job {
+            bot: Member::Fixer,
+            status: Status::Review,
+            checks: vec![failing.clone()],
+            ..Default::default()
+        };
+        let prompt = fix_turn(&mut job).expect("one fix turn");
+        assert!(prompt.contains("cargo test") && prompt.contains("FAILED"));
+        assert!(prompt.starts_with("Squad Code ran"));
+        assert_eq!(job.fix_turns, 1);
+        // The second failure is the person's to see.
+        assert!(fix_turn(&mut job).is_none());
+        // A check the computer couldn't run sends nothing back.
+        let mut job = store::Job {
+            status: Status::Review,
+            checks: vec![crate::proof::CheckRun {
+                infra: "disk full".into(),
+                ..failing
+            }],
+            ..Default::default()
+        };
+        assert!(fix_turn(&mut job).is_none());
+    }
 
     fn quiet_store() -> Store {
         // A demo store is never saved, so tests leave ~/.runo alone.

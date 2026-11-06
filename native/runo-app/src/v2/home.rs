@@ -176,7 +176,7 @@ impl Shell {
                                 div()
                                     .font_weight(FontWeight::MEDIUM)
                                     .truncate()
-                                    .child(j.title.clone()),
+                                    .child(j.label().to_string()),
                             )
                             .child(
                                 div()
@@ -721,7 +721,7 @@ impl Shell {
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(c(ui::ink()))
-                                    .child(j.title.clone()),
+                                    .child(j.label().to_string()),
                             )
                             .child(
                                 div()

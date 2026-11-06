@@ -617,11 +617,11 @@ impl Shell {
             Place::Crew => "Crew".into(),
             // A job sits in its thread, so the path goes through it.
             Place::Live(id) => match self.crew.store.job(id) {
-                Some(j) => format!("{} / #{id} {}", self.thread_crumb(j.thread), j.title),
+                Some(j) => format!("{} / #{id} {}", self.thread_crumb(j.thread), j.label()),
                 None => format!("Jobs / #{id}"),
             },
             Place::Race(id) => match self.crew.store.job(id) {
-                Some(j) => format!("{} / Race / {}", self.thread_crumb(j.thread), j.title),
+                Some(j) => format!("{} / Race / {}", self.thread_crumb(j.thread), j.label()),
                 None => "Jobs / Race".into(),
             },
             Place::Goal(id) => match self.crew.store.goals.iter().find(|g| g.id == id) {

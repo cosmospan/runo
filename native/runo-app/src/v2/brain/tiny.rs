@@ -1,4 +1,4 @@
-//! Fin's tiny router: a word and letter-pattern classifier built into the app.
+//! Peek's tiny router: a word and letter-pattern classifier built into the app.
 //!
 //! No neural net, no download, no server: about 15,000 weights (370 KB) that
 //! `training/train_tiny.py` learns from the same examples the small model is

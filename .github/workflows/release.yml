@@ -93,9 +93,9 @@ jobs:
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
-      # Smart Fin's server, inside the app so it's signed with it. Squad starts
-      # it only after the person turns Smart Fin on and downloads the model.
-      - name: Build llama-server for Smart Fin
+      # Smart Peek's server, inside the app so it's signed with it. Squad starts
+      # it only after the person turns Smart Peek on and downloads the model.
+      - name: Build llama-server for Smart Peek
         run: |
           git clone -q --depth 1 --branch v0.8.0 https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp"
           arch=${{ matrix.arch }}

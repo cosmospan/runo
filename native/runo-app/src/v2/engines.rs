@@ -73,12 +73,12 @@ pub(super) fn section(title: &'static str, line: &'static str) -> Div {
 }
 
 impl Shell {
-    /// Smart Fin: off until the person turns it on, which downloads Squad's
+    /// Smart Peek: off until the person turns it on, which downloads Squad's
     /// own model once. Squad then runs it only when the rules aren't sure.
-    fn smart_fin(&mut self, st: &AppSettings, cx: &mut Context<Self>) -> Div {
+    fn smart_peek(&mut self, st: &AppSettings, cx: &mut Context<Self>) -> Div {
         use super::brain::helper::{self, Download};
         let have = helper::model_path().is_file();
-        let ours = st.brain_model.trim() == helper::MODEL && st.brain_url.trim().is_empty();
+        let ours = helper::is_ours(&st.brain_model) && st.brain_url.trim().is_empty();
         let other = !st.brain_model.trim().is_empty() && !ours;
         let state = helper::download_state();
         let downloading = matches!(state, Download::Running { .. });
@@ -87,7 +87,7 @@ impl Shell {
             .flex_wrap()
             .gap(px(6.))
             .child(
-                choice("fin-off", "Off", st.brain_model.trim().is_empty(), true).on_click(
+                choice("peek-off", "Off", st.brain_model.trim().is_empty(), true).on_click(
                     cx.listener(|_, _, _, cx| {
                         helper::stop();
                         save(cx, |st| st.brain_model.clear());
@@ -96,10 +96,10 @@ impl Shell {
                 ),
             )
             .child(
-                choice("fin-on", "On \u{b7} Squad's own model", ours, true).on_click(cx.listener(
+                choice("peek-on", "On \u{b7} Squad's own model", ours, true).on_click(cx.listener(
                     |_, _, _, cx| {
                         let url = cx.global::<AppSettings>().brain_model_url.clone();
-                        helper::download(&url);
+                        helper::download(&url, false);
                         save(cx, |st| {
                             st.brain_model = helper::MODEL.to_string();
                             st.brain_url.clear();
@@ -110,15 +110,26 @@ impl Shell {
             );
         if other {
             chips = chips.child(choice(
-                "fin-other",
+                "peek-other",
                 format!("On \u{b7} {}", st.brain_model.trim()),
                 true,
                 true,
             ));
         }
+        if have && ours && !downloading {
+            chips = chips.child(
+                choice("peek-update", "Check for a newer model", false, true).on_click(
+                    cx.listener(|_, _, _, cx| {
+                        let url = cx.global::<AppSettings>().brain_model_url.clone();
+                        helper::download(&url, true);
+                        cx.notify();
+                    }),
+                ),
+            );
+        }
         if have && !ours && !downloading {
             chips = chips.child(
-                choice("fin-delete", "Delete the model (505 MB)", false, true).on_click(
+                choice("peek-delete", "Delete the model (505 MB)", false, true).on_click(
                     cx.listener(|_, _, _, cx| {
                         helper::remove();
                         cx.notify();
@@ -132,12 +143,13 @@ impl Shell {
                 (format!("Downloading Squad's model: {} of {} MB.", mb(got), mb(total)), false)
             }
             Download::Failed(e) if ours && !have => (format!("The download didn't finish: {e}. Turn it on again to retry."), true),
+            Download::Failed(e) if ours => (format!("Couldn't update: {e}. The model you have keeps working."), true),
             _ if other => (format!("Asking {} at {}. You run that server yourself.", st.brain_model.trim(), if st.brain_url.trim().is_empty() { super::brain::model::DEFAULT_URL } else { st.brain_url.trim() }), false),
             _ if ours && have && helper::server_bin().is_none() => (
                 "Needs llama-server from llama.cpp (on a Mac: brew install llama.cpp). Until then the rules decide.".to_string(),
                 true,
             ),
-            _ if ours && have => (format!("On. A small model on this computer picks the bot when the rules aren't sure, in about half a second. It stops after {} idle minutes.", helper::IDLE_MINUTES), false),
+            _ if ours && have => (format!("On{}. A small model on this computer picks the bot when the rules aren't sure, in about half a second. It stops after {} idle minutes.", helper::installed().map(|r| format!(", Peek v{}", r.version)).unwrap_or_default(), helper::IDLE_MINUTES), false),
             _ => ("Off: the rules pick the bot. Turning it on downloads Squad's own model once (505 MB); it runs on this computer, only when the rules aren't sure.".to_string(), false),
         };
         div()
@@ -234,7 +246,7 @@ impl Shell {
                 })),
             );
         }
-        let smart = self.smart_fin(&st, cx);
+        let smart = self.smart_peek(&st, cx);
         let work_vendor = vendor(agent::PROVIDERS[default_i].id);
         let same_vendor =
             !st.challenge_agent.is_empty() && vendor(&st.challenge_agent) == work_vendor;
@@ -276,7 +288,7 @@ impl Shell {
                 div()
                     .flex()
                     .gap(px(space::M))
-                    .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Smart Fin"))
+                    .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Smart Peek"))
                     .child(smart),
             );
 

@@ -60,7 +60,7 @@ impl Shell {
             if let Some(j) = self.crew.store.job(id) {
                 if j.status == Status::Review {
                     all.push(Entry {
-                        label: format!("Approve \u{201c}{}\u{201d}", j.title),
+                        label: format!("Approve \u{201c}{}\u{201d}", j.label()),
                         hint: "This job".into(),
                         icon: Some(IconName::Check),
                         bot: None,
@@ -203,7 +203,7 @@ impl Shell {
                 _ => j.status.label(),
             };
             all.push(Entry {
-                label: j.title.clone(),
+                label: j.label().to_string(),
                 hint: format!("{} · {state}", j.bot.name()),
                 icon: None,
                 bot: Some(j.bot),

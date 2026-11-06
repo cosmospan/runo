@@ -671,7 +671,7 @@ impl Shell {
             .into_iter()
             .filter(|j| j.id != job.id && j.bot == job.bot && (j.race == 0 || j.race != job.race))
             .take(3)
-            .map(|j| (j.id, j.title.clone(), j.status))
+            .map(|j| (j.id, j.label().to_string(), j.status))
             .collect();
         let has_more = !others.is_empty();
         let mut more = div().flex().flex_col().gap(px(4.));

@@ -299,15 +299,20 @@ pub struct AppSettings {
     /// Runo v2: the agent that double-checks the crew's decisions. Best from another
     /// vendor than the one that did the work; empty is no second check.
     pub challenge_agent: String,
-    /// Smart Fin: the local model Squad's intelligence layer asks first, by its
+    /// Smart Peek: the local model Squad's intelligence layer asks first, by its
     /// name on the local server ("squad-fin-0.8b"). Empty uses the rules alone.
     pub brain_model: String,
     /// Where that model is served (OpenAI-style API); empty is llama-server's
     /// usual `http://127.0.0.1:8088/v1`.
     pub brain_url: String,
-    /// Where Smart Fin downloads Squad's own model from; empty is the released one.
+    /// Where Smart Peek looks for Squad's own model (a folder with `latest.json`);
+    /// empty is the published one.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub brain_model_url: String,
+    /// Settings this build doesn't know, such as ones a newer or older Squad Code
+    /// wrote. Kept as they are, so saving never drops them.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// The engine under one of Runo v2's bots.
@@ -435,6 +440,7 @@ impl Default for AppSettings {
             brain_model: String::new(),
             brain_url: String::new(),
             brain_model_url: String::new(),
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -1589,6 +1595,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn settings_it_doesnt_know_survive_a_save() {
+        let s: AppSettings =
+            serde_json::from_str(r#"{"theme":"dark","v2_theme":"daylight","later":{"a":1}}"#)
+                .unwrap();
+        assert_eq!(s.theme, "dark");
+        let back = serde_json::to_value(&s).unwrap();
+        assert_eq!(back["v2_theme"], "daylight");
+        assert_eq!(back["later"]["a"], 1);
+        assert!(!s.extra.contains_key("theme"));
     }
 
     #[test]

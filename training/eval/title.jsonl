@@ -1,0 +1,80 @@
+{"text": "Can you clean up the dedupe step? It's letting duplicate orders through when two events share an order_id but the email field has different casing, and finance reports are double counting.", "title": "Fix order dedupe email casing"}
+{"text": "write property based tests for the tokenizer", "title": "Add property-based tokenizer tests"}
+{"text": "how is fix_currency_rates.sql actually wired into the nightly job", "title": "Explain fix_currency_rates.sql nightly wiring"}
+{"text": "parseDate('2024-02-29') throws in v2.3.1, worked in 2.3.0. regression from #881?", "title": "Fix parseDate leap day regression"}
+{"text": "We have rate limiting on login only. Product wants it on every public route of the node api, per api key, 100 req/min. Please add it.", "title": "Add per-key rate limiting to public routes"}
+{"text": "build a small admin dashboard showing signups per day", "title": "Build signups-per-day admin dashboard"}
+{"text": "the cohort_retention query returns 140% retention for March. that's obviously impossible, what the hell", "title": "Fix cohort_retention 140% March retention"}
+{"text": "is my dockerfile doing anything dangerous", "title": "Review Dockerfile for dangerous practices"}
+{"text": "Can you test my reasoning on this PR? I switched the RDS instance to Multi-AZ and changed the parameter group in infra/rds.tf. Read it and flag anything that could cause downtime on apply.", "title": "Review infra/rds.tf for downtime risks"}
+{"text": "run the 1-epoch smoke train on the tiny dataset and confirm loss goes down", "title": "Run 1-epoch smoke train"}
+{"text": "our webhook handler returns 500 whenever stripe retries", "title": "Fix webhook 500s on Stripe retries"}
+{"text": "rename UserProfileThing to Profile everywhere", "title": "Rename UserProfileThing to Profile"}
+{"text": "We changed the retry logic in the Go http client last sprint. Nobody wrote tests. Can you cover the backoff timing with table-driven tests?", "title": "Test Go HTTP client backoff timing"}
+{"text": "bump terraform aws provider to 5.x", "title": "Upgrade Terraform AWS provider to 5.x"}
+{"text": "docker build takes 40 min now and then dies with 'no space left on device'. this is ridiculous, make it work", "title": "Fix slow Docker build disk space"}
+{"text": "Would it be possible to add some tests around the late-arriving events logic in incremental_events.sql? We've had a couple of near-misses, and I'd feel much better with coverage for events that land two or three days late.", "title": "Test late events in incremental_events.sql"}
+{"text": "bump django 4.2 -> 5.0", "title": "Upgrade Django 4.2 to 5.0"}
+{"text": "review the dockerfile diff", "title": "Review the Dockerfile diff"}
+{"text": "update the readme so the setup steps are current", "title": "Update README setup steps"}
+{"text": "The orders module in the node api is one 1400-line file. Split it into routes, service and repo layers, no behaviour change.", "title": "Split orders module into layers"}
+{"text": "PR #203 touches src/auth/session.ts and middleware.ts, look it over before I merge, anything risky?", "title": "Review PR #203 for risks"}
+{"text": "Can you fix my understanding of how the useAuth hook refreshes tokens? I keep thinking it retries on 401 but I'm not sure.", "title": "Explain useAuth token refresh"}
+{"text": "Bump next from 13 to 14 and fix whatever the upgrade breaks.", "title": "Upgrade Next from 13 to 14"}
+{"text": "convert the remaining js files to typescript", "title": "Convert remaining JS files to TypeScript"}
+{"text": "checkpoint saving writes an empty file when disk is near full, can u fix that and also what's our usual checkpoint size", "title": "Fix empty checkpoint on full disk"}
+{"text": "need a weekly_active_users model in models/marts, partitioned by week, grouped by plan", "title": "Add weekly_active_users mart model"}
+{"text": "Users keep asking to export their invoices. We already have the invoice list page in React. Can you add a CSV download button that hits a new endpoint on the Node API?", "title": "Add invoice CSV download button"}
+{"text": "test my migration in migrations/0042_split_events.sql. I mean read it, don't run it, tell me if it'll lock the table", "title": "Review 0042_split_events.sql for table locks"}
+{"text": "test my PR #231 before I merge \u2014 just read through it and tell me if anything looks risky, don't push anything", "title": "Review PR #231 for risks"}
+{"text": "The contact form on /contact submits, but nobody gets the email. app/api/contact/route.ts returns 200 even when Resend errors out. Make it report failures and figure out why the sends fail.", "title": "Fix contact form email failures"}
+{"text": "what's the difference between the two config files in the root", "title": "Explain the two root config files"}
+{"text": "dark mode toggle in settings screen (iOS)", "title": "Add dark mode to iOS settings"}
+{"text": "would it be possible to get a --dry-run flag on the CLI that prints the migrations without applying them?", "title": "Add --dry-run flag to CLI migrations"}
+{"text": "try the password reset flow end to end on staging, does the email even arrive", "title": "Test password reset flow on staging"}
+{"text": "write a slack bot that posts the deploy status", "title": "Build deploy status Slack bot"}
+{"text": "is this diff safe to ship? it rewrites the window functions in sessions.sql", "title": "Review sessions.sql window function rewrite"}
+{"text": "For the library we need a option to pass custom logger. Now it write to console always and users complain about it.", "title": "Add custom logger option to library"}
+{"text": "is the 204 on PATCH /users/:id on purpose? just want to know before I document it", "title": "Explain 204 on PATCH /users/:id"}
+{"text": "there are like 30 unused sql files in legacy/ that nobody has touched in two years. delete them already", "title": "Delete unused SQL files in legacy/"}
+{"text": "spot check the permissions logic i added", "title": "Review the new permissions logic"}
+{"text": "dark mode??", "title": "Add dark mode"}
+{"text": "check that nothing in this patch logs personal data", "title": "Review patch for personal data logging"}
+{"text": "why does daily_revenue.sql LEFT JOIN refunds instead of inner join", "title": "Explain daily_revenue.sql refunds LEFT JOIN"}
+{"text": "run the e2e tests on the checkout flow", "title": "Run checkout flow e2e tests"}
+{"text": "flaky checkout test", "title": "Fix flaky checkout test"}
+{"text": "clean up the revenue dashboard query, its double counting refunds so totals are way too high", "title": "Fix revenue dashboard refund double counting"}
+{"text": "add a weekly_active_users model to the dbt project, grouped by plan", "title": "Add weekly_active_users dbt model"}
+{"text": "pipeline/utils.py is 1,400 lines of everything. Split it into modules by concern (io, dates, retry) without changing behavior.", "title": "Split pipeline/utils.py into modules"}
+{"text": "try the signup flow end to end on staging with a fresh email and tell me where it breaks", "title": "Test signup flow on staging"}
+{"text": "CI is green but prod broke, so obviously our tests are useless. Add integration tests that actually hit Postgres for the orders endpoints.", "title": "Add Postgres integration tests for orders"}
+{"text": "We moved the nightly ETL to Airflow last quarter and nobody documented the retries. I see retry_with_backoff() in pipeline/utils/retry.py wrapping the S3 loader. Can you explain how many times it actually retries before giving up, and whether the backoff is exponential?", "title": "Explain retry_with_backoff retry behavior"}
+{"text": "We shipped version 4.2 of the iOS app last week, and onboarding was moved into OnboardingCoordinator. Since then several users report that the onboarding screens appear again every time they log out and log back in. Could you clean up how the hasSeenOnboarding flag is stored so it actually stays dismissed? If it's easy, rename the flag to something clearer too, but the main thing is that onboarding stops reappearing.", "title": "Fix hasSeenOnboarding flag persistence"}
+{"text": "add `qry export --format parquet` subcommand", "title": "Add qry export parquet subcommand"}
+{"text": "fix the test gap in the backfill script \u2014 nothing covers the partition overwrite path", "title": "Test backfill partition overwrite path"}
+{"text": "who calls the sync_users function", "title": "Find callers of sync_users"}
+{"text": "review the changes in src/auth for anything risky", "title": "Review src/auth changes for risks"}
+{"text": "upgrade tokio to 1.40 and fix whatever breaks", "title": "Upgrade tokio to 1.40"}
+{"text": "is there any chance you could look into why the date picker shows yesterday for users in UTC+ timezones? it's been reported a few times", "title": "Fix date picker UTC+ off-by-one"}
+{"text": "Here's the new auth middleware I wrote for the Go service. Can you check it for security holes? Not looking for changes yet, just a list of concerns.", "title": "Review Go auth middleware security"}
+{"text": "2.3.0 broke imports on py3.8: ImportError: cannot import name 'TypeAlias' from 'typing'", "title": "Fix TypeAlias import on Python 3.8"}
+{"text": "does the tests folder for the react app even run in CI or is it just local", "title": "Check if React tests run in CI"}
+{"text": "Got this in the logs: `pq: canceling statement due to statement timeout`. Not asking to change anything, just what's our timeout set to and where?", "title": "Explain the statement timeout setting"}
+{"text": "is this migration safe to run on a big table?", "title": "Review migration safety on big tables"}
+{"text": "where do we store user uploads", "title": "Explain where user uploads are stored"}
+{"text": "add a /api/v2/invoices endpoint to the Django app that returns paginated invoices for the current org", "title": "Add /api/v2/invoices endpoint"}
+{"text": "check the new next.config.js headers for anything that could break caching or CSP. no edits", "title": "Review next.config.js headers for caching"}
+{"text": "run the full rspec suite and tell me what fails", "title": "Run the full RSpec suite"}
+{"text": "what does the --force flag on deploy actually do", "title": "Explain the deploy --force flag"}
+{"text": "We moved the blog to MDX last month. Marketing keeps asking if the old /posts URLs still redirect. Do they, and where is that configured?", "title": "Check old /posts URL redirects"}
+{"text": "kill the dead code in utils/legacy_*.py, nothing imports it", "title": "Remove dead code in utils/legacy_*.py"}
+{"text": "split views.py in the accounts app into a package, it's 2000 lines", "title": "Split accounts views.py into package"}
+{"text": "Does the pagination on /orders actually hold up with 10k rows? spin up a seeded db and hit it", "title": "Test /orders pagination with 10k rows"}
+{"text": "run the full test suite against Node 22 and tell me what breaks", "title": "Test full suite against Node 22"}
+{"text": "which version of react are we on", "title": "Check current React version"}
+{"text": "how are migrations run in production", "title": "Explain production migration process"}
+{"text": "WHY is there a second copy of the users table called users_v2_final, who uses that, does anything still read from it", "title": "Investigate users_v2_final table usage"}
+{"text": "add an integration test for the export endpoint", "title": "Add export endpoint integration test"}
+{"text": "Hi, sorry if this is a basic question, but I'm new to the repo and trying to understand where the Rust CLI reads its config from. Does ~/.config/qry win over the env vars, or the other way round? No changes needed, I just want to understand the precedence. Thanks!", "title": "Explain Rust CLI config precedence"}
+{"text": "Hello, I am new in team. In terraform/modules/vpc I see two NAT gateway, is this for high availability or is mistake? Please only explain, I not want change yet.", "title": "Explain the two VPC NAT gateways"}
+{"text": "how wud i fix the N+1 in OrdersController? just explain, dont touch anything", "title": "Explain OrdersController N+1 fix"}
