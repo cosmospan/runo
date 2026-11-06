@@ -63,6 +63,10 @@ pub const CARD_R: f32 = 10.;
 /// frosted theme's opacity.
 pub fn ground() -> u32 {
     let t = theme();
+    // Crew Chat's sidebar and Jobs panel: a cool, soft grey.
+    if t.id == "crew-chat" {
+        return 0xF6F6F9;
+    }
     let (base, k) = if t.light {
         (t.bg, 0.045)
     } else {
@@ -393,4 +397,27 @@ pub fn rise<E: Styled>(el: E, k: f32) -> E {
     el.opacity(k.clamp(0.0, 1.0))
         .relative()
         .top(px(8. * (1. - k)))
+}
+
+/// Puts text in a box with the caret after it, so typing carries on from there.
+pub(super) fn put_text(
+    i: &mut gpui_kit::component::input::TextareaState,
+    text: impl Into<String>,
+    window: &mut Window,
+    cx: &mut Context<gpui_kit::component::input::TextareaState>,
+) {
+    let text: String = text.into();
+    let line = text.matches('\n').count() as u32;
+    let character = text
+        .rsplit('\n')
+        .next()
+        .unwrap_or("")
+        .encode_utf16()
+        .count() as u32;
+    i.set_value(text, window, cx);
+    i.set_cursor_position(
+        gpui_kit::component::input::Position { line, character },
+        window,
+        cx,
+    );
 }

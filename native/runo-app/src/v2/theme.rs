@@ -100,7 +100,41 @@ const fn glass_tones(blue: u32, amber: u32, green: u32, red: u32, grey: u32) -> 
     ]
 }
 
-pub const THEMES: [Theme; 7] = [
+pub const THEMES: [Theme; 8] = [
+    // Crew Chat: the default. A white page, a soft grey sidebar and Jobs panel,
+    // and violet for the crew's own voice, so the bots' glowing faces stand out.
+    Theme {
+        id: "crew-chat",
+        name: "Crew Chat",
+        line: "Bright and calm, the default",
+        light: true,
+        frosted: false,
+        bg: 0xFFFFFF,
+        panel: 0xFFFFFF,
+        raised: 0xFFFFFF,
+        hover: 0xF1F1F5,
+        press: 0xE6E6EC,
+        ink: 0x16161D,
+        body: 0x3A3A44,
+        muted: 0x62626E,
+        faint: 0x84848F,
+        line_c: 0xE6E6EC,
+        line2: 0xEDEDF2,
+        line_hi: 0xD4D4DD,
+        fill: 0x16161D,
+        fill_hover: 0x2C2C35,
+        fill_press: 0x42424C,
+        on_fill: 0xFFFFFF,
+        well: 0xF6F6F9,
+        t_blue: 0x1D5AC4,
+        t_amber: 0x9A5E00,
+        t_green: 0x0F7646,
+        t_red: 0xBA2836,
+        t_violet: 0x5B47D6,
+        add: 0x0F7646,
+        del: 0xBA2836,
+        tones: tones(0xFFFFFF, 0x2F7BEB, 0xD08A12, 0x1E9E62, 0xE0414F, 0x3A3A44),
+    },
     // The original look: a dark, Linear-style ground.
     Theme {
         id: "midnight",
@@ -347,7 +381,7 @@ pub fn theme() -> &'static Theme {
     &THEMES[CURRENT.load(Ordering::Relaxed).min(THEMES.len() - 1)]
 }
 
-/// Puts a theme in use by id; an unknown id means the original, Midnight.
+/// Puts a theme in use by id; an unknown id means the default, Crew Chat.
 pub fn set_theme(id: &str) {
     let i = THEMES.iter().position(|t| t.id == id).unwrap_or(0);
     CURRENT.store(i, Ordering::Relaxed);
@@ -463,8 +497,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_unique_and_midnight_is_first() {
-        assert_eq!(THEMES[0].id, "midnight");
+    fn ids_are_unique_and_crew_chat_is_first() {
+        assert_eq!(THEMES[0].id, "crew-chat");
         for (i, a) in THEMES.iter().enumerate() {
             for b in &THEMES[i + 1..] {
                 assert_ne!(a.id, b.id);
@@ -590,11 +624,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_id_falls_back_to_midnight() {
+    fn unknown_id_falls_back_to_crew_chat() {
         set_theme("no-such-theme");
-        assert_eq!(theme().id, "midnight");
+        assert_eq!(theme().id, "crew-chat");
         set_theme("frost");
         assert_eq!(theme().id, "frost");
-        set_theme("midnight");
+        set_theme("crew-chat");
     }
 }

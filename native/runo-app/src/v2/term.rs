@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -21,6 +23,12 @@ const LINE: f32 = 17.;
 pub const ROWS: u16 = 14;
 /// Width of one column, near enough for a monospace face at FONT.
 const CELL: f32 = FONT * 0.6;
+
+/// The drawer is a dark terminal in every theme, like the terminal tails on cards.
+const TERM_BG: u32 = 0x15151C;
+const TERM_FG: u32 = 0xD8D8E0;
+const TERM_DIM: u32 = 0x8A8A97;
+const TERM_LINE: u32 = 0x2A2A34;
 
 /// A folder with a `squad` command in it, put first on the drawer's PATH so
 /// typing `squad` drives this app's crew.
@@ -283,19 +291,19 @@ impl Shell {
                     if cell.is_wide_continuation() {
                         continue;
                     }
-                    let mut fg = color(cell.fgcolor(), ui::body());
+                    let mut fg = color(cell.fgcolor(), TERM_FG);
                     let mut bg = match cell.bgcolor() {
                         vt100::Color::Default => None,
                         x => Some(color(x, 0)),
                     };
                     if cell.inverse() {
-                        let back = bg.unwrap_or(ui::well() & 0xff_ffff);
+                        let back = bg.unwrap_or(TERM_BG);
                         bg = Some(fg);
                         fg = back;
                     }
                     if show_cursor && focused && row == cur_row && col == cur_col {
-                        let back = bg.unwrap_or(ui::well() & 0xff_ffff);
-                        bg = Some(ui::ink());
+                        let back = bg.unwrap_or(TERM_BG);
+                        bg = Some(TERM_FG);
                         fg = back;
                     }
                     let s = (fg, bg, cell.bold());
@@ -314,18 +322,23 @@ impl Shell {
             lines
         });
         let mut bar = div()
-            .h(px(36.))
+            .h(px(34.))
             .px(px(12.))
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap(px(8.))
             .border_b_1()
-            .border_color(c(ui::line2()))
+            .border_color(c(TERM_LINE))
+            .child(
+                Icon::new(IconName::SquareTerminal)
+                    .size(px(13.))
+                    .text_color(c(TERM_DIM)),
+            )
             .child(
                 div()
                     .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::ink()))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(TERM_FG))
                     .child("Terminal"),
             )
             .child(
@@ -335,14 +348,25 @@ impl Shell {
                     .truncate()
                     .font_family(ui::MONO)
                     .text_size(px(11.))
-                    .text_color(c(ui::faint()))
+                    .text_color(c(TERM_DIM))
                     .child(place),
             );
         for (k, (label, command)) in quick.into_iter().enumerate() {
             bar = bar.child(
-                ui::pill(("term-quick", k), label, false)
-                    .h(px(24.))
-                    .text_size(px(12.))
+                div()
+                    .id(("term-quick", k))
+                    .h(px(22.))
+                    .px(px(9.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.))
+                    .border_1()
+                    .border_color(c(TERM_LINE))
+                    .text_size(px(11.5))
+                    .text_color(c(TERM_DIM))
+                    .cursor_pointer()
+                    .hover(|s| s.text_color(c(TERM_FG)).bg(c(TERM_LINE)))
+                    .child(label)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.term_run(id, &command, window, cx)
                     })),
@@ -351,12 +375,19 @@ impl Shell {
         bar = bar.child(
             div()
                 .id("term-close")
-                .px(px(8.))
-                .text_size(px(12.))
-                .text_color(c(ui::muted()))
+                .size(px(22.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(6.))
+                .text_color(c(TERM_DIM))
                 .cursor_pointer()
-                .hover(|s| s.text_color(c(ui::ink())))
-                .child("Close")
+                .hover(|s| s.text_color(c(TERM_FG)).bg(c(TERM_LINE)))
+                .child(Icon::new(IconName::ChevronDown).size(px(14.)))
+                .tooltip(|window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new("Hide; the shell keeps running")
+                        .build(window, cx)
+                })
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.term_open = None;
                     cx.notify();
@@ -365,9 +396,13 @@ impl Shell {
         Some(
             div()
                 .flex_none()
-                .bg(c(ui::well()))
-                .border_t_1()
-                .border_color(c(ui::line()))
+                .mx(px(8.))
+                .rounded_t(px(10.))
+                .overflow_hidden()
+                .bg(c(TERM_BG))
+                .border_1()
+                .border_b_0()
+                .border_color(c(TERM_LINE))
                 .child(bar)
                 .child(
                     div()
@@ -378,6 +413,7 @@ impl Shell {
                         .font_family(ui::MONO)
                         .text_size(px(FONT))
                         .line_height(px(LINE))
+                        .text_color(c(TERM_FG))
                         .cursor_text()
                         .on_click(
                             cx.listener(|this, _, window, cx| window.focus(&this.term_focus, cx)),
@@ -387,7 +423,7 @@ impl Shell {
                         }))
                         .child(lines)
                         .when(exited, |d| {
-                            d.child(div().text_color(c(ui::faint())).child(
+                            d.child(div().text_color(c(TERM_DIM)).child(
                                 "The shell ended. Close and open the terminal again for a new one.",
                             ))
                         }),

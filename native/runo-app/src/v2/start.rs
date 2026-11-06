@@ -46,7 +46,7 @@ impl Shell {
         self.set_mode(mode, window, cx);
         let text = text.to_string();
         self.composer.update(cx, |i, cx| {
-            i.set_value(text, window, cx);
+            ui::put_text(i, text, window, cx);
             i.focus(window, cx);
         });
         cx.notify();

@@ -1,29 +1,98 @@
-//! The sidebar: the folder you're in, search, the places, and the crew.
+//! The sidebar, Crew Chat style: the workspace, search, what needs you, your
+//! projects as channels, and the crew as people you can message.
 //!
-//! The crew lives here, one row per bot: its face with a status badge, its name
-//! and what it's doing right now, with a thin progress bar while it works. It
-//! replaces the dock, so the bots are always in view and never sit on top of a
-//! page.
-//!
-//! The look: no ground of its own (it sits on the window's, beside the page
-//! canvas), rows without boxes, and the place you're on lifted out in the
-//! canvas's colour with a short violet bar on its left edge. Status colours only show where something is happening.
+//! The crew lives here, one row per bot: its face, its name and a word on what
+//! it's doing right now (working, needs you), so the bots are always in view.
+//! The look: a soft grey column beside the white page, rows without boxes, and
+//! the place you're on lifted out as a white row with a hairline edge.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use super::data::Member;
+use super::store::Status;
 use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The sidebar's width.
-pub(super) const WIDTH: f32 = 64.;
+pub(super) const WIDTH: f32 = 248.;
 
-/// The sidebar's ground, a shade darker than the page so the page reads as
-/// the thing in front.
+/// The sidebar's ground, a shade off the page so the page reads as the thing
+/// in front.
 fn ground() -> u32 {
     ui::ground()
+}
+
+/// One row: an icon or face, a label, and something on the right. Lit when
+/// you're on it.
+fn row(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
+    div()
+        .id(id)
+        .h(px(32.))
+        .px(px(10.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .rounded(px(8.))
+        .text_size(px(13.5))
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .map(|d| {
+            if on {
+                d.bg(c(ui::raised()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .text_color(c(ui::ink()))
+                    .shadow(vec![BoxShadow {
+                        color: hsla(0., 0., 0., 0.05),
+                        offset: point(px(0.), px(1.)),
+                        blur_radius: px(2.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+            } else {
+                d.border_1()
+                    .border_color(transparent_black())
+                    .text_color(c(ui::muted()))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            }
+        })
+}
+
+/// A small count on the right of a row.
+fn count(n: usize, tone: Option<ui::Tone>) -> Div {
+    let d = div()
+        .ml_auto()
+        .min_w(px(18.))
+        .h(px(18.))
+        .px(px(5.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(6.))
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD);
+    match tone {
+        Some((text, fill, _)) => d.bg(c(fill)).text_color(c(text)),
+        None => d.text_color(c(ui::faint())),
+    }
+    .child(n.min(99).to_string())
+}
+
+/// A group's label, with an optional action on its right.
+fn label(text: &'static str) -> Div {
+    div()
+        .h(px(28.))
+        .mt(px(14.))
+        .px(px(10.))
+        .flex()
+        .items_center()
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(ui::faint()))
+        .child(text.to_uppercase())
 }
 
 impl Shell {
@@ -31,171 +100,305 @@ impl Shell {
         let place = self.place;
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let working = self.crew.store.running().count();
         let folder = self.crew.store.folder().cloned();
-        let letter = folder
+        let where_ = folder
             .as_ref()
-            .and_then(|f| f.name.chars().next())
-            .unwrap_or('S')
-            .to_uppercase()
-            .to_string();
-        let folder_name = folder
-            .as_ref()
-            .map(|f| format!("{} · {}", f.name, short_path(&f.path)))
-            .unwrap_or_else(|| "No folder yet".into());
+            .map(|f| short_path(&f.path))
+            .unwrap_or_else(|| "No project yet".into());
 
-        // The folder you're in, as a tile at the top of the rail.
+        // The project switcher: Peek, the project's name and its path. Click it to
+        // move to another project folder, or add one.
+        let peek_mood = self.side_mood(Member::Fin);
+        let peek = self.bot(Member::Fin, peek_mood, 30., runo_holo::Framing::Bust);
+        let project = folder
+            .as_ref()
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "Squad Code".into());
+        let open = self.folder_menu;
         let head = div()
-            .id("side-folder")
-            .size(px(36.))
-            .mb(px(14.))
+            .id("side-head")
+            .h(px(44.))
+            .px(px(6.))
+            .mb(px(8.))
             .flex()
             .items_center()
-            .justify_center()
+            .gap(px(10.))
             .rounded(px(10.))
-            .bg(c(ui::fill()))
-            .text_color(c(ui::on_fill()))
-            .text_size(px(15.))
-            .font_weight(FontWeight::BOLD)
             .cursor_pointer()
-            .hover(|s| s.opacity(0.9))
-            .child(letter)
-            .tooltip(move |window, cx| {
-                gpui_kit::component::tooltip::Tooltip::new(folder_name.clone()).build(window, cx)
-            })
-            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx)));
-
-        // One place: an icon in a rounded square, lit when you're on it, with
-        // an optional count badge on its corner.
-        let item = |id: &'static str,
-                    icon: IconName,
-                    tip: &'static str,
-                    on: bool,
-                    badge: Option<(usize, u32)>| {
-            div()
-                .id(id)
-                .relative()
-                .size(px(40.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(10.))
-                .cursor_pointer()
-                .map(|d| {
-                    if on {
-                        d.bg(c(ui::raised())).text_color(c(ui::ink())).child(
-                            div()
-                                .absolute()
-                                .left(px(-12.))
-                                .top(px(10.))
-                                .bottom(px(10.))
-                                .w(px(3.))
-                                .rounded_r(px(3.))
-                                .bg(c(ui::ink())),
-                        )
-                    } else {
-                        d.text_color(c(ui::muted()))
-                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                    }
-                })
-                .child(Icon::new(icon).size(px(18.)))
-                .when_some(badge, |d, (n, color)| {
-                    d.child(
+            .when(open, |d| d.bg(c(ui::hover())))
+            .hover(|s| s.bg(c(ui::hover())))
+            .child(peek)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
                         div()
-                            .absolute()
-                            .top(px(2.))
-                            .right(px(1.))
-                            .min_w(px(16.))
-                            .h(px(16.))
-                            .px(px(4.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_full()
-                            .bg(c(color))
-                            .border_2()
-                            .border_color(c(ground()))
-                            .text_size(px(9.5))
+                            .truncate()
+                            .text_size(px(14.))
                             .font_weight(FontWeight::BOLD)
-                            .text_color(c(0x0B0B0E))
-                            .child(n.min(99).to_string()),
+                            .text_color(c(ui::ink()))
+                            .child(project),
                     )
-                })
-                .tooltip(move |window, cx| {
-                    gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
-                })
-        };
-        let jobs_on = matches!(
-            place,
-            Place::Today | Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_)
-        );
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(11.5))
+                            .text_color(c(ui::faint()))
+                            .child(where_),
+                    ),
+            )
+            .child(
+                Icon::new(IconName::ChevronsUpDown)
+                    .size(px(15.))
+                    .text_color(c(ui::faint())),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if this.crew.store.folders.is_empty() {
+                    this.pick_folder(cx);
+                } else {
+                    this.folder_menu = !this.folder_menu;
+                    cx.notify();
+                }
+            }));
+        let switcher = self.folder_menu.then(|| self.project_menu(cx));
+
+        // Search: the palette finds places, bots and jobs.
+        let search = div()
+            .id("side-search")
+            .h(px(34.))
+            .px(px(10.))
+            .mb(px(8.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .rounded(px(9.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .text_size(px(13.))
+            .text_color(c(ui::faint()))
+            .cursor_pointer()
+            .hover(|s| s.border_color(c(ui::line_hi())))
+            .child(Icon::new(IconName::Search).size(px(15.)))
+            .child(div().flex_1().child("Search"))
+            .child(ui::kbd(if cfg!(target_os = "macos") {
+                "⌘K"
+            } else {
+                "Ctrl K"
+            }))
+            .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx)));
+
+        let all_jobs = self.crew.store.listed().len();
         let nav = div()
             .flex()
             .flex_col()
-            .items_center()
-            .gap(px(6.))
+            .gap(px(1.))
             .child(
-                item(
-                    "side-jobs",
-                    IconName::LayoutDashboard,
-                    "Jobs",
-                    jobs_on,
-                    None,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
+                row("side-inbox", place == Place::Inbox)
+                    .child(Icon::new(IconName::Inbox).size(px(16.)))
+                    .child("Needs you")
+                    .when(inbox > 0, |d| d.child(count(inbox, Some(ui::ask_tone()))))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
             )
             .child(
-                item(
-                    "side-inbox",
-                    IconName::Inbox,
-                    "Needs you",
-                    place == Place::Inbox,
-                    (inbox > 0).then_some((inbox, ui::AMBER)),
+                row(
+                    "side-history",
+                    matches!(place, Place::History | Place::Race(_) | Place::Goal(_)),
                 )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
+                .child(Icon::new(IconName::MessageSquare).size(px(16.)))
+                .child("All jobs")
+                .when(all_jobs > 0, |d| d.child(count(all_jobs, None)))
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
             )
             .child(
-                item(
-                    "side-crew",
-                    IconName::Users,
-                    "Crew",
-                    matches!(place, Place::Crew | Place::Chat(_)),
-                    (working > 0).then_some((working, ui::BLUE)),
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+                row("side-crew", place == Place::Crew)
+                    .child(Icon::new(IconName::Users).size(px(16.)))
+                    .child("Your crew")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             )
             .child(
-                item(
-                    "side-term",
-                    IconName::SquareTerminal,
-                    "Terminal",
-                    self.term_open.is_some_and(super::term::is_project),
-                    None,
-                )
-                .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
-            )
-            .child(
-                item(
-                    "side-usage",
-                    IconName::ChartColumn,
-                    "Usage",
-                    place == Place::Usage,
-                    None,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
+                row("side-usage", place == Place::Usage)
+                    .child(Icon::new(IconName::ChartColumn).size(px(16.)))
+                    .child("Usage")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
-        let settings = item(
-            "side-settings",
-            IconName::Settings,
-            "Settings",
-            matches!(place, Place::Settings(_)),
-            None,
-        )
-        .on_click(cx.listener(|this, _, _, cx| {
-            let pane = this.settings_pane;
-            this.go(Place::Settings(pane), cx)
-        }));
+        // The project's # threads: group chats with a few bots each. #general
+        // is always there; the one you're in is lit while you're on it.
+        let in_thread = matches!(place, Place::Today);
+        let here = self.crew.store.thread_here();
+        let rows = self.thread_rows();
+        let mut threads = div().flex().flex_col().gap(px(1.)).child(
+            label("Threads").child(div().flex_1()).child(
+                div()
+                    .id("side-add-thread")
+                    .size(px(20.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::Plus).size(px(13.)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(
+                            "New thread: a group chat with a few bots",
+                        )
+                        .build(window, cx)
+                    })
+                    .on_click(cx.listener(|this, _, window, cx| this.new_thread(window, cx))),
+            ),
+        );
+        if folder.is_none() {
+            threads = threads.child(
+                row("side-pick-folder", false)
+                    .child(Icon::new(IconName::FolderOpen).size(px(16.)))
+                    .child("Pick a project folder")
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+            );
+        }
+        let here_folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        for (id, name, busy, asks) in rows {
+            let on = in_thread && id == here;
+            // Something new since you last looked, in a thread you're not in.
+            let unread = !on && self.crew.store.unread(&here_folder, id);
+            threads = threads.child(
+                row(("side-thread", id as usize), on)
+                    .child(
+                        div()
+                            .w(px(16.))
+                            .flex()
+                            .justify_center()
+                            .text_size(px(15.))
+                            .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                            .child("#"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .when(unread, |d| {
+                                d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
+                            })
+                            .child(name),
+                    )
+                    .when(unread && asks == 0 && busy == 0, |d| {
+                        d.child(div().size(px(7.)).rounded_full().bg(c(ui::VIOLET)))
+                    })
+                    .when(asks > 0, |d| d.child(count(asks, Some(ui::ask_tone()))))
+                    .when(busy > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(5.))
+                                .text_size(px(11.5))
+                                .text_color(c(ui::t_blue()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
+                                .child(busy.to_string()),
+                        )
+                    })
+                    // The thread you're in can be deleted from its row.
+                    .when(on && id != 0, |d| {
+                        d.child(
+                            div()
+                                .id(("thread-trash", id as usize))
+                                .size(px(20.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(5.))
+                                .text_color(c(ui::faint()))
+                                .hover(|s| s.text_color(c(ui::t_red())).bg(c(ui::hover())))
+                                .child(Icon::new(IconName::Trash).size(px(13.)))
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new("Delete thread")
+                                        .build(window, cx)
+                                })
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.deleting = Some(id);
+                                    cx.notify();
+                                })),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.crew.store.thread_now = id;
+                        this.crew.store.save();
+                        this.go(Place::Today, cx);
+                    })),
+            );
+        }
+
+        // The crew, as people you can message: face, name, and what each is up to.
+        let members: Vec<Member> = Member::everyone()
+            .into_iter()
+            .filter(|m| m.on_crew())
+            .collect();
+        let mut crew = div().flex().flex_col().gap(px(1.)).child(label("Crew"));
+        for who in members {
+            let (word, _) = self.status_of(who);
+            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
+            let asks = !busy
+                && self
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == who && j.needs_you());
+            let mood = self.side_mood(who);
+            let face = self.bot(who, mood, 24., runo_holo::Framing::Bust);
+            let on = place == Place::Chat(who);
+            let (word, tint) = if asks {
+                ("asks you".to_string(), ui::t_amber())
+            } else if busy {
+                (word, ui::t_blue())
+            } else if who == Member::Fin {
+                ("lead".to_string(), ui::faint())
+            } else {
+                (String::new(), ui::faint())
+            };
+            crew = crew.child(
+                row(("side-bot", who.key() as usize), on)
+                    .when(!busy && !asks && !on, |d| d.text_color(c(ui::muted())))
+                    .when(busy || asks, |d| d.text_color(c(ui::ink())))
+                    .child(face)
+                    .child(div().flex_1().min_w_0().truncate().child(who.name()))
+                    .when(!word.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tint))
+                                .child(word),
+                        )
+                    })
+                    .on_hover(
+                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+            );
+        }
+
+        let settings = div().flex().flex_col().gap(px(1.)).child(
+            row("side-settings", matches!(place, Place::Settings(_)))
+                .child(Icon::new(IconName::Settings).size(px(16.)))
+                .child("Settings")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let pane = this.settings_pane;
+                    this.go(Place::Settings(pane), cx)
+                })),
+        );
 
         div()
             .id("sidebar")
@@ -204,20 +407,242 @@ impl Shell {
             .flex_none()
             .flex()
             .flex_col()
-            .items_center()
             // On a Mac the window buttons sit in the top-left corner.
-            .pt(px(if cfg!(target_os = "macos") { 40. } else { 14. }))
+            .pt(px(if cfg!(target_os = "macos") { 38. } else { 14. }))
             .pb(px(12.))
+            .px(px(12.))
             .bg(c(ground()))
             .border_r_1()
-            .border_color(c(ui::line2()))
+            .border_color(c(ui::line()))
             .child(head)
-            .child(nav)
-            .child(div().flex_1())
-            .child(settings)
+            .child(search)
+            .child(
+                div()
+                    .id("side-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .child(nav)
+                    .child(threads)
+                    .child(crew),
+            )
+            .child(settings.pt(px(8.)))
+            .children(switcher)
+    }
+
+    /// Each live thread in the current project, #general first: its id, name,
+    /// jobs running and jobs waiting on you.
+    pub(super) fn thread_rows(&self) -> Vec<(u64, String, usize, usize)> {
+        let store = &self.crew.store;
+        let Some(folder) = store.folder() else {
+            return Vec::new();
+        };
+        let mut ids: Vec<(u64, String)> = vec![(0, "general".into())];
+        ids.extend(
+            store
+                .threads_in(&folder.path)
+                .into_iter()
+                .map(|t| (t.id, t.name.clone())),
+        );
+        ids.into_iter()
+            .map(|(id, name)| {
+                // One row per race, as everywhere else, so the counts add up.
+                let listed = store.listed();
+                let jobs: Vec<_> = listed
+                    .iter()
+                    .filter(|j| {
+                        j.folder.path == folder.path
+                            && store.thread_for(&folder.path, j.thread) == id
+                    })
+                    .collect();
+                let busy = jobs
+                    .iter()
+                    .filter(|j| matches!(j.status, Status::Running | Status::Shipping))
+                    .count();
+                let asks = jobs.iter().filter(|j| j.needs_you()).count();
+                (id, name, busy, asks)
+            })
+            .collect()
+    }
+
+    /// Starts a new thread: the composer gets `/thread ` to type its name after.
+    pub(super) fn new_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.go(Place::Today, cx);
+        self.composer.update(cx, |i, cx| {
+            ui::put_text(i, "/thread ", window, cx);
+            i.focus(window, cx);
+        });
+        cx.notify();
+    }
+
+    /// The project switcher's menu: every project folder with what's moving in
+    /// it, the ones that need you first, then Add a folder.
+    fn project_menu(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let store = &self.crew.store;
+        let mut list: Vec<(usize, String, String, usize, usize)> = store
+            .folders
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let mine = store.jobs.iter().filter(|j| j.folder.path == f.path);
+                let busy = mine
+                    .clone()
+                    .filter(|j| matches!(j.status, Status::Running | Status::Shipping))
+                    .count();
+                let asks = mine.filter(|j| j.needs_you()).count();
+                (i, f.name.clone(), short_path(&f.path), busy, asks)
+            })
+            .collect();
+        list.sort_by_key(|(i, _, _, _, asks)| (*asks == 0, *i));
+        let current = store.current;
+        let mut menu = div()
+            .id("project-menu")
+            .occlude()
+            .w(px(300.))
+            .p(px(6.))
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .rounded(px(12.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .shadow(vec![BoxShadow {
+                color: hsla(0., 0., 0., 0.14),
+                offset: point(px(0.), px(12.)),
+                blur_radius: px(32.),
+                spread_radius: px(-8.),
+                inset: false,
+            }])
+            .child(
+                div()
+                    .px(px(10.))
+                    .pt(px(6.))
+                    .pb(px(4.))
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::faint()))
+                    .child("PROJECTS"),
+            );
+        for (i, name, path, busy, asks) in list {
+            let on = i == current;
+            menu = menu.child(
+                div()
+                    .id(("project-row", i))
+                    .px(px(10.))
+                    .py(px(7.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(c(ui::well())))
+                    .hover(|s| s.bg(c(ui::hover())))
+                    .child(
+                        div()
+                            .size(px(26.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(7.))
+                            .bg(c(if on { ui::fill() } else { ui::press() }))
+                            .text_color(c(if on { ui::on_fill() } else { ui::body() }))
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::BOLD)
+                            .child(
+                                name.chars()
+                                    .next()
+                                    .unwrap_or('?')
+                                    .to_uppercase()
+                                    .to_string(),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(11.5))
+                                    .text_color(c(ui::faint()))
+                                    .child(path),
+                            ),
+                    )
+                    .when(asks > 0, |d| d.child(count(asks, Some(ui::ask_tone()))))
+                    .when(busy > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(5.))
+                                .text_size(px(11.5))
+                                .text_color(c(ui::t_blue()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
+                                .child(busy.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.folder_menu = false;
+                        this.crew.store.current = i;
+                        this.crew.store.save();
+                        this.go(Place::Today, cx);
+                    })),
+            );
+        }
+        menu = menu
+            .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
+            .child(
+                div()
+                    .id("project-add")
+                    .px(px(10.))
+                    .h(px(34.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .text_size(px(13.))
+                    .text_color(c(ui::muted()))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::FolderOpen).size(px(15.)))
+                    .child("Add a project folder")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.folder_menu = false;
+                        this.pick_folder(cx);
+                    })),
+            );
+        deferred(
+            div()
+                .absolute()
+                .top(px(if cfg!(target_os = "macos") { 84. } else { 60. }))
+                .left(px(12.))
+                .child(menu),
+        )
+        .with_priority(2)
     }
 
     /// The top bar over every page: where you are, the engine, and a new job.
+    /// "#name" for a thread of the current project.
+    fn thread_crumb(&self, thread: u64) -> String {
+        let store = &self.crew.store;
+        let here = store.folder().map(|f| f.path.clone()).unwrap_or_default();
+        format!("#{}", store.thread_label(store.thread_for(&here, thread)))
+    }
+
     pub(super) fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let folder = self
             .crew
@@ -226,27 +651,54 @@ impl Shell {
             .map(|f| f.name.clone())
             .unwrap_or_else(|| "Squad Code".into());
         let here: String = match self.place {
-            Place::Today => "Jobs".into(),
+            Place::Today => format!(
+                "#{}",
+                self.crew.store.thread_label(self.crew.store.thread_here())
+            ),
             Place::Inbox => "Needs you".into(),
             Place::History => "All jobs".into(),
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
+            // A job sits in its thread, so the path goes through it.
             Place::Live(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / #{id} {}", j.label()),
+                Some(j) => format!("{} / #{id} {}", self.thread_crumb(j.thread), j.label()),
                 None => format!("Jobs / #{id}"),
             },
             Place::Race(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / Race / {}", j.label()),
+                Some(j) => format!("{} / Race / {}", self.thread_crumb(j.thread), j.label()),
                 None => "Jobs / Race".into(),
             },
             Place::Goal(id) => match self.crew.store.goals.iter().find(|g| g.id == id) {
-                Some(g) => format!("Jobs / Goal / {}", g.text),
-                None => "Jobs / Goal".into(),
+                Some(g) => format!("{} / Plan / {}", self.thread_crumb(g.thread), g.text),
+                None => "Jobs / Plan".into(),
             },
-            Place::Settings(pane) => format!("Settings / {}", pane.name()),
+            Place::Settings(_) => "Settings".into(),
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
         };
+        // Settings apply to every project, so they get a plain title, not a path.
+        let global = matches!(self.place, Place::Settings(_));
+        // The thread a job or plan sits in: its crumb takes you back there.
+        let back_to = match self.place {
+            Place::Live(id) | Place::Race(id) => self.crew.store.job(id).map(|j| j.thread),
+            Place::Goal(id) => self
+                .crew
+                .store
+                .goals
+                .iter()
+                .find(|g| g.id == id)
+                .map(|g| g.thread),
+            _ => None,
+        }
+        .map(|t| {
+            let here = self
+                .crew
+                .store
+                .folder()
+                .map(|f| f.path.clone())
+                .unwrap_or_default();
+            self.crew.store.thread_for(&here, t)
+        });
         let running = self.crew.store.running().count();
         // Each step of the path after a chevron; the last, where you are, in full ink.
         let parts: Vec<&str> = here.split(" / ").collect();
@@ -271,9 +723,25 @@ impl Shell {
                             d.flex_none().text_color(c(ui::muted()))
                         }
                     })
-                    .child(part.to_string())
-                    .into_any_element();
-                [chev, text]
+                    .child(part.to_string());
+                let text = match back_to {
+                    Some(t) if i == 0 => text
+                        .id("crumb-thread")
+                        .cursor_pointer()
+                        .hover(|s| s.text_color(c(ui::ink())))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.crew.store.thread_now = t;
+                            this.crew.store.save();
+                            this.go(Place::Today, cx);
+                        }))
+                        .into_any_element(),
+                    _ => text.into_any_element(),
+                };
+                if global {
+                    vec![text]
+                } else {
+                    vec![chev, text]
+                }
             })
             .collect();
         let mono = folder
@@ -301,52 +769,95 @@ impl Shell {
                     .items_center()
                     .gap(px(8.))
                     .min_w_0()
-                    .child(
-                        div()
-                            .h(px(24.))
-                            .flex()
-                            .flex_none()
-                            .items_center()
-                            .gap(px(8.))
-                            .text_color(c(ui::muted()))
-                            .child(
-                                div()
-                                    .size(px(20.))
-                                    .rounded(px(5.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .bg(c(ui::raised()))
-                                    .border_1()
-                                    .border_color(c(ui::line()))
-                                    .text_size(px(10.5))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::ink()))
-                                    .child(mono),
-                            )
-                            .child(folder),
-                    )
+                    .when(!global, |d| {
+                        d.child(
+                            div()
+                                .h(px(24.))
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .gap(px(8.))
+                                .text_color(c(ui::muted()))
+                                .child(
+                                    div()
+                                        .size(px(20.))
+                                        .rounded(px(5.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .bg(c(ui::raised()))
+                                        .border_1()
+                                        .border_color(c(ui::line()))
+                                        .text_size(px(10.5))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(ui::ink()))
+                                        .child(mono),
+                                )
+                                .child(folder),
+                        )
+                    })
                     .children(crumbs),
             )
             .child(div().flex_1())
-            .when(running > 0, |d| {
-                d.child(
-                    div()
-                        .h(px(26.))
-                        .px(px(9.))
-                        .flex()
-                        .items_center()
-                        .gap(px(7.))
-                        .rounded(px(7.))
-                        .bg(c(ui::run_tone().1))
-                        .border_1()
-                        .border_color(c(ui::run_tone().2))
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::t_blue()))
-                        .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
-                        .child(format!("{running} running")),
-                )
+            // The Jobs panel toggle: what's running and what needs you, at a glance.
+            .child({
+                let asks = self.inbox_count();
+                let open = self.jobs_open;
+                div()
+                    .id("top-jobs")
+                    .h(px(30.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .cursor_pointer()
+                    .map(|d| {
+                        if open {
+                            d.bg(c(ui::hover()))
+                                .border_color(c(ui::line_hi()))
+                                .text_color(c(ui::ink()))
+                        } else {
+                            d.border_color(c(ui::line()))
+                                .text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
+                        }
+                    })
+                    .child(Icon::new(IconName::PanelRight).size(px(14.)))
+                    .child("Jobs")
+                    .when(running > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_color(c(ui::t_blue()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
+                                .child(running.to_string()),
+                        )
+                    })
+                    .when(asks > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_color(c(ui::t_amber()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_amber())))
+                                .child(asks.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.jobs_open = !this.jobs_open;
+                        // The panel sits beside a thread or a job: open it there.
+                        if this.jobs_open && !matches!(this.place, Place::Today | Place::Live(_)) {
+                            this.go(Place::Today, cx);
+                        }
+                        cx.notify();
+                    }))
             })
             // Search, as a quiet field: the palette finds places, bots and jobs.
             .child(
@@ -392,5 +903,133 @@ fn short_path(path: &str) -> String {
     match path.strip_prefix(&home) {
         Some(rest) if !home.is_empty() => format!("~{rest}"),
         _ => path.to_string(),
+    }
+}
+
+impl Shell {
+    /// "Delete #name?" over the whole window, so the choice is in front of you
+    /// rather than squeezed into the sidebar.
+    pub(super) fn delete_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let id = self.deleting?;
+        let name = self
+            .crew
+            .store
+            .threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.name.clone())?;
+        let jobs = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.thread == id)
+            .count();
+        let scrim = div()
+            .id("delete-scrim")
+            .absolute()
+            .inset_0()
+            .bg(ui::ca(0x000000, 0.28))
+            .occlude()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.deleting = None;
+                cx.notify();
+            }));
+        let card = div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .justify_center()
+            .items_center()
+            .child(
+                div()
+                    .id("delete-card")
+                    .w(px(400.))
+                    .p(px(22.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .rounded(px(16.))
+                    .bg(c(ui::panel()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .shadow(vec![BoxShadow {
+                        color: ui::ca(0x000000, 0.35),
+                        offset: point(px(0.), px(20.)),
+                        blur_radius: px(60.),
+                        spread_radius: px(-6.),
+                        inset: false,
+                    }])
+                    .occlude()
+                    .on_click(|_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .size(px(32.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(8.))
+                                    .bg(c(ui::bad_tone().1))
+                                    .child(
+                                        Icon::new(IconName::Trash)
+                                            .size(px(16.))
+                                            .text_color(c(ui::bad_tone().0)),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(format!("Delete #{name}?")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .text_color(c(ui::body()))
+                            .child(if jobs == 0 {
+                                "What was said in this thread goes. This can't be undone.".to_string()
+                            } else {
+                                format!(
+                                    "What was said in this thread goes. Its {jobs} job{} move to #general, so no work is lost.",
+                                    if jobs == 1 { "" } else { "s" }
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .mt(px(8.))
+                            .flex()
+                            .justify_end()
+                            .gap(px(8.))
+                            .child(ui::ghost("delete-cancel", "Cancel").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.deleting = None;
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
+                                ui::solid("delete-yes", "Delete thread")
+                                    .bg(c(ui::bad_tone().0))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.delete_thread(id, cx)
+                                    })),
+                            ),
+                    ),
+            );
+        Some(
+            div()
+                .absolute()
+                .inset_0()
+                .child(deferred(scrim).with_priority(5))
+                .child(deferred(card).with_priority(6))
+                .into_any_element(),
+        )
     }
 }

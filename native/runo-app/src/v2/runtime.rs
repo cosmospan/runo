@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use crate::settings::AppSettings;
 
 use super::data::{Member, Mode};
-use super::store::{self, Said, Status, Store};
+use super::store::{self, Said, Status, Store, Talk};
 use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 
 type Landing = Receiver<Result<(), String>>;
@@ -36,6 +36,8 @@ pub struct Runtime {
     pub runners: Vec<jobs::Runner>,
     /// A question on its way to a bot's engine.
     pub asking: Option<engine::Ask>,
+    /// The thread question the answer being read goes to, if it's for one.
+    pub asking_talk: Option<u64>,
     /// What the crew wants said, oldest first, until a client takes it.
     pub notes: Vec<String>,
     /// When the store was last kept while jobs ran.
@@ -70,6 +72,7 @@ impl Runtime {
             store,
             runners: Vec::new(),
             asking: None,
+            asking_talk: None,
             notes: Vec::new(),
             saved: Instant::now(),
             checking: Vec::new(),
@@ -176,7 +179,11 @@ impl Runtime {
             seen: false,
             ..Default::default()
         };
+        job.thread = self.store.thread_here();
         if let Some((goal, context)) = part {
+            if let Some(g) = self.store.goals.iter().find(|g| g.id == goal) {
+                job.thread = g.thread;
+            }
             job.goal = goal;
             job.context = context;
         }
@@ -459,6 +466,7 @@ impl Runtime {
         let id = self.store.next_id;
         let mut g = goal::Goal {
             id,
+            thread: self.store.thread_here(),
             text: text.clone(),
             folder: folder.clone(),
             started: store::now(),
@@ -1171,29 +1179,162 @@ impl Runtime {
             .filter(|m| !m.note)
             .map(|m| (m.mine, m.text.clone()))
             .collect();
-        let log = self.store.chats.entry(who).or_default();
-        log.push(Said::mine(text.clone()));
+        self.store.say_in_dm(who, Said::mine(text.clone()));
         if self.asking.is_some() {
-            log.push(Said::note(
-                "One question at a time: ask again when the last answer is in.",
-            ));
+            self.store.say_in_dm(
+                who,
+                Said::note("One question at a time: ask again when the last answer is in."),
+            );
             return;
         }
         let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
-            log.push(Said::note(
-                "Pick a folder first (on Today), so the crew knows which code to read.",
-            ));
+            self.store.say_in_dm(
+                who,
+                Said::note("Pick a folder first (on Today), so the crew knows which code to read."),
+            );
             return;
         };
-        match engine::Ask::start(st, who, &folder, &text, &history) {
+        // One conversation per bot: it knows the jobs it ran here, too.
+        let jobs: Vec<String> = self
+            .store
+            .dm_jobs(who)
+            .into_iter()
+            .rev()
+            .take(5)
+            .map(|j| {
+                let last = j
+                    .last_words()
+                    .map(|w| {
+                        w.lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(160)
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
+                format!(
+                    "- #{} \"{}\" ({}) {}",
+                    j.id,
+                    j.label(),
+                    j.status.label(),
+                    last
+                )
+            })
+            .collect();
+        let prompt = if jobs.is_empty() {
+            text.clone()
+        } else {
+            format!(
+                "(Jobs you ran in this project, newest first:\n{}\n)\n\n{text}",
+                jobs.join("\n")
+            )
+        };
+        match engine::Ask::start(st, who, &folder, &prompt, &history) {
             Ok(ask) => self.asking = Some(ask),
-            Err(why) => self
-                .store
-                .chats
-                .entry(who)
-                .or_default()
-                .push(Said::note(why)),
+            Err(why) => self.store.say_in_dm(who, Said::note(why)),
         }
+        self.store.save();
+    }
+
+    /// Asks `who` a question in the thread you're in. The answer lands in the
+    /// thread, with the thread's earlier questions as context.
+    pub fn ask_in_thread(&mut self, st: &AppSettings, who: Member, text: String) {
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            return;
+        };
+        let thread = self.store.thread_here();
+        let mut history: Vec<(bool, String)> = Vec::new();
+        // Threads named with #: the bot reads what was said there first.
+        for other in self.store.thread_refs(&folder.path, &text) {
+            if other == thread {
+                continue;
+            }
+            let said = self.store.recent(&folder.path, other);
+            if said.is_empty() {
+                continue;
+            }
+            let label = self.store.thread_label(other);
+            let lines: Vec<String> = said
+                .iter()
+                .map(|(who, words)| format!("{who}: {words}"))
+                .collect();
+            history.push((
+                true,
+                format!(
+                    "For context, here is what was said in #{label}:\n{}",
+                    lines.join("\n")
+                ),
+            ));
+            history.push((false, format!("Got it, I've read #{label}.")));
+        }
+        for t in self
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.folder == folder.path && t.thread == thread && t.bot == who)
+        {
+            if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
+                history.push((true, t.question.clone()));
+                history.push((false, a.text.clone()));
+            }
+        }
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let mut talk = Talk {
+            id,
+            folder: folder.path.clone(),
+            thread,
+            bot: who,
+            question: text.clone(),
+            answer: None,
+            at: store::now(),
+            choices: Vec::new(),
+        };
+        if self.asking.is_some() {
+            talk.answer = Some(Said::note(
+                "One question at a time: ask again when the last answer is in.",
+            ));
+        } else {
+            // Jobs named with #12 or #their-slug: a short digest of each goes first.
+            let digest = super::brain::digest::context_for(&text, &self.store.jobs);
+            let asked = if digest.is_empty() {
+                text.clone()
+            } else {
+                format!("{digest}\n\n{text}")
+            };
+            match engine::Ask::start(st, who, &folder, &asked, &history) {
+                Ok(ask) => {
+                    self.asking = Some(ask);
+                    self.asking_talk = Some(id);
+                }
+                Err(why) => talk.answer = Some(Said::note(why)),
+            }
+        }
+        self.store.talks.push(talk);
+        self.store.save();
+    }
+
+    /// Peek says something in the thread you're in without an engine: a reply
+    /// to small talk, or a question back with quick answers.
+    pub fn peek_says(&mut self, text: String, reply: String, choices: Vec<String>) {
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            return;
+        };
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let thread = self.store.thread_here();
+        self.store.talks.push(Talk {
+            id,
+            folder: folder.path,
+            thread,
+            bot: Member::Fin,
+            question: text,
+            answer: Some(Said {
+                text: reply,
+                ..Default::default()
+            }),
+            at: store::now(),
+            choices,
+        });
         self.store.save();
     }
 
@@ -1208,7 +1349,7 @@ impl Runtime {
             if let Some(reply) = ask.poll() {
                 let (who, engine) = (ask.who, ask.engine.clone());
                 let secs = ask.started.elapsed().as_secs_f32();
-                self.store.chats.entry(who).or_default().push(match reply {
+                let said = match reply {
                     engine::Reply::Answer(text) if !text.is_empty() => {
                         Said::bot(text, format!("{engine} · {secs:.0}s"))
                     }
@@ -1216,7 +1357,16 @@ impl Runtime {
                         Said::note("The engine answered with nothing. Try asking again.")
                     }
                     engine::Reply::Failed(why) => Said::note(why),
-                });
+                };
+                // A thread question's answer goes back to its thread.
+                match self
+                    .asking_talk
+                    .take()
+                    .and_then(|id| self.store.talks.iter_mut().find(|t| t.id == id))
+                {
+                    Some(t) => t.answer = Some(said),
+                    None => self.store.say_in_dm(who, said),
+                }
                 self.asking = None;
                 self.store.save();
             }

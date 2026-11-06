@@ -9,6 +9,7 @@
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
 mod brain;
+mod channel;
 mod chat;
 pub mod cli;
 mod crew;
@@ -441,19 +442,28 @@ pub struct Shell {
     usage_open: bool,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
+    /// Engines shows each bot's brain rather than the engines themselves.
+    engine_brains: bool,
     /// The Settings pane last open, where the sidebar's Settings goes back to.
     settings_pane: Pane,
     /// The bot being dressed in Settings → Mascot.
     fin_sel: Member,
     /// The state the Mascot preview holds; it plays through them all when unset.
     fin_state: Option<runo_holo::fin::State>,
-    /// The bot whose model list is open on Engines.
-    engine_open: Option<Member>,
     /// The job Home's inspector shows; the newest active one when unset.
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
     /// Which jobs the list beside a job shows: all, needing you, running or done.
+    /// The Jobs panel shows the thread you're in (false) or every job (true).
+    list_all: bool,
+    /// The Jobs panel beside a thread or job, opened from the top bar.
+    jobs_open: bool,
+    /// A thread waiting for you to confirm deleting it.
+    deleting: Option<u64>,
+    /// A risky ask Peek wants you to OK first: its message in the thread, the
+    /// words, and where it would go.
+    confirming: Option<(u64, String, brain::route::Route)>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -708,7 +718,8 @@ impl Shell {
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
-            Ok("settings") => Place::Settings(Pane::General),
+            Ok("settings") => Place::Settings(Pane::Work),
+            Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("appearance") => Place::Settings(Pane::Appearance),
             Ok("usage") => Place::Usage,
@@ -776,14 +787,18 @@ impl Shell {
             maker_open: false,
             usage_open: false,
             engine_sel: None,
-            settings_pane: Pane::General,
+            engine_brains: false,
+            settings_pane: Pane::Work,
             applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
             fin_state: None,
-            engine_open: None,
             home_pick: None,
             inbox_pick: None,
             list_filter: 0,
+            list_all: false,
+            jobs_open: false,
+            deleting: None,
+            confirming: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -978,12 +993,265 @@ impl Shell {
         .detach();
     }
 
+    /// Deletes a thread for good, once confirmed: what was said goes, and its
+    /// jobs move to #general.
+    pub(super) fn delete_thread(&mut self, id: u64, cx: &mut Context<Self>) {
+        self.deleting = None;
+        let name = self.crew.store.thread_label(id);
+        if id != 0 && self.crew.store.delete_thread(id) {
+            self.crew.store.save();
+            self.say(format!(
+                "Deleted #{name}. Its jobs are in #general, so no work is lost."
+            ));
+            self.go(Place::Today, cx);
+        }
+        cx.notify();
+    }
+
+    /// Puts a thread away: its jobs show in #general from then on, and making a
+    /// thread with its name brings it back.
+    pub(super) fn archive_thread(&mut self, id: u64, cx: &mut Context<Self>) {
+        if id == 0 {
+            self.say("#general always stays. Archive any other thread.");
+            return;
+        }
+        let name = self.crew.store.thread_label(id);
+        if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == id) {
+            t.archived = true;
+        }
+        if self.crew.store.thread_now == id {
+            self.crew.store.thread_now = 0;
+        }
+        self.crew.store.save();
+        self.say(format!(
+            "Archived #{name}. Its jobs are in #general now; /thread {name} brings it back."
+        ));
+        self.go(Place::Today, cx);
+    }
+
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        // "@Builder do this": that bot joins the thread and takes the ask,
+        // whatever its words would otherwise suggest.
+        let mention = (!text.starts_with('/')).then(|| mentioned(&text)).flatten();
+        let Some((who, rest)) = mention else {
+            return self.read_first(text, cx);
+        };
+        if self.place == Place::Today {
+            let here = self.crew.store.thread_here();
+            if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == here) {
+                if who != Member::Fin && !t.bots.contains(&who) {
+                    t.bots.push(who);
+                }
+            }
+        }
+        let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
+        self.target = Some(who);
+        self.mode = who.mode();
+        self.mode_pinned = true;
+        self.hand_over_inner(rest, cx);
+        self.target = target;
+        self.mode = mode;
+        self.mode_pinned = pinned;
+        self.crew.store.save();
+    }
+
+    /// Peek reads a message in a thread before anyone works on it: small talk
+    /// it answers itself, a question goes to an engine to answer here, a vague
+    /// ask gets a question back, and real work goes to the bot it's for. A
+    /// slash command, a picked bot or a pinned kind of work skips the read.
+    fn read_first(&mut self, text: String, cx: &mut Context<Self>) {
+        let skip = text.starts_with('/')
+            || self.place != Place::Today
+            || self.target.is_some()
+            || self.mode_pinned
+            || self.crew.store.folder().is_none();
+        if skip {
+            return self.hand_over_inner(text, cx);
+        }
+        let st = Self::app_settings(cx);
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        // Just "#name": go to that thread, as in Slack.
+        let refs = self.crew.store.thread_refs(&folder, &text);
+        if text.split_whitespace().count() == 1 && refs.len() == 1 {
+            self.crew.store.thread_now = refs[0];
+            self.crew.store.save();
+            self.go(Place::Today, cx);
+            return;
+        }
+        // Threads named with # are read too, before this one.
+        let here = self.crew.store.thread_here();
+        let mut recent = Vec::new();
+        for other in refs.iter().filter(|t| **t != here) {
+            recent.extend(self.crew.store.recent(&folder, *other));
+        }
+        recent.extend(self.crew.store.recent(&folder, here));
+        match brain::front::read(&st, &text, &recent) {
+            brain::front::Front::Chat { reply } => {
+                self.crew.peek_says(text, reply, Vec::new());
+                cx.notify();
+            }
+            brain::front::Front::AskBack { question, choices } => {
+                self.crew.peek_says(text, question, choices);
+                cx.notify();
+            }
+            brain::front::Front::Answer { question, .. } => {
+                if !self.sample_guard(cx) {
+                    let who = self.ask_who();
+                    self.crew.ask_in_thread(&st, who, question);
+                }
+                cx.notify();
+            }
+            brain::front::Front::Confirm { why, route } => {
+                self.crew
+                    .peek_says(text.clone(), why, vec!["Go ahead".into(), "Cancel".into()]);
+                let id = self.crew.store.talks.last().map(|t| t.id).unwrap_or(0);
+                self.confirming = Some((id, text, route));
+                cx.notify();
+            }
+            brain::front::Front::Hand(route) => self.hand_to(route, text, cx),
+        }
+    }
+
+    /// A choice under one of Peek's messages: the answer to a risky ask it
+    /// held, or else a reply in its own right.
+    pub(super) fn pick_choice(&mut self, talk: u64, choice: String, cx: &mut Context<Self>) {
+        match self.confirming.take() {
+            Some((id, text, route)) if id == talk => {
+                if choice == "Go ahead" {
+                    self.hand_to(route, text, cx);
+                } else {
+                    self.say("Okay, nothing started.");
+                    cx.notify();
+                }
+            }
+            held => {
+                self.confirming = held;
+                self.hand_over(choice, cx);
+            }
+        }
+    }
+
+    /// Starts an ask the way Peek routed it, without reading it again.
+    pub(super) fn hand_to(
+        &mut self,
+        route: brain::route::Route,
+        text: String,
+        cx: &mut Context<Self>,
+    ) {
+        let crew = Member::all();
+        let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
+        self.target = crew.contains(&route.bot).then_some(route.bot);
+        self.mode = route.mode;
+        self.mode_pinned = true;
+        self.hand_over_inner(text, cx);
+        self.target = target;
+        self.mode = mode;
+        self.mode_pinned = pinned;
+    }
+
+    fn hand_over_inner(&mut self, text: String, cx: &mut Context<Self>) {
+        // Slash commands from the composer.
+        let mut text = text;
+        let mut plan = false;
+        let mut race = 0;
+        if let Some(rest) = text.strip_prefix('/') {
+            let (cmd, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+            let arg = arg.trim().to_string();
+            match cmd {
+                "thread" => {
+                    if arg.is_empty() {
+                        self.say("Give the thread a name, like /thread gift cards.");
+                        return;
+                    }
+                    if self.crew.store.folder().is_none() {
+                        self.say("Pick a project folder first, then make threads in it.");
+                        self.pick_folder(cx);
+                        return;
+                    }
+                    let bots: Vec<Member> = Member::all()
+                        .into_iter()
+                        .filter(|m| {
+                            *m != Member::Fin
+                                && arg
+                                    .to_lowercase()
+                                    .contains(&format!("@{}", m.name().to_lowercase()))
+                        })
+                        .collect();
+                    let name: String = arg
+                        .split_whitespace()
+                        .filter(|w| !w.starts_with('@'))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if self.crew.store.add_thread(&name, bots).is_some() {
+                        self.crew.store.save();
+                        let label = self.crew.store.thread_label(self.crew.store.thread_now);
+                        self.say(format!("#{label} is ready. Peek joins every thread."));
+                    }
+                    self.go(Place::Today, cx);
+                    return;
+                }
+                "rename" => {
+                    let now = self.crew.store.thread_now;
+                    let name = store::thread_name(&arg);
+                    if now == 0 {
+                        self.say("#general keeps its name. Rename any other thread.");
+                    } else if name.is_empty() || name == "general" {
+                        self.say("Give the new name, like /rename gift cards.");
+                    } else if self.crew.store.rename_thread(now, &name) {
+                        self.crew.store.save();
+                        self.say(format!("Renamed to #{name}."));
+                    } else {
+                        self.say(format!("There's already a #{name} in this project."));
+                    }
+                    cx.notify();
+                    return;
+                }
+                "delete" => {
+                    let now = self.crew.store.thread_now;
+                    if now == 0 {
+                        self.say("#general always stays. Delete any other thread.");
+                    } else {
+                        self.deleting = Some(now);
+                        self.say("Confirm in the sidebar: Delete or Cancel.");
+                    }
+                    cx.notify();
+                    return;
+                }
+                "archive" => {
+                    self.archive_thread(self.crew.store.thread_now, cx);
+                    return;
+                }
+                "plan" => plan = true,
+                "race" => race = 2,
+                "ask" => {
+                    self.mode = Mode::Ask;
+                    self.mode_pinned = true;
+                }
+                _ => {
+                    self.say(format!(
+                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename, /archive or /delete."
+                    ));
+                    return;
+                }
+            }
+            text = arg;
+        }
         if !self.mode_pinned {
             self.mode = Mode::guess(&text);
         }
+        if plan && !self.mode.writes() {
+            self.mode = Mode::Build;
+        }
+        let plan =
+            plan || self.splitting || cx.global::<crate::settings::AppSettings>().v2_plan_first;
+        let racing = if race > 0 { race } else { self.racing };
         let text = match (text.is_empty(), self.mode.default_job()) {
             (false, _) => text,
             (true, Some(d)) => d.to_string(),
@@ -1000,8 +1268,8 @@ impl Shell {
                 who: Member::for_mode(self.mode),
                 mode: self.mode,
                 text,
-                goal: self.splitting && self.mode.writes(),
-                race: if self.mode.writes() { self.racing } else { 0 },
+                goal: plan && self.mode.writes(),
+                race: if self.mode.writes() { racing } else { 0 },
             });
             cx.notify();
             return;
@@ -1009,6 +1277,16 @@ impl Shell {
         self.offer = None;
         let doer = self.doer();
         if self.mode == Mode::Ask {
+            // Asked in a thread: the answer comes back in the thread.
+            if self.place == Place::Today {
+                if !self.sample_guard(cx) {
+                    let st = Self::app_settings(cx);
+                    let who = self.ask_who();
+                    self.crew.ask_in_thread(&st, who, text);
+                }
+                cx.notify();
+                return;
+            }
             self.go(Place::Chat(doer), cx);
             self.ask(doer, text, cx);
             return;
@@ -1017,12 +1295,12 @@ impl Shell {
             return;
         };
         let mode = self.mode;
-        if self.splitting && mode.writes() {
-            self.begin_goal(text, folder, cx);
+        if racing > 1 && mode.writes() {
+            self.start_race(doer, mode, text, folder, racing, cx);
             return;
         }
-        if self.racing > 1 && mode.writes() {
-            self.start_race(doer, mode, text, folder, self.racing, cx);
+        if plan && mode.writes() {
+            self.begin_goal(text, folder, cx);
             return;
         }
         self.start_job_in(doer, mode, text, folder, cx);
@@ -1033,8 +1311,37 @@ impl Shell {
     fn doer(&self) -> Member {
         self.target
             .filter(|t| t.mode() == self.mode && Member::all().contains(t))
+            .or_else(|| self.thread_doer())
             .or_else(|| Member::doer_for(self.mode))
             .unwrap_or(Member::for_mode(self.mode))
+    }
+
+    /// Who answers a question or a chat in a thread: the bot you picked, else
+    /// Peek, who leads the crew and talks about anything.
+    pub(super) fn ask_who(&self) -> Member {
+        self.target
+            .filter(|t| t.mode() == Mode::Ask && Member::all().contains(t))
+            .unwrap_or(Member::Fin)
+    }
+
+    /// In a thread with its own bots, the one of them that does this kind of
+    /// work, so the thread's work goes to the bots you put in it.
+    fn thread_doer(&self) -> Option<Member> {
+        if self.place != Place::Today {
+            return None;
+        }
+        let here = self.crew.store.thread_here();
+        let t = self.crew.store.threads.iter().find(|t| t.id == here)?;
+        let crew = Member::all();
+        t.bots
+            .iter()
+            .copied()
+            // Shipper and Peek take no jobs of their own, as in doer_for.
+            .find(|b| {
+                !matches!(b, Member::Shipper | Member::Fin)
+                    && b.mode() == self.mode
+                    && crew.contains(b)
+            })
     }
 
     /// Adds the bot in the maker to the crew.
@@ -1127,7 +1434,7 @@ impl Shell {
     pub(super) fn skip_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(o) = self.offer.take() else { return };
         self.composer
-            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+            .update(cx, |i, cx| ui::put_text(i, o.text, window, cx));
         cx.notify();
     }
 
@@ -1136,7 +1443,7 @@ impl Shell {
     pub(super) fn make_for_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(o) = self.offer.take() else { return };
         self.composer
-            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+            .update(cx, |i, cx| ui::put_text(i, o.text, window, cx));
         if Member::KINDS.contains(&o.who) {
             self.maker_like = Some(o.who);
         }
@@ -1275,6 +1582,11 @@ impl Shell {
 
     /// Goes to what starting something opened.
     fn open(&mut self, opened: runtime::Opened, cx: &mut Context<Self>) {
+        // Asked in a thread: the job's card shows up right there, so stay.
+        if self.place == Place::Today {
+            cx.notify();
+            return;
+        }
         let place = match opened {
             runtime::Opened::Job(id) | runtime::Opened::Busy(id) => Place::Live(id),
             runtime::Opened::Race(id) => Place::Race(id),
@@ -1444,6 +1756,16 @@ impl Shell {
             return;
         }
         self.crew.approve(id);
+        // Hands off: a pull request Shipper opens merges once its checks pass.
+        if cx.global::<crate::settings::AppSettings>().v2_auto_merge
+            && self
+                .crew
+                .store
+                .job(id)
+                .is_some_and(|j| j.status == store::Status::Shipping)
+        {
+            self.crew.set_auto_merge(id, true);
+        }
         cx.notify();
     }
 
@@ -1791,7 +2113,7 @@ impl Render for Shell {
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
-            Place::Today => self.today(cx),
+            Place::Today => self.channel(cx),
             Place::Live(id) => {
                 let detail = self.live(id, cx);
                 self.split(Some(id), detail, cx)
@@ -1845,6 +2167,8 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
+        // Settings has its own title column, so no bar across the top.
+        let bare = matches!(self.place, Place::Settings(_));
         let project_drawer = self.project_drawer(cx);
         let root = div()
             .size_full()
@@ -1868,6 +2192,12 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
+                if this.deleting.is_some() && key == "escape" {
+                    this.deleting = None;
+                    cx.notify();
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.palette && !m.platform && !m.control {
                     if this.palette_key(key, window, cx) {
                         cx.stop_propagation();
@@ -1939,7 +2269,8 @@ impl Render for Shell {
                     .flex_col()
                     // Full height on its own; as a canvas, it stretches between its margins.
                     .when(setup, |d| d.h_full())
-                    .when(!setup, |d| d.bg(c(ui::bg())).child(self.topbar(cx)))
+                    .when(!setup, |d| d.bg(c(ui::bg())))
+                    .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
                             .flex_1()
@@ -1958,6 +2289,7 @@ impl Render for Shell {
                 d.child(self.usage_popover(cx))
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
+            .children(self.delete_dialog(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
@@ -2133,4 +2465,21 @@ mod drop_tests {
         assert_eq!(got, vec![dir.clone(), dir.join("sub")]);
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// The first crew bot named with @ in a message, and the message without it.
+fn mentioned(text: &str) -> Option<(Member, String)> {
+    let crew = Member::all();
+    let mut found = None;
+    let mut rest = Vec::new();
+    for word in text.split_whitespace() {
+        let name = word
+            .strip_prefix('@')
+            .map(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric()));
+        match name.and_then(|n| crew.iter().find(|m| m.name().eq_ignore_ascii_case(n))) {
+            Some(m) if found.is_none() => found = Some(*m),
+            _ => rest.push(word),
+        }
+    }
+    found.map(|m| (m, rest.join(" ")))
 }

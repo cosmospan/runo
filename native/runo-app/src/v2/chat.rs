@@ -37,7 +37,15 @@ impl Shell {
             Framing::Full,
         );
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
-        let log = self.crew.store.chat(who).to_vec();
+        let log = self.crew.store.chat(who);
+        let jobs: Vec<super::store::Job> =
+            self.crew.store.dm_jobs(who).into_iter().cloned().collect();
+        let project = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "this project".into());
         let header = div()
             .flex_none()
             .flex()
@@ -66,7 +74,12 @@ impl Shell {
                         div()
                             .text_size(px(13.))
                             .text_color(c(ui::muted()))
-                            .child(format!("{} · reads the code, never changes it", who.role())),
+                            .child(format!(
+                                "{} \u{b7} your one DM with {} in {}. Its jobs here show up too.",
+                                who.role(),
+                                who.name(),
+                                project
+                            )),
                     ),
             )
             .child(
@@ -98,7 +111,7 @@ impl Shell {
                 d.child(
                     ui::ghost_i("chat-clear", IconName::Eraser, "Clear").on_click(cx.listener(
                         move |this, _, _, cx| {
-                            this.crew.store.chats.remove(&who);
+                            this.crew.store.clear_dm(who);
                             this.crew.store.save();
                             cx.notify();
                         },
@@ -107,9 +120,11 @@ impl Shell {
             });
 
         let mut body = div().flex().flex_col().gap(px(14.)).px(px(28.)).py(px(24.));
-        if log.is_empty() {
+        if log.is_empty() && jobs.is_empty() {
             body = body.child(self.chat_empty(who, cx));
         }
+        // The bot's jobs sit among the lines, by when they started.
+        let mut jobs = jobs.into_iter().peekable();
         // The newest line slides in when it arrives.
         let last = log.len().saturating_sub(1);
         let fresh = if self.motion {
@@ -118,6 +133,9 @@ impl Shell {
             1.0
         };
         for (i, m) in log.iter().enumerate() {
+            while let Some(j) = jobs.next_if(|j| m.at > 0 && j.started <= m.at) {
+                body = body.child(self.job_entry(&j, cx));
+            }
             let k = if i == last { fresh } else { 1.0 };
             let row: Div = if m.mine {
                 div().child(
@@ -173,6 +191,9 @@ impl Shell {
             };
             body = body.child(ui::rise(row, k));
         }
+        for j in jobs {
+            body = body.child(self.job_entry(&j, cx));
+        }
         if thinking {
             let secs = self
                 .crew
@@ -207,15 +228,19 @@ impl Shell {
                 };
                 body = body.child(div().ml(px(40.)).flex().gap(px(8.)).child(
                     ui::ghost("hand-off", format!("Make it a job for {}", doer.name())).on_click(
-                        cx.listener(move |this, _, window, cx| {
-                            this.set_mode(mode, window, cx);
-                            this.target = Some(doer);
-                            this.composer
-                                .update(cx, |i, cx| i.set_value(q.clone(), window, cx));
-                            this.go(Place::Today, cx);
-                            this.say(
-                                "It's in the box on Today. Edit it if you like, then press Enter.",
-                            );
+                        cx.listener(move |this, _, _, cx| {
+                            let route = super::brain::route::Route {
+                                mode,
+                                bot: doer,
+                                sure: 1.0,
+                                why: String::new(),
+                                by: "dm".into(),
+                            };
+                            this.hand_to(route, q.clone(), cx);
+                            // The job's card lands in this DM.
+                            if doer == who {
+                                this.go(Place::Chat(who), cx);
+                            }
                         }),
                     ),
                 ));

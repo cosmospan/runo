@@ -396,19 +396,43 @@ impl Shell {
         detail: AnyElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let list = self.job_list(pick, cx);
+        // Crew Chat: the conversation in front, and the Jobs panel on its right
+        // only when you open it from the top bar.
+        let list = self.jobs_open.then(|| self.job_list(pick, cx));
         div()
             .size_full()
             .flex()
-            .child(list)
             .child(div().flex_1().min_w_0().h_full().child(detail))
+            .children(list)
             .into_any_element()
     }
 
     /// The job list: filters, then what needs you, what's running and what
     /// finished, one row per job with the bot's face.
     fn job_list(&mut self, pick: Option<u64>, cx: &mut Context<Self>) -> impl IntoElement {
-        let all: Vec<Job> = self.crew.store.listed().into_iter().cloned().collect();
+        // The thread in view: the picked job's, else the one you're in.
+        let store = &self.crew.store;
+        let (folder, thread) = match pick.and_then(|id| store.job(id)) {
+            Some(j) => (
+                j.folder.path.clone(),
+                store.thread_for(&j.folder.path, j.thread),
+            ),
+            None => (
+                store.folder().map(|f| f.path.clone()).unwrap_or_default(),
+                store.thread_here(),
+            ),
+        };
+        let thread_name = store.thread_label(thread);
+        let scoped = !self.list_all;
+        let all: Vec<Job> = store
+            .listed()
+            .into_iter()
+            .filter(|j| {
+                !scoped
+                    || (j.folder.path == folder && store.thread_for(&folder, j.thread) == thread)
+            })
+            .cloned()
+            .collect();
         let running = |j: &Job| matches!(j.status, Status::Running | Status::Shipping);
         let needs: Vec<Job> = all.iter().filter(|j| j.needs_you()).cloned().collect();
         let going: Vec<Job> = all
@@ -503,6 +527,47 @@ impl Shell {
                     )
                     .child(div().flex_1())
                     .child(
+                        div()
+                            .id("list-scope")
+                            .flex()
+                            .items_center()
+                            .p(px(2.))
+                            .rounded(px(8.))
+                            .bg(c(ui::press()))
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .cursor_pointer()
+                            .children(
+                                [
+                                    (false, format!("#{thread_name}")),
+                                    (true, "All".to_string()),
+                                ]
+                                .map(|(all, label)| {
+                                    let on = self.list_all == all;
+                                    div()
+                                        .max_w(px(120.))
+                                        .truncate()
+                                        .px(px(8.))
+                                        .h(px(22.))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(px(6.))
+                                        .map(|d| {
+                                            if on {
+                                                d.bg(c(ui::raised())).text_color(c(ui::ink()))
+                                            } else {
+                                                d.text_color(c(ui::muted()))
+                                            }
+                                        })
+                                        .child(label)
+                                }),
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.list_all = !this.list_all;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
                         ui::icon_btn("list-all", IconName::ListFilter)
                             .size(px(28.))
                             .tooltip(|window, cx| {
@@ -562,9 +627,9 @@ impl Shell {
             .h_full()
             .flex()
             .flex_col()
-            .bg(c(ui::panel()))
-            .border_r_1()
-            .border_color(c(ui::line2()))
+            .bg(c(ui::ground()))
+            .border_l_1()
+            .border_color(c(ui::line()))
             .child(head)
             .child(body)
     }
