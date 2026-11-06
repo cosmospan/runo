@@ -23,6 +23,7 @@
 //! that model, in the same prompt format the model is asked in.
 
 pub mod cli;
+pub mod digest;
 pub mod front;
 pub mod helper;
 pub mod ideas;

@@ -180,6 +180,15 @@ impl Runtime {
             job.goal = goal;
             job.context = context;
         }
+        // Threads the person points at with #, as a short digest each.
+        let refs = brain::digest::context_for(text, &self.store.jobs);
+        if !refs.is_empty() {
+            job.context = if job.context.is_empty() {
+                refs
+            } else {
+                format!("{}\n\n{refs}", job.context)
+            };
+        }
         // Peek's short title for the card, when Smart Peek is on.
         if let Some(rx) = brain::tasks::ask(st, &job, false) {
             self.peeking.push((job.id, rx));
@@ -354,6 +363,7 @@ impl Runtime {
     /// More words for a job: while it runs they wait; once it's done they start a
     /// follow-up that continues the same conversation when the engine can.
     pub fn follow_up(&mut self, st: &AppSettings, id: u64, text: String) {
+        let refs = brain::digest::context_for(&text, &self.store.jobs);
         let Some(job) = self.store.job_mut(id) else {
             return;
         };
@@ -362,6 +372,11 @@ impl Runtime {
             return;
         }
         job.feed.push(store::Item::You(text.clone()));
+        let text = if refs.is_empty() {
+            text
+        } else {
+            format!("{text}\n\n{refs}")
+        };
         match jobs::start(st, job, &text, true) {
             Ok(r) => self.runners.push(r),
             Err(why) => job.feed.push(store::Item::Error(why)),
