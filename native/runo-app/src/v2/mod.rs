@@ -2368,13 +2368,14 @@ fn backdrop() -> Option<AnyElement> {
 
 /// What the window looks like: the theme, whether transparency is on, and how
 /// see-through it is.
-type Look = (&'static str, bool, u8);
+type Look = (&'static str, bool, u8, bool);
 
 fn look() -> Look {
     (
         ui::theme().id,
         theme::see_through(),
         (theme::amount() * 100.).round() as u8,
+        theme::glass_popovers(),
     )
 }
 
@@ -2426,6 +2427,7 @@ pub fn open_window(cx: &mut App) {
     let st = cx.global::<crate::settings::AppSettings>();
     ui::set_theme(&st.v2_theme);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
+    theme::set_glass_popovers(st.v2_glass_popovers);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
