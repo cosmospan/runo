@@ -346,35 +346,15 @@ impl Shell {
             );
         }
 
-        let settings = div()
-            .flex()
-            .flex_col()
-            .gap(px(1.))
-            .child(
-                row(
-                    "side-term",
-                    self.term_open.is_some_and(super::term::is_project),
-                )
-                .child(Icon::new(IconName::SquareTerminal).size(px(16.)))
-                .child("Terminal")
-                .child(
-                    div()
-                        .ml_auto()
-                        .text_size(px(11.))
-                        .text_color(c(ui::faint()))
-                        .child("Ctrl `"),
-                )
-                .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
-            )
-            .child(
-                row("side-settings", matches!(place, Place::Settings(_)))
-                    .child(Icon::new(IconName::Settings).size(px(16.)))
-                    .child("Settings")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let pane = this.settings_pane;
-                        this.go(Place::Settings(pane), cx)
-                    })),
-            );
+        let settings = div().flex().flex_col().gap(px(1.)).child(
+            row("side-settings", matches!(place, Place::Settings(_)))
+                .child(Icon::new(IconName::Settings).size(px(16.)))
+                .child("Settings")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    let pane = this.settings_pane;
+                    this.go(Place::Settings(pane), cx)
+                })),
+        );
 
         div()
             .id("sidebar")
