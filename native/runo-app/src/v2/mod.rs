@@ -442,6 +442,8 @@ pub struct Shell {
     usage_open: bool,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
+    /// Engines shows each bot's brain rather than the engines themselves.
+    engine_brains: bool,
     /// The Settings pane last open, where the sidebar's Settings goes back to.
     settings_pane: Pane,
     /// The bot being dressed in Settings → Mascot.
@@ -787,6 +789,7 @@ impl Shell {
             maker_open: false,
             usage_open: false,
             engine_sel: None,
+            engine_brains: false,
             settings_pane: Pane::Work,
             applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
@@ -2187,6 +2190,12 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
+                if this.deleting.is_some() && key == "escape" {
+                    this.deleting = None;
+                    cx.notify();
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.palette && !m.platform && !m.control {
                     if this.palette_key(key, window, cx) {
                         cx.stop_propagation();
@@ -2278,6 +2287,7 @@ impl Render for Shell {
                 d.child(self.usage_popover(cx))
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
+            .children(self.delete_dialog(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())

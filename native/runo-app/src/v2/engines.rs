@@ -53,6 +53,52 @@ pub(super) fn choice(
         .child(label.into())
 }
 
+/// The command that installs agent `id`'s command-line tool here.
+fn install_cmd(id: &str) -> Option<String> {
+    crate::registry::spec(id).and_then(|s| {
+        s.install
+            .npm
+            .as_ref()
+            .map(|n| format!("npm install -g {n}"))
+            .or_else(|| {
+                if cfg!(windows) {
+                    s.install.windows.clone()
+                } else {
+                    s.install.unix.clone()
+                }
+            })
+    })
+}
+
+/// The command that brings agent `id`'s tool to its newest version: npm's
+/// latest, or the vendor's script again (it installs over the old one).
+fn update_cmd(id: &str) -> Option<String> {
+    let s = crate::registry::spec(id)?;
+    match s.install.npm.as_ref().or(s.package.as_ref()) {
+        Some(n) => Some(format!("npm install -g {n}@latest")),
+        None => install_cmd(id),
+    }
+}
+
+/// One tab over the page: its label, underlined when it's the one shown.
+fn tab(id: &'static str, label: &'static str, on: bool) -> Stateful<Div> {
+    div()
+        .id(id)
+        .pb(px(10.))
+        .mb(px(-1.))
+        .border_b_2()
+        .border_color(c(if on { ui::ink() } else { ui::bg() }).opacity(if on { 1. } else { 0. }))
+        .text_size(px(14.))
+        .font_weight(if on {
+            FontWeight::SEMIBOLD
+        } else {
+            FontWeight::NORMAL
+        })
+        .text_color(c(if on { ui::ink() } else { ui::muted() }))
+        .cursor_pointer()
+        .child(label)
+}
+
 pub(super) fn section(title: &'static str, line: &'static str) -> Div {
     div()
         .flex()
@@ -293,6 +339,8 @@ impl Shell {
             );
 
         let none_ready = ready.is_empty();
+        let brains_tab = self.engine_brains;
+        let add = self.add_engine(&ready, cx);
         div()
             .id("engines")
             .size_full()
@@ -315,15 +363,37 @@ impl Shell {
                                     .mt(px(6.))
                                     .text_size(px(13.5))
                                     .text_color(c(ui::muted()))
-                                    .child("Every bot works through a coding agent you already use. Pick each bot's brain here."),
+                                    .child("Every bot works through an agent on this computer. Add and update engines, or pick each bot's brain."),
                             ),
                     )
-                    .child(brains)
-                    .child(section(
-                        "Engines on this computer",
-                        "What's installed, what each costs today, and its models.",
-                    ))
-                    .when(none_ready, |d| {
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(20.))
+                            .border_b_1()
+                            .border_color(c(ui::line()))
+                            .child(tab("eng-tab-engines", "Engines", !brains_tab).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.engine_brains = false;
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(tab("eng-tab-brains", "Bot brains", brains_tab).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.engine_brains = true;
+                                    cx.notify();
+                                }),
+                            )),
+                    )
+                    .when(brains_tab, |d| d.child(brains))
+                    .when(!brains_tab, |d| {
+                        d.child(section(
+                            "Engines on this computer",
+                            "Install a new one, update one, or pick the default for new jobs.",
+                        ))
+                        .children(add)
+                    })
+                    .when(none_ready && !brains_tab, |d| {
                         d.child(
                             div()
                                 .text_size(px(13.))
@@ -331,17 +401,96 @@ impl Shell {
                                 .child("None of the agents' command-line tools were found. Install one (for example Claude Code or Codex) and it shows up here."),
                         )
                     })
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(space::M))
-                            .items_start()
-                            .child(list)
-                            .child(detail),
-                    )
-                    .child(brain),
+                    .when(!brains_tab, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .gap(px(space::M))
+                                .items_start()
+                                .child(list)
+                                .child(detail),
+                        )
+                        .child(brain)
+                    }),
             )
             .into_any_element()
+    }
+
+    /// Runs an install or update in the terminal drawer, so you watch it and
+    /// can answer if it asks; with no folder open, copies it instead.
+    fn run_setup(&mut self, cmd: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.crew.store.folder().is_some() {
+            let id = super::term::project_id(self.crew.store.current);
+            self.term_run(id, cmd, window, cx);
+            self.say("Running in the terminal below. Once it's done, sign in once and the engine shows as ready.");
+        } else {
+            cx.write_to_clipboard(ClipboardItem::new_string(cmd.to_string()));
+            self.say("Copied. Open a folder to run it here, or paste it in a terminal.");
+        }
+        cx.notify();
+    }
+
+    /// Engines you could add: each one not on this computer, with its
+    /// one-click Install.
+    fn add_engine(&mut self, ready: &[usize], cx: &mut Context<Self>) -> Option<Div> {
+        let missing: Vec<usize> = (0..agent::PROVIDERS.len())
+            .filter(|i| !ready.contains(i))
+            .filter(|&i| install_cmd(agent::PROVIDERS[i].id).is_some())
+            .collect();
+        if missing.is_empty() {
+            return None;
+        }
+        let mut row = div().flex().flex_wrap().gap(px(8.));
+        for i in missing {
+            let p = &agent::PROVIDERS[i];
+            let cmd = install_cmd(p.id).unwrap_or_default();
+            row = row.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .pl(px(6.))
+                    .pr(px(4.))
+                    .py(px(4.))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .bg(c(ui::panel()))
+                    .child(
+                        div()
+                            .size(px(24.))
+                            .rounded(px(7.))
+                            .bg(ca(p.color, 0.18))
+                            .text_color(c(p.color))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::BOLD)
+                            .child(p.mark),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(p.name),
+                    )
+                    .child(ui::ghost(("engine-add", i), "Install").h(px(26.)).on_click(
+                        cx.listener(move |this, _, window, cx| {
+                            this.engine_sel = Some(i);
+                            this.run_setup(&cmd, window, cx)
+                        }),
+                    )),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(8.))
+                .child(ui::caption("ADD AN ENGINE"))
+                .child(row),
+        )
     }
 
     /// Bot brains: every bot on one row with the engine and model it thinks
@@ -593,13 +742,7 @@ impl Shell {
             .overflow_hidden()
             .flex()
             .flex_col();
-        let missing: Vec<usize> = (0..agent::PROVIDERS.len())
-            .filter(|i| !ready.contains(i))
-            .collect();
-        for (title, group) in [
-            ("On this computer", ready.to_vec()),
-            ("Not installed", missing),
-        ] {
+        for (title, group) in [("On this computer", ready.to_vec())] {
             if group.is_empty() {
                 continue;
             }
@@ -786,6 +929,11 @@ impl Shell {
         } else if ok {
             head = head.child(ui::status(ui::GREEN, "Default for new jobs"));
         }
+        if let Some(cmd) = update_cmd(id).filter(|_| ok) {
+            head = head.child(ui::ghost("engine-update", "Update").on_click(
+                cx.listener(move |this, _, window, cx| this.run_setup(&cmd, window, cx)),
+            ));
+        }
         let mut body = ui::card()
             .flex_1()
             .min_w_0()
@@ -795,19 +943,7 @@ impl Shell {
             .gap(px(space::M))
             .child(head);
         if !ok {
-            let install = crate::registry::spec(id).and_then(|s| {
-                s.install
-                    .npm
-                    .as_ref()
-                    .map(|n| format!("npm install -g {n}"))
-                    .or_else(|| {
-                        if cfg!(windows) {
-                            s.install.windows.clone()
-                        } else {
-                            s.install.unix.clone()
-                        }
-                    })
-            });
+            let install = install_cmd(id);
             body = body.child(
                 div()
                     .text_size(px(13.))
@@ -836,6 +972,12 @@ impl Shell {
                                 .truncate()
                                 .child(cmd),
                         )
+                        .child({
+                            let run = copy.clone();
+                            ui::solid("engine-install", "Install").on_click(cx.listener(
+                                move |this, _, window, cx| this.run_setup(&run, window, cx),
+                            ))
+                        })
                         .child(ui::ghost("engine-copy", "Copy").on_click(cx.listener(
                             move |this, _, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));

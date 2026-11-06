@@ -270,54 +270,6 @@ impl Shell {
             let on = in_thread && id == here;
             // Something new since you last looked, in a thread you're not in.
             let unread = !on && self.crew.store.unread(&here_folder, id);
-            if self.deleting == Some(id) {
-                threads = threads.child(
-                    div()
-                        .my(px(2.))
-                        .p(px(10.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(8.))
-                        .rounded(px(8.))
-                        .border_1()
-                        .border_color(c(ui::bad_tone().2))
-                        .bg(c(ui::bad_tone().1))
-                        .child(
-                            div()
-                                .text_size(px(12.5))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(ui::ink()))
-                                .child(format!("Delete #{name}?")),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.5))
-                                .text_color(c(ui::muted()))
-                                .child("What was said here goes. Its jobs move to #general."),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap(px(6.))
-                                .child(
-                                    ui::solid(("thread-delete", id as usize), "Delete")
-                                        .h(px(26.))
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            this.delete_thread(id, cx)
-                                        })),
-                                )
-                                .child(
-                                    ui::ghost(("thread-keep", id as usize), "Cancel")
-                                        .h(px(26.))
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.deleting = None;
-                                            cx.notify();
-                                        })),
-                                ),
-                        ),
-                );
-                continue;
-            }
             threads = threads.child(
                 row(("side-thread", id as usize), on)
                     .child(
@@ -951,5 +903,133 @@ fn short_path(path: &str) -> String {
     match path.strip_prefix(&home) {
         Some(rest) if !home.is_empty() => format!("~{rest}"),
         _ => path.to_string(),
+    }
+}
+
+impl Shell {
+    /// "Delete #name?" over the whole window, so the choice is in front of you
+    /// rather than squeezed into the sidebar.
+    pub(super) fn delete_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let id = self.deleting?;
+        let name = self
+            .crew
+            .store
+            .threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.name.clone())?;
+        let jobs = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.thread == id)
+            .count();
+        let scrim = div()
+            .id("delete-scrim")
+            .absolute()
+            .inset_0()
+            .bg(ui::ca(0x000000, 0.28))
+            .occlude()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.deleting = None;
+                cx.notify();
+            }));
+        let card = div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .justify_center()
+            .items_center()
+            .child(
+                div()
+                    .id("delete-card")
+                    .w(px(400.))
+                    .p(px(22.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .rounded(px(16.))
+                    .bg(c(ui::panel()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .shadow(vec![BoxShadow {
+                        color: ui::ca(0x000000, 0.35),
+                        offset: point(px(0.), px(20.)),
+                        blur_radius: px(60.),
+                        spread_radius: px(-6.),
+                        inset: false,
+                    }])
+                    .occlude()
+                    .on_click(|_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .size(px(32.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(8.))
+                                    .bg(c(ui::bad_tone().1))
+                                    .child(
+                                        Icon::new(IconName::Trash)
+                                            .size(px(16.))
+                                            .text_color(c(ui::bad_tone().0)),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(format!("Delete #{name}?")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .text_color(c(ui::body()))
+                            .child(if jobs == 0 {
+                                "What was said in this thread goes. This can't be undone.".to_string()
+                            } else {
+                                format!(
+                                    "What was said in this thread goes. Its {jobs} job{} move to #general, so no work is lost.",
+                                    if jobs == 1 { "" } else { "s" }
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .mt(px(8.))
+                            .flex()
+                            .justify_end()
+                            .gap(px(8.))
+                            .child(ui::ghost("delete-cancel", "Cancel").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.deleting = None;
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
+                                ui::solid("delete-yes", "Delete thread")
+                                    .bg(c(ui::bad_tone().0))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.delete_thread(id, cx)
+                                    })),
+                            ),
+                    ),
+            );
+        Some(
+            div()
+                .absolute()
+                .inset_0()
+                .child(deferred(scrim).with_priority(5))
+                .child(deferred(card).with_priority(6))
+                .into_any_element(),
+        )
     }
 }
