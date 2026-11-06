@@ -1381,7 +1381,14 @@ impl Shell {
                         .flex()
                         .flex_col()
                         .gap(px(space::SM))
-                        .child(heading("Solid", "An opaque window, quickest to draw."))
+                        .child(heading(
+                            "Solid",
+                            if theme::see_through() {
+                                "Opaque by design, see-through while the window switch is on."
+                            } else {
+                                "An opaque window, quickest to draw."
+                            },
+                        ))
                         .child(solid),
                 )
                 .child(

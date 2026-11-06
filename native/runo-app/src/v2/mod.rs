@@ -2285,7 +2285,13 @@ impl Render for Shell {
             .font_family("Geist")
             .text_color(c(ui::ink()))
             // The ground the sidebar sits on; the page floats over it as a canvas.
-            .bg(c(if setup { ui::bg() } else { ui::ground() }))
+            // When the desktop shows through, the sidebar and the page each paint
+            // their own ground instead: stacked, two see-through layers would add
+            // up to nearly solid.
+            .when(!theme::window_clear(), |d| {
+                d.bg(c(if setup { ui::bg() } else { ui::ground() }))
+            })
+            .when(theme::window_clear() && setup, |d| d.bg(c(ui::bg())))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
