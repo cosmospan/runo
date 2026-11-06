@@ -1509,10 +1509,14 @@ impl Shell {
                 continue;
             };
             if self.place != Place::Live(*id) {
+                // A job that changed files is waiting for review by now.
                 let msg = match j.status {
-                    Status::Done => {
-                        format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.label())
-                    }
+                    Status::Done | Status::Review => format!(
+                        "{} finished \u{201c}{}\u{201d}. {}",
+                        j.bot.name(),
+                        j.label(),
+                        brain::tasks::facts(&j)
+                    ),
                     _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.label()),
                 };
                 self.say(msg);
@@ -1520,10 +1524,13 @@ impl Shell {
             // Squad Code is behind other windows: tell the person on the desktop.
             if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
                 let title = match j.status {
-                    Status::Done => format!("{} finished", j.bot.name()),
+                    Status::Done | Status::Review => format!("{} finished", j.bot.name()),
                     _ => format!("{} stopped", j.bot.name()),
                 };
-                crate::settings::notify(&title, j.label());
+                crate::settings::notify(
+                    &title,
+                    &format!("{}: {}", j.label(), brain::tasks::facts(&j)),
+                );
             }
         }
     }

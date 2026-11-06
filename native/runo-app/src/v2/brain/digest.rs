@@ -114,14 +114,18 @@ pub fn digest(j: &Job) -> String {
     }) {
         lines.push(format!("The person added: {}", clip(said, 200)));
     }
+    let said = j.feed.iter().rev().find_map(|i| match i {
+        Item::Text(t) if !t.trim().is_empty() => Some(clip(t, 400)),
+        _ => None,
+    });
     let ended = if !j.recap.is_empty() {
         Some(j.recap.clone())
+    } else if said.is_some() {
+        said
+    } else if j.status != Status::Running {
+        Some(super::tasks::facts(j))
     } else {
-        j.feed.iter().rev().find_map(|i| match i {
-            Item::Text(t) if !t.trim().is_empty() => Some(clip(t, 400)),
-            Item::Error(t) if j.status == Status::Failed => Some(clip(t, 200)),
-            _ => None,
-        })
+        None
     };
     if let Some(e) = ended {
         lines.push(format!("It ended with: {e}"));
