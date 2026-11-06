@@ -296,6 +296,10 @@ pub struct AppSettings {
     /// empty is the published one.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub brain_model_url: String,
+    /// Settings this build doesn't know, such as ones a newer or older Squad Code
+    /// wrote. Kept as they are, so saving never drops them.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// The engine under one of Runo v2's bots.
@@ -418,6 +422,7 @@ impl Default for AppSettings {
             brain_model: String::new(),
             brain_url: String::new(),
             brain_model_url: String::new(),
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -1564,6 +1569,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn settings_it_doesnt_know_survive_a_save() {
+        let s: AppSettings =
+            serde_json::from_str(r#"{"theme":"dark","v2_theme":"daylight","later":{"a":1}}"#)
+                .unwrap();
+        assert_eq!(s.theme, "dark");
+        let back = serde_json::to_value(&s).unwrap();
+        assert_eq!(back["v2_theme"], "daylight");
+        assert_eq!(back["later"]["a"], 1);
+        assert!(!s.extra.contains_key("theme"));
     }
 
     #[test]
