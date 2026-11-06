@@ -52,6 +52,8 @@ pub enum State {
 #[serde(default)]
 pub struct Goal {
     pub id: u64,
+    /// The # thread it was planned in; 0 is the project's #general.
+    pub thread: u64,
     pub text: String,
     pub folder: Folder,
     pub steps: Vec<Step>,

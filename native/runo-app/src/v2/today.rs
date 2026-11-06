@@ -311,7 +311,7 @@ impl Shell {
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
-                                    .text_color(c(if ready { ui::on_fill() } else { 0xFFFFFF })),
+                                    .text_color(c(if ready { ui::on_fill() } else { ui::faint() })),
                             )
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let text = this.composer.read(cx).value().trim().to_string();
@@ -338,7 +338,7 @@ impl Shell {
 
     /// Fin's question when a job needs a bot nobody on the crew is: add it and
     /// start, make your own, or not now.
-    fn fin_offer(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    pub(super) fn fin_offer(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let (who, mode, text) = {
             let o = self.offer.as_ref()?;
             (o.who, o.mode, o.text.clone())

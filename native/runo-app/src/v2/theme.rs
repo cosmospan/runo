@@ -9,8 +9,13 @@
 //! carry an opacity in the top byte of the colour (`0xAARRGGBB`); a top byte of zero
 //! means solid, so every plain `0xRRGGBB` colour still reads as it always did.
 //! `ui::c` and `ui::ca` honour it.
+//!
+//! Window transparency, under Settings > Appearance, makes any theme see-through:
+//! a switch and a slider thin every surface towards the theme's own floor, and lift
+//! the quieter text towards the brightest, so it stays readable over the desktop.
+//! With the switch off, every theme looks exactly as it is written below.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 /// Squad Code's own voice: its suggestions and the selected row.
 pub const RUNO: u32 = 0x7B4DF5;
@@ -100,7 +105,41 @@ const fn glass_tones(blue: u32, amber: u32, green: u32, red: u32, grey: u32) -> 
     ]
 }
 
-pub const THEMES: [Theme; 7] = [
+pub const THEMES: [Theme; 8] = [
+    // Crew Chat: the default. A white page, a soft grey sidebar and Jobs panel,
+    // and violet for the crew's own voice, so the bots' glowing faces stand out.
+    Theme {
+        id: "crew-chat",
+        name: "Crew Chat",
+        line: "Bright and calm, the default",
+        light: true,
+        frosted: false,
+        bg: 0xFFFFFF,
+        panel: 0xFFFFFF,
+        raised: 0xFFFFFF,
+        hover: 0xF1F1F5,
+        press: 0xE6E6EC,
+        ink: 0x16161D,
+        body: 0x3A3A44,
+        muted: 0x62626E,
+        faint: 0x84848F,
+        line_c: 0xE6E6EC,
+        line2: 0xEDEDF2,
+        line_hi: 0xD4D4DD,
+        fill: 0x16161D,
+        fill_hover: 0x2C2C35,
+        fill_press: 0x42424C,
+        on_fill: 0xFFFFFF,
+        well: 0xF6F6F9,
+        t_blue: 0x1D5AC4,
+        t_amber: 0x9A5E00,
+        t_green: 0x0F7646,
+        t_red: 0xBA2836,
+        t_violet: 0x5B47D6,
+        add: 0x0F7646,
+        del: 0xBA2836,
+        tones: tones(0xFFFFFF, 0x2F7BEB, 0xD08A12, 0x1E9E62, 0xE0414F, 0x3A3A44),
+    },
     // The original look: a dark, Linear-style ground.
     Theme {
         id: "midnight",
@@ -341,56 +380,159 @@ pub const THEMES: [Theme; 7] = [
 ];
 
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
+/// Window transparency is on.
+static SEE_THROUGH: AtomicBool = AtomicBool::new(false);
+/// How see-through, 0 to 100, while it's on.
+static CLEAR: AtomicU8 = AtomicU8::new(0);
+
+/// How much a quieter line of text moves towards the brightest one at full
+/// transparency, so it still reads over a busy desktop.
+const LIFT: f32 = 0.4;
+
+impl Theme {
+    /// The opacity the transparency slider thins this theme's surfaces to at its
+    /// far end: as far as its text stays readable over a busy desktop (checked in
+    /// the tests below). A frosted theme's own opacity is thinned on top of this.
+    pub fn floor(&self) -> f32 {
+        match self.id {
+            "crew-chat" => 0.62,
+            "midnight" => 0.72,
+            "graphite" => 0.76,
+            "deep-sea" => 0.72,
+            "daylight" => 0.66,
+            "frost" => 0.76,
+            "mist" => 0.60,
+            "aurora" => 0.78,
+            _ => 0.8,
+        }
+    }
+}
 
 /// The theme in use.
 pub fn theme() -> &'static Theme {
     &THEMES[CURRENT.load(Ordering::Relaxed).min(THEMES.len() - 1)]
 }
 
-/// Puts a theme in use by id; an unknown id means the original, Midnight.
+/// Puts a theme in use by id; an unknown id means the default, Crew Chat.
 pub fn set_theme(id: &str) {
     let i = THEMES.iter().position(|t| t.id == id).unwrap_or(0);
     CURRENT.store(i, Ordering::Relaxed);
+}
+
+/// Turns window transparency on or off, and sets how see-through it is (0 to 100).
+pub fn set_see_through(on: bool, clear: u8) {
+    SEE_THROUGH.store(on, Ordering::Relaxed);
+    CLEAR.store(clear.min(100), Ordering::Relaxed);
+}
+
+/// Window transparency is switched on.
+pub fn see_through() -> bool {
+    SEE_THROUGH.load(Ordering::Relaxed)
+}
+
+/// The desktop shows through the window: a frosted theme, or transparency on.
+pub fn window_clear() -> bool {
+    theme().frosted || see_through()
+}
+
+/// How far transparency has gone, 0 (off, or the slider at its start) to 1.
+pub fn amount() -> f32 {
+    if see_through() {
+        CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
+    } else {
+        0.
+    }
+}
+
+/// A surface thinned to `k` of its opacity. Faint overlays (a hover tint in a
+/// frosted theme, under half opaque) are left as they are: they already show
+/// what's under them.
+pub const fn thin(color: u32, k: f32) -> u32 {
+    let a = match color >> 24 {
+        0 => 255,
+        a => a,
+    };
+    if a < 0x80 || k >= 1. {
+        return color;
+    }
+    let mut out = (a as f32 * k + 0.5) as u32;
+    if out < 1 {
+        out = 1;
+    }
+    see(color, out as u8)
+}
+
+/// A surface as the transparency setting leaves it.
+pub fn glass(color: u32) -> u32 {
+    glass_at(color, amount(), theme().floor())
+}
+
+/// A surface at transparency `t` (0 to 1) for a theme whose floor is `floor`.
+const fn glass_at(color: u32, t: f32, floor: f32) -> u32 {
+    if t <= 0. {
+        return color;
+    }
+    thin(color, 1. - t * (1. - floor))
+}
+
+/// A line of text lifted towards the brightest, as the transparency setting needs.
+fn lift(color: u32) -> u32 {
+    lift_at(color, theme().ink, amount())
+}
+
+/// A line of text at transparency `t`, lifted towards `ink`.
+const fn lift_at(color: u32, ink: u32, t: f32) -> u32 {
+    if t <= 0. {
+        return color;
+    }
+    mix(color, ink, LIFT * t)
 }
 
 /// The status pill colours: text, fill and edge.
 pub type Tone = (u32, u32, u32);
 
 pub fn bg() -> u32 {
-    theme().bg
+    glass(theme().bg)
 }
 pub fn panel() -> u32 {
-    theme().panel
+    glass(theme().panel)
 }
 pub fn raised() -> u32 {
-    theme().raised
+    glass(theme().raised)
 }
 pub fn hover() -> u32 {
-    theme().hover
+    glass(theme().hover)
+}
+/// A surface that floats over the page: the palette, menus, popovers and dialogs.
+/// Always solid, even in a frosted theme or with transparency on: the window only
+/// blurs the desktop, so anything see-through here would show the page under it
+/// sharp, and the text on top would be hard to read.
+pub fn float() -> u32 {
+    theme().raised & 0xff_ffff
 }
 pub fn press() -> u32 {
-    theme().press
+    glass(theme().press)
 }
 pub fn ink() -> u32 {
     theme().ink
 }
 pub fn body() -> u32 {
-    theme().body
+    lift(theme().body)
 }
 pub fn muted() -> u32 {
-    theme().muted
+    lift(theme().muted)
 }
 pub fn faint() -> u32 {
-    theme().faint
+    lift(theme().faint)
 }
 pub fn line() -> u32 {
-    theme().line_c
+    glass(theme().line_c)
 }
 pub fn line2() -> u32 {
-    theme().line2
+    glass(theme().line2)
 }
 pub fn line_hi() -> u32 {
-    theme().line_hi
+    glass(theme().line_hi)
 }
 pub fn fill() -> u32 {
     theme().fill
@@ -405,37 +547,37 @@ pub fn on_fill() -> u32 {
     theme().on_fill
 }
 pub fn well() -> u32 {
-    theme().well
+    glass(theme().well)
 }
 pub fn t_blue() -> u32 {
-    theme().t_blue
+    lift(theme().t_blue)
 }
 pub fn t_amber() -> u32 {
-    theme().t_amber
+    lift(theme().t_amber)
 }
 pub fn t_green() -> u32 {
-    theme().t_green
+    lift(theme().t_green)
 }
 pub fn t_red() -> u32 {
-    theme().t_red
+    lift(theme().t_red)
 }
 pub fn t_violet() -> u32 {
-    theme().t_violet
+    lift(theme().t_violet)
 }
 pub fn add() -> u32 {
-    theme().add
+    lift(theme().add)
 }
 pub fn del() -> u32 {
-    theme().del
+    lift(theme().del)
 }
 /// The track of a switch that's off.
 pub fn off() -> u32 {
-    theme().tones[4].1
+    glass(theme().tones[4].1)
 }
 
 fn tone(i: usize, text: u32) -> Tone {
     let (fill, edge) = theme().tones[i];
-    (text, fill, edge)
+    (text, glass(fill), glass(edge))
 }
 /// Running: blue.
 pub fn run_tone() -> Tone {
@@ -463,8 +605,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_unique_and_midnight_is_first() {
-        assert_eq!(THEMES[0].id, "midnight");
+    fn ids_are_unique_and_crew_chat_is_first() {
+        assert_eq!(THEMES[0].id, "crew-chat");
         for (i, a) in THEMES.iter().enumerate() {
             for b in &THEMES[i + 1..] {
                 assert_ne!(a.id, b.id);
@@ -582,6 +724,70 @@ mod tests {
         }
     }
 
+    /// With window transparency all the way up, every theme's text still reads.
+    /// The desktop behind is blurred, and checked at its worst for the theme's own
+    /// ground: a dark theme over black, grey, a saturated blue and a warm yellow;
+    /// a light one over white and the same colours.
+    #[test]
+    fn text_reads_when_see_through() {
+        for t in &THEMES {
+            let (k, f) = (1.0, t.floor());
+            let g = |c: u32| glass_at(c, k, f);
+            let l = |c: u32| lift_at(c, t.ink, k);
+            let desks: &[u32] = if t.light {
+                &[0xFFFFFF, 0x808080, 0x2050D0, 0xF0C040]
+            } else {
+                &[0x000000, 0x808080, 0x2050D0, 0xF0C040]
+            };
+            let text = [
+                ("ink", t.ink, 7.0),
+                ("body", l(t.body), 4.5),
+                ("muted", l(t.muted), 4.5),
+                ("faint", l(t.faint), 3.0),
+                ("blue", l(t.t_blue), 4.5),
+                ("amber", l(t.t_amber), 4.5),
+                ("green", l(t.t_green), 4.5),
+                ("red", l(t.t_red), 4.5),
+                ("violet", l(t.t_violet), 4.5),
+                ("add", l(t.add), 4.5),
+                ("del", l(t.del), 4.5),
+            ];
+            for &desk in desks {
+                let page = over(g(t.bg), desk);
+                let panel = over(g(t.panel), page);
+                let surfaces = [
+                    ("page", page),
+                    ("panel", panel),
+                    ("raised", over(g(t.raised), panel)),
+                    ("hover", over(g(t.hover), panel)),
+                ];
+                for (name, color, min) in text {
+                    for (s, back) in surfaces {
+                        let got = contrast(color, back);
+                        assert!(
+                            got >= min,
+                            "{} see-through: {name} on {s} over {desk:06x} is {got:.2}, needs {min}",
+                            t.id
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn transparency_off_changes_nothing() {
+        for t in &THEMES {
+            for s in [t.bg, t.panel, t.hover, t.well, t.line_c] {
+                assert_eq!(glass_at(s, 0., t.floor()), s);
+            }
+            assert_eq!(lift_at(t.muted, t.ink, 0.), t.muted);
+        }
+        // Faint overlays stay as they are; solid surfaces gain an opacity.
+        assert_eq!(thin(see(0xFFFFFF, 0x14), 0.5), see(0xFFFFFF, 0x14));
+        assert_eq!(thin(0x101010, 0.5) >> 24, 128);
+    }
+
     #[test]
     fn mix_blends_each_channel() {
         assert_eq!(mix(0x000000, 0xFFFFFF, 0.0), 0x000000);
@@ -590,11 +796,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_id_falls_back_to_midnight() {
+    fn unknown_id_falls_back_to_crew_chat() {
         set_theme("no-such-theme");
-        assert_eq!(theme().id, "midnight");
+        assert_eq!(theme().id, "crew-chat");
         set_theme("frost");
         assert_eq!(theme().id, "frost");
-        set_theme("midnight");
+        set_theme("crew-chat");
     }
 }

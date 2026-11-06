@@ -202,6 +202,41 @@ impl Shell {
             )
             .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx)));
 
+        // The project's terminal: a toggle at the start of the bar, lit while
+        // it's open, that opens it as a drawer just above.
+        let term_on = self.term_open.is_some_and(super::term::is_project);
+        let term = div()
+            .id("status-term")
+            .h(px(22.))
+            .px(px(8.))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(6.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .map(|d| {
+                if term_on {
+                    d.bg(c(ui::ink())).text_color(c(ui::theme().bg & 0xff_ffff))
+                } else {
+                    d.hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                }
+            })
+            .child(Icon::new(IconName::SquareTerminal).size(px(13.)))
+            .child("Terminal")
+            .child(
+                div()
+                    .font_family(ui::MONO)
+                    .text_size(px(10.))
+                    .opacity(0.6)
+                    .child(super::term::KEY),
+            )
+            .tooltip(|window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new("A shell in this project")
+                    .build(window, cx)
+            })
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx)));
+
         div()
             .h(px(30.))
             .flex_none()
@@ -214,6 +249,8 @@ impl Shell {
             .border_color(c(ui::line2()))
             .text_size(px(11.5))
             .text_color(c(ui::muted()))
+            .child(term)
+            .child(div().w(px(1.)).h(px(14.)).mx(px(4.)).bg(c(ui::line())))
             .child(left)
             .child(div().flex_1())
             .child(right)
@@ -446,7 +483,7 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .rounded(px(12.))
-                    .bg(c(ui::raised()))
+                    .bg(c(ui::float()))
                     .border_1()
                     .border_color(c(ui::line_hi()))
                     .shadow(vec![BoxShadow {

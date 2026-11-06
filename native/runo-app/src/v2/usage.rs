@@ -37,7 +37,7 @@ impl Shell {
             .iter()
             .filter(|j| j.status != Status::Running)
             .count();
-        let ok = recent.iter().filter(|j| j.status == Status::Done).count();
+        let ok = recent.iter().filter(|j| finished_well(j.status)).count();
         let busy: u64 = recent.iter().map(|j| j.seconds()).sum();
 
         // Per bot, busiest first.
@@ -61,7 +61,7 @@ impl Shell {
             if j.status != Status::Running {
                 s.ended += 1;
             }
-            if j.status == Status::Done {
+            if finished_well(j.status) {
                 s.ok += 1;
             }
         }
@@ -329,6 +329,14 @@ fn hours(secs: u64) -> String {
         s if s >= 60 => format!("{} min", s / 60),
         s => format!("{s} s"),
     }
+}
+
+/// A job that did what it was asked: done, waiting for your OK, or on its way in.
+fn finished_well(status: Status) -> bool {
+    matches!(
+        status,
+        Status::Done | Status::Review | Status::Shipping | Status::Shipped
+    )
 }
 
 #[cfg(test)]

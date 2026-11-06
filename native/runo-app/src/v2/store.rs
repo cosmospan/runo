@@ -39,9 +39,83 @@ pub struct Store {
     /// Bot ideas Fin already offered (`brain::ideas`), so each is offered once.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub offered: Vec<String>,
+    /// The # threads in each project: group chats with a few bots around one
+    /// piece of work. Every project also has #general, which isn't stored.
+    pub threads: Vec<Thread>,
+    /// The thread new work goes to, by id; 0 is the project's #general.
+    pub thread_now: u64,
+    /// When you last looked at each thread, by "folder#id", for unread dots.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub seen_at: HashMap<String, u64>,
+    /// Questions asked in threads, with the answers that came back.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub talks: Vec<Talk>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+}
+
+/// A question asked in a thread and the bot's answer, kept in the thread.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Talk {
+    pub id: u64,
+    /// The project's folder path.
+    pub folder: String,
+    pub thread: u64,
+    pub bot: Member,
+    pub question: String,
+    /// None while the bot is still reading the code.
+    pub answer: Option<Said>,
+    pub at: u64,
+    /// Quick answers Peek offers with a question back, as buttons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<String>,
+}
+
+impl Default for Talk {
+    fn default() -> Self {
+        Talk {
+            id: 0,
+            folder: String::new(),
+            thread: 0,
+            bot: Member::Explainer,
+            question: String::new(),
+            answer: None,
+            at: 0,
+            choices: Vec::new(),
+        }
+    }
+}
+
+/// A # thread inside a project: a group chat with some bots, around one piece
+/// of work. Jobs and plans started in it stay in it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Thread {
+    pub id: u64,
+    pub name: String,
+    /// The project's folder path.
+    pub folder: String,
+    /// The bots in it besides Peek, who is in every thread.
+    pub bots: Vec<Member>,
+    pub archived: bool,
+    pub made: u64,
+}
+
+/// A thread name as it reads after the #: lower case, words joined by dashes.
+pub fn thread_name(raw: &str) -> String {
+    let mut out = String::new();
+    for w in raw
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        if !out.is_empty() {
+            out.push('-');
+        }
+        out.push_str(&w.to_lowercase());
+    }
+    out.chars().take(40).collect()
 }
 
 /// The getting-started list, in the order it's shown.
@@ -145,6 +219,8 @@ pub enum Item {
 #[serde(default)]
 pub struct Job {
     pub id: u64,
+    /// The # thread it was started in; 0 is the project's #general.
+    pub thread: u64,
     pub bot: Member,
     pub mode: Mode,
     /// What the person typed: the bot's instructions.
@@ -245,6 +321,7 @@ impl Default for Job {
     fn default() -> Self {
         Job {
             id: 0,
+            thread: 0,
             bot: Member::Builder,
             mode: Mode::Build,
             title: String::new(),
@@ -372,6 +449,11 @@ pub struct Said {
     pub via: Option<String>,
     /// Squad Code speaking, not the bot: a problem or a hint.
     pub note: bool,
+    /// The project folder the DM line belongs to; empty in older saves,
+    /// which show in every project.
+    pub folder: String,
+    /// When it was said, to place it among the bot's jobs.
+    pub at: u64,
 }
 
 impl Said {
@@ -379,6 +461,7 @@ impl Said {
         Said {
             mine: true,
             text,
+            at: now(),
             ..Default::default()
         }
     }
@@ -386,6 +469,7 @@ impl Said {
         Said {
             text,
             via: Some(via),
+            at: now(),
             ..Default::default()
         }
     }
@@ -393,6 +477,7 @@ impl Said {
         Said {
             text: text.into(),
             note: true,
+            at: now(),
             ..Default::default()
         }
     }
@@ -551,6 +636,242 @@ impl Store {
         self.folders.get(self.current)
     }
 
+    /// The live threads in a project, oldest first.
+    pub fn threads_in(&self, folder: &str) -> Vec<&Thread> {
+        self.threads
+            .iter()
+            .filter(|t| t.folder == folder && !t.archived)
+            .collect()
+    }
+
+    /// The thread a job or plan belongs to: its own, or #general (0) when that
+    /// thread is gone or archived.
+    pub fn thread_for(&self, folder: &str, thread: u64) -> u64 {
+        if self
+            .threads
+            .iter()
+            .any(|t| t.id == thread && t.folder == folder && !t.archived)
+        {
+            thread
+        } else {
+            0
+        }
+    }
+
+    /// The thread new work goes to, if it belongs to the current project;
+    /// else #general.
+    pub fn thread_here(&self) -> u64 {
+        match self.folder() {
+            Some(f) => self.thread_for(&f.path, self.thread_now),
+            None => 0,
+        }
+    }
+
+    /// The name of a thread, without the #.
+    pub fn thread_label(&self, id: u64) -> String {
+        self.threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|| "general".into())
+    }
+
+    /// Makes a thread in the current project and moves to it. A name already
+    /// used there picks that thread instead.
+    pub fn add_thread(&mut self, raw: &str, bots: Vec<Member>) -> Option<u64> {
+        let folder = self.folder()?.path.clone();
+        let name = thread_name(raw);
+        if name.is_empty() || name == "general" {
+            self.thread_now = 0;
+            return Some(0);
+        }
+        if let Some(t) = self
+            .threads
+            .iter_mut()
+            .find(|t| t.folder == folder && t.name == name)
+        {
+            t.archived = false;
+            self.thread_now = t.id;
+            return Some(t.id);
+        }
+        let id = self.threads.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.threads.push(Thread {
+            id,
+            name,
+            folder,
+            bots,
+            archived: false,
+            made: now(),
+        });
+        self.thread_now = id;
+        Some(id)
+    }
+
+    /// Renames a thread, unless its project already has one by that name.
+    pub fn rename_thread(&mut self, id: u64, name: &str) -> bool {
+        let Some(folder) = self
+            .threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.folder.clone())
+        else {
+            return false;
+        };
+        if self
+            .threads
+            .iter()
+            .any(|t| t.id != id && t.folder == folder && t.name == name && !t.archived)
+        {
+            return false;
+        }
+        if let Some(t) = self.threads.iter_mut().find(|t| t.id == id) {
+            t.name = name.to_string();
+        }
+        true
+    }
+
+    /// A thread's conversation so far, oldest first, as (who, words): what you
+    /// asked and what came back, for Peek to read a follow-up by.
+    pub fn recent(&self, folder: &str, thread: u64) -> Vec<(String, String)> {
+        let mut said: Vec<(u64, String, String)> = Vec::new();
+        for t in &self.talks {
+            if t.folder == folder && self.thread_for(folder, t.thread) == thread {
+                said.push((t.at, "you".into(), t.question.clone()));
+                if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
+                    said.push((t.at, t.bot.name().to_lowercase(), a.text.clone()));
+                }
+            }
+        }
+        for j in self.jobs_in(folder, thread) {
+            said.push((j.started, "you".into(), j.title.clone()));
+        }
+        said.sort_by_key(|s| s.0);
+        let n = said.len();
+        said.into_iter()
+            .skip(n.saturating_sub(12))
+            .map(|(_, who, words)| (who, words))
+            .collect()
+    }
+
+    /// Deletes a thread and what was said in it. Its jobs and plans hold real
+    /// work, so they move to #general rather than vanish.
+    pub fn delete_thread(&mut self, id: u64) -> bool {
+        let Some(i) = self.threads.iter().position(|t| t.id == id) else {
+            return false;
+        };
+        let t = self.threads.remove(i);
+        self.talks
+            .retain(|k| !(k.folder == t.folder && k.thread == id));
+        for j in self
+            .jobs
+            .iter_mut()
+            .filter(|j| j.folder.path == t.folder && j.thread == id)
+        {
+            j.thread = 0;
+        }
+        for g in self
+            .goals
+            .iter_mut()
+            .filter(|g| g.folder.path == t.folder && g.thread == id)
+        {
+            g.thread = 0;
+        }
+        self.seen_at.remove(&format!("{}#{id}", t.folder));
+        if self.thread_now == id {
+            self.thread_now = 0;
+        }
+        true
+    }
+
+    /// A thread of a project by its name; "general" is 0.
+    pub fn thread_named(&self, folder: &str, name: &str) -> Option<u64> {
+        let name = thread_name(name);
+        if name == "general" {
+            return Some(0);
+        }
+        self.threads
+            .iter()
+            .find(|t| t.folder == folder && t.name == name && !t.archived)
+            .map(|t| t.id)
+    }
+
+    /// The threads a message points at with #name, in order, each once.
+    pub fn thread_refs(&self, folder: &str, text: &str) -> Vec<u64> {
+        let mut out = Vec::new();
+        for word in text.split_whitespace() {
+            let Some(name) = word.strip_prefix('#') else {
+                continue;
+            };
+            let name = name.trim_end_matches(|c: char| !c.is_alphanumeric());
+            if let Some(id) = self.thread_named(folder, name) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+
+    /// You're looking at a thread now: it has nothing unread.
+    pub fn mark_seen(&mut self, folder: &str, thread: u64) {
+        self.seen_at.insert(format!("{folder}#{thread}"), now());
+    }
+
+    /// Something happened in a thread since you last looked: an answer came
+    /// back, or a job started or ended there.
+    pub fn unread(&self, folder: &str, thread: u64) -> bool {
+        let Some(&seen) = self.seen_at.get(&format!("{folder}#{thread}")) else {
+            return false;
+        };
+        let jobs = self
+            .jobs_in(folder, thread)
+            .into_iter()
+            .any(|j| j.started > seen || j.ended.is_some_and(|e| e > seen));
+        let talks = self.talks.iter().any(|t| {
+            t.folder == folder
+                && self.thread_for(folder, t.thread) == thread
+                && t.answer.is_some()
+                && t.at > seen
+        });
+        jobs || talks
+    }
+
+    /// Who's in a thread: Peek, the bots you brought in, and any bot that has
+    /// done work or answered there. Nobody else until they're needed.
+    pub fn members(&self, folder: &str, thread: u64) -> Vec<Member> {
+        let mut out = vec![Member::Fin];
+        let mut add = |m: Member| {
+            if !out.contains(&m) {
+                out.push(m);
+            }
+        };
+        if let Some(t) = self.threads.iter().find(|t| t.id == thread) {
+            t.bots.iter().copied().for_each(&mut add);
+        }
+        for j in self.jobs_in(folder, thread) {
+            add(j.bot);
+        }
+        for t in &self.talks {
+            if t.folder == folder && self.thread_for(folder, t.thread) == thread {
+                add(t.bot);
+            }
+        }
+        let crew = Member::all();
+        out.retain(|m| *m == Member::Fin || crew.contains(m));
+        out
+    }
+
+    /// Jobs in one thread of a project, oldest first.
+    pub fn jobs_in(&self, folder: &str, thread: u64) -> Vec<&Job> {
+        let mut out: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.folder.path == folder && self.thread_for(folder, j.thread) == thread)
+            .collect();
+        out.sort_by_key(|j| j.started);
+        out
+    }
+
     /// Adds a folder (or picks it if it's there already) and makes it current.
     pub fn add_folder(&mut self, path: PathBuf) {
         let p = path.to_string_lossy().into_owned();
@@ -614,8 +935,49 @@ impl Store {
         self.running().find(|j| j.bot == who)
     }
 
-    pub fn chat(&self, who: Member) -> &[Said] {
-        self.chats.get(&who).map(Vec::as_slice).unwrap_or(&[])
+    /// Your DM with `who` in the project you're in: one conversation per bot
+    /// per project.
+    pub fn chat(&self, who: Member) -> Vec<Said> {
+        let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
+        self.chats
+            .get(&who)
+            .map(|log| {
+                log.iter()
+                    .filter(|m| m.folder.is_empty() || m.folder == here)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Adds a line to the DM with `who` in the project you're in.
+    pub fn say_in_dm(&mut self, who: Member, mut said: Said) {
+        said.folder = self.folder().map(|f| f.path.clone()).unwrap_or_default();
+        self.chats.entry(who).or_default().push(said);
+    }
+
+    /// Clears the DM with `who` in the project you're in; other projects keep theirs.
+    pub fn clear_dm(&mut self, who: Member) {
+        let here = self.folder().map(|f| f.path.clone()).unwrap_or_default();
+        if let Some(log) = self.chats.get_mut(&who) {
+            log.retain(|m| !m.folder.is_empty() && m.folder != here);
+            if log.is_empty() {
+                self.chats.remove(&who);
+            }
+        }
+    }
+
+    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
+    pub fn dm_jobs(&self, who: Member) -> Vec<&Job> {
+        let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
+        let mut v: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.bot == who && j.folder.path == here)
+            .filter(|j| j.goal == 0 && (j.race == 0 || j.race == j.id))
+            .collect();
+        v.sort_by_key(|j| j.started);
+        v
     }
 }
 
@@ -642,6 +1004,158 @@ pub fn span(s: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn with_project() -> Store {
+        let mut s = Store::default();
+        s.add_folder(PathBuf::from("/work/shop"));
+        s
+    }
+
+    #[test]
+    fn thread_names_read_like_channels() {
+        assert_eq!(thread_name("Gift Cards!"), "gift-cards");
+        assert_eq!(thread_name("  flaky   tests "), "flaky-tests");
+        assert_eq!(thread_name("@#$"), "");
+    }
+
+    #[test]
+    fn a_new_thread_becomes_the_one_you_are_in() {
+        let mut s = with_project();
+        let id = s.add_thread("Gift cards", vec![Member::Builder]).unwrap();
+        assert_eq!(s.thread_here(), id);
+        assert_eq!(s.thread_label(id), "gift-cards");
+        // The same name picks the same thread instead of making another.
+        s.thread_now = 0;
+        assert_eq!(s.add_thread("gift cards", Vec::new()), Some(id));
+        assert_eq!(s.threads.len(), 1);
+        // "general" is always there and never stored.
+        assert_eq!(s.add_thread("general", Vec::new()), Some(0));
+        assert_eq!(s.threads.len(), 1);
+    }
+
+    #[test]
+    fn a_thread_can_be_renamed_but_not_onto_another() {
+        let mut s = with_project();
+        let a = s.add_thread("checkout", Vec::new()).unwrap();
+        let b = s.add_thread("payments", Vec::new()).unwrap();
+        assert!(s.rename_thread(a, "cart"));
+        assert_eq!(s.thread_label(a), "cart");
+        assert!(!s.rename_thread(b, "cart"));
+        assert_eq!(s.thread_label(b), "payments");
+    }
+
+    #[test]
+    fn a_thread_starts_with_just_peek() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().clone();
+        assert_eq!(s.members(&folder.path, 0), vec![Member::Fin]);
+        // A bot that works there joins.
+        s.jobs.push(Job {
+            id: 1,
+            bot: Member::Fixer,
+            folder: folder.clone(),
+            ..Default::default()
+        });
+        assert_eq!(s.members(&folder.path, 0), vec![Member::Fin, Member::Fixer]);
+    }
+
+    #[test]
+    fn deleting_a_thread_keeps_its_jobs_in_general() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().clone();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        s.jobs.push(Job {
+            id: 1,
+            thread: id,
+            folder: folder.clone(),
+            ..Default::default()
+        });
+        s.talks.push(Talk {
+            id: 1,
+            folder: folder.path.clone(),
+            thread: id,
+            ..Default::default()
+        });
+        assert!(s.delete_thread(id));
+        assert!(s.threads.is_empty() && s.talks.is_empty());
+        assert_eq!(s.jobs[0].thread, 0);
+        assert_eq!(s.thread_now, 0);
+        assert!(!s.delete_thread(0));
+    }
+
+    #[test]
+    fn hash_names_point_at_threads() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().path.clone();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        assert_eq!(
+            s.thread_refs(&folder, "see #checkout, and #general. Not #nope"),
+            vec![id, 0]
+        );
+    }
+
+    #[test]
+    fn jobs_from_gone_threads_land_in_general() {
+        let mut s = with_project();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        let folder = s.folder().unwrap().clone();
+        for (n, thread) in [(1, id), (2, 0), (3, 99)] {
+            s.jobs.push(Job {
+                id: n,
+                thread,
+                folder: folder.clone(),
+                started: n,
+                ..Default::default()
+            });
+        }
+        let ids = |s: &Store, t| {
+            s.jobs_in(&folder.path, t)
+                .iter()
+                .map(|j| j.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&s, id), vec![1]);
+        assert_eq!(ids(&s, 0), vec![2, 3]);
+        s.threads[0].archived = true;
+        assert_eq!(ids(&s, 0), vec![1, 2, 3]);
+        assert!(s.threads_in(&folder.path).is_empty());
+    }
+
+    #[test]
+    fn stores_from_before_threads_still_load() {
+        let back: Store = serde_json::from_str(r#"{"jobs":[{"id":4,"title":"x"}]}"#).unwrap();
+        assert!(back.threads.is_empty());
+        assert_eq!(back.jobs[0].thread, 0);
+    }
+
+    #[test]
+    fn each_project_has_its_own_dm_with_a_bot_and_its_jobs() {
+        let mut s = Store::default();
+        for (n, p) in [("a", "/a"), ("b", "/b")] {
+            s.folders.push(Folder {
+                name: n.into(),
+                path: p.into(),
+                ..Default::default()
+            });
+        }
+        s.current = 0;
+        s.say_in_dm(Member::Builder, Said::mine("in a".into()));
+        s.jobs.push(Job {
+            id: 1,
+            bot: Member::Builder,
+            folder: s.folders[0].clone(),
+            ..Default::default()
+        });
+        s.current = 1;
+        s.say_in_dm(Member::Builder, Said::mine("in b".into()));
+        assert_eq!(s.chat(Member::Builder).len(), 1);
+        assert_eq!(s.chat(Member::Builder)[0].text, "in b");
+        assert!(s.dm_jobs(Member::Builder).is_empty());
+        s.clear_dm(Member::Builder);
+        s.current = 0;
+        assert_eq!(s.chat(Member::Builder)[0].text, "in a");
+        assert_eq!(s.dm_jobs(Member::Builder).len(), 1);
+    }
 
     #[test]
     fn chats_with_made_bots_save_and_load() {

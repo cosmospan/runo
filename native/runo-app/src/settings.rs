@@ -149,6 +149,21 @@ pub struct AppSettings {
     /// The Squad Code window's theme, by id from `v2::theme::THEMES`: "midnight",
     /// "daylight", "frost"…
     pub v2_theme: String,
+    /// Window transparency for the Squad Code window: the desktop shows through
+    /// whatever theme is picked, blurred.
+    pub v2_see_through: bool,
+    /// How see-through the window is while transparency is on, 0 to 100.
+    pub v2_clear: u8,
+    /// The window has been switched to Crew Chat once; after that the theme is
+    /// whatever the person picks.
+    pub v2_crew_chat: bool,
+    /// How often the crew checks with you, under Settings > How work runs:
+    /// "a_lot", "balanced" or "hands_off". The two switches below follow it.
+    pub v2_ask: String,
+    /// Peek posts a plan for a writing job, and nothing starts until you press Start.
+    pub v2_plan_first: bool,
+    /// A pull request Shipper opens merges on its own once its checks pass.
+    pub v2_auto_merge: bool,
     /// Background pattern, by id from `pattern::Pattern`: "off", "dots", "grid"…
     pub pattern: String,
     /// Where the pattern lies: on the page and the terminal, on the side panels, and on
@@ -365,7 +380,13 @@ impl Default for AppSettings {
             fin_looks: HashMap::new(),
             glass: "off".into(),
             glass_cards: true,
-            v2_theme: "midnight".into(),
+            v2_theme: "crew-chat".into(),
+            v2_see_through: false,
+            v2_clear: 50,
+            v2_crew_chat: true,
+            v2_ask: "balanced".into(),
+            v2_plan_first: false,
+            v2_auto_merge: false,
             font: "bundled".into(),
             font_smoothing: false,
             memory_server: true,
@@ -472,6 +493,14 @@ impl AppSettings {
     /// background checks switch on becomes Auto at low priority, off becomes no limit at
     /// normal priority. A Crew cap of 3, the old default, becomes Auto; any other stays.
     pub fn migrate(&mut self) {
+        // Squad Code's window became Crew Chat: move everyone to its theme once.
+        if !self.v2_crew_chat {
+            self.v2_crew_chat = true;
+            self.v2_theme = "crew-chat".into();
+        }
+        if self.v2_ask.is_empty() {
+            self.v2_ask = "balanced".into();
+        }
         if self.checks_at_once.is_empty() {
             self.checks_at_once = if self.background_checks { "auto" } else { "0" }.into();
             self.checks_low_priority = self.background_checks;
