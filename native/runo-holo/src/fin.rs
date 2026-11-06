@@ -436,7 +436,9 @@ pub struct FinPose {
     pub state: State,
     /// Hovered or worth marking: the ring and glow burn a little brighter.
     pub shine: bool,
-    /// Where the eyes look, each axis from -2 (left, up) to 2 (right, down).
+    /// Where the eyes look, in tenths: each axis from -10 (left, up) to 10
+    /// (right, down). `(0, 0)` means nothing to look at, so an idle Peek
+    /// glances around on its own.
     pub gaze: (i8, i8),
     /// Shifts the animation clock, in steps of [`OFFSET_STEP`] seconds, so a
     /// row of bots in the same state doesn't move in lockstep.
@@ -449,7 +451,7 @@ pub const OFFSET_STEP: f64 = 0.37;
 impl FinPose {
     /// Looking towards `gaze` (see [`FinPose::gaze`]).
     pub fn looking(mut self, gaze: (i8, i8)) -> Self {
-        self.gaze = (gaze.0.clamp(-2, 2), gaze.1.clamp(-2, 2));
+        self.gaze = (gaze.0.clamp(-10, 10), gaze.1.clamp(-10, 10));
         self
     }
 
@@ -853,6 +855,8 @@ struct Face {
     squash: (f64, f64),
     spin: f64,
     lift: f64,
+    /// The pill leaning towards what Peek is looking at.
+    lean: (f64, f64),
     glow: f64,
     blush: f64,
     /// Size of each eye.
@@ -874,6 +878,7 @@ impl Default for Face {
             squash: (1.0, 1.0),
             spin: 0.0,
             lift: 0.0,
+            lean: (0.0, 0.0),
             glow: 1.0,
             blush: 0.0,
             size: [1.0; 2],
@@ -1051,6 +1056,37 @@ fn wander(t: f64) -> (f64, f64) {
     let (a, b) = (at(n - 1.0), at(n));
     let k = crate::anim::SOFT.at(((t - n * slot) / 0.35).min(1.0));
     (a.0 + (b.0 - a.0) * k, a.1 + (b.1 - a.1) * k)
+}
+
+/// Turns Peek towards the pointer at `gaze` (tenths, see [`FinPose::gaze`]).
+///
+/// Like real eyes, the eyes do most of the turning and the pill follows a
+/// little; the top lids rise looking up and drop looking down. A calm Peek
+/// gives the pointer its full attention, a busy one only glances. With nothing
+/// to look at, an idle Peek looks around on its own.
+fn follow(f: &mut Face, state: State, gaze: (i8, i8), t: f64) {
+    if gaze == (0, 0) {
+        if state == State::Idle {
+            let w = wander(t);
+            f.look = (f.look.0 + w.0, f.look.1 + w.1);
+        }
+        return;
+    }
+    if matches!(f.eye, EyeShape::Sleep) || state == State::Blocked {
+        return;
+    }
+    let (gx, gy) = (gaze.0 as f64 / 10.0, gaze.1 as f64 / 10.0);
+    // How much of the face turns: all of it when free, less when busy.
+    let k = if f.roams { 1.0 } else { 0.55 };
+    // The eyes swing towards the pointer, from wherever the state put them.
+    f.look.0 += (gx * 1.05 - f.look.0) * k;
+    f.look.1 += (gy * 0.95 - f.look.1) * k;
+    f.look = (f.look.0.clamp(-1.15, 1.15), f.look.1.clamp(-1.0, 1.0));
+    f.lean = (gx * 1.6 * k, gy * 1.2 * k);
+    f.spin += gx * 2.0 * k;
+    for l in &mut f.lid {
+        *l = (*l + gy * 0.14 * k).clamp(0.0, 0.9);
+    }
 }
 
 /// How open the eyes are for blinking: 1 open, near 0 mid-blink. Blinks come
@@ -1565,7 +1601,7 @@ fn view(framing: Framing) -> (f64, f64, f64) {
         // Room for the floating bits, the prop badge and the Guard's block.
         Framing::Full => (-4.0, -2.0, 128.0),
         // Avatars: the pill and any hat, with room for a hop.
-        Framing::Bust => (8.0, 8.0, 104.0),
+        Framing::Bust => (5.0, 6.0, 110.0),
     }
 }
 
@@ -1585,14 +1621,7 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let fin = pose.fin;
     let state = pose.state;
     let mut f = face(state, t);
-    if f.roams {
-        let (gx, gy) = pose.gaze;
-        if (gx, gy) == (0, 0) && state == State::Idle {
-            let w = wander(t);
-            f.look = (f.look.0 + w.0, f.look.1 + w.1);
-        }
-        f.look = (f.look.0 + gx as f64 * 0.42, f.look.1 + gy as f64 * 0.42);
-    }
+    follow(&mut f, state, pose.gaze, t);
     let open = if state == State::Sleep { 1.0 } else { blink(t) };
     let strong = fin.tint.strong();
     let light = fin.tint.0[0];
@@ -1623,7 +1652,7 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         }
     }
 
-    let body = Affine::translate((0.0, f.lift))
+    let body = Affine::translate((f.lean.0, f.lift + f.lean.1))
         * about(
             (60.0, 62.0),
             rot(f.spin) * Affine::scale_non_uniform(f.squash.0, f.squash.1),
@@ -1814,6 +1843,20 @@ mod tests {
         let mut r = FinRenderer::new(64);
         let a = r.draw(&pose, 7.7, Framing::Full).to_vec();
         assert_eq!(a, r.draw(&pose, 7.7, Framing::Full));
+    }
+
+    #[test]
+    fn eyes_turn_to_the_pointer_even_when_busy() {
+        let mut r = FinRenderer::new(64);
+        for mood in [Mood::Idle, Mood::Working] {
+            let pose = fin(Material::Glass, Outfit::PLAIN).pose(mood);
+            let ahead = r.draw(&pose, 1.0, Framing::Bust).to_vec();
+            let left = r.draw(&pose.looking((-10, 0)), 1.0, Framing::Bust).to_vec();
+            assert_ne!(ahead, left, "{mood:?}");
+        }
+        let mut f = face(State::Idle, 0.0);
+        follow(&mut f, State::Idle, (10, -10), 0.0);
+        assert!(f.look.0 > 0.9 && f.look.1 < -0.8 && f.lean.0 > 0.0);
     }
 
     #[test]
