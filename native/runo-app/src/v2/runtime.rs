@@ -565,7 +565,7 @@ impl Runtime {
             return;
         };
         self.store.offered.push(idea.key.to_string());
-        self.say(brain::fin::line(&brain::fin::Moment::Idea {
+        self.say(brain::voice::line(&brain::voice::Moment::Idea {
             name: idea.name.to_string(),
             why: idea.why,
         }));

@@ -75,7 +75,7 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
                              a job of that kind
   squad new --bot <name> <words...>
                              a job for one bot
-  squad do <words...>         Fin picks the bot and the kind of job
+  squad do <words...>         Peek picks the bot and the kind of job
   squad approve <id>          approve a job waiting for review
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
@@ -88,13 +88,14 @@ On a server:
   squad devices               paired devices
   squad unpair <name>         stop a device reaching the crew
 
-Fin's routing:
-  squad brain why <words...>  where Fin would send a job, and why
-  squad brain ideas           a bot Fin thinks you could use
+Peek's routing:
+  squad brain why <words...>  where Peek would send a job, and why
+  squad brain ideas           a bot Peek thinks you could use
   squad brain export <file>   your finished jobs as training examples
-  squad brain eval [hard|file] score Fin's routing on the fixed cases
-  squad brain install [file]  turn Smart Fin on with Squad's own model
-  squad brain remove          turn Smart Fin off and delete its model
+  squad brain eval [hard|file] score Peek's routing on the fixed cases
+  squad brain install [file]  turn Smart Peek on with Squad's own model
+  squad brain update          get the newest Peek model, if there is one
+  squad brain remove          turn Smart Peek off and delete its model
 
 Jobs run in the Squad Code app while it's open, or in `squad serve`.";
 

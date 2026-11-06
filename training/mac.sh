@@ -8,7 +8,7 @@
 # 2. adds your own finished jobs, if Squad Code is installed (they stay here)
 # 3. fine-tunes Qwen3.5-0.8B with LoRA using MLX (free, about 1 to 2 hours)
 # 4. shrinks it to one ~0.5 GB GGUF file and serves it with llama-server
-# 5. turns Smart Fin on and scores it against the rules
+# 5. turns Smart Peek on and scores it against the rules
 #
 # Needs: Homebrew, Python 3.10+, git. Re-running skips steps already done.
 set -euo pipefail
@@ -90,14 +90,14 @@ step "Merge the adapter into the model"
 
 step "Shrink to one GGUF file"
 command -v llama-server >/dev/null || brew install llama.cpp
-if [ ! -s "$WORK/fin-q4_k_m.gguf" ]; then
+if [ ! -s "$WORK/peek-q4_k_m.gguf" ]; then
   [ -d "$WORK/llama.cpp" ] || git clone -q --depth 1 https://github.com/ggml-org/llama.cpp "$WORK/llama.cpp"
   pip install -q -r "$WORK/llama.cpp/requirements/requirements-convert_hf_to_gguf.txt"
-  python "$WORK/llama.cpp/convert_hf_to_gguf.py" "$WORK/fused" --outfile "$WORK/fin-f16.gguf" --outtype f16
-  llama-quantize "$WORK/fin-f16.gguf" "$WORK/fin-q4_k_m.gguf" Q4_K_M
-  rm -f "$WORK/fin-f16.gguf"
+  python "$WORK/llama.cpp/convert_hf_to_gguf.py" "$WORK/fused" --outfile "$WORK/peek-f16.gguf" --outtype f16
+  llama-quantize "$WORK/peek-f16.gguf" "$WORK/peek-q4_k_m.gguf" Q4_K_M
+  rm -f "$WORK/peek-f16.gguf"
 fi
-ls -lh "$WORK/fin-q4_k_m.gguf"
+ls -lh "$WORK/peek-q4_k_m.gguf"
 
 step "Serve it on port 8088"
 if ! curl -s -m 2 http://127.0.0.1:8088/v1/models >/dev/null; then
@@ -105,7 +105,7 @@ if ! curl -s -m 2 http://127.0.0.1:8088/v1/models >/dev/null; then
   # answer before any JSON; the model was trained to answer straight away.
   # One 4K slot: left alone it reserves 4 slots of the model's 262K context
   # (3.3 GB); a routing question needs under 1K tokens (about 250 MB).
-  nohup llama-server -m "$WORK/fin-q4_k_m.gguf" --port 8088 --alias fin \
+  nohup llama-server -m "$WORK/peek-q4_k_m.gguf" --port 8088 --alias peek \
     --chat-template-kwargs '{"enable_thinking":false}' \
     -c 4096 -np 1 \
     > "$WORK/llama-server.log" 2>&1 &
@@ -115,16 +115,16 @@ if ! curl -s -m 2 http://127.0.0.1:8088/v1/models >/dev/null; then
   done
 fi
 
-step "Turn on Smart Fin and score it"
+step "Turn on Smart Peek and score it"
 python - <<'PY'
 import json, pathlib
 p = pathlib.Path.home() / ".squadcode" / "settings.json"
 s = json.loads(p.read_text()) if p.exists() else {}
-s["brain_model"] = "fin"
+s["brain_model"] = "peek"
 s.setdefault("brain_url", "")
 p.parent.mkdir(parents=True, exist_ok=True)
 p.write_text(json.dumps(s, indent=2))
-print(f"Smart Fin on in {p}")
+print(f"Smart Peek on in {p}")
 PY
 if [ -x "$SQUAD" ]; then
   "$SQUAD" v2 brain eval
@@ -132,4 +132,4 @@ else
   echo "Install Squad Code from this branch, then run: SquadCode v2 brain eval"
 fi
 echo
-echo "Done. To turn Smart Fin off, set \"brain_model\": \"\" in ~/.squadcode/settings.json."
+echo "Done. To turn Smart Peek off, set \"brain_model\": \"\" in ~/.squadcode/settings.json."

@@ -1,4 +1,4 @@
-"""Train Fin's tiny router: a word and letter-pattern classifier, no neural net.
+"""Train Peek's tiny router: a word and letter-pattern classifier, no neural net.
 
 It reads the same chat examples as train_lora.py, learns which words and
 four-letter pieces point at which kind of job, and writes the weights the app

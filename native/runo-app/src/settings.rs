@@ -286,13 +286,14 @@ pub struct AppSettings {
     /// Runo v2: the agent that double-checks the crew's decisions. Best from another
     /// vendor than the one that did the work; empty is no second check.
     pub challenge_agent: String,
-    /// Smart Fin: the local model Squad's intelligence layer asks first, by its
+    /// Smart Peek: the local model Squad's intelligence layer asks first, by its
     /// name on the local server ("squad-fin-0.8b"). Empty uses the rules alone.
     pub brain_model: String,
     /// Where that model is served (OpenAI-style API); empty is llama-server's
     /// usual `http://127.0.0.1:8088/v1`.
     pub brain_url: String,
-    /// Where Smart Fin downloads Squad's own model from; empty is the released one.
+    /// Where Smart Peek looks for Squad's own model (a folder with `latest.json`);
+    /// empty is the published one.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub brain_model_url: String,
 }

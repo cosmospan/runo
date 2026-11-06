@@ -2,7 +2,7 @@
 
 use super::super::data::{Member, Mode};
 use super::super::store::{self, Store};
-use super::{fin, helper, ideas, model, route, teach};
+use super::{helper, ideas, model, route, teach, voice};
 
 /// Where `squad do <words>` sends a job: the bot, the kind of job, and a line
 /// saying why, for the terminal.
@@ -26,7 +26,7 @@ fn here() -> store::Folder {
     }
 }
 
-/// `squad brain why|ideas|export|eval|install|remove`.
+/// `squad brain why|ideas|export|eval|install|update|remove`.
 pub fn main(args: &[String]) -> Result<String, String> {
     let sub = args.first().map(String::as_str).unwrap_or("");
     let rest = args.get(1..).unwrap_or(&[]).join(" ");
@@ -75,7 +75,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
         "ideas" => Ok(match ideas::next(&store, &crew, &[], store::now()) {
             Some(i) => format!(
                 "{}\n{}: {} (works like {}). Make it on Crew \u{2192} New bot.",
-                fin::line(&fin::Moment::Idea {
+                voice::line(&voice::Moment::Idea {
                     name: i.name.to_string(),
                     why: i.why.clone(),
                 }),
@@ -84,7 +84,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 i.like.name()
             ),
             None => {
-                "No ideas yet. Fin suggests a bot once the same kind of job comes up a few times."
+                "No ideas yet. Peek suggests a bot once the same kind of job comes up a few times."
                     .into()
             }
         }),
@@ -130,7 +130,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 ));
             }
             let Some(m) = model::Local::from_settings(&st) else {
-                out.push_str("\nSmart Fin is off, so only the rules were scored.");
+                out.push_str("\nSmart Peek is off, so only the rules were scored.");
                 return Ok(out);
             };
             helper::ensure(&st, std::time::Duration::from_secs(30));
@@ -153,36 +153,50 @@ pub fn main(args: &[String]) -> Result<String, String> {
             }
             Ok(out)
         }
-        "install" => {
+        "install" | "update" => {
             // squad brain install [file.gguf | https://…]: Squad's own model,
-            // then Smart Fin on.
-            let from = args.get(1).cloned().unwrap_or_else(|| {
-                let u = st.brain_model_url.trim();
-                if u.is_empty() {
-                    helper::MODEL_URL.to_string()
-                } else {
-                    u.to_string()
+            // then Smart Peek on. With nothing named, the latest release.
+            // squad brain update: the latest release, if it's newer.
+            let base = st.brain_model_url.trim().to_string();
+            let msg = match args.get(1) {
+                Some(from) if sub == "install" => {
+                    helper::install_file(from)?;
+                    format!("Installed {from}.")
                 }
-            });
-            helper::fetch(&from, &helper::model_path())?;
+                _ => match helper::install_latest(&base, sub == "update")? {
+                    Some(r) => format!(
+                        "Installed Peek v{}{}.",
+                        r.version,
+                        if r.notes.is_empty() {
+                            String::new()
+                        } else {
+                            format!(": {}", r.notes)
+                        }
+                    ),
+                    None => format!(
+                        "Peek v{} is already the latest.",
+                        helper::installed().map(|r| r.version).unwrap_or(0)
+                    ),
+                },
+            };
             let mut st = st.clone();
             st.brain_model = helper::MODEL.to_string();
             st.brain_url.clear();
             st.save();
             Ok(format!(
-                "Smart Fin is on, with Squad's own model at {}.",
+                "{msg} Smart Peek is on, with Squad's own model at {}.",
                 helper::model_path().display()
             ))
         }
         "remove" => {
             helper::remove();
             let mut st = st.clone();
-            if st.brain_model == helper::MODEL {
+            if helper::is_ours(&st.brain_model) {
                 st.brain_model.clear();
             }
             st.save();
-            Ok("Smart Fin is off and its model is deleted.".into())
+            Ok("Smart Peek is off and its model is deleted.".into())
         }
-        _ => Err("usage: squad brain why|ideas|export|eval|install|remove".into()),
+        _ => Err("usage: squad brain why|ideas|export|eval|install|update|remove".into()),
     }
 }

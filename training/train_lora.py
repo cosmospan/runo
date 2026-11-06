@@ -1,6 +1,6 @@
 """Fine-tune Squad's model with LoRA on chat examples, then merge it.
 
-    python train_lora.py --data synth.jsonl mine.jsonl --out fin-lora
+    python train_lora.py --data synth.jsonl mine.jsonl --out peek-lora
 
 A 0.8B model with LoRA fits on one 16 GB GPU; a free Colab or Kaggle T4
 works (see colab.ipynb). On a Mac, MLX-LM's `mlx_lm.lora` does the same job with the
@@ -81,7 +81,7 @@ def main() -> None:
         model = AutoModelForCausalLM.from_pretrained(args.base, torch_dtype=dtype)
     model.to(dtype)
     data = load_dataset("json", data_files=args.data, split="train").shuffle(seed=7)
-    # Prompt (instructions + the person's words) and completion (Fin's answer),
+    # Prompt (instructions + the person's words) and completion (Peek's answer),
     # so only the answer is learned.
     data = data.map(
         lambda r: {"prompt": r["messages"][:-1], "completion": r["messages"][-1:]},
