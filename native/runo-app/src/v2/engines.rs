@@ -987,9 +987,11 @@ impl Shell {
             bin
         };
         let mut models = div().flex().flex_wrap().gap(px(6.));
+        let mut seen = std::collections::HashSet::new();
         for m in AgentPick::models(sel)
             .into_iter()
             .filter(|m| !m.value.is_empty())
+            .filter(|m| seen.insert(m.label.clone()))
         {
             models = models.child(
                 div()
