@@ -63,6 +63,10 @@ pub const CARD_R: f32 = 10.;
 /// frosted theme's opacity.
 pub fn ground() -> u32 {
     let t = theme();
+    // Crew Chat's sidebar and Jobs panel: a cool, soft grey.
+    if t.id == "crew-chat" {
+        return 0xF6F6F9;
+    }
     let (base, k) = if t.light {
         (t.bg, 0.045)
     } else {

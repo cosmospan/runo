@@ -1,29 +1,98 @@
-//! The sidebar: the folder you're in, search, the places, and the crew.
+//! The sidebar, Crew Chat style: the workspace, search, what needs you, your
+//! projects as channels, and the crew as people you can message.
 //!
-//! The crew lives here, one row per bot: its face with a status badge, its name
-//! and what it's doing right now, with a thin progress bar while it works. It
-//! replaces the dock, so the bots are always in view and never sit on top of a
-//! page.
-//!
-//! The look: no ground of its own (it sits on the window's, beside the page
-//! canvas), rows without boxes, and the place you're on lifted out in the
-//! canvas's colour with a short violet bar on its left edge. Status colours only show where something is happening.
+//! The crew lives here, one row per bot: its face, its name and a word on what
+//! it's doing right now (working, needs you), so the bots are always in view.
+//! The look: a soft grey column beside the white page, rows without boxes, and
+//! the place you're on lifted out as a white row with a hairline edge.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use super::data::Member;
+use super::store::Status;
 use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The sidebar's width.
-pub(super) const WIDTH: f32 = 64.;
+pub(super) const WIDTH: f32 = 248.;
 
-/// The sidebar's ground, a shade darker than the page so the page reads as
-/// the thing in front.
+/// The sidebar's ground, a shade off the page so the page reads as the thing
+/// in front.
 fn ground() -> u32 {
     ui::ground()
+}
+
+/// One row: an icon or face, a label, and something on the right. Lit when
+/// you're on it.
+fn row(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
+    div()
+        .id(id)
+        .h(px(32.))
+        .px(px(10.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .rounded(px(8.))
+        .text_size(px(13.5))
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .map(|d| {
+            if on {
+                d.bg(c(ui::raised()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .text_color(c(ui::ink()))
+                    .shadow(vec![BoxShadow {
+                        color: hsla(0., 0., 0., 0.05),
+                        offset: point(px(0.), px(1.)),
+                        blur_radius: px(2.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+            } else {
+                d.border_1()
+                    .border_color(transparent_black())
+                    .text_color(c(ui::muted()))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            }
+        })
+}
+
+/// A small count on the right of a row.
+fn count(n: usize, tone: Option<ui::Tone>) -> Div {
+    let d = div()
+        .ml_auto()
+        .min_w(px(18.))
+        .h(px(18.))
+        .px(px(5.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(6.))
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD);
+    match tone {
+        Some((text, fill, _)) => d.bg(c(fill)).text_color(c(text)),
+        None => d.text_color(c(ui::faint())),
+    }
+    .child(n.min(99).to_string())
+}
+
+/// A group's label, with an optional action on its right.
+fn label(text: &'static str) -> Div {
+    div()
+        .h(px(28.))
+        .mt(px(14.))
+        .px(px(10.))
+        .flex()
+        .items_center()
+        .text_size(px(11.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(ui::faint()))
+        .child(text.to_uppercase())
 }
 
 impl Shell {
@@ -31,171 +100,280 @@ impl Shell {
         let place = self.place;
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let working = self.crew.store.running().count();
         let folder = self.crew.store.folder().cloned();
-        let letter = folder
+        let where_ = folder
             .as_ref()
-            .and_then(|f| f.name.chars().next())
-            .unwrap_or('S')
-            .to_uppercase()
-            .to_string();
-        let folder_name = folder
-            .as_ref()
-            .map(|f| format!("{} · {}", f.name, short_path(&f.path)))
-            .unwrap_or_else(|| "No folder yet".into());
+            .map(|f| short_path(&f.path))
+            .unwrap_or_else(|| "No project yet".into());
 
-        // The folder you're in, as a tile at the top of the rail.
+        // The workspace: Peek, the app's name and the project you're in.
+        let peek_mood = self.side_mood(Member::Fin);
+        let peek = self.bot(Member::Fin, peek_mood, 30., runo_holo::Framing::Bust);
         let head = div()
-            .id("side-folder")
-            .size(px(36.))
-            .mb(px(14.))
+            .id("side-head")
+            .h(px(44.))
+            .px(px(6.))
+            .mb(px(8.))
             .flex()
             .items_center()
-            .justify_center()
+            .gap(px(10.))
             .rounded(px(10.))
-            .bg(c(ui::fill()))
-            .text_color(c(ui::on_fill()))
-            .text_size(px(15.))
-            .font_weight(FontWeight::BOLD)
             .cursor_pointer()
-            .hover(|s| s.opacity(0.9))
-            .child(letter)
-            .tooltip(move |window, cx| {
-                gpui_kit::component::tooltip::Tooltip::new(folder_name.clone()).build(window, cx)
-            })
+            .hover(|s| s.bg(c(ui::hover())))
+            .child(peek)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Squad Code"),
+                    )
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(11.5))
+                            .text_color(c(ui::faint()))
+                            .child(where_),
+                    ),
+            )
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx)));
 
-        // One place: an icon in a rounded square, lit when you're on it, with
-        // an optional count badge on its corner.
-        let item = |id: &'static str,
-                    icon: IconName,
-                    tip: &'static str,
-                    on: bool,
-                    badge: Option<(usize, u32)>| {
-            div()
-                .id(id)
-                .relative()
-                .size(px(40.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(10.))
-                .cursor_pointer()
-                .map(|d| {
-                    if on {
-                        d.bg(c(ui::raised())).text_color(c(ui::ink())).child(
-                            div()
-                                .absolute()
-                                .left(px(-12.))
-                                .top(px(10.))
-                                .bottom(px(10.))
-                                .w(px(3.))
-                                .rounded_r(px(3.))
-                                .bg(c(ui::ink())),
-                        )
-                    } else {
-                        d.text_color(c(ui::muted()))
-                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                    }
-                })
-                .child(Icon::new(icon).size(px(18.)))
-                .when_some(badge, |d, (n, color)| {
-                    d.child(
-                        div()
-                            .absolute()
-                            .top(px(2.))
-                            .right(px(1.))
-                            .min_w(px(16.))
-                            .h(px(16.))
-                            .px(px(4.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_full()
-                            .bg(c(color))
-                            .border_2()
-                            .border_color(c(ground()))
-                            .text_size(px(9.5))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(0x0B0B0E))
-                            .child(n.min(99).to_string()),
-                    )
-                })
-                .tooltip(move |window, cx| {
-                    gpui_kit::component::tooltip::Tooltip::new(tip).build(window, cx)
-                })
-        };
-        let jobs_on = matches!(
-            place,
-            Place::Today | Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_)
-        );
+        // Search: the palette finds places, bots and jobs.
+        let search = div()
+            .id("side-search")
+            .h(px(34.))
+            .px(px(10.))
+            .mb(px(8.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .rounded(px(9.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .text_size(px(13.))
+            .text_color(c(ui::faint()))
+            .cursor_pointer()
+            .hover(|s| s.border_color(c(ui::line_hi())))
+            .child(Icon::new(IconName::Search).size(px(15.)))
+            .child(div().flex_1().child("Search"))
+            .child(ui::kbd(if cfg!(target_os = "macos") {
+                "⌘K"
+            } else {
+                "Ctrl K"
+            }))
+            .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx)));
+
+        let all_jobs = self.crew.store.listed().len();
         let nav = div()
             .flex()
             .flex_col()
-            .items_center()
-            .gap(px(6.))
+            .gap(px(1.))
             .child(
-                item(
-                    "side-jobs",
-                    IconName::LayoutDashboard,
-                    "Jobs",
-                    jobs_on,
-                    None,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
+                row("side-inbox", place == Place::Inbox)
+                    .child(Icon::new(IconName::Inbox).size(px(16.)))
+                    .child("Needs you")
+                    .when(inbox > 0, |d| d.child(count(inbox, Some(ui::ask_tone()))))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
             )
             .child(
-                item(
-                    "side-inbox",
-                    IconName::Inbox,
-                    "Needs you",
-                    place == Place::Inbox,
-                    (inbox > 0).then_some((inbox, ui::AMBER)),
+                row(
+                    "side-history",
+                    matches!(place, Place::History | Place::Race(_) | Place::Goal(_)),
                 )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
+                .child(Icon::new(IconName::MessageSquare).size(px(16.)))
+                .child("All jobs")
+                .when(all_jobs > 0, |d| d.child(count(all_jobs, None)))
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
             )
             .child(
-                item(
-                    "side-crew",
-                    IconName::Users,
-                    "Crew",
-                    matches!(place, Place::Crew | Place::Chat(_)),
-                    (working > 0).then_some((working, ui::BLUE)),
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+                row("side-crew", place == Place::Crew)
+                    .child(Icon::new(IconName::Users).size(px(16.)))
+                    .child("Your crew")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             )
             .child(
-                item(
+                row("side-usage", place == Place::Usage)
+                    .child(Icon::new(IconName::ChartColumn).size(px(16.)))
+                    .child("Usage")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
+            );
+
+        // Projects, as channels. The one you're in is lit while you're on its
+        // channel or one of its jobs.
+        let in_channel = matches!(place, Place::Today | Place::Live(_));
+        let current = self.crew.store.current;
+        let folders: Vec<(usize, String, usize)> = self
+            .crew
+            .store
+            .folders
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let busy = self
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .filter(|j| {
+                        j.folder.path == f.path
+                            && matches!(j.status, Status::Running | Status::Shipping)
+                    })
+                    .count();
+                (i, f.name.clone(), busy)
+            })
+            .collect();
+        let mut projects = div().flex().flex_col().gap(px(1.)).child(
+            label("Projects").child(div().flex_1()).child(
+                div()
+                    .id("side-add-folder")
+                    .size(px(20.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::Plus).size(px(13.)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new("Add a project folder")
+                            .build(window, cx)
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+            ),
+        );
+        if folders.is_empty() {
+            projects = projects.child(
+                row("side-pick-folder", false)
+                    .child(Icon::new(IconName::FolderOpen).size(px(16.)))
+                    .child("Pick a folder")
+                    .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+            );
+        }
+        for (i, name, busy) in folders {
+            let on = in_channel && i == current;
+            projects = projects.child(
+                row(("side-folder", i), on)
+                    .child(
+                        div()
+                            .w(px(16.))
+                            .flex()
+                            .justify_center()
+                            .text_size(px(15.))
+                            .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                            .child("#"),
+                    )
+                    .child(div().flex_1().min_w_0().truncate().child(name))
+                    .when(busy > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(5.))
+                                .text_size(px(11.5))
+                                .text_color(c(ui::t_blue()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
+                                .child(busy.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.crew.store.current = i;
+                        this.crew.store.save();
+                        this.go(Place::Today, cx);
+                    })),
+            );
+        }
+
+        // The crew, as people you can message: face, name, and what each is up to.
+        let members: Vec<Member> = Member::everyone()
+            .into_iter()
+            .filter(|m| m.on_crew())
+            .collect();
+        let mut crew = div()
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .child(label("Crew"));
+        for who in members {
+            let (word, _) = self.status_of(who);
+            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
+            let asks = !busy
+                && self
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == who && j.needs_you());
+            let mood = self.side_mood(who);
+            let face = self.bot(who, mood, 24., runo_holo::Framing::Bust);
+            let on = place == Place::Chat(who);
+            let (word, tint) = if asks {
+                ("asks you".to_string(), ui::t_amber())
+            } else if busy {
+                (word, ui::t_blue())
+            } else if who == Member::Fin {
+                ("lead".to_string(), ui::faint())
+            } else {
+                (String::new(), ui::faint())
+            };
+            crew = crew.child(
+                row(("side-bot", who.key() as usize), on)
+                    .when(!busy && !asks && !on, |d| d.text_color(c(ui::muted())))
+                    .when(busy || asks, |d| d.text_color(c(ui::ink())))
+                    .child(face)
+                    .child(div().flex_1().min_w_0().truncate().child(who.name()))
+                    .when(!word.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tint))
+                                .child(word),
+                        )
+                    })
+                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
+                        this.hover_bot(who, *on, cx)
+                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+            );
+        }
+
+        let settings = div()
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .child(
+                row(
                     "side-term",
-                    IconName::SquareTerminal,
-                    "Terminal",
                     self.term_open.is_some_and(super::term::is_project),
-                    None,
+                )
+                .child(Icon::new(IconName::SquareTerminal).size(px(16.)))
+                .child("Terminal")
+                .child(
+                    div()
+                        .ml_auto()
+                        .text_size(px(11.))
+                        .text_color(c(ui::faint()))
+                        .child("Ctrl `"),
                 )
                 .on_click(cx.listener(|this, _, window, cx| this.toggle_project_term(window, cx))),
             )
             .child(
-                item(
-                    "side-usage",
-                    IconName::ChartColumn,
-                    "Usage",
-                    place == Place::Usage,
-                    None,
-                )
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
+                row("side-settings", matches!(place, Place::Settings(_)))
+                    .child(Icon::new(IconName::Settings).size(px(16.)))
+                    .child("Settings")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let pane = this.settings_pane;
+                        this.go(Place::Settings(pane), cx)
+                    })),
             );
-
-        let settings = item(
-            "side-settings",
-            IconName::Settings,
-            "Settings",
-            matches!(place, Place::Settings(_)),
-            None,
-        )
-        .on_click(cx.listener(|this, _, _, cx| {
-            let pane = this.settings_pane;
-            this.go(Place::Settings(pane), cx)
-        }));
 
         div()
             .id("sidebar")
@@ -204,17 +382,28 @@ impl Shell {
             .flex_none()
             .flex()
             .flex_col()
-            .items_center()
             // On a Mac the window buttons sit in the top-left corner.
-            .pt(px(if cfg!(target_os = "macos") { 40. } else { 14. }))
+            .pt(px(if cfg!(target_os = "macos") { 38. } else { 14. }))
             .pb(px(12.))
+            .px(px(12.))
             .bg(c(ground()))
             .border_r_1()
-            .border_color(c(ui::line2()))
+            .border_color(c(ui::line()))
             .child(head)
-            .child(nav)
-            .child(div().flex_1())
-            .child(settings)
+            .child(search)
+            .child(
+                div()
+                    .id("side-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .child(nav)
+                    .child(projects)
+                    .child(crew),
+            )
+            .child(settings.pt(px(8.)))
     }
 
     /// The top bar over every page: where you are, the engine, and a new job.
