@@ -1,31 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
 <defs>
-<linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E3040"/><stop offset="1" stop-color="#14151C"/></linearGradient>
-<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".28"/><stop offset=".25" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".12"/></linearGradient>
-<linearGradient id="shell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7F82"/><stop offset="1" stop-color="#F04A55"/></linearGradient>
-<linearGradient id="vis" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2A2B35"/><stop offset="1" stop-color="#1B1C22"/></linearGradient>
-<filter id="drop" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="2.6" stdDeviation="2.6" flood-color="#000000" flood-opacity=".28"/></filter>
+<linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25222F"/><stop offset="1" stop-color="#0B0A10"/></linearGradient>
+<radialGradient id="halo" cx=".5" cy=".52" r=".5"><stop offset="0" stop-color="#7B5CFF" stop-opacity=".42"/><stop offset="1" stop-color="#7B5CFF" stop-opacity="0"/></radialGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/><stop offset=".3" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+<linearGradient id="pill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B2836"/><stop offset="1" stop-color="#111017"/></linearGradient>
+<radialGradient id="glow"><stop offset="0" stop-color="#A88BFF" stop-opacity=".75"/><stop offset=".5" stop-color="#A88BFF" stop-opacity=".25"/><stop offset="1" stop-color="#A88BFF" stop-opacity="0"/></radialGradient>
+<clipPath id="clip"><path d="M381.78 100.00L642.22 100.00C723.36 100.00 763.93 100.00 807.60 113.81C855.28 131.16 892.84 168.72 910.19 216.40C924.00 260.07 924.00 300.64 924.00 381.78L924.00 642.22C924.00 723.36 924.00 763.93 910.19 807.60C892.84 855.28 855.28 892.84 807.60 910.19C763.93 924.00 723.36 924.00 642.22 924.00L381.78 924.00C300.64 924.00 260.07 924.00 216.40 910.19C168.72 892.84 131.16 855.28 113.81 807.60C100.00 763.93 100.00 723.36 100.00 642.22L100.00 381.78C100.00 300.64 100.00 260.07 113.81 216.40C131.16 168.72 168.72 131.16 216.40 113.81C260.07 100.00 300.64 100.00 381.78 100.00Z"/></clipPath>
 </defs>
-<!-- Squad Code: Fin's head, its visor drawn as an editor window with a text cursor. -->
+<!-- Squad Code: Peek, the crew lead, in its Glow finish: two lit eyes in a dark glass pill on an ink tile. -->
 <path d="M381.78 100.00L642.22 100.00C723.36 100.00 763.93 100.00 807.60 113.81C855.28 131.16 892.84 168.72 910.19 216.40C924.00 260.07 924.00 300.64 924.00 381.78L924.00 642.22C924.00 723.36 924.00 763.93 910.19 807.60C892.84 855.28 855.28 892.84 807.60 910.19C763.93 924.00 723.36 924.00 642.22 924.00L381.78 924.00C300.64 924.00 260.07 924.00 216.40 910.19C168.72 892.84 131.16 855.28 113.81 807.60C100.00 763.93 100.00 723.36 100.00 642.22L100.00 381.78C100.00 300.64 100.00 260.07 113.81 216.40C131.16 168.72 168.72 131.16 216.40 113.81C260.07 100.00 300.64 100.00 381.78 100.00Z" fill="url(#tile)"/>
-<g transform="translate(512 520) scale(6.1) translate(-60 -53)">
-<g filter="url(#drop)">
-<path d="M53 21Q57 4 72 9Q64 13 66 22Z" fill="#FF9A9D"/>
-<path d="M44 46Q16 30 5 44Q4 58 44 63Z" fill="#FF9A9D"/>
-<path d="M76 46Q104 30 115 44Q116 58 76 63Z" fill="#FF9A9D"/>
-<path d="M60 20L90 37V69L60 86L30 69V37Z" fill="url(#shell)" stroke="url(#shell)" stroke-width="9" stroke-linejoin="round"/>
-</g>
-<path d="M29 47L15 43M29 53L13 52.5" stroke="#D8505B" stroke-width="1.6" stroke-linecap="round"/>
-<path d="M91 47L105 43M91 53L107 52.5" stroke="#D8505B" stroke-width="1.6" stroke-linecap="round"/>
-<path d="M31 71L60 87.5L89 71" fill="none" stroke="#C8323E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
-<path d="M33 36L59 21.5" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" opacity=".75"/>
-<rect x="35.5" y="34.5" width="49" height="37" rx="13.5" fill="#000" opacity=".12"/>
-<rect x="36" y="33" width="48" height="37" rx="13" fill="url(#vis)"/>
-<path d="M36.5 44.5H83.5" stroke="#FFFFFF" stroke-width=".5" opacity=".12"/>
-<circle cx="42.0" cy="39" r="1.45" fill="#FF8A8E"/><circle cx="46.2" cy="39" r="1.45" fill="#FFD06A"/><circle cx="50.4" cy="39" r="1.45" fill="#6FDDB0"/>
-<path d="M48 69L62 33H69L55 69Z" fill="#FFFFFF" opacity=".05"/>
-<path d="M46.5 55q4.5 -7 9 0M64.5 55q4.5 -7 9 0" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round"/>
-<rect x="58.8" y="59.5" width="2.4" height="7" rx="1.2" fill="#FF7F82"/>
-</g>
+<g clip-path="url(#clip)"><rect x="100" y="100" width="824" height="824" fill="url(#halo)"/></g>
+<rect x="182.0" y="342.0" width="660" height="348" rx="174.0" fill="url(#pill)" stroke="#7B62E6" stroke-width="16"/>
+<path d="M287.6 411.6Q393.2 380.3 498.8 387.2" fill="none" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="17.4" stroke-linecap="round"/>
+<circle cx="366" cy="516" r="136.8" fill="url(#glow)"/>
+<circle cx="366" cy="516" r="72.0" fill="#A88BFF"/>
+<circle cx="391.9" cy="490.1" r="24.5" fill="#FFFFFF"/>
+<circle cx="658" cy="516" r="136.8" fill="url(#glow)"/>
+<circle cx="658" cy="516" r="72.0" fill="#A88BFF"/>
+<circle cx="683.9" cy="490.1" r="24.5" fill="#FFFFFF"/>
 <path d="M381.78 100.00L642.22 100.00C723.36 100.00 763.93 100.00 807.60 113.81C855.28 131.16 892.84 168.72 910.19 216.40C924.00 260.07 924.00 300.64 924.00 381.78L924.00 642.22C924.00 723.36 924.00 763.93 910.19 807.60C892.84 855.28 855.28 892.84 807.60 910.19C763.93 924.00 723.36 924.00 642.22 924.00L381.78 924.00C300.64 924.00 260.07 924.00 216.40 910.19C168.72 892.84 131.16 855.28 113.81 807.60C100.00 763.93 100.00 723.36 100.00 642.22L100.00 381.78C100.00 300.64 100.00 260.07 113.81 216.40C131.16 168.72 168.72 131.16 216.40 113.81C260.07 100.00 300.64 100.00 381.78 100.00Z" fill="none" stroke="url(#rim)" stroke-width="4" transform="translate(512 512) scale(.996) translate(-512 -512)"/>
 </svg>
