@@ -480,9 +480,9 @@ pub struct Shell {
     nav_at: Instant,
     /// Progress bars' shown values, by job, so they glide.
     bars: HashMap<u64, f32>,
-    /// Today's mode tabs: the highlight glides from one to the next.
-    mode_from: f32,
-    mode_at: Instant,
+    /// The job box's kind of work was set on purpose (Give a job, a hand-off),
+    /// so it isn't guessed from the text until that job is sent.
+    mode_pinned: bool,
     /// The Inbox count last frame, and when it last went up, for the badge's pop.
     inbox_seen: usize,
     inbox_at: Instant,
@@ -563,9 +563,6 @@ fn doze_after() -> Duration {
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
 
-/// Width of one of Today's mode tabs plus the gap after it.
-const MODE_STEP: f32 = 70.;
-
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
@@ -584,7 +581,7 @@ impl Shell {
         // A long job wraps and the box grows with it; Shift+Enter starts a new line.
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .placeholder(Mode::Build.placeholder())
+                .placeholder(Mode::ANY_PLACEHOLDER)
                 .submit_on_enter(true)
                 .auto_grow(1, 6)
         });
@@ -622,6 +619,7 @@ impl Shell {
                     let text = input.read(cx).value().trim().to_string();
                     input.update(cx, |i, cx| i.set_value("", window, cx));
                     this.hand_over(text, cx);
+                    this.unpin_mode(window, cx);
                 }
             }),
             cx.subscribe_in(&chat_input, window, |this, input, event, window, cx| {
@@ -797,8 +795,7 @@ impl Shell {
             nav_to: nav_slot(start).unwrap_or(0.),
             nav_at: Instant::now(),
             bars: HashMap::new(),
-            mode_from: MODE_STEP,
-            mode_at: Instant::now(),
+            mode_pinned: false,
             inbox_seen: usize::MAX,
             inbox_at: Instant::now(),
             chat_at: Instant::now(),
@@ -872,17 +869,6 @@ impl Shell {
         }
     }
 
-    /// Where Today's mode highlight is now, in pixels from the first tab.
-    fn mode_x(&self) -> f32 {
-        let to = Mode::ALL
-            .into_iter()
-            .position(|m| m == self.mode)
-            .unwrap_or(0) as f32
-            * MODE_STEP;
-        let k = runo_holo::anim::spring(self.mode_at.elapsed().as_secs_f64(), 0.3) as f32;
-        self.mode_from + (to - self.mode_from) * k
-    }
-
     /// How far item `i` of the current place has eased in, 0 → 1; each item
     /// starts a beat after the one before.
     fn stagger(&self, i: usize) -> f32 {
@@ -923,15 +909,25 @@ impl Shell {
     }
 
     fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        if mode != self.mode {
-            self.mode_from = self.mode_x();
-            self.mode_at = Instant::now();
-        }
         self.mode = mode;
+        self.mode_pinned = true;
         self.composer.update(cx, |i, cx| {
             i.set_placeholder(mode.placeholder(), window, cx)
         });
         cx.notify();
+    }
+
+    /// Once a job is sent (and not held for Fin's offer), the next one's kind
+    /// of work is read from its text again.
+    fn unpin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.offer.is_some() || !self.mode_pinned {
+            return;
+        }
+        self.mode_pinned = false;
+        self.target = None;
+        self.composer.update(cx, |i, cx| {
+            i.set_placeholder(Mode::ANY_PLACEHOLDER, window, cx)
+        });
     }
 
     fn say(&mut self, text: impl Into<SharedString>) {
@@ -973,6 +969,9 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        if !self.mode_pinned {
+            self.mode = Mode::guess(&text);
+        }
         let text = match (text.is_empty(), self.mode.default_job()) {
             (false, _) => text,
             (true, Some(d)) => d.to_string(),
@@ -1095,6 +1094,7 @@ impl Shell {
         self.set_mode(o.mode, window, cx);
         let added = self.toast.clone();
         self.hand_over(o.text, cx);
+        self.unpin_mode(window, cx);
         // Keep "Added Fixer" showing unless starting the job had more to say.
         if self.toast.is_none() {
             self.toast = added;
@@ -1685,7 +1685,6 @@ impl Render for Shell {
         // What the last frame needed sets the clock for the next one.
         let busy = self.entered.elapsed() < Duration::from_millis(1000)
             || (self.palette && self.palette_at.elapsed() < Duration::from_millis(600))
-            || self.mode_at.elapsed() < Duration::from_millis(500)
             || self.inbox_at.elapsed() < Duration::from_millis(700)
             || self.chat_at.elapsed() < Duration::from_millis(500)
             || self.nav_at.elapsed() < Duration::from_millis(600)

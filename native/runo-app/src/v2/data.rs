@@ -434,6 +434,10 @@ impl Mode {
         !matches!(self, Mode::Ask | Mode::Review)
     }
 
+    /// The job box's hint while the kind of work is still read from the text.
+    pub const ANY_PLACEHOLDER: &'static str =
+        "Describe what to build, fix, test or tidy, or ask a question…";
+
     pub fn placeholder(self) -> &'static str {
         match self {
             Mode::Ask => "Ask anything about the code…",
@@ -446,6 +450,61 @@ impl Mode {
     }
 
     /// The job when the box is left empty, for the modes that have one.
+    /// The kind of work a request reads as, so the job box never asks: a
+    /// question is Ask, an error or bug is Fix, and so on; anything else is
+    /// Build. The first word counts most, then keywords anywhere in it.
+    pub fn guess(text: &str) -> Mode {
+        let t = text.trim().to_lowercase();
+        if t.is_empty() {
+            return Mode::Build;
+        }
+        let first = t
+            .split(|c: char| !c.is_alphanumeric())
+            .find(|w| !w.is_empty())
+            .unwrap_or("");
+        let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
+        match first {
+            "fix" | "debug" | "repair" | "resolve" => return Mode::Fix,
+            "test" | "run" | "verify" | "try" => return Mode::Test,
+            "review" | "audit" | "inspect" => return Mode::Review,
+            "tidy" | "refactor" | "clean" | "cleanup" | "rename" | "simplify" | "format"
+            | "lint" | "reorganize" | "reorganise" => return Mode::Tidy,
+            "add" | "build" | "make" | "create" | "implement" | "write" | "new" => {
+                return Mode::Build
+            }
+            "what" | "why" | "how" | "where" | "which" | "who" | "when" | "explain" | "does"
+            | "do" | "is" | "are" | "can" | "should" | "tell" | "describe" | "summarize"
+            | "summarise" => return Mode::Ask,
+            _ => {}
+        }
+        if t.ends_with('?') {
+            Mode::Ask
+        } else if has(&[
+            "error",
+            "bug",
+            "broken",
+            "crash",
+            "exception",
+            "traceback",
+            "panic",
+            "fails",
+            "failing",
+            "doesn't work",
+            "not working",
+            "stack trace",
+        ]) {
+            Mode::Fix
+        } else if has(&["review", "look over", "audit"]) {
+            Mode::Review
+        } else if has(&["refactor", "clean up", "dead code", "tidy"]) {
+            Mode::Tidy
+        } else if has(&["run the tests", "test suite", "coverage"]) {
+            Mode::Test
+        } else {
+            Mode::Build
+        }
+    }
+
     pub fn default_job(self) -> Option<&'static str> {
         match self {
             Mode::Review => Some("Review my uncommitted changes"),
@@ -459,6 +518,23 @@ impl Mode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_job_box_reads_the_kind_of_work() {
+        assert_eq!(Mode::guess("Add a dark mode toggle"), Mode::Build);
+        assert_eq!(Mode::guess("Checkout page shows a blank cart"), Mode::Build);
+        assert_eq!(Mode::guess("How does the retry logic work?"), Mode::Ask);
+        assert_eq!(Mode::guess("the login form, is it validated?"), Mode::Ask);
+        assert_eq!(
+            Mode::guess("TypeError: cannot read property 'id' of undefined"),
+            Mode::Fix
+        );
+        assert_eq!(Mode::guess("Fix the coupon field on mobile"), Mode::Fix);
+        assert_eq!(Mode::guess("Review my uncommitted changes"), Mode::Review);
+        assert_eq!(Mode::guess("Run the tests and report failures"), Mode::Test);
+        assert_eq!(Mode::guess("Refactor the payment module"), Mode::Tidy);
+        assert_eq!(Mode::guess(""), Mode::Build);
+    }
 
     #[test]
     fn made_bots_join_the_crew() {

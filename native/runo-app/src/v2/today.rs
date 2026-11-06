@@ -9,7 +9,7 @@ use gpui_kit::*;
 
 use runo_holo::{Framing, Mood};
 
-use super::data::{Member, Mode};
+use super::data::Mode;
 use super::store::{self, Status};
 use super::ui::{self, c, ca};
 use super::Pane;
@@ -54,9 +54,6 @@ fn full_name() -> Option<String> {
     let text = text.split(':').nth(4)?.split(',').next()?.to_string();
     (!text.is_empty()).then_some(text)
 }
-
-/// A mode tab's width: the bot's face and the word.
-const TAB: f32 = 68.;
 
 fn greeting() -> String {
     use chrono::Timelike;
@@ -178,76 +175,15 @@ impl Shell {
     }
 
     fn composer_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        // The kind of work comes from what's typed, unless a job was set up
+        // on purpose (Give a job, a hand-off from chat).
+        if !self.mode_pinned {
+            self.mode = Mode::guess(&self.composer.read(cx).value());
+        }
         let target = self.doer();
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 26.);
-        // The white highlight glides under the tabs as the mode changes.
-        let x = self.mode_x();
-        let mut modes = div()
-            .relative()
-            .flex()
-            .items_center()
-            .p(px(3.))
-            .gap(px(super::MODE_STEP - TAB))
-            .rounded(px(10.))
-            .bg(c(ui::well()))
-            .border_1()
-            .border_color(c(ui::line2()))
-            .child(
-                div()
-                    .absolute()
-                    .top(px(3.))
-                    .left(px(3. + x))
-                    .w(px(TAB))
-                    .h(px(30.))
-                    .rounded(px(7.))
-                    .bg(c(ui::raised()))
-                    .border_1()
-                    .border_color(c(ui::line())),
-            );
-        // Every kind of work. One nobody on the crew does yet is fainter, and a
-        // job sent in it makes Fin offer the bot for it.
-        for (i, m) in Mode::ALL.into_iter().enumerate() {
-            let on = self.mode == m;
-            let staffed = Member::doer_for(m).is_some();
-            modes = modes.child(
-                div()
-                    .id(("mode", i))
-                    .w(px(TAB))
-                    .h(px(30.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(5.))
-                    .rounded(px(7.))
-                    .text_size(px(13.))
-                    .cursor_pointer()
-                    .map(|d| {
-                        if on {
-                            d.font_weight(FontWeight::MEDIUM).text_color(c(ui::ink()))
-                        } else {
-                            d.text_color(c(if staffed { ui::muted() } else { ui::faint() }))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                        }
-                    })
-                    .child(m.label())
-                    .when(!staffed, |d| {
-                        let who = Member::for_mode(m).name();
-                        d.tooltip(move |window, cx| {
-                            gpui_kit::component::tooltip::Tooltip::new(format!(
-                                "Nobody on your crew does this yet. Send a job and Fin offers {who}."
-                            ))
-                            .build(window, cx)
-                        })
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.target = None;
-                        this.set_mode(m, window, cx);
-                        this.composer.update(cx, |i, cx| i.focus(window, cx));
-                    })),
-            );
-        }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
         let box_ = div()
             .flex_1()
@@ -272,7 +208,6 @@ impl Shell {
                     .flex_wrap()
                     .items_center()
                     .gap(px(8.))
-                    .child(modes)
                     .child(div().flex_1())
                     .when(self.mode.writes(), |d| {
                         let on = self.splitting;
@@ -340,6 +275,12 @@ impl Shell {
                             } else {
                                 format!("{} (Fin asks first)", target.name())
                             })
+                            // What it reads the request as, so a wrong guess shows.
+                            .child(
+                                div()
+                                    .text_color(c(ui::faint()))
+                                    .child(format!("· {}", self.mode.label())),
+                            )
                             .tooltip(move |window, cx| {
                                 gpui_kit::component::tooltip::Tooltip::new(format!(
                                     "Runs on {engine}. Click to change it."
@@ -377,6 +318,7 @@ impl Shell {
                                 this.composer
                                     .update(cx, |i, cx| i.set_value("", window, cx));
                                 this.hand_over(text, cx);
+                                this.unpin_mode(window, cx);
                             })),
                     ),
             );
