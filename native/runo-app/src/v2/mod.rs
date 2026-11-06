@@ -428,7 +428,11 @@ pub struct Shell {
     /// The maker's name and job boxes, and the built-in bot its work is like.
     maker_name: Entity<InputState>,
     maker_role: Entity<InputState>,
-    maker_like: Member,
+    /// What it knows best and how it works, when the person sets them; left
+    /// empty, they're filled in from its job and the project.
+    maker_skills: Entity<InputState>,
+    maker_rules: Entity<InputState>,
+    maker_like: Option<Member>,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
     /// The bot maker is open on Crew.
@@ -596,6 +600,12 @@ impl Shell {
         let maker_name = cx.new(|cx| InputState::new(window, cx).placeholder("Scout"));
         let maker_role =
             cx.new(|cx| InputState::new(window, cx).placeholder("Checks the docs match the code"));
+        let maker_skills = cx
+            .new(|cx| InputState::new(window, cx).placeholder("Optional: docs, readme, changelog"));
+        let maker_rules = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Optional, split with ; Run the docs build; never edit code")
+        });
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
@@ -779,7 +789,9 @@ impl Shell {
             sampling: false,
             maker_name,
             maker_role,
-            maker_like: Member::Checker,
+            maker_skills,
+            maker_rules,
+            maker_like: None,
             hover_at: Instant::now(),
             mouse: Point::default(),
             faces: Default::default(),
@@ -1029,6 +1041,17 @@ impl Shell {
     fn save_made(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.maker_name.read(cx).value().trim().to_string();
         let role = self.maker_role.read(cx).value().trim().to_string();
+        let split = |text: &str, by: char| -> Vec<String> {
+            text.split(by)
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        };
+        let skills: Vec<String> = split(&self.maker_skills.read(cx).value(), ',')
+            .into_iter()
+            .map(|x| x.to_lowercase())
+            .collect();
+        let rules = split(&self.maker_rules.read(cx).value(), ';');
         if name.is_empty() {
             self.say("Give your bot a name first.");
             cx.notify();
@@ -1042,24 +1065,22 @@ impl Shell {
             cx.notify();
             return;
         }
-        let id = self.crew.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
-        let like = self.maker_like;
-        let role = if role.is_empty() {
-            like.role().to_string()
-        } else {
-            role
-        };
-        self.crew.store.made.push(data::Made {
-            id,
-            name: name.clone(),
-            role,
-            like,
-            look: [mascot::colour_index(self.maker.0), 0, 0, 0],
-            outfit: runo_holo::fin::Fin::outfit_code(self.maker.1),
-        });
-        data::set_made(&self.crew.store.made);
-        self.crew.store.save();
-        for input in [&self.maker_name, &self.maker_role] {
+        let st = cx.global::<crate::settings::AppSettings>().clone();
+        self.crew.make_bot(
+            &st,
+            &name,
+            &role,
+            self.maker_like,
+            (skills, rules),
+            [mascot::colour_index(self.maker.0), 0, 0, 0],
+            runo_holo::fin::Fin::outfit_code(self.maker.1),
+        );
+        for input in [
+            &self.maker_name,
+            &self.maker_role,
+            &self.maker_skills,
+            &self.maker_rules,
+        ] {
             input.update(cx, |i, cx| i.set_value("", window, cx));
         }
         self.entered = Instant::now();
@@ -1117,7 +1138,7 @@ impl Shell {
         self.composer
             .update(cx, |i, cx| i.set_value(o.text, window, cx));
         if Member::KINDS.contains(&o.who) {
-            self.maker_like = o.who;
+            self.maker_like = Some(o.who);
         }
         self.maker_open = true;
         self.go(Place::Crew, cx);
@@ -1488,21 +1509,28 @@ impl Shell {
                 continue;
             };
             if self.place != Place::Live(*id) {
+                // A job that changed files is waiting for review by now.
                 let msg = match j.status {
-                    Status::Done => {
-                        format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.title)
-                    }
-                    _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
+                    Status::Done | Status::Review => format!(
+                        "{} finished \u{201c}{}\u{201d}. {}",
+                        j.bot.name(),
+                        j.label(),
+                        brain::tasks::facts(&j)
+                    ),
+                    _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.label()),
                 };
                 self.say(msg);
             }
             // Squad Code is behind other windows: tell the person on the desktop.
             if !self.active.load(std::sync::atomic::Ordering::Relaxed) {
                 let title = match j.status {
-                    Status::Done => format!("{} finished", j.bot.name()),
+                    Status::Done | Status::Review => format!("{} finished", j.bot.name()),
                     _ => format!("{} stopped", j.bot.name()),
                 };
-                crate::settings::notify(&title, &j.title);
+                crate::settings::notify(
+                    &title,
+                    &format!("{}: {}", j.label(), brain::tasks::facts(&j)),
+                );
             }
         }
     }
@@ -1571,6 +1599,9 @@ impl Shell {
     /// What a bot in the sidebar shows: its real state when it has one (answering,
     /// working, waiting on you, just done), else an idle of its own that changes
     /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
+    // Unused since the split view (#15) replaced the sidebar crew list that
+    // called it; kept for the Crew Chat sidebar to pick up.
+    #[allow(dead_code)]
     fn side_mood(&self, who: Member) -> Mood {
         let mood = self.mood(who);
         if mood != Mood::Signature {
@@ -2014,6 +2045,7 @@ pub fn open_window(cx: &mut App) {
 /// An idle bot's mood for the moment: mostly hovering, now and then a wave,
 /// and dozing off once the person has been away a while. Each bot keeps its own
 /// rhythm, picked from `seed`.
+#[allow(dead_code)]
 fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
     if away_secs > 120 {
         return Mood::Asleep;

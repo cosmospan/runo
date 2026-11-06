@@ -53,7 +53,7 @@ def route_system() -> str:
     """Must match brain::model::route_system in the app, word for word.
     Both are checked against eval/route_system.txt."""
     s = (
-        "You are Fin, the guide in Squad Code. A person typed a job for the crew of coding bots. "
+        "You are Peek, the guide in Squad Code. A person typed a job for the crew of coding bots. "
         "Pick the kind of job and the bot that should take it. "
         "Kinds: ask (a question, nothing changes), build (something new), fix (a bug or error), "
         "review (look for risks, nothing changes), test (run or write tests), tidy (refactor, deps, cleanup).\n"

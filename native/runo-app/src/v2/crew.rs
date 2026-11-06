@@ -239,6 +239,18 @@ impl Shell {
                                     .truncate()
                                     .child(who.role()),
                             )
+                            .when(!who.skills().is_empty(), |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(ui::faint()))
+                                        .truncate()
+                                        .child(format!(
+                                            "Knows {}",
+                                            who.skills().split(' ').collect::<Vec<_>>().join(", ")
+                                        )),
+                                )
+                            })
                             .child(div().mt(px(4.)).child(if color == ui::faint() {
                                 ui::status(ui::faint(), "Idle")
                             } else {
@@ -515,7 +527,6 @@ impl Shell {
             )
         }));
 
-
         let rights = Tool::ALL
             .iter()
             .copied()
@@ -528,16 +539,19 @@ impl Shell {
             })
             .collect();
 
-        let likes = Member::KINDS
-            .into_iter()
-            .map(|m| {
-                (
-                    m.name().to_string(),
-                    self.maker_like == m,
-                    Box::new(move |s: &mut Shell| s.maker_like = m) as Box<dyn Fn(&mut Shell)>,
-                )
-            })
-            .collect();
+        // Peek works the kind out from what the bot is for, unless the person picks.
+        let mut likes: Vec<Choice> = vec![(
+            "Peek decides".to_string(),
+            self.maker_like.is_none(),
+            Box::new(|s: &mut Shell| s.maker_like = None) as Box<dyn Fn(&mut Shell)>,
+        )];
+        likes.extend(Member::KINDS.into_iter().map(|m| {
+            (
+                m.name().to_string(),
+                self.maker_like == Some(m),
+                Box::new(move |s: &mut Shell| s.maker_like = Some(m)) as Box<dyn Fn(&mut Shell)>,
+            )
+        }));
         let like = row("Works like", likes, "mk-like", cx);
         let kits = row("Kit", kits, "mk-kit", cx);
         let rights = row("Prop", rights, "mk-right", cx);
@@ -614,6 +628,20 @@ impl Shell {
                                 ui::solid("maker-save", "Add to crew")
                                     .on_click(cx.listener(|this, _, window, cx| this.save_made(window, cx))),
                             ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(field("KNOWS", &self.maker_skills, 260.))
+                            .child(field("RULES", &self.maker_rules, 0.)),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(c(ui::faint()))
+                            .child("Leave these empty and Peek writes them from its job and your project."),
                     ),
             )
     }

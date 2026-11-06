@@ -1,4 +1,4 @@
-//! The small model on the person's own computer, for when Smart Fin is on.
+//! The small model on the person's own computer, for when Smart Peek is on.
 //!
 //! Squad Code doesn't link a model runtime in. It talks to one the person
 //! runs, over the OpenAI-style chat API that llama.cpp's `llama-server`,
@@ -29,7 +29,7 @@ pub const TIMEOUT_SECS: u32 = 4;
 /// this text (see `teach`), so what the model learned is what it's asked.
 pub fn route_system(crew: &[Member]) -> String {
     let mut s = String::from(
-        "You are Fin, the guide in Squad Code. A person typed a job for the crew of coding bots. \
+        "You are Peek, the guide in Squad Code. A person typed a job for the crew of coding bots. \
          Pick the kind of job and the bot that should take it. \
          Kinds: ask (a question, nothing changes), build (something new), fix (a bug or error), \
          review (look for risks, nothing changes), test (run or write tests), tidy (refactor, deps, cleanup).\n\
@@ -73,7 +73,7 @@ pub struct Local {
 }
 
 impl Local {
-    /// The person's local model, when Smart Fin is on.
+    /// The person's local model, when Smart Peek is on.
     pub fn from_settings(st: &AppSettings) -> Option<Local> {
         if st.brain_model.trim().is_empty() {
             return None;
@@ -83,10 +83,13 @@ impl Local {
         } else {
             st.brain_url.trim().trim_end_matches('/').to_string()
         };
-        Some(Local {
-            url,
-            model: st.brain_model.trim().to_string(),
-        })
+        // Settings saved before the rename still name Squad's own model "fin".
+        let model = if super::helper::is_ours(&st.brain_model) && st.brain_url.trim().is_empty() {
+            super::helper::MODEL.to_string()
+        } else {
+            st.brain_model.trim().to_string()
+        };
+        Some(Local { url, model })
     }
 
     /// One chat turn, asked for as JSON matching `schema`; the reply's text.
@@ -196,11 +199,11 @@ mod tests {
         let r = parse_route(
             "```json\n{\"mode\":\"fix\",\"bot\":\"Fixer\",\"sure\":0.9,\"why\":\"It's a crash.\"}\n```",
             &Member::CREW,
-            "fin-0.8b",
+            "peek-0.8b",
         )
         .unwrap();
         assert_eq!((r.mode, r.bot), (Mode::Fix, Member::Fixer));
-        assert_eq!(r.by, "fin-0.8b");
+        assert_eq!(r.by, "peek-0.8b");
     }
 
     #[test]

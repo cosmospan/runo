@@ -147,7 +147,14 @@ pub struct Job {
     pub id: u64,
     pub bot: Member,
     pub mode: Mode,
+    /// What the person typed: the bot's instructions.
     pub title: String,
+    /// Peek's short title for the card, when Smart Peek is on; empty before.
+    pub short: String,
+    /// Peek's sentence or two on how it went, once it ended.
+    pub recap: String,
+    /// Times its failing checks were sent back to its bot to fix.
+    pub fix_turns: u8,
     pub folder: Folder,
     /// "Claude Code · Sonnet 4.5": what ran it.
     pub engine: String,
@@ -222,6 +229,18 @@ pub struct Changed {
     pub removed: usize,
 }
 
+impl Job {
+    /// The name lists and notices show: Peek's short title when there is one,
+    /// else the first line of what the person typed.
+    pub fn label(&self) -> &str {
+        if self.short.is_empty() {
+            self.title.lines().next().unwrap_or("").trim()
+        } else {
+            &self.short
+        }
+    }
+}
+
 impl Default for Job {
     fn default() -> Self {
         Job {
@@ -229,6 +248,9 @@ impl Default for Job {
             bot: Member::Builder,
             mode: Mode::Build,
             title: String::new(),
+            short: String::new(),
+            recap: String::new(),
+            fix_turns: 0,
             folder: Folder::default(),
             engine: String::new(),
             agent: String::new(),
@@ -424,6 +446,18 @@ fn path() -> PathBuf {
 impl Store {
     /// The saved store, or a fresh one that starts from v1's projects.
     pub fn load() -> Store {
+        Self::load_as(true)
+    }
+
+    /// The saved store as it stands, for a reader such as `squad ls` while the
+    /// app or server may be running jobs: a running job stays running.
+    pub fn load_view() -> Store {
+        Self::load_as(false)
+    }
+
+    /// `owner`: this process runs the jobs, so a job still marked running was
+    /// cut off when Squad Code last closed.
+    fn load_as(owner: bool) -> Store {
         let mut s: Store = std::fs::read_to_string(path())
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
@@ -445,18 +479,18 @@ impl Store {
                 }
             });
         for j in &mut s.jobs {
-            if j.status == Status::Running {
+            if owner && j.status == Status::Running {
                 j.status = Status::Interrupted;
                 j.ended = Some(j.ended.unwrap_or(j.started));
                 j.feed.push(Item::Note(
                     "Squad Code closed while this was running.".into(),
                 ));
             }
-            if j.checking {
+            if owner && j.checking {
                 j.checking = false;
             }
             // Squad Code closed while Shipper was opening the pull request.
-            if j.shipping {
+            if owner && j.shipping {
                 j.shipping = false;
                 if j.pr.is_empty() && j.status == Status::Shipping {
                     j.status = Status::Review;

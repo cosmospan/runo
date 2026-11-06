@@ -1,5 +1,5 @@
 //! A bot worth making: when the same kind of job keeps coming up and no bot
-//! on the crew is for it, Fin suggests one, with a name, a job and the kind of
+//! on the crew is for it, Peek suggests one, with a name, a job and the kind of
 //! work it does. The person makes it or says no; each idea is offered once.
 
 use super::super::data::Member;
@@ -11,7 +11,7 @@ pub const WINDOW_DAYS: u64 = 14;
 /// How many such jobs it takes.
 pub const ENOUGH: usize = 3;
 
-/// A bot Fin thinks the person could use.
+/// A bot Peek thinks the person could use.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Idea {
     /// Saved once offered, so it's never offered again: "docs".
@@ -23,6 +23,8 @@ pub struct Idea {
     pub why: String,
     /// The jobs that led to it.
     pub jobs: Vec<u64>,
+    /// The words that mark a job as one for it, which become its skills.
+    pub words: &'static [&'static str],
 }
 
 /// Topics a bot of its own pays for, with the words that mark a job as one.
@@ -206,6 +208,7 @@ pub fn next(store: &Store, crew: &[Member], offered: &[String], now: u64) -> Opt
                 topic_words(t.0)
             ),
             jobs,
+            words: t.4,
         })
 }
 

@@ -57,6 +57,11 @@ pub struct Runtime {
     planning: Vec<(u64, Receiver<crate::agent::Event>)>,
     /// Where jobs can run besides here, for the intelligence layer to choose.
     pub sites: brain::Sites,
+    /// Titles and recaps Peek is writing, by job.
+    peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
+    /// New bots the crew's engine is setting up for the project, by made id,
+    /// with whether the person set its skills and its rules (kept as they are).
+    designing: Vec<(u16, (bool, bool), Receiver<crate::agent::Event>)>,
 }
 
 impl Runtime {
@@ -76,6 +81,8 @@ impl Runtime {
             queue_at: Instant::now(),
             planning: Vec::new(),
             sites: brain::Sites::default(),
+            peeking: Vec::new(),
+            designing: Vec::new(),
         }
     }
 
@@ -91,6 +98,8 @@ impl Runtime {
             || !self.shipping.is_empty()
             || !self.landing.is_empty()
             || !self.planning.is_empty()
+            || !self.peeking.is_empty()
+            || !self.designing.is_empty()
     }
 
     /// Whether `who` is answering a question right now.
@@ -170,6 +179,38 @@ impl Runtime {
         if let Some((goal, context)) = part {
             job.goal = goal;
             job.context = context;
+        }
+        // Threads the person points at with #, as a short digest each.
+        let refs = brain::digest::context_for(text, &self.store.jobs);
+        if !refs.is_empty() {
+            job.context = if job.context.is_empty() {
+                refs
+            } else {
+                format!("{}\n\n{refs}", job.context)
+            };
+        }
+        // A thread it builds on that isn't merged yet: this job starts from
+        // the base without those changes, so say so and show where they are.
+        if mode.writes() {
+            for j in brain::digest::unmerged(text, &self.store.jobs) {
+                if j.folder.path != job.folder.path {
+                    continue;
+                }
+                job.feed.push(store::Item::Note(format!(
+                    "#{} isn't approved yet, so this starts without its changes. {} can read them on #{}'s branch; approve #{} first if this should build on it.",
+                    j.id,
+                    bot.name(),
+                    j.id,
+                    j.id
+                )));
+                job.context = format!("{}\n\n{}", job.context, brain::digest::unmerged_hint(j))
+                    .trim()
+                    .to_string();
+            }
+        }
+        // Peek's short title for the card, when Smart Peek is on.
+        if let Some(rx) = brain::tasks::ask(st, &job, false) {
+            self.peeking.push((job.id, rx));
         }
         if let Some((i, race)) = pick {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
@@ -341,6 +382,14 @@ impl Runtime {
     /// More words for a job: while it runs they wait; once it's done they start a
     /// follow-up that continues the same conversation when the engine can.
     pub fn follow_up(&mut self, st: &AppSettings, id: u64, text: String) {
+        self.send_on(st, id, text, None);
+    }
+
+    /// Sends `text` to a job's bot as its next turn. `note` is None when the
+    /// person wrote it; Squad Code's own asks (a fix turn, carrying on) show
+    /// as that note instead, so they're never taken for the person's words.
+    fn send_on(&mut self, st: &AppSettings, id: u64, text: String, note: Option<String>) {
+        let refs = brain::digest::context_for(&text, &self.store.jobs);
         let Some(job) = self.store.job_mut(id) else {
             return;
         };
@@ -348,7 +397,18 @@ impl Runtime {
             self.say("It's still working. Add this once it finishes.");
             return;
         }
-        job.feed.push(store::Item::You(text.clone()));
+        match note {
+            None => job.feed.push(store::Item::You(text.clone())),
+            Some(n) if !n.is_empty() => job.feed.push(store::Item::Note(n)),
+            Some(_) => {}
+        }
+        // The last turn's recap no longer tells how it ends.
+        job.recap.clear();
+        let text = if refs.is_empty() {
+            text
+        } else {
+            format!("{text}\n\n{refs}")
+        };
         match jobs::start(st, job, &text, true) {
             Ok(r) => self.runners.push(r),
             Err(why) => job.feed.push(store::Item::Error(why)),
@@ -358,11 +418,12 @@ impl Runtime {
 
     /// A stopped or interrupted job picks up where it was.
     pub fn carry_on(&mut self, st: &AppSettings, id: u64) {
-        self.follow_up(
+        self.send_on(
             st,
             id,
             "Carry on from where you stopped. Check what is already done in the files first."
                 .into(),
+            Some("Picking up where it stopped.".into()),
         );
     }
 
@@ -376,7 +437,12 @@ impl Runtime {
         if let Some(j) = self.store.job_mut(id) {
             j.conflict.clear();
         }
-        self.follow_up(st, id, text);
+        self.send_on(
+            st,
+            id,
+            text,
+            Some("Bringing the branch up to date with its base.".into()),
+        );
     }
 
     pub fn stop(&mut self, id: u64) {
@@ -565,10 +631,33 @@ impl Runtime {
             return;
         };
         self.store.offered.push(idea.key.to_string());
-        self.say(brain::fin::line(&brain::fin::Moment::Idea {
+        self.say(brain::voice::line(&brain::voice::Moment::Idea {
             name: idea.name.to_string(),
             why: idea.why,
         }));
+    }
+
+    /// Makes the bot Peek suggested, set up the way a bot made by hand is,
+    /// with the words that led to it as its skills. None when no idea fits.
+    pub fn make_idea(&mut self, st: &AppSettings, key: &str) -> Option<u16> {
+        let crew = Member::all();
+        let idea =
+            brain::ideas::next(&self.store, &crew, &[], store::now()).filter(|i| i.key == key)?;
+        let skills = idea.words.iter().map(|w| w.to_string()).collect();
+        let id = self.make_bot(
+            st,
+            idea.name,
+            idea.role,
+            Some(idea.like),
+            (skills, Vec::new()),
+            [0, 0, 0, 0],
+            String::new(),
+        );
+        self.say(format!(
+            "{} joined the crew. It takes jobs about {} from now on.",
+            idea.name, idea.key
+        ));
+        Some(id)
     }
 
     /// Does one thing asked from the command line (or any other client).
@@ -1165,9 +1254,15 @@ impl Runtime {
             }
         });
         for (id, results) in back {
+            let mut retry = None;
             if let Some(job) = self.store.job_mut(id) {
                 job.checks = results;
                 job.checking = false;
+                retry = fix_turn(job);
+            }
+            if let Some(prompt) = retry {
+                // fix_turn already said why in the feed.
+                self.send_on(st, id, prompt, Some(String::new()));
             }
             self.store.save();
         }
@@ -1175,19 +1270,219 @@ impl Runtime {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
                 self.begin_review(*id);
+                self.peek(st, *id, true);
             }
             self.offer_idea();
             self.store.save();
         }
+        self.poll_peek();
+        self.poll_designs();
         self.poll_goals(st);
         self.poll_queue(st);
         finished
     }
+
+    /// Asks Peek for a job's title, or its recap once it ended, when Smart
+    /// Peek is on.
+    fn peek(&mut self, st: &AppSettings, id: u64, recap: bool) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        // The small model mixes up a job of several turns (a fix turn, a
+        // follow-up); there the bot's own last words and the facts line
+        // tell it better.
+        if recap && several_turns(job) {
+            return;
+        }
+        if let Some(rx) = brain::tasks::ask(st, job, recap) {
+            self.peeking.push((id, rx));
+        }
+    }
+
+    /// Adds a bot to the crew. What the person left out (the kind of work, its
+    /// skills, its rules) is filled in at once from what it's for, and then the
+    /// crew's engine reads the project and writes rules and skills that fit it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn make_bot(
+        &mut self,
+        st: &AppSettings,
+        name: &str,
+        role: &str,
+        like: Option<Member>,
+        (skills, rules): (Vec<String>, Vec<String>),
+        look: [u8; 4],
+        outfit: String,
+    ) -> u16 {
+        let id = self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+        let mut d = brain::maker::draft(name, role, like);
+        let set = (!skills.is_empty(), !rules.is_empty());
+        if set.0 {
+            d.skills = skills;
+        }
+        if set.1 {
+            d.rules = rules;
+        }
+        self.store.made.push(super::data::Made {
+            id,
+            name: name.to_string(),
+            role: d.role.clone(),
+            like: d.like,
+            look,
+            outfit,
+            skills: d.skills.clone(),
+            rules: d.rules.clone(),
+        });
+        super::data::set_made(&self.store.made);
+        self.store.save();
+        if let Some(folder) = self.store.folder().cloned() {
+            if set != (true, true) {
+                if let Ok(rx) = brain::maker::design(st, &folder, name, &d) {
+                    self.designing.push((id, set, rx));
+                }
+            }
+        }
+        id
+    }
+
+    /// Bot setups coming back from the engine.
+    fn poll_designs(&mut self) {
+        let mut back = Vec::new();
+        self.designing.retain(|(id, set, rx)| match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => {
+                back.push((*id, *set, r.ok()));
+                false
+            }
+            Ok(_) | Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        for (id, set, reply) in back {
+            let parsed = reply
+                .as_deref()
+                .map(crate::agent::strip_ansi)
+                .and_then(|t| brain::maker::parse_design(&t));
+            let Some((role, skills, rules)) = parsed else {
+                continue;
+            };
+            let Some(m) = self.store.made.iter_mut().find(|m| m.id == id) else {
+                continue;
+            };
+            m.role = role;
+            if !set.0 {
+                m.skills = skills;
+            }
+            if !set.1 {
+                m.rules = rules;
+            }
+            let name = m.name.clone();
+            super::data::set_made(&self.store.made);
+            self.store.save();
+            self.say(format!(
+                "{name} is set up for this project: its rules and what it knows best are on Crew."
+            ));
+        }
+    }
+
+    /// Titles and recaps coming back from Peek.
+    fn poll_peek(&mut self) {
+        let mut back = Vec::new();
+        self.peeking.retain(|(id, rx)| match rx.try_recv() {
+            Ok(said) => {
+                back.push((*id, said));
+                false
+            }
+            Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        for (id, said) in back {
+            let Some(job) = self.store.job_mut(id) else {
+                continue;
+            };
+            match said {
+                brain::tasks::Said::Title(t) => job.short = t,
+                brain::tasks::Said::Recap(r, _) => {
+                    job.feed.push(store::Item::Note(r.clone()));
+                    job.recap = r;
+                }
+            }
+            self.store.save();
+        }
+    }
+}
+
+/// Whether the bot has had more than one turn on `job`.
+fn several_turns(job: &store::Job) -> bool {
+    job.fix_turns > 0 || job.feed.iter().any(|i| matches!(i, store::Item::You(_)))
+}
+
+/// How many times a job's failing checks go back to its bot before the
+/// person is asked.
+pub const FIX_TURNS: u8 = 1;
+
+/// When a job's checks failed and it hasn't used its fix turns, notes that in
+/// its feed and gives the words to send its bot. Checks the computer couldn't
+/// run (a full disk, a timeout) aren't the code's fault and send nothing back.
+fn fix_turn(job: &mut store::Job) -> Option<String> {
+    let failed: Vec<&crate::proof::CheckRun> = job
+        .checks
+        .iter()
+        .filter(|c| !c.ok && c.infra.is_empty() && !c.timed_out)
+        .collect();
+    if failed.is_empty() || job.fix_turns >= FIX_TURNS || job.status != Status::Review {
+        return None;
+    }
+    let names: Vec<String> = failed.iter().map(|c| format!("`{}`", c.command)).collect();
+    job.fix_turns += 1;
+    job.feed.push(store::Item::Note(format!(
+        "{} failed, so {} is fixing it before it comes to you.",
+        names.join(" and "),
+        job.bot.name()
+    )));
+    let mut prompt = crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran");
+    // Checks can fail before a job touches anything; fixing that here would
+    // redo other work and clash with it later.
+    prompt.push_str(
+        "\nFirst check whether each failure comes from your change: compare with the code before it \
+         (git stash, or the base branch). Fix only what your change broke. If a failure was already \
+         there, leave it and say so in one line.",
+    );
+    Some(prompt)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failing_checks_go_back_to_the_bot_once() {
+        let failing = crate::proof::CheckRun {
+            command: "cargo test".into(),
+            ok: false,
+            tail: "test parse ... FAILED".into(),
+            ..Default::default()
+        };
+        let mut job = store::Job {
+            bot: Member::Fixer,
+            status: Status::Review,
+            checks: vec![failing.clone()],
+            ..Default::default()
+        };
+        let prompt = fix_turn(&mut job).expect("one fix turn");
+        assert!(prompt.contains("cargo test") && prompt.contains("FAILED"));
+        assert!(prompt.starts_with("Squad Code ran"));
+        assert_eq!(job.fix_turns, 1);
+        // The second failure is the person's to see.
+        assert!(fix_turn(&mut job).is_none());
+        // A check the computer couldn't run sends nothing back.
+        let mut job = store::Job {
+            status: Status::Review,
+            checks: vec![crate::proof::CheckRun {
+                infra: "disk full".into(),
+                ..failing
+            }],
+            ..Default::default()
+        };
+        assert!(fix_turn(&mut job).is_none());
+    }
 
     fn quiet_store() -> Store {
         // A demo store is never saved, so tests leave ~/.runo alone.
