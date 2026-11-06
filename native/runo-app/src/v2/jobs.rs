@@ -22,26 +22,55 @@ pub struct Runner {
     stopped: bool,
 }
 
-/// Commands a bot that changes files may run without asking: the project's
-/// own checks, and git's read-only views. Anything else is still refused,
-/// since a headless run can't ask.
-pub fn may_run(checks: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = checks.iter().map(|c| format!("Bash({c}:*)")).collect();
-    for c in ["git status", "git diff", "git log", "git show", "ls"] {
-        out.push(format!("Bash({c}:*)"));
+/// What a bot that changes files may run without asking: any command, so
+/// it can install, build, test and start what it made, in its own worktree.
+pub const MAY_RUN: &[&str] = &["Bash"];
+
+/// The engine's rules for the commands a bot never runs on its own (see
+/// `brain::permit::EVERY_TIME`), Claude Code style. Without a way to ask
+/// mid-run, the engine refuses these.
+pub fn never_run() -> Vec<String> {
+    super::brain::permit::EVERY_TIME
+        .iter()
+        .map(|c| format!("Bash({}:*)", c.trim()))
+        .collect()
+}
+
+/// Whether hard-to-undo commands are asked about rather than refused: only
+/// Claude Code with Squad Code's prompt tool can ask mid-run.
+fn asks_first(provider: &str, prompt_tool: bool) -> bool {
+    provider == "claude" && prompt_tool
+}
+
+/// What a bot that changes files is told about running things.
+fn run_rule(checks: &[String]) -> String {
+    let mut out = String::from(
+        " You can run commands here: install, build, run the tests, and start what you made to see it work. \
+         Start a server in the background, check it (for example with curl on localhost), then stop it, so the job can finish. \
+         Don't push, deploy, publish or delete outside this folder; Squad Code does those after the person says yes.",
+    );
+    if !checks.is_empty() {
+        out.push_str(&format!(
+            " The project's checks are {}; Squad Code runs them again when you finish.",
+            checks.join(", ")
+        ));
     }
     out
 }
 
-/// What a bot that changes files is told about the checks.
-fn check_rule(checks: &[String]) -> String {
-    if checks.is_empty() {
-        return String::new();
+/// Adds `more` to a comma-separated rule list, each once.
+fn add_rules(list: &str, more: &[String]) -> String {
+    let mut rules: Vec<String> = list
+        .split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    for r in more {
+        if !rules.contains(r) {
+            rules.push(r.clone());
+        }
     }
-    format!(
-        " You may run the project's checks ({}) to see your change work; Squad Code runs them again when you finish.",
-        checks.join(", ")
-    )
+    rules.join(",")
 }
 
 /// What the bot is told, around the person's words.
@@ -55,7 +84,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
         }
         _ => format!(
             "Make the change in this folder. Keep a short todo list as you work.{}",
-            check_rule(checks)
+            run_rule(checks)
         ),
     };
     let part = if job.context.is_empty() {
@@ -64,7 +93,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
         format!("{}\n\n", job.context)
     };
     format!(
-        "{}\n\n{part}{rules} When you finish, end with two or three plain sentences for someone who may not code: what you found or changed, and how to check it.\n\nThe job: {text}",
+        "{}\n\n{part}{rules} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         job.bot.persona()
     )
 }
@@ -131,19 +160,20 @@ pub fn start(
     } else {
         Vec::new()
     };
-    if !checks.is_empty() {
-        let mut rules: Vec<String> = opts
-            .allowed_tools
-            .split(',')
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect();
-        for r in may_run(&checks) {
-            if !rules.contains(&r) {
-                rules.push(r);
-            }
+    // A bot that changes files works in its own worktree, so it may run
+    // what it needs to build and test; only the hard-to-undo commands stay
+    // off. A tool the person turned off in Settings stays off: their deny
+    // rules win over this allow.
+    // When Claude Code can ask through Squad Code's prompt tool (a run with
+    // memory), the hard-to-undo commands are asked about with Go ahead /
+    // Deny instead of refused: Claude never asks about a disallowed tool.
+    let memory = None;
+    if job.mode.writes() {
+        let may: Vec<String> = MAY_RUN.iter().map(|t| t.to_string()).collect();
+        opts.allowed_tools = add_rules(&opts.allowed_tools, &may);
+        if !asks_first(p.id, memory.is_some()) {
+            opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
         }
-        opts.allowed_tools = rules.join(",");
     }
     let sent = prompt(job, text, resume, &checks);
     // Runo's own MCP server asks you, in the job's card, before a tool the bot
@@ -329,7 +359,7 @@ fn apply(job: &mut Job, e: AgentEvent) {
         AgentEvent::Error(s) => job.feed.push(Item::Error(s)),
         AgentEvent::Notice(s) => job.feed.push(Item::Note(s)),
         AgentEvent::Denied(tools) => job.feed.push(Item::Note(format!(
-            "It wanted to use {}, which this kind of job doesn't allow.",
+            "It was stopped from using {}. Bots don't push, deploy, publish or wipe files on their own; ask in a follow-up if this job needs it.",
             tools.join(", ")
         ))),
         AgentEvent::Todos(steps) => {
@@ -362,13 +392,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_bot_that_changes_files_may_run_the_checks() {
-        let checks = vec!["npm test".to_string(), "cargo test".to_string()];
-        let rules = may_run(&checks);
-        assert!(rules.contains(&"Bash(npm test:*)".to_string()));
-        assert!(rules.contains(&"Bash(git diff:*)".to_string()));
-        assert!(!rules.iter().any(|r| r == "Bash"));
-        assert!(check_rule(&checks).contains("npm test, cargo test"));
-        assert!(check_rule(&[]).is_empty());
+    fn a_bot_that_changes_files_may_run_things_but_not_ship_or_wipe() {
+        assert_eq!(MAY_RUN, &["Bash"]);
+        assert!(asks_first("claude", true));
+        assert!(!asks_first("claude", false) && !asks_first("grok", true));
+        let never = never_run();
+        for want in [
+            "Bash(git push:*)",
+            "Bash(rm -rf:*)",
+            "Bash(sudo:*)",
+            "Bash(vercel:*)",
+        ] {
+            assert!(never.iter().any(|r| r == want), "{want}");
+        }
+        for ok in ["npm", "node", "cargo", "pytest", "curl"] {
+            assert!(!never.iter().any(|r| r == &format!("Bash({ok}:*)")), "{ok}");
+        }
+        let rule = run_rule(&["npm test".to_string()]);
+        assert!(
+            rule.contains("background") && rule.contains("npm test"),
+            "{rule}"
+        );
+        assert_eq!(
+            add_rules("Read, Bash", &["Bash".into(), "Edit".into()]),
+            "Read,Bash,Edit"
+        );
     }
 }

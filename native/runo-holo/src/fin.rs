@@ -153,16 +153,25 @@ pub enum Material {
     Bubble,
     /// A glossy pill in the crew colour with dark eyes.
     Solid,
+    /// Just the lines: the pill and eyes drawn as outlines in the crew
+    /// colour, with no fill and no glow.
+    Outline,
 }
 
 impl Material {
-    pub const ALL: [Material; 3] = [Material::Glass, Material::Bubble, Material::Solid];
+    pub const ALL: [Material; 4] = [
+        Material::Glass,
+        Material::Bubble,
+        Material::Solid,
+        Material::Outline,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Material::Glass => "Glow",
             Material::Bubble => "Rainbow glow",
             Material::Solid => "Solid",
+            Material::Outline => "Outline",
         }
     }
 
@@ -171,6 +180,7 @@ impl Material {
             Material::Glass => "glass",
             Material::Bubble => "bubble",
             Material::Solid => "solid",
+            Material::Outline => "outline",
         }
     }
 
@@ -1006,7 +1016,19 @@ fn blink(t: f64) -> f64 {
 }
 
 /// One eye at `(cx, cy)`. `halo` is the glow's strength, if it glows.
-fn eye(p: &mut Pen, at: (f64, f64), f: &Face, side: usize, col: Rgb, halo: Option<f64>, open: f64) {
+/// With `outline`, the oval and heart eyes are drawn as lines of that width
+/// instead of being filled.
+#[allow(clippy::too_many_arguments)]
+fn eye(
+    p: &mut Pen,
+    at: (f64, f64),
+    f: &Face,
+    side: usize,
+    col: Rgb,
+    halo: Option<f64>,
+    outline: Option<f64>,
+    open: f64,
+) {
     let (cx, cy) = at;
     let r = f.r * f.size[side];
     let shape = match f.eye {
@@ -1046,6 +1068,10 @@ fn eye(p: &mut Pen, at: (f64, f64), f: &Face, side: usize, col: Rgb, halo: Optio
                 Affine::translate((cx, cy + 1.0)) * Affine::scale(1.45),
                 |p| {
                     let h = svg(HEART);
+                    if let Some(w) = outline {
+                        p.stroke(&h, w / 1.45, PINK, 1.0);
+                        return;
+                    }
                     if halo.is_some() {
                         p.glow(&h, 1.0, 3.0, PINK, 0.4);
                     }
@@ -1082,6 +1108,14 @@ fn eye(p: &mut Pen, at: (f64, f64), f: &Face, side: usize, col: Rgb, halo: Optio
             lids.line_to((cx + r + 4.0, bot));
             lids.line_to((cx - r - 4.0, bot));
             lids.close_path();
+            if let Some(w) = outline {
+                // The edge of the oval where the lids leave it open, then the
+                // lids' own edges where they cut across it.
+                let oval = Ellipse::new((cx, cy), (r, ry), 0.0);
+                p.clip(&lids, false, |p| p.stroke(&oval, w, col, 1.0));
+                p.clip(&oval.to_path(0.05), false, |p| p.stroke(&lids, w, col, 1.0));
+                return;
+            }
             p.clip(&lids, false, |p| {
                 p.fill(&Ellipse::new((cx, cy), (r, ry), 0.0), col, 1.0);
                 p.fill(
@@ -1539,10 +1573,13 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let strong = fin.tint.strong();
     let light = fin.tint.0[0];
     let solid = fin.material == Material::Solid;
+    let outline = fin.material == Material::Outline;
+    // Lines stay readable in tiny avatars by getting thicker there.
+    let line_w = if simple { 6.0 } else { 3.0 };
     let lit = if pose.shine { 1.3 } else { 1.0 };
     let eye_col = if solid { INK } else { mix(strong, light, 0.35) };
 
-    if !solid && !simple {
+    if !solid && !outline && !simple {
         let e = Ellipse::new((60.0, 66.0), (70.0, 48.0), 0.0);
         let g = p.radial(
             &[(0.0, strong, 0.35 * f.glow * lit), (1.0, strong, 0.0)],
@@ -1572,7 +1609,14 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         );
     p.at(body, |p| {
         let shell = pill();
-        if solid {
+        if outline {
+            let rim = if state == State::Needs {
+                mix(strong, AMBER, 0.5 + (t * 6.0).sin() * 0.4)
+            } else {
+                strong
+            };
+            p.stroke(&shell, line_w, rim, 1.0);
+        } else if solid {
             let g = p.linear(
                 &[
                     (0.0, mix(light, strong, 0.3), 1.0),
@@ -1602,19 +1646,22 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
                 p.stroke(&shell, 2.0, rim, (0.6 * lit).min(1.0));
             }
         }
-        let shine = if solid { 0.4 } else { 0.16 };
-        p.stroke(&svg("M36 42Q48 39 62 40"), 3.0, WHITE, shine);
+        if !outline {
+            let shine = if solid { 0.4 } else { 0.16 };
+            p.stroke(&svg("M36 42Q48 39 62 40"), 3.0, WHITE, shine);
+        }
         let (l, r) = (42.0 + f.look.0 * 8.0, 78.0 + f.look.0 * 8.0);
         let cy = 62.0 + f.look.1 * 6.0;
-        if f.blush > 0.02 {
+        if f.blush > 0.02 && !outline {
             for x in [32.0, 88.0] {
                 let at = (x + f.look.0 * 4.0, 75.0 + f.look.1 * 4.0);
                 p.fill(&Ellipse::new(at, (7.5, 3.6), 0.0), PINK, 0.5 * f.blush);
             }
         }
-        let halo = (!solid && !simple).then_some(f.glow * lit);
-        eye(p, (l, cy), &f, 0, eye_col, halo, open);
-        eye(p, (r, cy), &f, 1, eye_col, halo, open);
+        let halo = (!solid && !outline && !simple).then_some(f.glow * lit);
+        let lines = outline.then_some(line_w);
+        eye(p, (l, cy), &f, 0, eye_col, halo, lines, open);
+        eye(p, (r, cy), &f, 1, eye_col, halo, lines, open);
     });
 
     if simple {
@@ -1630,12 +1677,16 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         p.at(
             Affine::translate((x, y + f.lift + bob)) * Affine::scale(k),
             |p| {
-                let halo = Circle::new((0.0, 0.0), 24.0);
-                let g = p.radial(&[(0.0, strong, 0.35), (1.0, strong, 0.0)], (0.5, 0.5), 0.5);
-                p.fill_grad(&halo, g, Affine::IDENTITY);
                 let disc = Circle::new((0.0, 0.0), 13.5);
-                p.fill(&disc, BADGE_INK, 1.0);
-                p.stroke(&disc, 1.5, strong, 0.55);
+                if outline {
+                    p.stroke(&disc, 2.0, strong, 1.0);
+                } else {
+                    let halo = Circle::new((0.0, 0.0), 24.0);
+                    let g = p.radial(&[(0.0, strong, 0.35), (1.0, strong, 0.0)], (0.5, 0.5), 0.5);
+                    p.fill_grad(&halo, g, Affine::IDENTITY);
+                    p.fill(&disc, BADGE_INK, 1.0);
+                    p.stroke(&disc, 1.5, strong, 0.55);
+                }
                 let ic = if solid { strong } else { eye_col };
                 p.at(Affine::scale(0.82), |p| icon(p, prop, ic, t));
             },
@@ -1707,7 +1758,9 @@ mod tests {
                     offset: 0,
                 };
                 let px = r.draw(&pose, 1.3, Framing::Full);
-                assert!(coverage(px) > 600, "{m:?} {s:?} drew almost nothing");
+                // The outline finish is only lines, so it covers far less.
+                let least = if m == Material::Outline { 250 } else { 600 };
+                assert!(coverage(px) > least, "{m:?} {s:?} drew almost nothing");
             }
         }
     }

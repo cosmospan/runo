@@ -25,6 +25,23 @@ pub struct Route {
 
 impl Route {
     pub const SURE: f32 = 0.6;
+
+    /// Peek's line as it hands the job on: "Sounds like a bug, so I'm
+    /// bringing in Fixer to hunt it down."
+    pub fn handoff(&self) -> String {
+        let name = self.bot.name();
+        if self.bot.is_made() {
+            return format!("This one's right up {name}'s street, so I'm handing it over.");
+        }
+        match self.mode {
+            Mode::Build => format!("This is a build job, so I'm bringing in {name}."),
+            Mode::Fix => format!("Sounds like a bug, so I'm bringing in {name} to hunt it down."),
+            Mode::Test => format!("Let's try it for real. {name}, you're up."),
+            Mode::Review => format!("This wants a careful second look, so I'm bringing in {name}."),
+            Mode::Tidy => format!("Cleanup time. {name} is taking this one."),
+            Mode::Ask => format!("Good question. {name} will dig into the code and answer."),
+        }
+    }
 }
 
 /// Words and phrases that lean a sentence to each kind of job, with weights.
@@ -510,6 +527,13 @@ mod tests {
         assert!(fits("document cart pricing").is_some());
         assert!(same_word("docs", "doc") && same_word("price", "pricing"));
         assert!(!same_word("read", "readme"));
+    }
+
+    #[test]
+    fn the_handoff_names_the_bot_and_why() {
+        let r = by_rules("the export button crashes on safari", &crew());
+        let h = r.handoff();
+        assert!(h.contains(r.bot.name()) && h.contains("bug"), "{h}");
     }
 
     #[test]

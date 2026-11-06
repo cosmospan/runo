@@ -504,11 +504,48 @@ pub fn hover() -> u32 {
     glass(theme().hover)
 }
 /// A surface that floats over the page: the palette, menus, popovers and dialogs.
-/// Always solid, even in a frosted theme or with transparency on: the window only
-/// blurs the desktop, so anything see-through here would show the page under it
-/// sharp, and the text on top would be hard to read.
+/// While the desktop shows through the window they're see-through too, so the
+/// whole window reads as one sheet of glass, unless that's switched off under
+/// Settings > Appearance. The window only blurs the desktop, not the page under a
+/// popover, so a popover stays more opaque than the page: never below `POP_FLOOR`,
+/// enough that the page's own text under it can't fight the text on top.
 pub fn float() -> u32 {
-    theme().raised & 0xff_ffff
+    float_at(theme(), amount(), window_clear() && glass_popovers())
+}
+
+/// The least opacity a see-through popover goes down to, at full transparency.
+const POP_FLOOR: f32 = 0.82;
+
+/// A floating surface for theme `t`, at transparency `amount` (0 to 1), see-through
+/// or not.
+const fn float_at(t: &Theme, amount: f32, clear: bool) -> u32 {
+    let rgb = t.raised & 0xff_ffff;
+    if !clear {
+        return rgb;
+    }
+    // A frosted theme starts at its own raised opacity; a solid one, nearly opaque.
+    let base = match t.raised >> 24 {
+        0 => 0.94,
+        a => a as f32 / 255.,
+    };
+    let mut k = base - amount * (base - POP_FLOOR);
+    if k < POP_FLOOR {
+        k = POP_FLOOR;
+    }
+    see(rgb, (k * 255. + 0.5) as u8)
+}
+
+/// Popovers, menus and dialogs are see-through while the window is. On by default.
+static GLASS_POPOVERS: AtomicBool = AtomicBool::new(true);
+
+/// Lets popovers, menus and dialogs go see-through with the window, or keeps them solid.
+pub fn set_glass_popovers(on: bool) {
+    GLASS_POPOVERS.store(on, Ordering::Relaxed);
+}
+
+/// Popovers, menus and dialogs follow the window's transparency.
+pub fn glass_popovers() -> bool {
+    GLASS_POPOVERS.load(Ordering::Relaxed)
 }
 pub fn press() -> u32 {
     glass(theme().press)
@@ -772,6 +809,45 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// A see-through popover keeps its text readable over whatever's under it:
+    /// the page (over the theme's worst desktops), or a line of the page's own
+    /// brightest text running right under a word on top.
+    #[test]
+    fn text_reads_on_see_through_popovers() {
+        for t in &THEMES {
+            for k in [0.0, 0.5, 1.0] {
+                let pop = float_at(t, k, true);
+                let l = |c: u32| lift_at(c, t.ink, k);
+                let g = |c: u32| glass_at(c, k, t.floor());
+                let desks: &[u32] = if t.light {
+                    &[0xFFFFFF, 0x808080, 0x2050D0, 0xF0C040]
+                } else {
+                    &[0x000000, 0x808080, 0x2050D0, 0xF0C040]
+                };
+                for &desk in desks {
+                    let page = over(g(t.bg), desk);
+                    for under in [page, t.ink, t.body] {
+                        let back = over(pop, under);
+                        for (name, color, min) in [
+                            ("ink", t.ink, 7.0),
+                            ("body", l(t.body), 4.5),
+                            ("muted", l(t.muted), 3.0),
+                        ] {
+                            let got = contrast(color, back);
+                            assert!(
+                                got >= min,
+                                "{} popover at {k}: {name} over {under:06x} on {desk:06x} is {got:.2}, needs {min}",
+                                t.id
+                            );
+                        }
+                    }
+                }
+            }
+            // Switched off, or with the window solid, a popover is opaque.
+            assert_eq!(float_at(t, 1.0, false) >> 24, 0);
         }
     }
 
