@@ -167,6 +167,7 @@ impl Shell {
             .unwrap_or(default_i);
         let list = self.engine_list(&st, &ready, default_i, sel, cx);
         let detail = self.engine_detail(&st, &ready, default_i, sel, cx);
+        let brains = self.bot_brains(&st, &ready, default_i, cx);
 
         // Squad Code's own thinking: shaping jobs, and a second opinion.
         let brain_i = crate::assistant::assistant_provider(&st);
@@ -302,9 +303,14 @@ impl Shell {
                                     .mt(px(6.))
                                     .text_size(px(13.5))
                                     .text_color(c(ui::muted()))
-                                    .child("Every bot works through a coding agent you already use. Pick one to see which bots run on it."),
+                                    .child("Every bot works through a coding agent you already use. Pick each bot's brain here."),
                             ),
                     )
+                    .child(brains)
+                    .child(section(
+                        "Engines on this computer",
+                        "What's installed, what each costs today, and its models.",
+                    ))
                     .when(none_ready, |d| {
                         d.child(
                             div()
@@ -324,6 +330,240 @@ impl Shell {
                     .child(brain),
             )
             .into_any_element()
+    }
+
+    /// Bot brains: every bot on one row with the engine and model it thinks
+    /// with, each switched in one click, and one row to set them all at once.
+    fn bot_brains(
+        &mut self,
+        st: &AppSettings,
+        ready: &[usize],
+        default_i: usize,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        // The engines worth offering: the installed ones, plus any a bot is on.
+        let mut offer: Vec<usize> = ready.to_vec();
+        if !offer.contains(&default_i) {
+            offer.insert(0, default_i);
+        }
+        let crew = Member::all();
+        for who in &crew {
+            let (i, _) = engine::engine(st, *who);
+            if !offer.contains(&i) {
+                offer.push(i);
+            }
+        }
+        let everyone_on = |i: usize| {
+            crew.iter().all(|w| {
+                let (k, m) = engine::engine(st, *w);
+                k == i && m.is_empty()
+            })
+        };
+
+        // Set every bot to one engine: it becomes the default, and every bot follows it.
+        let mut all = div().flex().flex_wrap().items_center().gap(px(6.));
+        for &i in &offer {
+            let p = &agent::PROVIDERS[i];
+            let id = p.id;
+            all = all.child(
+                choice(
+                    ("brains-all", i),
+                    p.name,
+                    everyone_on(i),
+                    engine::ready(st, i),
+                )
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    save(cx, |st| {
+                        st.default_provider = id.to_string();
+                        st.bot_engines.clear();
+                    });
+                    cx.notify();
+                })),
+            );
+        }
+
+        let mut rows = div().flex().flex_col();
+        for who in crew {
+            let (cur, model) = engine::engine(st, who);
+            let own = st.bot_engines.contains_key(&engine::bot_key(who));
+            let face = self.avatar(who, 26.);
+            let mut engines_row = div().flex().flex_wrap().gap(px(5.));
+            for &i in &offer {
+                let id = agent::PROVIDERS[i].id;
+                engines_row = engines_row.child(
+                    choice(
+                        (
+                            SharedString::from(format!("brain-{}", engine::bot_key(who))),
+                            i,
+                        ),
+                        agent::PROVIDERS[i].name,
+                        i == cur,
+                        engine::ready(st, i),
+                    )
+                    .h(px(24.))
+                    .px(px(9.))
+                    .text_size(px(12.))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| {
+                            engine::set(
+                                st,
+                                who,
+                                BotEngine {
+                                    agent: id.to_string(),
+                                    model: String::new(),
+                                },
+                            )
+                        });
+                        cx.notify();
+                    })),
+                );
+            }
+            let mut models_row = div().flex().flex_wrap().gap(px(5.));
+            let cur_id = agent::PROVIDERS[cur].id;
+            for (k, m) in AgentPick::models(cur).into_iter().take(5).enumerate() {
+                let value = m.value.clone();
+                let on = model == m.value;
+                models_row = models_row.child(
+                    div()
+                        .id((
+                            SharedString::from(format!("brain-model-{}", engine::bot_key(who))),
+                            k,
+                        ))
+                        .h(px(22.))
+                        .px(px(8.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.))
+                        .border_1()
+                        .text_size(px(11.5))
+                        .cursor_pointer()
+                        .map(|d| {
+                            if on {
+                                d.border_color(c(ui::VIOLET))
+                                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.1)))
+                                    .text_color(c(ui::t_violet()))
+                                    .font_weight(FontWeight::MEDIUM)
+                            } else {
+                                d.border_color(c(ui::line()))
+                                    .text_color(c(ui::muted()))
+                                    .hover(|s| s.text_color(c(ui::ink())).bg(c(ui::hover())))
+                            }
+                        })
+                        .child(m.label.clone())
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            let value = value.clone();
+                            save(cx, |st| {
+                                engine::set(
+                                    st,
+                                    who,
+                                    BotEngine {
+                                        agent: cur_id.to_string(),
+                                        model: value,
+                                    },
+                                )
+                            });
+                            cx.notify();
+                        })),
+                );
+            }
+            rows = rows.child(
+                div()
+                    .px(px(18.))
+                    .py(px(11.))
+                    .flex()
+                    .items_center()
+                    .gap(px(14.))
+                    .border_t_1()
+                    .border_color(c(ui::line2()))
+                    .child(div().pt(px(2.)).flex_none().child(face))
+                    .child(
+                        div()
+                            .w(px(130.))
+                            .flex_none()
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(who.name()),
+                            )
+                            .child(div().text_size(px(11.5)).text_color(c(ui::faint())).child(
+                                if offer.len() == 1 {
+                                    agent::PROVIDERS[cur].name
+                                } else if own {
+                                    "its own pick"
+                                } else {
+                                    "follows the default"
+                                },
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .when(offer.len() > 1, |d| d.child(engines_row))
+                            .child(models_row),
+                    )
+                    .when(own, |d| {
+                        d.child(
+                            div()
+                                .id((
+                                    SharedString::from(format!(
+                                        "brain-reset-{}",
+                                        engine::bot_key(who)
+                                    )),
+                                    0usize,
+                                ))
+                                .pt(px(4.))
+                                .text_size(px(12.))
+                                .text_color(c(ui::muted()))
+                                .cursor_pointer()
+                                .hover(|s| s.text_color(c(ui::ink())))
+                                .child("Use default")
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    save(cx, |st| engine::set(st, who, BotEngine::default()));
+                                    cx.notify();
+                                })),
+                        )
+                    }),
+            );
+        }
+
+        ui::card()
+            .overflow_hidden()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .px(px(18.))
+                    .pt(px(16.))
+                    .pb(px(14.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .child(section(
+                        "Bot brains",
+                        "The engine and model each bot thinks with. Click to switch; it applies to the next job.",
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::muted()))
+                                    .child("Set every bot to"),
+                            )
+                            .child(all),
+                    ),
+            )
+            .child(rows)
     }
 
     /// Every agent Squad Code knows: the ones on this computer first.
