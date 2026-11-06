@@ -632,10 +632,12 @@ impl Shell {
                 Some(g) => format!("Jobs / Goal / {}", g.text),
                 None => "Jobs / Goal".into(),
             },
-            Place::Settings(pane) => format!("Settings / {}", pane.name()),
+            Place::Settings(_) => "Settings".into(),
             Place::Usage => "Usage".into(),
             Place::Welcome => "Welcome".into(),
         };
+        // Settings apply to every project, so they get a plain title, not a path.
+        let global = matches!(self.place, Place::Settings(_));
         let running = self.crew.store.running().count();
         // Each step of the path after a chevron; the last, where you are, in full ink.
         let parts: Vec<&str> = here.split(" / ").collect();
@@ -662,7 +664,11 @@ impl Shell {
                     })
                     .child(part.to_string())
                     .into_any_element();
-                [chev, text]
+                if global {
+                    vec![text]
+                } else {
+                    vec![chev, text]
+                }
             })
             .collect();
         let mono = folder
@@ -690,31 +696,33 @@ impl Shell {
                     .items_center()
                     .gap(px(8.))
                     .min_w_0()
-                    .child(
-                        div()
-                            .h(px(24.))
-                            .flex()
-                            .flex_none()
-                            .items_center()
-                            .gap(px(8.))
-                            .text_color(c(ui::muted()))
-                            .child(
-                                div()
-                                    .size(px(20.))
-                                    .rounded(px(5.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .bg(c(ui::raised()))
-                                    .border_1()
-                                    .border_color(c(ui::line()))
-                                    .text_size(px(10.5))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::ink()))
-                                    .child(mono),
-                            )
-                            .child(folder),
-                    )
+                    .when(!global, |d| {
+                        d.child(
+                            div()
+                                .h(px(24.))
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .gap(px(8.))
+                                .text_color(c(ui::muted()))
+                                .child(
+                                    div()
+                                        .size(px(20.))
+                                        .rounded(px(5.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .bg(c(ui::raised()))
+                                        .border_1()
+                                        .border_color(c(ui::line()))
+                                        .text_size(px(10.5))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(ui::ink()))
+                                        .child(mono),
+                                )
+                                .child(folder),
+                        )
+                    })
                     .children(crumbs),
             )
             .child(div().flex_1())

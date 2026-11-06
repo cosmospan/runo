@@ -1890,6 +1890,8 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
+        // Settings has its own title column, so no bar across the top.
+        let bare = matches!(self.place, Place::Settings(_));
         let project_drawer = self.project_drawer(cx);
         let root = div()
             .size_full()
@@ -1984,7 +1986,8 @@ impl Render for Shell {
                     .flex_col()
                     // Full height on its own; as a canvas, it stretches between its margins.
                     .when(setup, |d| d.h_full())
-                    .when(!setup, |d| d.bg(c(ui::bg())).child(self.topbar(cx)))
+                    .when(!setup, |d| d.bg(c(ui::bg())))
+                    .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
                             .flex_1()

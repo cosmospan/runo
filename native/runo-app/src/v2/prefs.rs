@@ -38,14 +38,6 @@ pub enum Pane {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 5] = [
-        Pane::Work,
-        Pane::General,
-        Pane::Appearance,
-        Pane::Mascot,
-        Pane::Engines,
-    ];
-
     pub fn name(self) -> &'static str {
         match self {
             Pane::Work => "How work runs",
@@ -135,6 +127,71 @@ fn row(title: &'static str, line: impl Into<SharedString>, control: impl IntoEle
                         .text_size(px(12.5))
                         .text_color(c(ui::muted()))
                         .child(line.into()),
+                ),
+        )
+        .child(control)
+}
+
+/// A card with a title row, and an optional note on the right.
+fn card_head(title: &'static str, note: Option<SharedString>) -> Div {
+    ui::card().overflow_hidden().flex().flex_col().child(
+        div()
+            .px(px(18.))
+            .py(px(14.))
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(title),
+            )
+            .children(note.map(|n| {
+                div()
+                    .text_size(px(11.5))
+                    .text_color(c(ui::faint()))
+                    .child(n)
+            })),
+    )
+}
+
+/// A settings row led by the bot it's about.
+fn face_row(
+    face: AnyElement,
+    title: &'static str,
+    line: &'static str,
+    control: impl IntoElement,
+) -> Div {
+    div()
+        .px(px(18.))
+        .py(px(13.))
+        .flex()
+        .items_center()
+        .gap(px(14.))
+        .border_t_1()
+        .border_color(c(ui::line2()))
+        .child(div().flex_none().child(face))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(13.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .child(line),
                 ),
         )
         .child(control)
@@ -353,60 +410,7 @@ fn swatch(t: &'static Theme) -> Div {
 
 impl Shell {
     pub(super) fn settings(&mut self, pane: Pane, cx: &mut Context<Self>) -> AnyElement {
-        // The panes as a row of tabs across the top, the one you're on
-        // underlined.
-        let mut tabs = div().flex().items_end().gap(px(22.));
-        for p in Pane::ALL {
-            let on = p == pane;
-            tabs = tabs.child(
-                div()
-                    .id(("settings-pane", p as usize))
-                    .relative()
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .gap(px(7.))
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .cursor_pointer()
-                    .map(|d| {
-                        if on {
-                            d.text_color(c(ui::ink())).child(
-                                div()
-                                    .absolute()
-                                    .left_0()
-                                    .right_0()
-                                    .bottom(px(-1.))
-                                    .h(px(2.))
-                                    .rounded_t(px(2.))
-                                    .bg(c(ui::ink())),
-                            )
-                        } else {
-                            d.text_color(c(ui::muted()))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                        }
-                    })
-                    .child(Icon::new(p.icon()).size(px(14.)))
-                    .child(p.name())
-                    .tooltip(move |window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new(p.line()).build(window, cx)
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        // Switching panes stays inside Settings: no page fade, no
-                        // extra step on the back trail.
-                        this.settings_pane = p;
-                        this.place = Place::Settings(p);
-                        cx.notify();
-                    })),
-            );
-        }
-        let nav = div()
-            .flex_none()
-            .px(px(28.))
-            .pt(px(6.))
-            .border_b_1()
-            .border_color(c(ui::line2()))
-            .child(tabs);
+        let nav = self.settings_nav(pane, cx);
         let body = match pane {
             Pane::Work => self.settings_work(cx),
             Pane::General => self.settings_general(cx),
@@ -417,10 +421,86 @@ impl Shell {
         div()
             .size_full()
             .flex()
-            .flex_col()
             .child(nav)
-            .child(div().flex_1().min_h_0().w_full().child(body))
+            .child(div().flex_1().min_w_0().h_full().child(body))
             .into_any_element()
+    }
+
+    /// Settings' own column: its title, then the panes in small groups.
+    fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
+        let groups: [(&'static str, &[Pane]); 2] = [
+            ("CREW", &[Pane::Work, Pane::Engines, Pane::Mascot]),
+            ("YOU", &[Pane::General, Pane::Appearance]),
+        ];
+        let mut col = div()
+            .w(px(210.))
+            .h_full()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .px(px(10.))
+            .pt(px(22.))
+            .border_r_1()
+            .border_color(c(ui::line2()))
+            .bg(c(ui::bg()))
+            .child(
+                div()
+                    .px(px(10.))
+                    .pb(px(14.))
+                    .text_size(px(17.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child("Settings"),
+            );
+        for (label, panes) in groups {
+            col = col.child(
+                div()
+                    .px(px(10.))
+                    .pt(px(10.))
+                    .pb(px(6.))
+                    .text_size(px(10.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::faint()))
+                    .child(label),
+            );
+            for &p in panes {
+                let on = p == pane;
+                col = col.child(
+                    div()
+                        .id(("settings-pane", p as usize))
+                        .h(px(31.))
+                        .px(px(10.))
+                        .mb(px(1.))
+                        .flex()
+                        .items_center()
+                        .gap(px(9.))
+                        .rounded(px(8.))
+                        .text_size(px(13.))
+                        .cursor_pointer()
+                        .map(|d| {
+                            if on {
+                                d.bg(c(super::theme::mix(ui::bg(), ui::VIOLET, 0.09)))
+                                    .text_color(c(ui::t_violet()))
+                                    .font_weight(FontWeight::MEDIUM)
+                            } else {
+                                d.text_color(c(ui::body()))
+                                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                            }
+                        })
+                        .child(Icon::new(p.icon()).size(px(15.)))
+                        .child(p.name())
+                        .tooltip(move |window, cx| Tooltip::new(p.line()).build(window, cx))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            // Switching panes stays inside Settings: no page fade, no
+                            // extra step on the back trail.
+                            this.settings_pane = p;
+                            this.place = Place::Settings(p);
+                            cx.notify();
+                        })),
+                );
+            }
+        }
+        col
     }
 
     fn page(id: &'static str, title: &'static str, line: &'static str, body: Div) -> AnyElement {
@@ -544,7 +624,20 @@ impl Shell {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(ui::ink()))
                                     .child(name),
-                            ),
+                            )
+                            .when(on, |d| {
+                                d.child(
+                                    div()
+                                        .px(px(6.))
+                                        .py(px(1.))
+                                        .rounded(px(5.))
+                                        .bg(c(super::theme::mix(ui::bg(), ui::VIOLET, 0.12)))
+                                        .font_family(ui::MONO)
+                                        .text_size(px(10.5))
+                                        .text_color(c(ui::t_violet()))
+                                        .child("Picked"),
+                                )
+                            }),
                     )
                     .child(
                         div()
@@ -564,15 +657,20 @@ impl Shell {
                     })),
             );
         }
-        let ask = group("WHEN SHOULD THE CREW ASK YOU?", Vec::new()).child(cards);
+        let ask = card_head("When should the crew ask you?", None).child(cards);
 
+        let peek = self.avatar(Member::Fin, 24.).into_any_element();
+        let builder = self.avatar(Member::Builder, 24.).into_any_element();
+        let shipper = self.avatar(Member::Shipper, 24.).into_any_element();
         let toggle = |id: &'static str,
+                      face: AnyElement,
                       title: &'static str,
                       line: &'static str,
                       on: bool,
                       set: fn(&mut AppSettings, bool),
                       cx: &mut Context<Self>| {
-            row(
+            face_row(
+                face,
                 title,
                 line,
                 div()
@@ -594,82 +692,152 @@ impl Shell {
                     })),
             )
         };
-        let checkpoints = group(
-            "CHECKPOINTS",
-            vec![
-                toggle(
-                    "work-plan-first",
-                    "Approve Peek's plan first",
-                    "Writing jobs arrive as a plan card. Nothing starts until you press Start.",
-                    st.v2_plan_first,
-                    |st, on| st.v2_plan_first = on,
-                    cx,
-                ),
-                row(
-                    "Changes wait for you",
-                    "Every job that changes files stops in Review until you approve it.",
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .px(px(7.))
-                                .py(px(2.))
-                                .rounded(px(5.))
-                                .bg(c(ui::well()))
-                                .text_size(px(11.5))
-                                .text_color(c(ui::muted()))
-                                .child("Always on"),
-                        )
-                        .child(div().opacity(0.45).child(switch(true))),
-                ),
-                toggle(
-                    "work-auto-merge",
-                    "Merge on its own",
-                    "A pull request Shipper opens merges once its checks pass.",
-                    st.v2_auto_merge,
-                    |st, on| st.v2_auto_merge = on,
-                    cx,
-                ),
-            ],
-        );
+        let set_by = match level {
+            "a_lot" => "Set by Ask a lot \u{00b7} change any",
+            "balanced" => "Set by Balanced \u{00b7} change any",
+            "hands_off" => "Set by Hands off \u{00b7} change any",
+            _ => "Your own mix",
+        };
+        let checkpoints = card_head("Checkpoints", Some(set_by.into()))
+            .child(toggle(
+                "work-plan-first",
+                peek,
+                "Approve Peek's plan first",
+                "Peek posts a plan card. Nothing starts until you press Start.",
+                st.v2_plan_first,
+                |st, on| st.v2_plan_first = on,
+                cx,
+            ))
+            .child(face_row(
+                builder,
+                "Changes wait for you",
+                "Every job that changes files stops in Review until you approve it.",
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .px(px(7.))
+                            .py(px(2.))
+                            .rounded(px(5.))
+                            .bg(c(ui::well()))
+                            .font_family(ui::MONO)
+                            .text_size(px(11.))
+                            .text_color(c(ui::muted()))
+                            .child("Always on"),
+                    )
+                    .child(div().opacity(0.45).child(switch(true))),
+            ))
+            .child(toggle(
+                "work-auto-merge",
+                shipper,
+                "Merge on its own",
+                "A pull request Shipper opens merges once its checks pass.",
+                st.v2_auto_merge,
+                |st, on| st.v2_auto_merge = on,
+                cx,
+            ));
 
-        // Who runs on what.
-        let mut engines = Vec::new();
-        for who in super::data::Member::all().into_iter().take(6) {
-            let face = self.avatar(who, 22.);
-            let label = super::engine::label(&st, who);
-            engines.push(
+        // The engines in play: the default, then any a bot was moved to.
+        let default_i = super::engine::index_of(&st, "");
+        let mut used: Vec<(usize, Vec<Member>)> = vec![(default_i, Vec::new())];
+        for who in Member::all() {
+            let (i, _) = super::engine::engine(&st, who);
+            match used.iter_mut().find(|(k, _)| *k == i) {
+                Some((_, bots)) => bots.push(who),
+                None => used.push((i, vec![who])),
+            }
+        }
+        // Then the ones installed here, and the usual few, so a missing one can be set up.
+        let n = crate::agent::PROVIDERS.len();
+        for i in (0..n)
+            .filter(|&i| super::engine::ready(&st, i))
+            .chain(0..n.min(3))
+        {
+            if used.len() < 5 && !used.iter().any(|(k, _)| *k == i) {
+                used.push((i, Vec::new()));
+            }
+        }
+        let mut engines = card_head("Engines", None);
+        for (i, bots) in used {
+            let p = &crate::agent::PROVIDERS[i];
+            let ready = super::engine::ready(&st, i);
+            let who = match bots.len() {
+                _ if !ready => "Not set up yet".to_string(),
+                0 => "Ready, no bots on it".to_string(),
+                1 => format!("Used by {}", bots[0].name()),
+                n => format!("Used by {n} bots"),
+            };
+            let pill = |text: &'static str, tone: ui::Tone| {
+                div()
+                    .px(px(7.))
+                    .py(px(2.))
+                    .rounded(px(5.))
+                    .bg(c(tone.1))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.))
+                    .text_color(c(tone.0))
+                    .child(text)
+            };
+            engines = engines.child(
                 div()
                     .px(px(18.))
-                    .py(px(10.))
+                    .py(px(12.))
                     .flex()
                     .items_center()
                     .gap(px(12.))
                     .border_t_1()
                     .border_color(c(ui::line2()))
-                    .child(face)
                     .child(
                         div()
-                            .w(px(110.))
-                            .text_size(px(13.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::ink()))
-                            .child(who.name()),
+                            .size(px(30.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(8.))
+                            .bg(c(super::theme::mix(ui::bg(), p.color, 0.12)))
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(c(super::theme::mix(p.color, 0x000000, 0.25)))
+                            .child(p.mark),
                     )
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
-                            .truncate()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::muted()))
-                            .child(label),
-                    ),
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(p.name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::muted()))
+                                    .child(who),
+                            ),
+                    )
+                    .when(i == default_i, |d| {
+                        d.child(pill("Default", ui::grey_tone()))
+                    })
+                    .child(if ready {
+                        pill("Connected", ui::ok_tone()).into_any_element()
+                    } else {
+                        ui::ghost(("work-setup", i), "Set up")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.settings_pane = Pane::Engines;
+                                this.place = Place::Settings(Pane::Engines);
+                                cx.notify();
+                            }))
+                            .into_any_element()
+                    }),
             );
         }
-        let engines = group("ENGINES", engines).child(
+        let engines = engines.child(
             div()
                 .id("work-engines")
                 .px(px(18.))
@@ -680,7 +848,7 @@ impl Shell {
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(ui::t_violet()))
                 .cursor_pointer()
-                .child("Change engines \u{2192}")
+                .child("Set per bot \u{2192}")
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.settings_pane = Pane::Engines;
                     this.place = Place::Settings(Pane::Engines);
@@ -688,34 +856,30 @@ impl Shell {
                 })),
         );
 
-        let preview = self.work_preview(&st);
-        let body = div()
-            .flex()
-            .items_start()
-            .gap(px(20.))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(space::M))
-                    .child(ask)
-                    .child(checkpoints)
-                    .child(engines),
-            )
-            .child(preview);
-        Self::page(
+        let main = Self::page(
             "settings-work",
             "How work runs",
-            "Decide how often the crew checks with you. It applies to every project.",
-            body,
-        )
+            "Decide how much the crew checks with you. It applies to every project.",
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(space::M))
+                .child(ask)
+                .child(checkpoints)
+                .child(engines),
+        );
+        let rail = self.work_preview(&st, cx);
+        div()
+            .size_full()
+            .flex()
+            .child(div().flex_1().min_w_0().h_full().child(main))
+            .child(rail)
+            .into_any_element()
     }
 
     /// What asking for something looks like with these settings, step by step,
     /// with the steps that wait for you marked.
-    fn work_preview(&mut self, st: &AppSettings) -> Div {
+    fn work_preview(&mut self, st: &AppSettings, cx: &mut Context<Self>) -> Div {
         use super::data::Member;
         let mut steps: Vec<(Option<Member>, &str, &str, bool)> =
             vec![(None, "You ask in a thread", "", false)];
@@ -755,6 +919,7 @@ impl Shell {
             ));
         }
         let asks = steps.iter().filter(|s| s.3).count();
+        let steps_alone = steps.len() - 1 - asks;
         let mut flow = div().flex().flex_col().gap(px(8.));
         for (who, what, sub, yours) in steps {
             let face: AnyElement = match who {
@@ -815,47 +980,107 @@ impl Shell {
                     ),
             );
         }
+        let alone = steps_alone;
+        let balanced = !st.v2_plan_first && !st.v2_auto_merge;
+        let stat = |n: String, what: &'static str| {
+            div()
+                .flex_1()
+                .child(
+                    div()
+                        .text_size(px(20.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(n),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .text_color(c(ui::muted()))
+                        .child(what),
+                )
+        };
         div()
-            .w(px(300.))
+            .w(px(330.))
+            .h_full()
             .flex_none()
-            .p(px(16.))
+            .px(px(18.))
+            .pt(px(26.))
+            .pb(px(18.))
             .flex()
             .flex_col()
-            .gap(px(12.))
-            .rounded(px(14.))
+            .gap(px(16.))
             .bg(c(ui::ground()))
-            .border_1()
-            .border_color(c(ui::line()))
+            .border_l_1()
+            .border_color(c(ui::line2()))
             .child(
                 div()
                     .child(
                         div()
-                            .text_size(px(11.))
-                            .font_weight(FontWeight::SEMIBOLD)
+                            .font_family(ui::MONO)
+                            .text_size(px(10.5))
                             .text_color(c(ui::faint()))
                             .child("PREVIEW"),
                     )
                     .child(
                         div()
-                            .mt(px(2.))
-                            .text_size(px(14.))
+                            .mt(px(4.))
+                            .text_size(px(15.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(ui::ink()))
                             .child("What \u{201c}Add gift cards\u{201d} looks like"),
+                    )
+                    .child(
+                        div()
+                            .mt(px(2.))
+                            .text_size(px(12.))
+                            .text_color(c(ui::muted()))
+                            .child("Updates as you change settings."),
                     ),
             )
             .child(flow)
             .child(
+                ui::card()
+                    .px(px(16.))
+                    .py(px(14.))
+                    .flex()
+                    .gap(px(12.))
+                    .child(stat(
+                        asks.to_string(),
+                        if asks == 1 {
+                            "time you're asked"
+                        } else {
+                            "times you're asked"
+                        },
+                    ))
+                    .child(stat(alone.to_string(), "steps the crew runs alone")),
+            )
+            .child(div().flex_1())
+            .child(
                 div()
-                    .pt(px(10.))
-                    .border_t_1()
-                    .border_color(c(ui::line()))
-                    .text_size(px(12.5))
-                    .text_color(c(ui::muted()))
-                    .child(format!(
-                        "You're asked {asks} {}. The crew does the rest alone.",
-                        if asks == 1 { "time" } else { "times" }
-                    )),
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(c(ui::faint()))
+                            .child("Changes save as you make them."),
+                    )
+                    .when(!balanced, |d| {
+                        d.child(
+                            ui::ghost("work-reset", "Reset to Balanced").on_click(cx.listener(
+                                |_, _, _, cx| {
+                                    save(cx, |st| {
+                                        st.v2_ask = "balanced".into();
+                                        st.v2_plan_first = false;
+                                        st.v2_auto_merge = false;
+                                    });
+                                    cx.notify();
+                                },
+                            )),
+                        )
+                    }),
             )
     }
 
