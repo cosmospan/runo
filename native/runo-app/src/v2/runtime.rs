@@ -1141,28 +1141,60 @@ impl Runtime {
             .filter(|m| !m.note)
             .map(|m| (m.mine, m.text.clone()))
             .collect();
-        let log = self.store.chats.entry(who).or_default();
-        log.push(Said::mine(text.clone()));
+        self.store.say_in_dm(who, Said::mine(text.clone()));
         if self.asking.is_some() {
-            log.push(Said::note(
-                "One question at a time: ask again when the last answer is in.",
-            ));
+            self.store.say_in_dm(
+                who,
+                Said::note("One question at a time: ask again when the last answer is in."),
+            );
             return;
         }
         let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
-            log.push(Said::note(
-                "Pick a folder first (on Today), so the crew knows which code to read.",
-            ));
+            self.store.say_in_dm(
+                who,
+                Said::note("Pick a folder first (on Today), so the crew knows which code to read."),
+            );
             return;
         };
-        match engine::Ask::start(st, who, &folder, &text, &history) {
+        // One conversation per bot: it knows the jobs it ran here, too.
+        let jobs: Vec<String> = self
+            .store
+            .dm_jobs(who)
+            .into_iter()
+            .rev()
+            .take(5)
+            .map(|j| {
+                let last = j
+                    .last_words()
+                    .map(|w| {
+                        w.lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(160)
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
+                format!(
+                    "- #{} \"{}\" ({}) {}",
+                    j.id,
+                    j.label(),
+                    j.status.label(),
+                    last
+                )
+            })
+            .collect();
+        let prompt = if jobs.is_empty() {
+            text.clone()
+        } else {
+            format!(
+                "(Jobs you ran in this project, newest first:\n{}\n)\n\n{text}",
+                jobs.join("\n")
+            )
+        };
+        match engine::Ask::start(st, who, &folder, &prompt, &history) {
             Ok(ask) => self.asking = Some(ask),
-            Err(why) => self
-                .store
-                .chats
-                .entry(who)
-                .or_default()
-                .push(Said::note(why)),
+            Err(why) => self.store.say_in_dm(who, Said::note(why)),
         }
         self.store.save();
     }
@@ -1295,7 +1327,7 @@ impl Runtime {
                     .and_then(|id| self.store.talks.iter_mut().find(|t| t.id == id))
                 {
                     Some(t) => t.answer = Some(said),
-                    None => self.store.chats.entry(who).or_default().push(said),
+                    None => self.store.say_in_dm(who, said),
                 }
                 self.asking = None;
                 self.store.save();

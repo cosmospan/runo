@@ -145,7 +145,17 @@ impl Shell {
                             .items_center()
                             .gap(px(6.))
                             .text_size(px(13.))
-                            .child(div().font_weight(FontWeight::SEMIBOLD).child(who.name()))
+                            .child(
+                                div()
+                                    .id("job-bot-dm")
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .cursor_pointer()
+                                    .hover(|s| s.underline())
+                                    .child(who.name())
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.go(Place::Chat(who), cx)
+                                    })),
+                            )
                             .child(div().text_color(c(ui::muted())).child(verb))
                             .child(chip(IconName::Cpu, job.engine.clone()))
                             .child(chip(IconName::Folder, job.folder.name.clone())),

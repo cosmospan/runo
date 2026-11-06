@@ -443,7 +443,7 @@ impl Shell {
     }
 
     /// A job: your ask, then the bot's reply with a live card.
-    fn job_entry(&mut self, j: &Job, cx: &mut Context<Self>) -> Div {
+    pub(super) fn job_entry(&mut self, j: &Job, cx: &mut Context<Self>) -> Div {
         let id = j.id;
         let running = j.status == Status::Running;
         let face = if running {
