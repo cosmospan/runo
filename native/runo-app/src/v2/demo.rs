@@ -312,6 +312,8 @@ pub fn seed() -> Store {
             like: Member::Builder,
             look: [3, 0, 0, 0],
             outfit: "beret.none.pencil.heart".into(),
+            skills: Vec::new(),
+            rules: Vec::new(),
         },
         Made {
             id: 2,
@@ -320,6 +322,8 @@ pub fn seed() -> Store {
             like: Member::Explainer,
             look: [4, 0, 0, 0],
             outfit: "headset.clipboard.pencil.tag".into(),
+            skills: Vec::new(),
+            rules: Vec::new(),
         },
         Made {
             id: 3,
@@ -328,6 +332,8 @@ pub fn seed() -> Store {
             like: Member::Keeper,
             look: [6, 0, 0, 0],
             outfit: "bandana.none.broom.gear".into(),
+            skills: Vec::new(),
+            rules: Vec::new(),
         },
     ];
     super::data::set_made(&made);

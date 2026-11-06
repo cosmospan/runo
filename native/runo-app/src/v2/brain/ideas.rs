@@ -23,6 +23,8 @@ pub struct Idea {
     pub why: String,
     /// The jobs that led to it.
     pub jobs: Vec<u64>,
+    /// The words that mark a job as one for it, which become its skills.
+    pub words: &'static [&'static str],
 }
 
 /// Topics a bot of its own pays for, with the words that mark a job as one.
@@ -206,6 +208,7 @@ pub fn next(store: &Store, crew: &[Member], offered: &[String], now: u64) -> Opt
                 topic_words(t.0)
             ),
             jobs,
+            words: t.4,
         })
 }
 
