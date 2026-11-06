@@ -1568,7 +1568,21 @@ impl Shell {
         (who.role().to_lowercase(), ui::faint())
     }
 
-    /// Where `who`'s eyes look: towards the pointer when it's near, else ahead.
+    /// What a bot in the sidebar shows: its real state when it has one (answering,
+    /// working, waiting on you, just done), else an idle of its own that changes
+    /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
+    fn side_mood(&self, who: Member) -> Mood {
+        let mood = self.mood(who);
+        if mood != Mood::Signature {
+            return mood;
+        }
+        if self.hovered == Some(who) {
+            return Mood::Signature;
+        }
+        idle_mood(who.key(), self.now(), self.touched.elapsed().as_secs())
+    }
+
+    /// Where `who`'s eyes look: always towards the pointer.
     fn gaze(&self, who: Member) -> (i8, i8) {
         let Some(b) = self.faces.borrow().get(&who).copied() else {
             return (0, 0);
@@ -1997,14 +2011,36 @@ pub fn open_window(cx: &mut App) {
     cx.activate(true);
 }
 
-/// Which way eyes at `eye` look to find the pointer at `at` (window pixels):
-/// straight ahead when it's far off, else up to two steps each way.
+/// An idle bot's mood for the moment: mostly hovering, now and then a wave,
+/// and dozing off once the person has been away a while. Each bot keeps its own
+/// rhythm, picked from `seed`.
+fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
+    if away_secs > 120 {
+        return Mood::Asleep;
+    }
+    let span = 6.0 + (seed % 5) as f64;
+    let slot = ((now + seed as f64 * 1.9) / span) as u64;
+    let mut h =
+        (seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ slot).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 29;
+    match h % 10 {
+        0..=6 => Mood::Idle,
+        _ => Mood::Signature,
+    }
+}
+
+/// Which way eyes at `eye` look to find the pointer at `at` (window pixels), in
+/// tenths each way. The eyes always point along the line to the pointer; how
+/// far they turn grows quickly near the face and eases out further away, the
+/// way real eyes swing most of the way round and then hold.
 fn gaze_towards(eye: (f32, f32), at: (f32, f32)) -> (i8, i8) {
     let (dx, dy) = (at.0 - eye.0, at.1 - eye.1);
-    if dx.hypot(dy) > 260.0 {
+    let dist = dx.hypot(dy);
+    if dist < 1.0 {
         return (0, 0);
     }
-    let step = |d: f32| (d / 28.0).round().clamp(-2.0, 2.0) as i8;
+    let reach = 1.0 - (-dist / 90.0).exp();
+    let step = |d: f32| (d / dist * reach * 10.0).round().clamp(-10.0, 10.0) as i8;
     (step(dx), step(dy))
 }
 
@@ -2029,10 +2065,13 @@ mod side_tests {
     use super::gaze_towards;
 
     #[test]
-    fn eyes_find_a_nearby_pointer_and_ignore_a_far_one() {
-        assert_eq!(gaze_towards((100., 100.), (180., 100.)), (2, 0));
-        assert_eq!(gaze_towards((100., 100.), (100., 72.)), (0, -1));
-        assert_eq!(gaze_towards((100., 100.), (900., 100.)), (0, 0));
+    fn eyes_follow_the_pointer_wherever_it_is() {
+        assert_eq!(gaze_towards((100., 100.), (180., 100.)), (6, 0));
+        assert_eq!(gaze_towards((100., 100.), (100., 72.)), (0, -3));
+        assert_eq!(gaze_towards((100., 100.), (900., 100.)), (10, 0));
+        // Along the diagonal both axes turn alike.
+        let (x, y) = gaze_towards((100., 100.), (400., 400.));
+        assert!(x == y && x > 5, "{x} {y}");
     }
 }
 

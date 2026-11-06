@@ -14,7 +14,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{Badge, FinPose, Hat, Held, Material, Outfit, State, Tool, ROLES};
+use runo_holo::fin::{FinPose, Material, Outfit, State, Tool, ROLES};
 use runo_holo::{Figure, Framing, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -51,7 +51,7 @@ impl Pane {
         match self {
             Pane::General => "Alerts, motion and limits",
             Pane::Appearance => "Themes and frosted glass",
-            Pane::Mascot => "Fin, colours and props",
+            Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
         }
     }
@@ -908,32 +908,11 @@ impl Shell {
                     .on_click(cx.listener(dress(r.tint, r.outfit))),
             );
         }
-        let mut hats = div();
-        for (i, h) in Hat::ALL.iter().copied().enumerate() {
-            hats = hats.child(
-                choice(("fin-hat", i), h.name(), outfit.hat == h, true)
-                    .on_click(cx.listener(dress(tint, Outfit { hat: h, ..outfit }))),
-            );
-        }
-        let mut lefts = div();
-        for (i, h) in Held::ALL.iter().copied().enumerate() {
-            lefts = lefts.child(
-                choice(("fin-left", i), h.name(), outfit.left == h, true)
-                    .on_click(cx.listener(dress(tint, Outfit { left: h, ..outfit }))),
-            );
-        }
         let mut rights = div();
         for (i, t) in Tool::ALL.iter().copied().enumerate() {
             rights = rights.child(
                 choice(("fin-right", i), t.name(), outfit.right == t, true)
                     .on_click(cx.listener(dress(tint, Outfit { right: t, ..outfit }))),
-            );
-        }
-        let mut badges = div();
-        for (i, b) in Badge::ALL.iter().copied().enumerate() {
-            badges = badges.child(
-                choice(("fin-badge", i), b.name(), outfit.badge == b, true)
-                    .on_click(cx.listener(dress(tint, Outfit { badge: b, ..outfit }))),
             );
         }
         let mut colours = div().pt(px(2.));
@@ -978,11 +957,11 @@ impl Shell {
             .flex_col()
             .child(div().px(px(18.)).pt(px(16.)).pb(px(6.)).child(section(
                 "Crew look",
-                "What Fin is made of, for every bot, everywhere in the app.",
+                "How Peek looks, for every bot, everywhere in the app.",
             )))
             .child(row(
-                "Material",
-                "Liquid glass, a slowly shifting rainbow glow, or solid colour.",
+                "Finish",
+                "Glowing eyes in a dark pill, the same with a turning rainbow rim, or a solid colour pill.",
                 segmented(mats),
             ));
 
@@ -1008,10 +987,7 @@ impl Shell {
             .child(pick)
             .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
             .child(slot("ROLE", roles))
-            .child(slot("HEAD", hats))
-            .child(slot("LEFT FIN", lefts))
-            .child(slot("RIGHT FIN", rights))
-            .child(slot("CHEST", badges))
+            .child(slot("PROP", rights))
             .child(slot("COLOUR", colours.flex().gap(px(8.))));
 
         let mut lineup = div().flex().flex_wrap().gap(px(space::M));
@@ -1062,7 +1038,7 @@ impl Shell {
         Self::page(
             "settings-mascot",
             "Mascot",
-            "Meet Fin. It hovers on a ring of light: the fins show effort, the brows show mood and the ring shows status.",
+            "Meet Peek: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
             div()
                 .flex()
                 .flex_col()

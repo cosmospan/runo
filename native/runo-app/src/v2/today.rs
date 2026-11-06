@@ -273,7 +273,7 @@ impl Shell {
                             .child(if target.on_crew() {
                                 target.name().to_string()
                             } else {
-                                format!("{} (Fin asks first)", target.name())
+                                format!("{} (Peek asks first)", target.name())
                             })
                             // What it reads the request as, so a wrong guess shows.
                             .child(
