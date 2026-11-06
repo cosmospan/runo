@@ -223,7 +223,7 @@ impl Shell {
             .engine_sel
             .filter(|i| *i < agent::PROVIDERS.len())
             .unwrap_or(default_i);
-        let list = self.engine_list(&st, &ready, default_i, sel, cx);
+        let list = self.engine_list(&ready, default_i, sel, cx);
         let detail = self.engine_detail(&st, &ready, default_i, sel, cx);
         let brains = self.bot_brains(&st, &ready, default_i, cx);
 
@@ -730,7 +730,6 @@ impl Shell {
     /// Every agent Squad Code knows: the ones on this computer first.
     fn engine_list(
         &mut self,
-        st: &AppSettings,
         ready: &[usize],
         default_i: usize,
         sel: usize,
@@ -763,10 +762,6 @@ impl Shell {
             for i in group {
                 let p = &agent::PROVIDERS[i];
                 let ok = ready.contains(&i);
-                let bots = Member::all()
-                    .into_iter()
-                    .filter(|m| engine::engine(st, *m).0 == i)
-                    .count();
                 list = list.child(
                     div()
                         .id(("engine-row", i))
@@ -811,17 +806,12 @@ impl Shell {
                                         .truncate()
                                         .child(p.name),
                                 )
-                                .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
-                                    if ok && bots > 0 {
-                                        format!(
-                                            "{} \u{b7} {bots} {}",
-                                            vendor(p.id),
-                                            if bots == 1 { "bot" } else { "bots" }
-                                        )
-                                    } else {
-                                        vendor(p.id).to_string()
-                                    },
-                                )),
+                                .child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(ui::muted()))
+                                        .child(vendor(p.id)),
+                                ),
                         )
                         .child(if i == default_i && ok {
                             div()
@@ -989,160 +979,46 @@ impl Shell {
             }
             return body;
         }
-        // The bots on this engine, each with its model; and the rest, one click
-        // from moving over.
-        let models = AgentPick::models(sel);
-        let mut on = div().flex().flex_col();
-        let mut off = div().flex().flex_wrap().gap(px(6.));
-        let mut any_off = false;
-        for (n, who) in Member::all().into_iter().enumerate() {
-            let own = st
-                .bot_engines
-                .get(&engine::bot_key(who))
-                .cloned()
-                .unwrap_or_default();
-            let (i, model) = engine::engine(st, who);
-            if i != sel {
-                any_off = true;
-                off = off.child(
-                    choice(("engine-move", n), format!("+ {}", who.name()), false, true).on_click(
-                        cx.listener(move |_, _, _, cx| {
-                            save(cx, |st| {
-                                engine::set(
-                                    st,
-                                    who,
-                                    BotEngine {
-                                        agent: id.to_string(),
-                                        model: String::new(),
-                                    },
-                                )
-                            });
-                            cx.notify();
-                        }),
-                    ),
-                );
-                continue;
-            }
-            let face = self.avatar(who, 26.);
-            let open = self.engine_open == Some(who);
-            let current = models
-                .iter()
-                .find(|m| m.value == model)
-                .map(|m| m.label.clone())
-                .unwrap_or_else(|| {
-                    if model.is_empty() {
-                        "Its default".into()
-                    } else {
-                        model.clone()
-                    }
-                });
-            let mut picks = div().flex().flex_wrap().items_center().gap(px(6.));
-            if !open {
-                picks = picks
-                    .child(
-                        div()
-                            .px(px(10.))
-                            .h(px(26.))
-                            .flex()
-                            .items_center()
-                            .rounded(px(7.))
-                            .border_1()
-                            .border_color(c(ui::line()))
-                            .text_size(px(12.))
-                            .text_color(c(ui::ink()))
-                            .child(current),
-                    )
-                    .child(
-                        div()
-                            .id(("engine-change", n))
-                            .px(px(6.))
-                            .text_size(px(12.))
-                            .text_color(c(ui::muted()))
-                            .cursor_pointer()
-                            .hover(|s| s.text_color(c(ui::ink())))
-                            .child("Change model")
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.engine_open = Some(who);
-                                cx.notify();
-                            })),
-                    );
-            }
-            for (k, m) in models.iter().take(if open { 6 } else { 0 }).enumerate() {
-                let value = m.value.clone();
-                picks = picks.child(
-                    ui::pill(
-                        ("engine-model", n * 100 + k),
-                        m.label.clone(),
-                        model == m.value,
-                    )
-                    .h(px(26.))
-                    .text_size(px(12.))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let value = value.clone();
-                        save(cx, |st| {
-                            engine::set(
-                                st,
-                                who,
-                                BotEngine {
-                                    agent: id.to_string(),
-                                    model: value,
-                                },
-                            )
-                        });
-                        this.engine_open = None;
-                        cx.notify();
-                    })),
-                );
-            }
-            on = on.child(
+        // What the engine is: where its tool lives and the models it offers.
+        let bin = st.agent(id).binary.clone();
+        let tool = if bin.is_empty() {
+            p.bin.to_string()
+        } else {
+            bin
+        };
+        let mut models = div().flex().flex_wrap().gap(px(6.));
+        for m in AgentPick::models(sel)
+            .into_iter()
+            .filter(|m| !m.value.is_empty())
+        {
+            models = models.child(
                 div()
-                    .py(px(10.))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .border_t_1()
-                    .border_color(c(ui::line2()))
-                    .child(face)
-                    .child(
-                        div()
-                            .w(px(130.))
-                            .flex_none()
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(who.name()),
-                            )
-                            .child(div().text_size(px(11.5)).text_color(c(ui::faint())).child(
-                                if own.agent.is_empty() {
-                                    "follows the default"
-                                } else {
-                                    "its own pick"
-                                },
-                            )),
-                    )
-                    .child(div().flex_1().min_w_0().child(picks))
-                    .when(!own.agent.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .id(("engine-reset", n))
-                                .text_size(px(12.))
-                                .text_color(c(ui::muted()))
-                                .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::ink())))
-                                .child("Use default")
-                                .on_click(cx.listener(move |_, _, _, cx| {
-                                    save(cx, |st| engine::set(st, who, BotEngine::default()));
-                                    cx.notify();
-                                })),
-                        )
-                    }),
+                    .px(px(9.))
+                    .py(px(4.))
+                    .rounded(px(7.))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .text_size(px(12.))
+                    .text_color(c(ui::body()))
+                    .child(m.label.clone()),
             );
         }
-        body = body.child(ui::caption("BOTS ON THIS ENGINE")).child(on);
-        if any_off {
-            body = body.child(ui::caption("MOVE A BOT HERE")).child(off);
-        }
+        body = body
+            .child(ui::caption("COMMAND"))
+            .child(
+                div()
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(c(ui::bg()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .child(tool),
+            )
+            .child(ui::caption("MODELS"))
+            .child(models);
         body
     }
 }

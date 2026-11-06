@@ -450,8 +450,6 @@ pub struct Shell {
     fin_sel: Member,
     /// The state the Mascot preview holds; it plays through them all when unset.
     fin_state: Option<runo_holo::fin::State>,
-    /// The bot whose model list is open on Engines.
-    engine_open: Option<Member>,
     /// The job Home's inspector shows; the newest active one when unset.
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
@@ -794,7 +792,6 @@ impl Shell {
             applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
             fin_state: None,
-            engine_open: None,
             home_pick: None,
             inbox_pick: None,
             list_filter: 0,
