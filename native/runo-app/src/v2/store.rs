@@ -153,6 +153,8 @@ pub struct Job {
     pub short: String,
     /// Peek's sentence or two on how it went, once it ended.
     pub recap: String,
+    /// Times its failing checks were sent back to its bot to fix.
+    pub fix_turns: u8,
     pub folder: Folder,
     /// "Claude Code · Sonnet 4.5": what ran it.
     pub engine: String,
@@ -248,6 +250,7 @@ impl Default for Job {
             title: String::new(),
             short: String::new(),
             recap: String::new(),
+            fix_turns: 0,
             folder: Folder::default(),
             engine: String::new(),
             agent: String::new(),

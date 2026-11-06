@@ -1173,9 +1173,14 @@ impl Runtime {
             }
         });
         for (id, results) in back {
+            let mut retry = None;
             if let Some(job) = self.store.job_mut(id) {
                 job.checks = results;
                 job.checking = false;
+                retry = fix_turn(job);
+            }
+            if let Some(prompt) = retry {
+                self.follow_up(st, id, prompt);
             }
             self.store.save();
         }
@@ -1232,9 +1237,67 @@ impl Runtime {
     }
 }
 
+/// How many times a job's failing checks go back to its bot before the
+/// person is asked.
+pub const FIX_TURNS: u8 = 1;
+
+/// When a job's checks failed and it hasn't used its fix turns, notes that in
+/// its feed and gives the words to send its bot. Checks the computer couldn't
+/// run (a full disk, a timeout) aren't the code's fault and send nothing back.
+fn fix_turn(job: &mut store::Job) -> Option<String> {
+    let failed: Vec<&crate::proof::CheckRun> = job
+        .checks
+        .iter()
+        .filter(|c| !c.ok && c.infra.is_empty() && !c.timed_out)
+        .collect();
+    if failed.is_empty() || job.fix_turns >= FIX_TURNS || job.status != Status::Review {
+        return None;
+    }
+    let names: Vec<String> = failed.iter().map(|c| format!("`{}`", c.command)).collect();
+    job.fix_turns += 1;
+    job.feed.push(store::Item::Note(format!(
+        "{} failed, so {} is fixing it before it comes to you.",
+        names.join(" and "),
+        job.bot.name()
+    )));
+    Some(crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failing_checks_go_back_to_the_bot_once() {
+        let failing = crate::proof::CheckRun {
+            command: "cargo test".into(),
+            ok: false,
+            tail: "test parse ... FAILED".into(),
+            ..Default::default()
+        };
+        let mut job = store::Job {
+            bot: Member::Fixer,
+            status: Status::Review,
+            checks: vec![failing.clone()],
+            ..Default::default()
+        };
+        let prompt = fix_turn(&mut job).expect("one fix turn");
+        assert!(prompt.contains("cargo test") && prompt.contains("FAILED"));
+        assert!(prompt.starts_with("Squad Code ran"));
+        assert_eq!(job.fix_turns, 1);
+        // The second failure is the person's to see.
+        assert!(fix_turn(&mut job).is_none());
+        // A check the computer couldn't run sends nothing back.
+        let mut job = store::Job {
+            status: Status::Review,
+            checks: vec![crate::proof::CheckRun {
+                infra: "disk full".into(),
+                ..failing
+            }],
+            ..Default::default()
+        };
+        assert!(fix_turn(&mut job).is_none());
+    }
 
     fn quiet_store() -> Store {
         // A demo store is never saved, so tests leave ~/.runo alone.
