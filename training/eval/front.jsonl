@@ -1,0 +1,388 @@
+{"text": "hey peek, morning!", "want": "chat", "mode": ""}
+{"text": "thanks, that fixed it \ud83d\ude4f", "want": "chat", "mode": ""}
+{"text": "what can you guys actually do?", "want": "chat", "mode": ""}
+{"text": "ok signing off for today, cya tmrw", "want": "chat", "mode": ""}
+{"text": "how r u doin peek", "want": "chat", "mode": ""}
+{"text": "you're all awesome, the release went great", "want": "chat", "mode": ""}
+{"text": "hi", "want": "chat", "mode": ""}
+{"text": "thx for the help earlier w the crash, much apprecated", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the Play Store work?", "want": "answer", "mode": ""}
+{"text": "wher is the confg loded in the app", "want": "answer", "mode": ""}
+{"text": "what does PaymentRepository do when a card gets declined?", "want": "answer", "mode": ""}
+{"text": "best android phone for testing under $300?", "want": "answer", "mode": ""}
+{"text": "summarise what GDPR means for storing user emails", "want": "answer", "mode": ""}
+{"text": "why do we use Hilt instead of Koin in this project?", "want": "answer", "mode": ""}
+{"text": "whats 15% of 2400", "want": "answer", "mode": ""}
+{"text": "kotlin.UninitializedPropertyAccessException: lateinit property adapter has not been initialized \u2014 just curious what this means in general, don't change anything", "want": "answer", "mode": ""}
+{"text": "make the app better", "want": "ask_back", "mode": ""}
+{"text": "do the thing we talked about yesterday", "want": "ask_back", "mode": ""}
+{"text": "update the page", "want": "ask_back", "mode": ""}
+{"text": "can u clean stuff up a bit", "want": "ask_back", "mode": ""}
+{"text": "its broken again", "want": "ask_back", "mode": ""}
+{"text": "change the colours like i said", "want": "ask_back", "mode": ""}
+{"text": "hi, can you sort out that issue?", "want": "ask_back", "mode": ""}
+{"text": "delete all the unused drawables in res/ in one go, like 200 files", "want": "confirm", "mode": "tidy"}
+{"text": "the Maps API key leaked, swap it for the new one in the prod config", "want": "confirm", "mode": "fix"}
+{"text": "merge the logn crash fix strait to main, no PR", "want": "confirm", "mode": "fix"}
+{"text": "push the crash hotfix live to all users now", "want": "confirm", "mode": "fix"}
+{"text": "rewrite git history to purge the keystore we accidentally committed, then force push", "want": "confirm", "mode": "fix"}
+{"text": "wipe all the dumy test acounts from the production db", "want": "confirm", "mode": "tidy"}
+{"text": "hi, fix the login crash on Android 14", "want": "hand", "mode": "fix"}
+{"text": "fix the password reset email, the link in it is broken", "want": "hand", "mode": "fix"}
+{"text": "the delete button is misaligned on the cart screen", "want": "hand", "mode": "fix"}
+{"text": "review the payment code in PaymentRepository.kt before I open the PR", "want": "hand", "mode": "review"}
+{"text": "write unit tests for CartViewModel", "want": "hand", "mode": "test"}
+{"text": "getting this on launch: java.lang.NullPointerException at com.app.home.HomeFragment.onViewCreated(HomeFragment.kt:42) pls fix", "want": "hand", "mode": "fix"}
+{"text": "rename the messy vars in ProfileFragment and split it into smaller functions, no behaviour changes", "want": "hand", "mode": "tidy"}
+{"text": "add pull to refresh on the feed screen, and btw which library do we use for images?", "want": "hand", "mode": "build"}
+{"text": "hi peek!", "want": "chat", "mode": ""}
+{"text": "thanks, that worked perfectly", "want": "chat", "mode": ""}
+{"text": "what can you do?", "want": "chat", "mode": ""}
+{"text": "good night, talk tomorrow", "want": "chat", "mode": ""}
+{"text": "how are you today?", "want": "chat", "mode": ""}
+{"text": "Wow, the pipeline ran clean for the first time in weeks. You lot are great.", "want": "chat", "mode": ""}
+{"text": "Morning! Just checking in, nothing for you yet.", "want": "chat", "mode": ""}
+{"text": "cheers, bye", "want": "chat", "mode": ""}
+{"text": "How does our deploy work?", "want": "answer", "mode": ""}
+{"text": "What does the dedupe step in transform.py actually do?", "want": "answer", "mode": ""}
+{"text": "Is it safe to delete the tmp/ folder, or does something still read from it?", "want": "answer", "mode": ""}
+{"text": "What's the difference between a left join and an inner join in pandas?", "want": "answer", "mode": ""}
+{"text": "Can you explain how we store the API keys for the pipeline?", "want": "answer", "mode": ""}
+{"text": "Best mechanical keyboard under $150?", "want": "answer", "mode": ""}
+{"text": "Summarise what GDPR says about keeping customer data in logs.", "want": "answer", "mode": ""}
+{"text": "I'm trying to decide between Airflow and Prefect for scheduling. We have about 30 jobs and a small team. Which would you pick?", "want": "answer", "mode": ""}
+{"text": "make the pipeline better", "want": "ask_back", "mode": ""}
+{"text": "Update the script.", "want": "ask_back", "mode": ""}
+{"text": "hey, can you sort out that bug?", "want": "ask_back", "mode": ""}
+{"text": "It's still broken.", "want": "ask_back", "mode": ""}
+{"text": "Hi there, sorry to bother you, I was wondering if you could possibly clean things up a bit when you get a chance? Thanks so much.", "want": "ask_back", "mode": ""}
+{"text": "change the numbers", "want": "ask_back", "mode": ""}
+{"text": "hi! can you fix the crash in the CSV parser when a row has extra commas?", "want": "hand", "mode": "fix"}
+{"text": "Write unit tests for the date normaliser in transform/dates.py.", "want": "hand", "mode": "test"}
+{"text": "Fix the password reset email template, the link text is cut off.", "want": "hand", "mode": "fix"}
+{"text": "The delete button on the pipeline dashboard is misaligned on mobile.", "want": "hand", "mode": "fix"}
+{"text": "Review the payment reconciliation module for bugs before I open the PR.", "want": "hand", "mode": "review"}
+{"text": "Could you add a --dry-run flag to the backfill script?", "want": "hand", "mode": "build"}
+{"text": "Clean up the unused imports and dead functions in utils/.", "want": "hand", "mode": "tidy"}
+{"text": "So we've been getting duplicate rows whenever the source API retries. I think it's the upsert in load_orders. Can you take a look and fix it?", "want": "hand", "mode": "fix"}
+{"text": "Delete all the parquet files in s3://pipeline-archive from before 2022.", "want": "confirm", "mode": "tidy"}
+{"text": "Add a currency column to the production orders table.", "want": "confirm", "mode": "build"}
+{"text": "The nightly ETL in prod is crashing on null dates. Hotfix it directly on the production server please.", "want": "confirm", "mode": "fix"}
+{"text": "Fix the timezone bug in loader.py and merge it straight to main, no PR needed.", "want": "confirm", "mode": "fix"}
+{"text": "Add retry logic to the ingest worker and deploy it to production tonight.", "want": "confirm", "mode": "build"}
+{"text": "Drop all the unused staging tables from the prod warehouse.", "want": "confirm", "mode": "tidy"}
+{"text": "Our Snowflake key got leaked in a Slack screenshot. Swap in a new one in the production secrets.", "want": "confirm", "mode": "fix"}
+{"text": "Squash the last 40 messy commits on main into one and force-push.", "want": "confirm", "mode": "tidy"}
+{"text": "thanks, that query runs way faster now", "want": "chat", "mode": ""}
+{"text": "wat can u do", "want": "chat", "mode": ""}
+{"text": "ok im logging off, cya tmrw", "want": "chat", "mode": ""}
+{"text": "how's your day going?", "want": "chat", "mode": ""}
+{"text": "you're a lifesaver, seriously", "want": "chat", "mode": ""}
+{"text": "hi! just saying hello, nothing needed rn", "want": "chat", "mode": ""}
+{"text": "good night peek", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the warehouse work?", "want": "answer", "mode": ""}
+{"text": "wher is the db confg loded", "want": "answer", "mode": ""}
+{"text": "whats the difference between a left join and a full outer join", "want": "answer", "mode": ""}
+{"text": "can you explain what the daily_revenue model calculates?", "want": "answer", "mode": ""}
+{"text": "best way to learn window functions as a beginner?", "want": "answer", "mode": ""}
+{"text": "why does fct_sessions use a CTE instead of a subquery?", "want": "answer", "mode": ""}
+{"text": "whats 15% of 2340", "want": "answer", "mode": ""}
+{"text": "make the dashboard better", "want": "ask_back", "mode": ""}
+{"text": "can u update the query", "want": "ask_back", "mode": ""}
+{"text": "clean things up a bit", "want": "ask_back", "mode": ""}
+{"text": "hi peek, that report is wrong again, sort it", "want": "ask_back", "mode": ""}
+{"text": "speed it up pls", "want": "ask_back", "mode": ""}
+{"text": "drop the unused staging tables from the prod warehouse", "want": "confirm", "mode": "tidy"}
+{"text": "delete every old backup csv in the exports bucket", "want": "confirm", "mode": "tidy"}
+{"text": "fix the null customer_ids directly in the production orders table", "want": "confirm", "mode": "fix"}
+{"text": "merge my fix for the churn query straight to main, skip the PR", "want": "confirm", "mode": "fix"}
+{"text": "add a new column to the prod users table and backfill it", "want": "confirm", "mode": "build"}
+{"text": "build the new retention view and deploy it straight to prod", "want": "confirm", "mode": "build"}
+{"text": "clean up dupes in the live customers table, delete the extra rows", "want": "confirm", "mode": "tidy"}
+{"text": "fix the timezone bug and push it live to the prod dashboards now", "want": "confirm", "mode": "fix"}
+{"text": "hi, fix the broken join in monthly_active_users.sql", "want": "hand", "mode": "fix"}
+{"text": "add tests for the cohort retention query", "want": "hand", "mode": "test"}
+{"text": "the delete button on the report builder is misaligned", "want": "hand", "mode": "fix"}
+{"text": "review the payment reconciliation sql", "want": "hand", "mode": "review"}
+{"text": "tidy up the formatting in the churn queries, its all over the place", "want": "hand", "mode": "tidy"}
+{"text": "could you write a query that shows top 10 products by refund rate?", "want": "hand", "mode": "build"}
+{"text": "fix teh typo in the pasword reset email template", "want": "hand", "mode": "fix"}
+{"text": "add a weekly signups chart to the growth dashboard", "want": "hand", "mode": "build"}
+{"text": "hey peek, good morning!", "want": "chat", "mode": ""}
+{"text": "what kinds of things can you help me with?", "want": "chat", "mode": ""}
+{"text": "ok I'm logging off for the night, see you tomorrow", "want": "chat", "mode": ""}
+{"text": "Hi! First time using this. Nice to meet you.", "want": "chat", "mode": ""}
+{"text": "cheers, that's all for now", "want": "chat", "mode": ""}
+{"text": "how does our deploy work? like what actually happens after I merge a PR?", "want": "answer", "mode": ""}
+{"text": "What's a good laptop for web dev under $1200?", "want": "answer", "mode": ""}
+{"text": "Can you explain how the useAuth hook decides whether a user is logged in?", "want": "answer", "mode": ""}
+{"text": "Where do we keep the Stripe API keys in this repo? Just want to know where to look.", "want": "answer", "mode": ""}
+{"text": "what's the difference between useMemo and useCallback?", "want": "answer", "mode": ""}
+{"text": "Could you summarise what GDPR means for storing user emails?", "want": "answer", "mode": ""}
+{"text": "I'm writing a thank-you note to my landlord. How do I make it sound warm but not over the top?", "want": "answer", "mode": ""}
+{"text": "if I force-push to my own feature branch, does it affect anyone else's work?", "want": "answer", "mode": ""}
+{"text": "can you do the thing we talked about yesterday?", "want": "ask_back", "mode": ""}
+{"text": "hi peek, something's broken, can you sort it out?", "want": "ask_back", "mode": ""}
+{"text": "The client looked at it this morning. She said it feels off. Can you change it?", "want": "ask_back", "mode": ""}
+{"text": "make it faster", "want": "ask_back", "mode": ""}
+{"text": "delete all the unused image files in /public/assets, there's like 300 of them", "want": "confirm", "mode": "tidy"}
+{"text": "Squash the last 20 commits on main into one and force-push it", "want": "confirm", "mode": "tidy"}
+{"text": "The import bug left a bunch of duplicate user rows in the prod database. Can you delete the duplicates?", "want": "confirm", "mode": "fix"}
+{"text": "hotfix the checkout crash and merge it straight to main, skip the PR", "want": "confirm", "mode": "fix"}
+{"text": "drop the legacy_orders table from the production database, we don't use it anymore", "want": "confirm", "mode": "tidy"}
+{"text": "Add the new Team pricing tier to the pricing page and ship it to production right away", "want": "confirm", "mode": "build"}
+{"text": "Production is showing a blank page for everyone since this morning's release. Roll prod back to yesterday's version.", "want": "confirm", "mode": "fix"}
+{"text": "remove all the old feature flag code and push it directly to main", "want": "confirm", "mode": "tidy"}
+{"text": "fix the password reset email, the link in it points to localhost", "want": "hand", "mode": "fix"}
+{"text": "the delete button on the settings page is misaligned on mobile", "want": "hand", "mode": "fix"}
+{"text": "hi! the login page crashes when the email field is empty, can you fix it?", "want": "hand", "mode": "fix"}
+{"text": "write unit tests for formatCurrency in utils/money.ts", "want": "hand", "mode": "test"}
+{"text": "review the payment code in src/billing before I open the PR", "want": "hand", "mode": "review"}
+{"text": "Could you add a dark mode toggle to the navbar?", "want": "hand", "mode": "build"}
+{"text": "The ProfileCard component is 600 lines and impossible to read. Split it into smaller components without changing how it behaves.", "want": "hand", "mode": "tidy"}
+{"text": "Customers keep asking to download their order history. Add a CSV export button to the orders table, and nudge the button font size up a bit if it looks small next to the others.", "want": "hand", "mode": "build"}
+{"text": "what kinds of things can you help with?", "want": "chat", "mode": ""}
+{"text": "ok that's all for today, see ya", "want": "chat", "mode": ""}
+{"text": "hi! first time using this", "want": "chat", "mode": ""}
+{"text": "lol nice, appreciate it", "want": "chat", "mode": ""}
+{"text": "you bots are fast, cheers", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the prod scheduler work?", "want": "answer", "mode": ""}
+{"text": "what does the dedupe step in ingest.py actually do?", "want": "answer", "mode": ""}
+{"text": "is pandas or polars better for crunching 50GB of parquet on a laptop?", "want": "answer", "mode": ""}
+{"text": "summarise the main points of GDPR for storing customer emails", "want": "answer", "mode": ""}
+{"text": "where does the pipeline load the S3 credentials from?", "want": "answer", "mode": ""}
+{"text": "what's 15% of 3,240?", "want": "answer", "mode": ""}
+{"text": "can you help me word a polite reply declining a meeting invite?", "want": "answer", "mode": ""}
+{"text": "what's the difference between a left join and an anti join?", "want": "answer", "mode": ""}
+{"text": "can you do the thing we talked about yesterday", "want": "ask_back", "mode": ""}
+{"text": "update the report", "want": "ask_back", "mode": ""}
+{"text": "it's broken again, sort it out", "want": "ask_back", "mode": ""}
+{"text": "tidy things up a bit", "want": "ask_back", "mode": ""}
+{"text": "hi peek, can you change the numbers", "want": "ask_back", "mode": ""}
+{"text": "same as last time please", "want": "ask_back", "mode": ""}
+{"text": "add unit tests for parse_currency in utils/money.py", "want": "hand", "mode": "test"}
+{"text": "hi, the CSV loader crashes on empty files, can you fix that?", "want": "hand", "mode": "fix"}
+{"text": "fix the password reset email template, the link points to localhost", "want": "hand", "mode": "fix"}
+{"text": "review the payment reconciliation code in reconcile.py before I open the PR", "want": "hand", "mode": "review"}
+{"text": "rename the camelCase variables in transform.py to snake_case", "want": "hand", "mode": "tidy"}
+{"text": "We get daily exports from the vendor as xlsx files. Right now someone converts them to CSV by hand every morning. Can you add a step that reads the xlsx straight into the pipeline?", "want": "hand", "mode": "build"}
+{"text": "the delete_old_partitions function has a typo in its log message", "want": "hand", "mode": "fix"}
+{"text": "dark mode for the pipeline dashboard??", "want": "hand", "mode": "build"}
+{"text": "fix the timezone bug in normalize_dates and push the fix straight to main", "want": "confirm", "mode": "fix"}
+{"text": "drop all the staging tables older than 2022 in the warehouse, we don't need them", "want": "confirm", "mode": "tidy"}
+{"text": "delete the old_scripts folder and the whole archive/ directory, it's all dead code", "want": "confirm", "mode": "tidy"}
+{"text": "squash the last 20 commits on the shared branch and force-push so the history is cleaner", "want": "confirm", "mode": "tidy"}
+{"text": "Set up the failure alert so it emails the whole data team when ingest fails, then send a test email to everyone now.", "want": "confirm", "mode": "build"}
+{"text": "fix the double-charge bug in billing_export and rerun it against the live payments table", "want": "confirm", "mode": "fix"}
+{"text": "Our Airflow DAG for invoices has been failing since Monday because of the schema change. Please patch it and redeploy it to prod.", "want": "confirm", "mode": "fix"}
+{"text": "add a retry wrapper to the S3 uploader and merge it directly into main, skip the review", "want": "confirm", "mode": "build"}
+{"text": "thanks, that worked \ud83d\ude4f", "want": "chat", "mode": ""}
+{"text": "ok I'm logging off for the night, see ya", "want": "chat", "mode": ""}
+{"text": "hi there", "want": "chat", "mode": ""}
+{"text": "cheers, have a good weekend", "want": "chat", "mode": ""}
+{"text": "where does src/auth/session.ts store the session token?", "want": "answer", "mode": ""}
+{"text": "best laptop under $1000 for web dev?", "want": "answer", "mode": ""}
+{"text": "can you summarise what GDPR means for storing user emails?", "want": "answer", "mode": ""}
+{"text": "what does useCart() return when the cart is empty?", "want": "answer", "mode": ""}
+{"text": "what's 18% of 2,450?", "want": "answer", "mode": ""}
+{"text": "why do we have two different date libraries in package.json?", "want": "answer", "mode": ""}
+{"text": "make it better", "want": "ask_back", "mode": ""}
+{"text": "do the thing we talked about", "want": "ask_back", "mode": ""}
+{"text": "hi, can you clean things up a bit?", "want": "ask_back", "mode": ""}
+{"text": "it's broken again", "want": "ask_back", "mode": ""}
+{"text": "change the colors", "want": "ask_back", "mode": ""}
+{"text": "can you sort out that bug from earlier?", "want": "ask_back", "mode": ""}
+{"text": "squash the last 20 commits on main and force-push", "want": "confirm", "mode": "tidy"}
+{"text": "drop the old users_backup table from the production database", "want": "confirm", "mode": "tidy"}
+{"text": "delete every file in src/legacy, we don't use any of it anymore", "want": "confirm", "mode": "tidy"}
+{"text": "checkout is crashing for customers right now. hotfix it and push straight to production", "want": "confirm", "mode": "fix"}
+{"text": "remove all the test accounts from the live users table", "want": "confirm", "mode": "tidy"}
+{"text": "the Stripe API key in config.ts leaked, rotate it and push the new one to prod", "want": "confirm", "mode": "fix"}
+{"text": "hi, fix the login crash", "want": "hand", "mode": "fix"}
+{"text": "the delete button on the cart page is misaligned", "want": "hand", "mode": "fix"}
+{"text": "review the payment code in src/billing/charge.ts before I open the PR", "want": "hand", "mode": "review"}
+{"text": "PROJ-412: add a 'remember me' checkbox to the login form", "want": "hand", "mode": "build"}
+{"text": "src/utils/format.ts has three copies of the same date function, merge them into one", "want": "hand", "mode": "tidy"}
+{"text": "Users keep reporting that the signup form accepts emails without an @. I checked and there's no validation at all. Can you fix that?", "want": "hand", "mode": "fix"}
+{"text": "add unit tests for the discount calculation in useCart()", "want": "hand", "mode": "test"}
+{"text": "hey peek!", "want": "chat", "mode": ""}
+{"text": "what can you actually do?", "want": "chat", "mode": ""}
+{"text": "gn, talk tomorrow", "want": "chat", "mode": ""}
+{"text": "hows it goin", "want": "chat", "mode": ""}
+{"text": "lol ur fast", "want": "chat", "mode": ""}
+{"text": "ok bye for now", "want": "chat", "mode": ""}
+{"text": "thx!!", "want": "chat", "mode": ""}
+{"text": "wher is the confg loded", "want": "answer", "mode": ""}
+{"text": "what's the best laptop under $1000 for coding", "want": "answer", "mode": ""}
+{"text": "summarise GDPR in a few bullets for me", "want": "answer", "mode": ""}
+{"text": "what does the deleteAccount() function actually delete?", "want": "answer", "mode": ""}
+{"text": "is it safe to keep an API key in chrome.storage.local?", "want": "answer", "mode": ""}
+{"text": "how many grams is 3/8 cup of flour", "want": "answer", "mode": ""}
+{"text": "can u explain wat src/auth/session.ts does", "want": "answer", "mode": ""}
+{"text": "do the thing we discussed yesterday", "want": "ask_back", "mode": ""}
+{"text": "can you clean things up a bit", "want": "ask_back", "mode": ""}
+{"text": "same as before but for the other one", "want": "ask_back", "mode": ""}
+{"text": "hi, fix the login crash in the popup", "want": "hand", "mode": "fix"}
+{"text": "fix teh logn buton on the options page, it dosnt do anything", "want": "hand", "mode": "fix"}
+{"text": "the delete button in the history panel is misaligned", "want": "hand", "mode": "fix"}
+{"text": "fix the password reset email, the link points to localhost", "want": "hand", "mode": "fix"}
+{"text": "review my PR for the payment code, PROJ-412", "want": "hand", "mode": "review"}
+{"text": "add a dark mode toggle to the extension popup", "want": "hand", "mode": "build"}
+{"text": "write unit tests for useCart()", "want": "hand", "mode": "test"}
+{"text": "fix the crash on save in editor.ts, and btw what does debounce mean?", "want": "hand", "mode": "fix"}
+{"text": "delete every file under src/legacy/ along with the tests that use them", "want": "confirm", "mode": "tidy"}
+{"text": "squash and force-push the last 10 commits on main so the history is clean", "want": "confirm", "mode": "tidy"}
+{"text": "run the migration that drops the users_old table on prod", "want": "confirm", "mode": "tidy"}
+{"text": "push the hotfix for the checkout crash directly to production", "want": "confirm", "mode": "fix"}
+{"text": "wipe all the old analytics rows from the production db, we dont need them", "want": "confirm", "mode": "tidy"}
+{"text": "hey peek", "want": "chat", "mode": ""}
+{"text": "thanks, that worked!", "want": "chat", "mode": ""}
+{"text": "gn ttyl", "want": "chat", "mode": ""}
+{"text": "how r u today", "want": "chat", "mode": ""}
+{"text": "good morning!", "want": "chat", "mode": ""}
+{"text": "you're the best lol", "want": "chat", "mode": ""}
+{"text": "bye for now", "want": "chat", "mode": ""}
+{"text": "what does the cleanup function in useEffect actually do", "want": "answer", "mode": ""}
+{"text": "best laptop under $1000 for coding?", "want": "answer", "mode": ""}
+{"text": "summarise GDPR in 3 bullets", "want": "answer", "mode": ""}
+{"text": "is it safe to delete node_modules or will that break something?", "want": "answer", "mode": ""}
+{"text": "how do we handle stripe refunds in the code right now?", "want": "answer", "mode": ""}
+{"text": "do the thing we discussed", "want": "ask_back", "mode": ""}
+{"text": "cleanup pls", "want": "ask_back", "mode": ""}
+{"text": "hi peek, can you sort out that bug", "want": "ask_back", "mode": ""}
+{"text": "same as yesterday but for the other one", "want": "ask_back", "mode": ""}
+{"text": "hi, fix the login crash when the password field is empty", "want": "hand", "mode": "fix"}
+{"text": "fix the password reset email template, the reset link in it points to localhost", "want": "hand", "mode": "fix"}
+{"text": "the delete button is misaligned on mobile in the cart page", "want": "hand", "mode": "fix"}
+{"text": "review the payment code in PaymentForm.tsx", "want": "hand", "mode": "review"}
+{"text": "hey can u add unt tests for the useCart hook", "want": "hand", "mode": "test"}
+{"text": "rename utils2.ts to something sensible and remove the exports nobody uses", "want": "hand", "mode": "tidy"}
+{"text": "add a dark mode toggle to the settings page", "want": "hand", "mode": "build"}
+{"text": "TypeError: Cannot read properties of undefined (reading 'map') at ProductList (ProductList.tsx:42:18) pls fix", "want": "hand", "mode": "fix"}
+{"text": "delete everything in src/legacy, we dont use any of it anymore", "want": "confirm", "mode": "tidy"}
+{"text": "squash the last 20 commits on main and force push", "want": "confirm", "mode": "tidy"}
+{"text": "drop the old_users table in prod, we migrated everything", "want": "confirm", "mode": "tidy"}
+{"text": "hotfix the checkout null crash and deploy straight to production", "want": "confirm", "mode": "fix"}
+{"text": "rotate the stripe api key in prod, the old one leaked", "want": "confirm", "mode": "fix"}
+{"text": "remove all users with no email from the production db, its about 3k rows", "want": "confirm", "mode": "tidy"}
+{"text": "fix teh typo in the homepage banner and push it live to prod", "want": "confirm", "mode": "fix"}
+{"text": "how are you doing today?", "want": "chat", "mode": ""}
+{"text": "lol you guys are fast", "want": "chat", "mode": ""}
+{"text": "morning! just checking in, nothing for you yet", "want": "chat", "mode": ""}
+{"text": "awesome, the crew sorted it out. thank you all!", "want": "chat", "mode": ""}
+{"text": "how does our deploy to TestFlight work?", "want": "answer", "mode": ""}
+{"text": "what's the difference between a struct and a class in Swift?", "want": "answer", "mode": ""}
+{"text": "best laptop under $1000 for iOS development?", "want": "answer", "mode": ""}
+{"text": "how does auth work in our app? are we storing the tokens in Keychain?", "want": "answer", "mode": ""}
+{"text": "what happens if I delete the DerivedData folder? will I lose anything?", "want": "answer", "mode": ""}
+{"text": "Can you summarise the GDPR rules for storing user email addresses?", "want": "answer", "mode": ""}
+{"text": "I have a job interview on Friday and I'm nervous about the intro. Can you help me write a short paragraph about myself?", "want": "answer", "mode": ""}
+{"text": "why does force-pushing break other people's branches?", "want": "answer", "mode": ""}
+{"text": "hi, can you sort out the bug?", "want": "ask_back", "mode": ""}
+{"text": "The app feels off lately. Users keep complaining in reviews. Can you just improve it?", "want": "ask_back", "mode": ""}
+{"text": "change the color", "want": "ask_back", "mode": ""}
+{"text": "clean up that file", "want": "ask_back", "mode": ""}
+{"text": "hi, fix the login crash when the email field is left empty", "want": "hand", "mode": "fix"}
+{"text": "fix the password reset email, the link in it points to localhost instead of our domain", "want": "hand", "mode": "fix"}
+{"text": "the delete button on the settings screen is misaligned on iPhone SE", "want": "hand", "mode": "fix"}
+{"text": "review the payment code in PaymentService.swift before I open the PR", "want": "hand", "mode": "review"}
+{"text": "Fatal error: Unexpectedly found nil while implicitly unwrapping an Optional value: file ProfileViewController.swift, line 42. Happens every time I open the profile while offline.", "want": "hand", "mode": "fix"}
+{"text": "Rename the view controller files to match our new naming convention and remove the unused imports while you're in there", "want": "hand", "mode": "tidy"}
+{"text": "write unit tests for the discount calculation in CartViewModel", "want": "hand", "mode": "test"}
+{"text": "Add pull-to-refresh to the feed screen. Also, quick question, what is FeedCache actually for?", "want": "hand", "mode": "build"}
+{"text": "Delete every unused image in Assets.xcassets and remove the whole Legacy folder", "want": "confirm", "mode": "tidy"}
+{"text": "Fix the crash in PaymentService and merge it straight to main, skip the PR", "want": "confirm", "mode": "fix"}
+{"text": "Squash the last 30 commits into one and force-push to main so the history looks clean", "want": "confirm", "mode": "tidy"}
+{"text": "Our production database is full of junk. Delete all the test accounts created before March.", "want": "confirm", "mode": "tidy"}
+{"text": "Our Stripe live key leaked in a screenshot. Replace the secret key in the server config with the new one I generated.", "want": "confirm", "mode": "fix"}
+{"text": "Write a script that emails every beta tester their new TestFlight invite and run it", "want": "confirm", "mode": "build"}
+{"text": "what kind of stuff can you do for me?", "want": "chat", "mode": ""}
+{"text": "ok I'm logging off for the weekend, bye", "want": "chat", "mode": ""}
+{"text": "hello, sorry my english not so good, I am new here", "want": "chat", "mode": ""}
+{"text": "appreciate the help on the dashboard yesterday \ud83d\ude4f", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the warehouse work? just curious, don't change anything", "want": "answer", "mode": ""}
+{"text": "what's the difference between a LEFT JOIN and a FULL OUTER JOIN?", "want": "answer", "mode": ""}
+{"text": "where do we calculate monthly active users in this repo?", "want": "answer", "mode": ""}
+{"text": "can you explain why we use window functions in revenue_daily.sql?", "want": "answer", "mode": ""}
+{"text": "is it normal that COUNT(DISTINCT) is slow on big tables?", "want": "answer", "mode": ""}
+{"text": "what's a fair way to split rent with three roommates when the rooms are different sizes?", "want": "answer", "mode": ""}
+{"text": "how does the dbt snapshot for customers decide when a row changed?", "want": "answer", "mode": ""}
+{"text": "what does 'relation does not exist' usually mean in Postgres?", "want": "answer", "mode": ""}
+{"text": "can you do the thing we talked about", "want": "ask_back", "mode": ""}
+{"text": "update the query", "want": "ask_back", "mode": ""}
+{"text": "hi, please change the numbers, they wrong", "want": "ask_back", "mode": ""}
+{"text": "clean it up a bit", "want": "ask_back", "mode": ""}
+{"text": "do the same for the other one", "want": "ask_back", "mode": ""}
+{"text": "delete all the old backfill tables in the prod schema, anything starting with tmp_", "want": "confirm", "mode": "tidy"}
+{"text": "force-push my branch over main, the history there is a mess", "want": "confirm", "mode": "tidy"}
+{"text": "the prod orders table has duplicate rows from last night's load, run a DELETE to dedupe it", "want": "confirm", "mode": "fix"}
+{"text": "rotate the warehouse API key, it got pasted in a public channel", "want": "confirm", "mode": "fix"}
+{"text": "merge the fix for the null revenue bug straight to main, skip review", "want": "confirm", "mode": "fix"}
+{"text": "squash and rewrite the last 30 commits on main so the history is clean", "want": "confirm", "mode": "tidy"}
+{"text": "fix the churn calculation and deploy it to the production dashboard", "want": "confirm", "mode": "fix"}
+{"text": "add a region column to the prod customers table and backfill it for all rows", "want": "confirm", "mode": "build"}
+{"text": "hi, fix the login crash on the metrics portal", "want": "hand", "mode": "fix"}
+{"text": "write tests for the date_spine macro", "want": "hand", "mode": "test"}
+{"text": "the delete button on the saved queries page is misaligned", "want": "hand", "mode": "fix"}
+{"text": "review the payment reconciliation query before I merge my branch", "want": "hand", "mode": "review"}
+{"text": "fix the password reset email template, the link text is cut off", "want": "hand", "mode": "fix"}
+{"text": "could you add a weekly_signups model grouped by country?", "want": "hand", "mode": "build"}
+{"text": "getting this when I run the daily job:\nERROR: column \"user_id\" does not exist\nLINE 4: SELECT user_id, SUM(amount) FROM payments\ncan you fix the query in models/payments_summary.sql", "want": "hand", "mode": "fix"}
+{"text": "please rename the cte in retention.sql, they are called a, b, c, is very hard to read", "want": "hand", "mode": "tidy"}
+{"text": "ok signing off for the day, bye", "want": "chat", "mode": ""}
+{"text": "how's it going?", "want": "chat", "mode": ""}
+{"text": "you guys are awesome, cheers", "want": "chat", "mode": ""}
+{"text": "hello! first time here", "want": "chat", "mode": ""}
+{"text": "really appreciate the help earlier with the dedupe step", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the prod Airflow cluster work?", "want": "answer", "mode": ""}
+{"text": "what does normalize_timestamps() in etl/transform.py do?", "want": "answer", "mode": ""}
+{"text": "why do we use parquet instead of csv for the staging tables?", "want": "answer", "mode": ""}
+{"text": "best laptop under $1000 for data work?", "want": "answer", "mode": ""}
+{"text": "summarise what GDPR means for storing customer emails", "want": "answer", "mode": ""}
+{"text": "what's 15% of 2,340?", "want": "answer", "mode": ""}
+{"text": "can you explain how the S3 credentials get loaded in config/settings.py?", "want": "answer", "mode": ""}
+{"text": "is pandas or polars faster for a 50GB join?", "want": "answer", "mode": ""}
+{"text": "update the job", "want": "ask_back", "mode": ""}
+{"text": "can you change the config like before", "want": "ask_back", "mode": ""}
+{"text": "speed it up please", "want": "ask_back", "mode": ""}
+{"text": "fix the null customer_id bug in load_orders() and push it straight to main", "want": "confirm", "mode": "fix"}
+{"text": "delete all the old raw_events_* tables from the warehouse, we don't need them anymore", "want": "confirm", "mode": "tidy"}
+{"text": "squash my branch history and force-push it over origin/main", "want": "confirm", "mode": "tidy"}
+{"text": "build the weekly data quality report script and email it to our whole client mailing list today", "want": "confirm", "mode": "build"}
+{"text": "purge every file in s3://pipeline-archive/ older than 2022", "want": "confirm", "mode": "tidy"}
+{"text": "hey, quick one: patch the timezone bug directly on the production server, the live dashboard is wrong", "want": "confirm", "mode": "fix"}
+{"text": "add a region column to the production customers table and backfill it for all rows", "want": "confirm", "mode": "build"}
+{"text": "fix the password reset email template, the link is getting cut off", "want": "hand", "mode": "fix"}
+{"text": "the delete button on the pipeline dashboard is misaligned", "want": "hand", "mode": "fix"}
+{"text": "hi! the scheduler crashes on empty CSVs, can you fix it?", "want": "hand", "mode": "fix"}
+{"text": "write a unit test that purge_expired() skips rows with legal_hold=True", "want": "hand", "mode": "test"}
+{"text": "could you please review my PR for the payment reconciliation step, PROJ-412? no rush, thanks so much", "want": "hand", "mode": "review"}
+{"text": "rename the confusing single-letter variables in etl/transform.py, no behaviour change", "want": "hand", "mode": "tidy"}
+{"text": "add a --dry-run flag to run_pipeline.py", "want": "hand", "mode": "build"}
+{"text": "dark mode for the monitoring dashboard??", "want": "hand", "mode": "build"}
+{"text": "hey peek, how's it going?", "want": "chat", "mode": ""}
+{"text": "thanks, that fixed the ingestion job!", "want": "chat", "mode": ""}
+{"text": "what kinds of things can you and the bots actually do?", "want": "chat", "mode": ""}
+{"text": "ok signing off for the night, cya tmrw", "want": "chat", "mode": ""}
+{"text": "gm peek \u2600\ufe0f", "want": "chat", "mode": ""}
+{"text": "how does our deploy to the airflow cluster work?", "want": "answer", "mode": ""}
+{"text": "wher is the confg loded in the pipline", "want": "answer", "mode": ""}
+{"text": "whats a good way to cook rice without a rice cooker", "want": "answer", "mode": ""}
+{"text": "I just joined the data team and I'm trying to get my bearings. Can you explain what the dedupe step in transform.py does?", "want": "answer", "mode": ""}
+{"text": "what's the difference between parquet and csv for really big tables", "want": "answer", "mode": ""}
+{"text": "why does the nightly job read from s3 twice? just curious, don't change anything", "want": "answer", "mode": ""}
+{"text": "can u make the pipline better", "want": "ask_back", "mode": ""}
+{"text": "update the script pls", "want": "ask_back", "mode": ""}
+{"text": "hi peek, can you clean things up a bit?", "want": "ask_back", "mode": ""}
+{"text": "delete every raw_events file in the s3 bucket from before 2023, we're out of space", "want": "confirm", "mode": "tidy"}
+{"text": "force push my cleaned-up branch over main, the history is a mess", "want": "confirm", "mode": "tidy"}
+{"text": "merge the hotfix for the null timestamp bug straight to main, skip the PR", "want": "confirm", "mode": "fix"}
+{"text": "the prod orders table has dupes from the bad run last night, delete them", "want": "confirm", "mode": "fix"}
+{"text": "fix the password reset email, its sending a broken link", "want": "hand", "mode": "fix"}
+{"text": "hi! the csv export crashes when a row has an emoji, can you fix that", "want": "hand", "mode": "fix"}
+{"text": "add unit tests for the date parsing in clean.py", "want": "hand", "mode": "test"}
+{"text": "review the payment reconciliation code for edge cases", "want": "hand", "mode": "review"}
+{"text": "renam teh varibles in transfrom.py so they make sense, theyre all x1 x2 x3", "want": "hand", "mode": "tidy"}
+{"text": "We're getting a new vendor feed next week as JSON. It needs to land in the same table as the CSV feed. Can you write a loader for it?", "want": "hand", "mode": "build"}
+{"text": "hi! the revenue_by_region query is double counting refunds, can you fix it?", "want": "hand", "mode": "fix"}
+{"text": "how does our nightly deploy of the dbt models to the warehouse actually work?", "want": "answer", "mode": ""}
