@@ -1225,7 +1225,14 @@ impl Runtime {
                 "One question at a time: ask again when the last answer is in.",
             ));
         } else {
-            match engine::Ask::start(st, who, &folder, &text, &history) {
+            // Jobs named with #12 or #their-slug: a short digest of each goes first.
+            let digest = super::brain::digest::context_for(&text, &self.store.jobs);
+            let asked = if digest.is_empty() {
+                text.clone()
+            } else {
+                format!("{digest}\n\n{text}")
+            };
+            match engine::Ask::start(st, who, &folder, &asked, &history) {
                 Ok(ask) => {
                     self.asking = Some(ask);
                     self.asking_talk = Some(id);
