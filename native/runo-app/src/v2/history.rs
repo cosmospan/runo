@@ -95,7 +95,7 @@ impl Shell {
                                             .truncate()
                                             .text_size(px(13.))
                                             .font_weight(FontWeight::SEMIBOLD)
-                                            .child(j.title.clone()),
+                                            .child(j.label().to_string()),
                                     )
                                     .child(
                                         div()
@@ -315,7 +315,7 @@ impl Shell {
                                         .truncate()
                                         .child(format!(
                                             "{} · Job #{id} · {}{}",
-                                            j.title,
+                                            j.label(),
                                             if j.engine.is_empty() {
                                                 "—"
                                             } else {

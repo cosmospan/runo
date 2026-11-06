@@ -266,53 +266,52 @@ impl Shell {
         for (k, d) in days.iter().enumerate() {
             let p = &crate::agent::PROVIDERS[d.i];
             let default = k == 0;
-            let mut card =
-                div()
-                    .px(px(16.))
-                    .py(px(12.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(div().size(px(8.)).rounded_full().bg(c(if d.ready {
-                                ui::GREEN
-                            } else {
-                                ui::RED
-                            })))
-                            .child(
+            let mut card = div()
+                .px(px(16.))
+                .py(px(12.))
+                .flex()
+                .flex_col()
+                .gap(px(8.))
+                .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(div().size(px(8.)).rounded_full().bg(c(if d.ready {
+                            ui::GREEN
+                        } else {
+                            ui::RED
+                        })))
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(ui::ink()))
+                                .child(p.name),
+                        )
+                        .when(default, |el| {
+                            el.child(
                                 div()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::ink()))
-                                    .child(p.name),
+                                    .px(px(6.))
+                                    .rounded(px(4.))
+                                    .bg(ca(ui::RUNO, 0.18))
+                                    .text_size(px(10.5))
+                                    .text_color(c(ui::t_violet()))
+                                    .child("Default"),
                             )
-                            .when(default, |el| {
-                                el.child(
-                                    div()
-                                        .px(px(6.))
-                                        .rounded(px(4.))
-                                        .bg(ca(ui::RUNO, 0.18))
-                                        .text_size(px(10.5))
-                                        .text_color(c(ui::t_violet()))
-                                        .child("Default"),
-                                )
-                            })
-                            .child(div().flex_1())
-                            .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
-                                format!(
-                                    "${:.2} · {} · {} job{}",
-                                    d.spend,
-                                    crate::health::token_count(d.tokens),
-                                    d.jobs,
-                                    if d.jobs == 1 { "" } else { "s" }
-                                ),
-                            )),
-                    );
+                        })
+                        .child(div().flex_1())
+                        .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
+                            format!(
+                                "${:.2} · {} · {} job{}",
+                                d.spend,
+                                crate::health::token_count(d.tokens),
+                                d.jobs,
+                                if d.jobs == 1 { "" } else { "s" }
+                            ),
+                        )),
+                );
             match d.usage.as_ref().map(|u| &u.reading) {
                 Some(crate::usage::Reading::Limits(windows)) if !windows.is_empty() => {
                     for w in windows {

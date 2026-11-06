@@ -1,6 +1,6 @@
 """Fine-tune Squad's model with LoRA on chat examples, then merge it.
 
-    python train_lora.py --data synth.jsonl mine.jsonl --out fin-lora
+    python train_lora.py --data synth.jsonl mine.jsonl --out peek-lora
 
 A 0.8B model with LoRA fits on one 16 GB GPU; a free Colab or Kaggle T4
 works (see colab.ipynb). On a Mac, MLX-LM's `mlx_lm.lora` does the same job with the
@@ -62,7 +62,7 @@ def main() -> None:
     ap.add_argument("--data", nargs="+", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=float, default=2)
-    ap.add_argument("--rank", type=int, default=16)
+    ap.add_argument("--rank", type=int, default=32)
     args = ap.parse_args()
 
     # is_bf16_supported() says yes on a T4 too (it counts emulation), so ask
@@ -81,7 +81,7 @@ def main() -> None:
         model = AutoModelForCausalLM.from_pretrained(args.base, torch_dtype=dtype)
     model.to(dtype)
     data = load_dataset("json", data_files=args.data, split="train").shuffle(seed=7)
-    # Prompt (instructions + the person's words) and completion (Fin's answer),
+    # Prompt (instructions + the person's words) and completion (Peek's answer),
     # so only the answer is learned.
     data = data.map(
         lambda r: {"prompt": r["messages"][:-1], "completion": r["messages"][-1:]},
@@ -107,7 +107,10 @@ def main() -> None:
             lr_scheduler_type="cosine",
             warmup_steps=10,
             logging_steps=20,
-            save_strategy="epoch",
+            # Saved often, so a run that stops carries on from where it was.
+            save_strategy="steps",
+            save_steps=200,
+            save_total_limit=2,
             completion_only_loss=True,
             max_length=1024,
             bf16=bf16,
@@ -115,7 +118,12 @@ def main() -> None:
             report_to="none",
         ),
     )
-    trainer.train()
+    import glob
+
+    resume = bool(glob.glob(f"{args.out}/checkpoint-*"))
+    if resume:
+        print("Carrying on from the last checkpoint in", args.out)
+    trainer.train(resume_from_checkpoint=resume or None)
     merged = trainer.model.merge_and_unload()
     merged.save_pretrained(f"{args.out}/merged")
     tok.save_pretrained(f"{args.out}/merged")

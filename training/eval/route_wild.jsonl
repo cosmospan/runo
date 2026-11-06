@@ -1,0 +1,299 @@
+{"text": "why does getStaticProps in pages/pricing.tsx refetch on every deploy? not asking you to change it, just want to understand", "mode": "ask"}
+{"text": "fix my understanding here: does revenue_daily subtract refunds or not? don't touch anything", "mode": "ask"}
+{"text": "where is the semver bump decided in our release script", "mode": "ask"}
+{"text": "what does useSignupForm() actually return when the email field is empty?", "mode": "ask"}
+{"text": "is there a reason dim_customers uses a LEFT JOIN against fct_orders instead of INNER", "mode": "ask"}
+{"text": "test question: does the library still support Node 16 or did we drop it in v3?", "mode": "ask"}
+{"text": "how come the hero image on / is loaded with priority but the logo isn't", "mode": "ask"}
+{"text": "PROJ-412: add a /customers case study page with the same layout as /about", "mode": "build"}
+{"text": "would it be possible to get a --dry-run flag on the CLI that prints the migrations without applying them?", "mode": "build"}
+{"text": "need a weekly_active_users model in models/marts, partitioned by week, grouped by plan", "mode": "build"}
+{"text": "export a debounce helper from the package root, people keep asking for it in issues", "mode": "build"}
+{"text": "sitemap.xml doesn't exist and the SEO team is on my back about it. just make one", "mode": "build"}
+{"text": "og:image per blog post, PROJ-388", "mode": "build"}
+{"text": "TypeError: Cannot read properties of undefined (reading 'map') at FeatureGrid (components/FeatureGrid.tsx:42) on the prod home page", "mode": "fix"}
+{"text": "the cohort_retention query returns 140% retention for March. that's obviously impossible, what the hell", "mode": "fix"}
+{"text": "clean up the duplicate rows in the signups dashboard, same user shows 3 times after the join on events", "mode": "fix"}
+{"text": "parseDate('2024-02-29') throws in v2.3.1, worked in 2.3.0. regression from #881?", "mode": "fix"}
+{"text": "why is the contact form sending two emails every time someone submits?? make it stop", "mode": "fix"}
+{"text": "build fails on Vercel: Module not found: Can't resolve '@/lib/analytics'", "mode": "fix"}
+{"text": "ESM import broken. `import { slugify } from 'textkit'` gives ERR_PACKAGE_PATH_NOT_EXPORTED", "mode": "fix"}
+{"text": "PR #203 touches src/auth/session.ts and middleware.ts, look it over before I merge, anything risky?", "mode": "review"}
+{"text": "test my migration in migrations/0042_split_events.sql. I mean read it, don't run it, tell me if it'll lock the table", "mode": "review"}
+{"text": "is this diff safe to ship? it rewrites the window functions in sessions.sql", "mode": "review"}
+{"text": "second pair of eyes on the breaking-change list for v4 before I tag it", "mode": "review"}
+{"text": "skim the last 5 commits on main, someone pushed straight to it and I'm nervous", "mode": "review"}
+{"text": "check the new next.config.js headers for anything that could break caching or CSP. no edits", "mode": "review"}
+{"text": "write unit tests for formatCurrency() covering negative and zero amounts", "mode": "test"}
+{"text": "run the full test suite against Node 22 and tell me what breaks", "mode": "test"}
+{"text": "add dbt tests for not_null and unique on fct_orders.order_id", "mode": "test"}
+{"text": "go through the pricing page signup flow on staging like a real user and report anything weird", "mode": "test"}
+{"text": "can you fix the coverage on src/utils? it's at 41%", "mode": "test"}
+{"text": "snapshot tests for the <Hero> component in all three locales", "mode": "test"}
+{"text": "rename getUsr to getUser everywhere, it's been bugging me for months", "mode": "tidy"}
+{"text": "bump next from 13.4 to 14.2 and sort out whatever breaks", "mode": "tidy"}
+{"text": "fix all the eslint warnings in components/", "mode": "tidy"}
+{"text": "there's like four copies of the same active-users CTE across the reports folder. consolidate them into one macro", "mode": "tidy"}
+{"text": "delete the old v1 compat shims, nobody's imported them since 2022", "mode": "tidy"}
+{"text": "the newsletter signup e2e passes on retry like 1 in 3 times, so sick of rerunning CI", "mode": "tidy"}
+{"text": "lodash out, native methods in, whole lib", "mode": "tidy"}
+{"text": "why does the daily_revenue view join on orders twice?", "mode": "ask"}
+{"text": "how is fix_currency_rates.sql actually wired into the nightly job", "mode": "ask"}
+{"text": "Hi, sorry if this is a basic question, but I'm new to the repo and trying to understand where the Rust CLI reads its config from. Does ~/.config/qry win over the env vars, or the other way round? No changes needed, I just want to understand the precedence. Thanks!", "mode": "ask"}
+{"text": "what does `--dry-run` actually skip in the cli", "mode": "ask"}
+{"text": "who decided to put business logic in a 400-line CTE?? what is cte_sessions even supposed to compute", "mode": "ask"}
+{"text": "test coverage for the sql models \u2014 do we even have any?", "mode": "ask"}
+{"text": "add `qry export --format parquet` subcommand", "mode": "build"}
+{"text": "cohort retention table by signup week", "mode": "build"}
+{"text": "Hello! When you get a chance, could we add a GitHub Actions workflow that builds the Docker image on tags and pushes it to ECR? Ideally it would be tagged with both the git tag and latest. Thanks so much, no rush at all.", "mode": "build"}
+{"text": "I have asked THREE times for a churn query. just write the thing. monthly churn by plan.", "mode": "build"}
+{"text": "shell completions for the cli??", "mode": "build"}
+{"text": "fix: we have no way to backfill a single day, need a --date flag on the backfill script", "mode": "build"}
+{"text": "error[E0502]: cannot borrow `self.cache` as mutable because it is also borrowed as immutable\n  --> src/query.rs:88:9\nbroke after merging main", "mode": "fix"}
+{"text": "ERROR: column \"user_id\" must appear in the GROUP BY clause or be used in an aggregate function\nLINE 4: ...\nweekly_active_users.sql failing in the prod run", "mode": "fix"}
+{"text": "Error: Error acquiring the state lock\nConditionalCheckFailedException: The conditional request failed\nevery apply since yesterday", "mode": "fix"}
+{"text": "docker build takes 40 min now and then dies with 'no space left on device'. this is ridiculous, make it work", "mode": "fix"}
+{"text": "clean up the dedupe step \u2014 it's dropping legit rows with the same timestamp", "mode": "fix"}
+{"text": "revenue double counted for refunds in finance_summary", "mode": "fix"}
+{"text": "thread 'main' panicked at 'called `Option::unwrap()` on a `None` value', src/config.rs:42:31\nhappens when HOME isn't set", "mode": "fix"}
+{"text": "can you look over PR #212 before I merge? it touches the IAM policies", "mode": "review"}
+{"text": "test the new migration for me \u2014 like read it and tell me if anything could lock the orders table", "mode": "review"}
+{"text": "Hi there, I've rewritten the sessionization query in models/sessions.sql to use window functions instead of a self-join. Before I ship it, would you mind going through the diff and flagging anything that might change the results or blow up the cost? Please don't edit it, I'd like to make the changes myself.", "mode": "review"}
+{"text": "sanity check this plan before I apply:\nPlan: 0 to add, 2 to change, 3 to destroy.", "mode": "review"}
+{"text": "any risks in the unsafe block I added to the parser?", "mode": "review"}
+{"text": "someone merged the ci changes without anyone looking. go through what changed in .github/workflows and tell me what's dangerous", "mode": "review"}
+{"text": "review the dockerfile diff", "mode": "review"}
+{"text": "run the dbt tests", "mode": "test"}
+{"text": "unit tests for the csv parser edge cases: quoted newlines, BOM, empty file", "mode": "test"}
+{"text": "cargo test", "mode": "test"}
+{"text": "try the full `qry login` \u2192 `qry run` flow against staging and tell me if it actually works", "mode": "test"}
+{"text": "Would it be possible to add some tests around the late-arriving events logic in incremental_events.sql? We've had a couple of near-misses, and I'd feel much better with coverage for events that land two or three days late.", "mode": "test"}
+{"text": "terratest for the vpc module", "mode": "test"}
+{"text": "fix the test gap in the backfill script \u2014 nothing covers the partition overwrite path", "mode": "test"}
+{"text": "flaky test_export_large_file, fails like 1 in 5 on ci", "mode": "tidy"}
+{"text": "bump terraform aws provider to 5.x", "mode": "tidy"}
+{"text": "rename `tmp_final_v2` and friends to something sane across the models folder", "mode": "tidy"}
+{"text": "there are like 30 unused sql files in legacy/ that nobody has touched in two years. delete them already", "mode": "tidy"}
+{"text": "When you have a moment, could you split src/main.rs into separate modules for commands, config and output? It's over 1500 lines now and hard to navigate. Behavior should stay exactly the same.", "mode": "tidy"}
+{"text": "the build stage in the Dockerfile is copy-pasted three times, collapse it into one shared base", "mode": "tidy"}
+{"text": "warning: unused import: `std::collections::HashMap`\n --> src/output.rs:3:5\nthere are dozens of these, clean them out", "mode": "tidy"}
+{"text": "We moved the nightly ETL to Airflow last quarter and nobody documented the retries. I see retry_with_backoff() in pipeline/utils/retry.py wrapping the S3 loader. Can you explain how many times it actually retries before giving up, and whether the backoff is exponential?", "mode": "ask"}
+{"text": "Marketing wants a case studies section. Add a /customers page in the Next.js app that lists case studies from content/customers/*.mdx, with a card per customer and a detail page per slug.", "mode": "build"}
+{"text": "Nightly run died again: KeyError: 'event_ts' in transform/normalize.py line 88, in normalize_row. Upstream added a new event type without that field. Make it not crash.", "mode": "fix"}
+{"text": "I rewrote the partitioning logic in pipeline/load/writer.py for PROJ-431. Before I merge, look over the diff and tell me if anything could lose data or write to the wrong partition. Don't change it.", "mode": "review"}
+{"text": "We have zero coverage on transform/currency.py. Write pytest tests for convert_amount() covering missing rates, zero amounts and rounding.", "mode": "test"}
+{"text": "pipeline/utils.py is 1,400 lines of everything. Split it into modules by concern (io, dates, retry) without changing behavior.", "mode": "tidy"}
+{"text": "Before I try to fix anything: why does the Next.js build generate /pricing statically but render /blog/[slug] at request time? I just want to understand what decides that. Don't touch the code.", "mode": "ask"}
+{"text": "We keep having to backfill partitions by hand after outages. Add a CLI command `pipeline backfill --start --end` that reruns the daily jobs for a date range.", "mode": "build"}
+{"text": "The hero image on the homepage is broken AGAIN in production. next/image throws 'hostname cdn.acme.io is not configured under images in next.config.js'. Fix it.", "mode": "fix"}
+{"text": "Can you test my reasoning on this PR? I switched the RDS instance to Multi-AZ and changed the parameter group in infra/rds.tf. Read it and flag anything that could cause downtime on apply.", "mode": "review"}
+{"text": "Please run the whole test suite for the pipeline after my change and tell me which ones fail. My local environment is not working.", "mode": "test"}
+{"text": "Fix the lint errors. ruff is complaining about unused imports and line lengths in transform/. Nothing is broken, it's just noisy.", "mode": "tidy"}
+{"text": "Hello, I am new in team. In terraform/modules/vpc I see two NAT gateway, is this for high availability or is mistake? Please only explain, I not want change yet.", "mode": "ask"}
+{"text": "Please can you make new terraform module for SQS queue with dead letter queue, we need it for PROJ-519. It should take name and retention as variable.", "mode": "build"}
+{"text": "Can you clean up the dedupe step? It's letting duplicate orders through when two events share an order_id but the email field has different casing, and finance reports are double counting.", "mode": "fix"}
+{"text": "Last time someone touched the middleware, we broke every localized route for two days. Go through the changes in middleware.ts on this branch and tell me what's going to blow up before I approve.", "mode": "review"}
+{"text": "Add a Playwright test that goes to the homepage, clicks 'Book a demo', fills in the form and checks that the thank-you page shows.", "mode": "test"}
+{"text": "test_load_incremental fails about one run in five on CI and passes when you rerun it. I'm done hitting retry. Make it deterministic.", "mode": "tidy"}
+{"text": "Which Dockerfile does CI actually use for the pipeline image, docker/Dockerfile or the one in pipeline/? PROJ-288 references both.", "mode": "ask"}
+{"text": "Fix the gap in our landing page: there's no newsletter signup anywhere. Add a form in the footer that posts to /api/subscribe, and create that route to forward to Mailchimp.", "mode": "build"}
+{"text": "When I do terraform apply it say 'Error: creating S3 bucket: BucketAlreadyExists' but bucket is ours, it was created by hand before. Please fix so apply work.", "mode": "fix"}
+{"text": "My colleague make PR to change the Dockerfile to multi-stage. Can you look if there is security problem, like secret in layer or running as root? Only comment please.", "mode": "review"}
+{"text": "Can you review the signup flow end to end on the preview deployment? Actually click through it: sign up with a fake email, confirm, land on the dashboard. Tell me where it breaks.", "mode": "test"}
+{"text": "Upgrade Next.js from 13.4 to 14 in the marketing site and fix whatever breaks in the upgrade.", "mode": "tidy"}
+{"text": "Seriously, who decided that dedupe_events() should drop rows with a null user_id?? Is that intentional somewhere, or did someone just do it? Tell me where it's coming from.", "mode": "ask"}
+{"text": "I'm so tired of SSHing in to check whether the nightly job ran. Add a Slack alert to the pipeline that posts when run_daily() finishes or fails, with row counts.", "mode": "build"}
+{"text": "Docker build fails on CI with `failed to solve: python:3.11-slim: not found` since yesterday. Works locally. PROJ-604.", "mode": "fix"}
+{"text": "Here's the new GitHub Actions deploy workflow. I'm worried about the permissions block and the use of pull_request_target. Review it for anything exploitable.", "mode": "review"}
+{"text": "Extend tests/test_schema.py so it also checks the new nullable columns from PROJ-552 against the parquet output.", "mode": "test"}
+{"text": "In terraform we have a variable named env_nm, envName and environment for the same thing. Please rename all to environment, it is very confusing.", "mode": "tidy"}
+{"text": "Does our GitHub Actions workflow cache pip dependencies between runs, or does every job reinstall from scratch?", "mode": "ask"}
+{"text": "Add a GitHub Actions workflow that runs terraform plan on every PR touching infra/ and posts the plan as a PR comment.", "mode": "build"}
+{"text": "The contact form on /contact submits, but nobody gets the email. app/api/contact/route.ts returns 200 even when Resend errors out. Make it report failures and figure out why the sends fail.", "mode": "fix"}
+{"text": "PROJ-477 bumped pandas to 2.x across the pipeline. Before it goes out, read through the changes and point out anywhere behavior might silently change, like dtype or groupby defaults.", "mode": "review"}
+{"text": "Write terratest tests for the vpc module that assert the subnets land in three AZs. I'm sick of finding this out in prod.", "mode": "test"}
+{"text": "Delete the old components/legacy/ folder and the unused useCart() hook, since the marketing site doesn't sell anything anymore. Make sure nothing still imports them.", "mode": "tidy"}
+{"text": "We have both getStaticProps in pages/ and fetch caching in app/ in the marketing repo. What's the difference between them, and which pattern should new pages follow?", "mode": "ask"}
+{"text": "The sales team asked for a pricing calculator. Build a <PricingCalculator> component on /pricing where you pick seats and billing period and it shows the monthly total.", "mode": "build"}
+{"text": "The test environment is down. The staging deploy fails because the ECS task can't pull from ECR: 'no basic auth credentials'. Get staging back up.", "mode": "fix"}
+{"text": "Spin up the docker-compose stack locally and run a sample file through the ingest job to see whether it actually lands in Postgres.", "mode": "test"}
+{"text": "wher is the confg loded for the trainng runs, is it hydra or smthing custom", "mode": "ask"}
+{"text": "fix question: why does the dataloader use num_workers=0 on mac? not asking u to change it just want to understand", "mode": "ask"}
+{"text": "Hi! Sorry to bother you, I'm new to the analytics repo and was hoping you could kindly explain how the daily_revenue view gets refreshed \u2014 is it a cron, dbt, or something else? Thank you so much in advance.", "mode": "ask"}
+{"text": "how does the extension talk to the background script?? and maybe also where the manifest permissions r defined", "mode": "ask"}
+{"text": "is the lr scheduler stepping per batch or per epoch, i keep forgetting", "mode": "ask"}
+{"text": "WHY is there a second copy of the users table called users_v2_final, who uses that, does anything still read from it", "mode": "ask"}
+{"text": "can u check if the popup stores the api key in localStorage or chrome.storage", "mode": "ask"}
+{"text": "add a --resume flag to train.py so we can pick up from the last checkpoint", "mode": "build"}
+{"text": "need a new sql view for weekly active users by country, and while ur at it tell me if the events table has a country col", "mode": "build"}
+{"text": "mak a dark mode toggle in teh popup settngs pls", "mode": "build"}
+{"text": "Hello, if it isn't too much trouble, could you please add a context menu item to the extension that lets users save the selected text to their reading list? I'd really appreciate it, and no rush at all.", "mode": "build"}
+{"text": "i have asked THREE times for an early stopping callback. please just add it, patience configurable", "mode": "build"}
+{"text": "add a cli cmd to export the cohort retention query results to csv", "mode": "build"}
+{"text": "fix it so users can pick a keyboard shortcut to open the sidebar, right now theres no way to set one at all", "mode": "build"}
+{"text": "training crashes at epoch 3 with RuntimeError: CUDA error: device-side assert triggered, pls fix", "mode": "fix"}
+{"text": "clean up the revenue dashboard query, its double counting refunds so totals are way too high", "mode": "fix"}
+{"text": "teh extnsion icon dosnt update wen i swich tabs, fix pls", "mode": "fix"}
+{"text": "this is ridiculous, the nightly sql job has failed 4 nights in a row with 'division by zero' in conversion_rate. FIX IT.", "mode": "fix"}
+{"text": "checkpoint saving writes an empty file when disk is near full, can u fix that and also what's our usual checkpoint size", "mode": "fix"}
+{"text": "content script throws Uncaught TypeError: Cannot read properties of null (reading 'querySelector') on gmail, stack: content.js:142", "mode": "fix"}
+{"text": "tidy up the eval loop \u2014 it's computing accuracy on the train set instead of val, numbers are bogus", "mode": "fix"}
+{"text": "test my PR before i merge? just read thru the migration and tell me if anything could drop data, dont run anything", "mode": "review"}
+{"text": "can u look over the diff on feature/mixed-precision and flag anything risky", "mode": "review"}
+{"text": "Good morning! When you have a moment, would you mind reviewing the changes I made to the background service worker? I'm particularly worried about the new permissions I requested. Please don't change anything, I'd just like your thoughts.", "mode": "review"}
+{"text": "pls reveiw the new attribution queries for perf problms, dont edit", "mode": "review"}
+{"text": "before i ship this to the chrome store can u sanity check the manifest changes for security issues", "mode": "review"}
+{"text": "someone pushed a huge change to the loss function last night w no review, i'm furious. go through it and tell me what could break", "mode": "review"}
+{"text": "write unit tests for the tokenizer padding logic", "mode": "test"}
+{"text": "run the full test suite on the analytics repo and tell me what fails", "mode": "test"}
+{"text": "add tsts for the url matcher in the extnsion, esp wildcard subdomains", "mode": "test"}
+{"text": "Hi there, could you please actually load the extension in a browser and try the login flow end to end with a fresh profile, and let me know whether it works? Many thanks.", "mode": "test"}
+{"text": "extend the sql tests to cover the null country case in the geo rollup", "mode": "test"}
+{"text": "why is there no test for the gradient clipping? write one pls", "mode": "test"}
+{"text": "run the 1-epoch smoke train on the tiny dataset and confirm loss goes down", "mode": "test"}
+{"text": "rename all the df1 df2 df3 vars in the feature pipeline to something meaningful", "mode": "tidy"}
+{"text": "bump pytorch to 2.3 and fix whatever deprecation warnings pop up", "mode": "tidy"}
+{"text": "the test_retention_query test fails like 1 in 5 runs bc of row ordering, make it stable", "mode": "tidy"}
+{"text": "remove the dead code for the old v2 manifest bacground page, we're mv3 now", "mode": "tidy"}
+{"text": "run eslint on the extension and clean up all the warnigs", "mode": "tidy"}
+{"text": "split the 900 line queries.sql into one file per report, no behavior changes, and btw which report is the slowest", "mode": "tidy"}
+{"text": "wher is the confg loded in the go service? env or yaml or both", "mode": "ask"}
+{"text": "Can you fix my understanding of how the useAuth hook refreshes tokens? I keep thinking it retries on 401 but I'm not sure.", "mode": "ask"}
+{"text": "We moved to pgx last month. Some handlers in the Go service still seem to use database/sql. Which ones still do?", "mode": "ask"}
+{"text": "is the 204 on PATCH /users/:id on purpose? just want to know before I document it", "mode": "ask"}
+{"text": "how do the migrations get run in prod, is it the node container on boot or a seperate job", "mode": "ask"}
+{"text": "Got this in the logs: `pq: canceling statement due to statement timeout`. Not asking to change anything, just what's our timeout set to and where?", "mode": "ask"}
+{"text": "does the tests folder for the react app even run in CI or is it just local", "mode": "ask"}
+{"text": "add a /healthz endpont to the go svc that pings postgres", "mode": "build"}
+{"text": "Users keep asking to export their invoices. We already have the invoice list page in React. Can you add a CSV download button that hits a new endpoint on the Node API?", "mode": "build"}
+{"text": "Could we maybe get a dark mode toggle in the settings page?", "mode": "build"}
+{"text": "new cli cmd in the go service: `svc reindex --since 2024-01-01` that rebuilds the search table", "mode": "build"}
+{"text": "We have rate limiting on login only. Product wants it on every public route of the node api, per api key, 100 req/min. Please add it.", "mode": "build"}
+{"text": "Is it possible to add a 'forgot password' page? we have the email service already wired in the node side", "mode": "build"}
+{"text": "TypeError: Cannot read properties of undefined (reading 'map')\n    at OrderList (OrderList.tsx:42:18)\nhappens when the user has no orders", "mode": "fix"}
+{"text": "panic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation]\ngoroutine 34 [running]:\nmain.(*Handler).GetUser(...)\n\t/app/handlers/user.go:88\nthis is taking down the pod every few hours", "mode": "fix"}
+{"text": "clean up the duplicate rows that show up in the dashboard table, every item appears twice since yesterday", "mode": "fix"}
+{"text": "teh logn buton dosnt do anyting on safari, works on chrome", "mode": "fix"}
+{"text": "error: duplicate key value violates unique constraint \"users_email_key\" \u2014 signup crashes with 500 when someone retries the form. should be a 409.", "mode": "fix"}
+{"text": "Can you tidy up the date shown on invoices? It's showing UTC so customers in Sydney see yesterday's date.", "mode": "fix"}
+{"text": "UnhandledPromiseRejectionWarning: Error: Connection terminated unexpectedly\n    at Connection.<anonymous> (node_modules/pg/lib/client.js:132:73)\napi falls over after db restart, needs to reconnect", "mode": "fix"}
+{"text": "Can you test my PR #412 for anything risky before I merge? Just read through, don't run it.", "mode": "review"}
+{"text": "look over the diff on feat/payments-webhook, worried about sql injection in the new queries", "mode": "review"}
+{"text": "I rewrote the token refresh logic in the React app. It touches every API call. Anything in the diff likely to break in prod?", "mode": "review"}
+{"text": "go thru my changes to the worker pool in the go svc, any race conditions? dont change anything", "mode": "review"}
+{"text": "Please review migration 0047 (drops legacy_orders column) before we ship it \u2014 flag anything that could lose data.", "mode": "review"}
+{"text": "Here's the new auth middleware I wrote for the Go service. Can you check it for security holes? Not looking for changes yet, just a list of concerns.", "mode": "review"}
+{"text": "run the go tests with -race and tell me what fails", "mode": "test"}
+{"text": "write unit tests for the formatCurrency util, it has none rn", "mode": "test"}
+{"text": "Can you actually sign up a new user through the React app against the local Node API and see if the welcome email gets queued?", "mode": "test"}
+{"text": "add integration tests for POST /orders covering the 400 and 409 cases", "mode": "test"}
+{"text": "the jest suite for the checkout pg only checks happy path, extend it w/ declined card + expired card", "mode": "test"}
+{"text": "Does the pagination on /orders actually hold up with 10k rows? spin up a seeded db and hit it", "mode": "test"}
+{"text": "We changed the retry logic in the Go http client last sprint. Nobody wrote tests. Can you cover the backoff timing with table-driven tests?", "mode": "test"}
+{"text": "rename `usrSvc` to `userService` everywhere in the node api", "mode": "tidy"}
+{"text": "bump react to 18.3 and fix whatever types break", "mode": "tidy"}
+{"text": "`TestCacheExpiry` keeps failing randomly in CI \u2014 passes locally, fails ~1 in 5 runs there. Timing thing I think. make it stable", "mode": "tidy"}
+{"text": "there's a bunch of dead handlers in the go svc from the v1 api, nothing routes to them anymore, rip them out", "mode": "tidy"}
+{"text": "eslint is screaming 300 warnings on the react app, mostly no-unused-vars and exhaustive-deps. clear em out w/o changing behavior", "mode": "tidy"}
+{"text": "The orders module in the node api is one 1400-line file. Split it into routes, service and repo layers, no behaviour change.", "mode": "tidy"}
+{"text": "can u swap moment for date-fns acros the frontend", "mode": "tidy"}
+{"text": "wher is the confg loded in the rails app", "mode": "ask"}
+{"text": "how wud i fix the N+1 in OrdersController? just explain, dont touch anything", "mode": "ask"}
+{"text": "why does daily_revenue.sql LEFT JOIN refunds instead of inner join", "mode": "ask"}
+{"text": "what does the strict kwarg in parse() even do", "mode": "ask"}
+{"text": "does celery beat run in UTC or local time here??", "mode": "ask"}
+{"text": "is the test db seeded from fixtures or factories", "mode": "ask"}
+{"text": "wich migration added teh tenant_id colum", "mode": "ask"}
+{"text": "add csv export to the admin reports page", "mode": "build"}
+{"text": "new endpoint GET /api/v2/invoices/:id/pdf", "mode": "build"}
+{"text": "need a rake task to backfill user slugs", "mode": "build"}
+{"text": "add a weekly_active_users model to the dbt project, grouped by plan", "mode": "build"}
+{"text": "can we get a --json flag on the cli output pls", "mode": "build"}
+{"text": "add retry w backoff to the http client, ppl keep asking for it in issues", "mode": "build"}
+{"text": "fix teh logn buton", "mode": "fix"}
+{"text": "every page 500s after deploy: ActiveRecord::StatementInvalid: PG::UndefinedColumn: ERROR: column users.deleted_at does not exist", "mode": "fix"}
+{"text": "clean up the duplicate rows in orders_daily rollup, counts are literally double what stripe says", "mode": "fix"}
+{"text": "WHY does signup 500 every single time someone has a + in their email. come on.", "mode": "fix"}
+{"text": "nightly etl died again KeyError: 'region' File \"etl/transform.py\", line 88, in normalize", "mode": "fix"}
+{"text": "2.3.0 broke imports on py3.8: ImportError: cannot import name 'TypeAlias' from 'typing'", "mode": "fix"}
+{"text": "pagination on /admin/users skips page 3 entirely wtf", "mode": "fix"}
+{"text": "test my branch before i merge, just read thru the diff n tell me if anythings risky", "mode": "review"}
+{"text": "look over PR #412 for sql injection", "mode": "review"}
+{"text": "can u check the migration in this pr wont lock the orders table", "mode": "review"}
+{"text": "sanity check my changes to the cohort queries before i ship, dont change anything", "mode": "review"}
+{"text": "is this diff safe to merge? public api changed in serializers.py", "mode": "review"}
+{"text": "review the new auth middleware pls", "mode": "review"}
+{"text": "write specs for Invoice#overdue? theres zero coverage", "mode": "test"}
+{"text": "run the full suite on py3.12 and tell me what breaks", "mode": "test"}
+{"text": "try the password reset flow end to end on staging, does the email even arrive", "mode": "test"}
+{"text": "add a case for empty input to test_parse.py", "mode": "test"}
+{"text": "can u run the dbt tests on the marts folder", "mode": "test"}
+{"text": "make sure refunds actually work, click thru it for real", "mode": "test"}
+{"text": "flaky checkout test", "mode": "tidy"}
+{"text": "rename UserProfileThing to Profile everywhere", "mode": "tidy"}
+{"text": "bump django 4.2 -> 5.0", "mode": "tidy"}
+{"text": "fix the rubocop warnings in app/models", "mode": "tidy"}
+{"text": "kill the dead code in utils/legacy_*.py, nothing imports it", "mode": "tidy"}
+{"text": "revenue sql is 400 lines of copy pasted CTEs, split into reusable models, same output", "mode": "tidy"}
+{"text": "DeprecationWarning: pkg_resources is deprecated as an API -- swap it for importlib.metadata", "mode": "tidy"}
+{"text": "is useCart() supposed to re-render twice on add or is that just StrictMode?", "mode": "ask"}
+{"text": "how does the Rails app decide which tenant a request belongs to?", "mode": "ask"}
+{"text": "fix for PROJ-412 \u2014 was it ever merged? which commit?", "mode": "ask"}
+{"text": "where do we set the Keychain access group in the iOS app", "mode": "ask"}
+{"text": "Hi! Sorry if this is a dumb question, but could you walk me through how the Django signals in orders/signals.py fire when a refund is created? I'm trying to understand the order of things before I touch anything.", "mode": "ask"}
+{"text": "dark mode support \u2014 do we already have it somewhere in the SwiftUI views?", "mode": "ask"}
+{"text": "what's the test coverage on src/auth/session.ts roughly", "mode": "ask"}
+{"text": "add a /api/v2/invoices endpoint to the Django app that returns paginated invoices for the current org", "mode": "build"}
+{"text": "dark mode toggle in settings screen (iOS)", "mode": "build"}
+{"text": "can we get a CSV export button on the admin users table?", "mode": "build"}
+{"text": "PROJ-588: rake task to backfill missing slugs on Article", "mode": "build"}
+{"text": "would it be possible to add pull-to-refresh on the OrdersListView? no rush", "mode": "build"}
+{"text": "new page /settings/billing in the React app, show current plan + upgrade button", "mode": "build"}
+{"text": "NoMethodError: undefined method `email' for nil:NilClass\n  app/mailers/receipt_mailer.rb:14:in `receipt'", "mode": "fix"}
+{"text": "clean up the duplicate charges \u2014 customers are getting billed twice when they double-tap Pay", "mode": "fix"}
+{"text": "Fatal error: Unexpectedly found nil while unwrapping an Optional value \u2014 ProfileViewController.swift line 88, happens on cold launch", "mode": "fix"}
+{"text": "login redirect loops forever after session expires, src/auth/session.ts I think", "mode": "fix"}
+{"text": "is there any chance you could look into why the date picker shows yesterday for users in UTC+ timezones? it's been reported a few times", "mode": "fix"}
+{"text": "TypeError: Cannot read properties of undefined (reading 'map') in OrderSummary.tsx", "mode": "fix"}
+{"text": "django migration 0042 fails on fresh db: relation \"billing_plan\" does not exist", "mode": "fix"}
+{"text": "test my PR #231 before I merge \u2014 just read through it and tell me if anything looks risky, don't push anything", "mode": "review"}
+{"text": "can you look over the diff on feature/stripe-webhooks for security issues?", "mode": "review"}
+{"text": "sanity check my changes to CartStore.swift, worried about retain cycles", "mode": "review"}
+{"text": "Hey, when you get a sec, could you go through the migration I wrote in db/migrate/20240611_split_names.rb and let me know if it'll lock the users table in prod? Not looking for changes yet, just a second opinion.", "mode": "review"}
+{"text": "PROJ-640 review pls", "mode": "review"}
+{"text": "anything dangerous in the last 5 commits on main?", "mode": "review"}
+{"text": "fix-up commit is up, eyes on it before I squash?", "mode": "review"}
+{"text": "write unit tests for formatCurrency() covering negatives and zero", "mode": "test"}
+{"text": "run the full rspec suite and tell me what fails", "mode": "test"}
+{"text": "add XCTest cases for the LoginViewModel validation logic", "mode": "test"}
+{"text": "try the signup flow end to end on staging with a fresh email and tell me where it breaks", "mode": "test"}
+{"text": "does pytest pass on the orders app right now?", "mode": "test"}
+{"text": "extend the Cypress spec for checkout to cover the coupon code path", "mode": "test"}
+{"text": "rename UserMgr to UserManager everywhere in the iOS target", "mode": "tidy"}
+{"text": "bump React to 18.3 and fix whatever breaks in the types", "mode": "tidy"}
+{"text": "rip out the old jQuery helpers in app/assets/javascripts, nothing references them anymore", "mode": "tidy"}
+{"text": "eslint is screaming about unused imports in src/components, can you sort that", "mode": "tidy"}
+{"text": "split views.py in the accounts app into a package, it's 2000 lines", "mode": "tidy"}
+{"text": "Would you mind fixing the SwiftLint warnings in the Networking module? There are about forty of them and they're cluttering every build log. No behaviour changes please.", "mode": "tidy"}
+{"text": "Can you fix my understanding of how revalidate works on the pricing page? We set it to 60 and edits from the CMS show up about a minute late. Is that just how ISR works?", "mode": "ask"}
+{"text": "where do we set the pg pool size", "mode": "ask"}
+{"text": "Please explain me why the library export both CJS and ESM builds. Is it need for something or only historical reason?", "mode": "ask"}
+{"text": "We moved the blog to MDX last month. Marketing keeps asking if the old /posts URLs still redirect. Do they, and where is that configured?", "mode": "ask"}
+{"text": "Sales wants contact form leads in our CRM. Right now they go to an inbox nobody reads. Add a POST /leads endpoint that saves to Postgres and forwards to HubSpot.", "mode": "build"}
+{"text": "I have asked THREE times for a CSV export on the /reports endpoint. Just add ?format=csv already, today.", "mode": "build"}
+{"text": "For the library we need a option to pass custom logger. Now it write to console always and users complain about it.", "mode": "build"}
+{"text": "Clean up the newsletter signup, it's submitting twice and people get two confirmation emails.", "mode": "fix"}
+{"text": "POST /signup throws: error: duplicate key value violates unique constraint \"users_email_key\" when someone signs up with Bob@x.com after bob@x.com. Should be a nice 409, not a 500.", "mode": "fix"}
+{"text": "hero image is broken on mobile AGAIN. who touched the images config in next.config.js", "mode": "fix"}
+{"text": "After upgrade to 3.2 the parse function return undefined for empty string, before it return empty object. Many users open issue already.", "mode": "fix"}
+{"text": "Test my migration before I merge it. Just read through 0042_add_orders_index.sql and tell me if it'll lock the orders table in prod.", "mode": "review"}
+{"text": "PR #318 touches the auth middleware. Can someone look it over for anything that leaks tokens to logs? Don't change anything, just leave comments.", "mode": "review"}
+{"text": "risky? the diff on the sitemap generator", "mode": "review"}
+{"text": "We have zero coverage on the rate limiter. Write tests for burst traffic and the reset window.", "mode": "test"}
+{"text": "Go through the signup flow on staging for real with a fresh email and tell me if the welcome email actually arrives.", "mode": "test"}
+{"text": "CI is green but prod broke, so obviously our tests are useless. Add integration tests that actually hit Postgres for the orders endpoints.", "mode": "test"}
+{"text": "Rename fetchStuff to something meaningful across the API, it's embarrassing. No behaviour change.", "mode": "tidy"}
+{"text": "Bump next from 13 to 14 and fix whatever the upgrade breaks.", "mode": "tidy"}
+{"text": "we got like 40 eslint warnings in the lib, unused imports etc. resolve them properly, not with disable comments", "mode": "tidy"}
+{"text": "Hello, in our Go service we have a retry middleware that wraps every HTTP handler. I notice that sometimes the same request is logged two times in the access log, with the same request ID. Before anybody fix anything, can you please explain me why the logger is called both before and after the retry loop? Maybe this is by design and I just don't understand it, so please don't change the code yet.", "mode": "ask"}
+{"text": "We shipped version 4.2 of the iOS app last week, and onboarding was moved into OnboardingCoordinator. Since then several users report that the onboarding screens appear again every time they log out and log back in. Could you clean up how the hasSeenOnboarding flag is stored so it actually stays dismissed? If it's easy, rename the flag to something clearer too, but the main thing is that onboarding stops reappearing.", "mode": "fix"}

@@ -1490,9 +1490,9 @@ impl Shell {
             if self.place != Place::Live(*id) {
                 let msg = match j.status {
                     Status::Done => {
-                        format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.title)
+                        format!("{} finished \u{201c}{}\u{201d}.", j.bot.name(), j.label())
                     }
-                    _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.title),
+                    _ => format!("{} stopped: \u{201c}{}\u{201d}.", j.bot.name(), j.label()),
                 };
                 self.say(msg);
             }
@@ -1502,7 +1502,7 @@ impl Shell {
                     Status::Done => format!("{} finished", j.bot.name()),
                     _ => format!("{} stopped", j.bot.name()),
                 };
-                crate::settings::notify(&title, &j.title);
+                crate::settings::notify(&title, j.label());
             }
         }
     }

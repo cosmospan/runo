@@ -232,11 +232,11 @@ impl Shell {
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
             Place::Live(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / #{id} {}", j.title),
+                Some(j) => format!("Jobs / #{id} {}", j.label()),
                 None => format!("Jobs / #{id}"),
             },
             Place::Race(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / Race / {}", j.title),
+                Some(j) => format!("Jobs / Race / {}", j.label()),
                 None => "Jobs / Race".into(),
             },
             Place::Goal(id) => match self.crew.store.goals.iter().find(|g| g.id == id) {

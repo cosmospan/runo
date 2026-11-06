@@ -6,11 +6,13 @@
 //!   and on which engine, with the reason said in plain words.
 //! - [`ideas`]: a bot worth making, when the same kind of job keeps coming up
 //!   and no bot on the crew is for it. The person decides; nothing is made for them.
-//! - [`fin`]: what Fin says when something happens.
+//! - [`voice`]: what Peek says when something happens.
+//! - [`tasks`]: with Smart Peek on, a short title for each job's card and a
+//!   recap when it ends.
 //!
 //! Every decision has two tiers. The rules here always work, need no download
 //! and are the answer when anything else fails. When the person turns on Smart
-//! Fin, a small model running on their own computer ([`model`]) is asked first,
+//! Peek, a small model running on their own computer ([`model`]) is asked first,
 //! and its answer is used only if it parses into something the rules would
 //! accept (a mode that exists, a bot on the crew). Facts (what's running, which
 //! engines are signed in) always come from Squad Code itself, never the model.
@@ -19,14 +21,15 @@
 //! that model, in the same prompt format the model is asked in.
 
 pub mod cli;
-pub mod fin;
 pub mod helper;
 pub mod ideas;
 pub mod model;
 pub mod place;
 pub mod route;
+pub mod tasks;
 pub mod teach;
 pub mod tiny;
+pub mod voice;
 
 pub use place::{place, JobAsk, Site, Sites};
 

@@ -319,7 +319,7 @@ pub fn by_tiny(text: &str, crew: &[Member]) -> Route {
         bot: doer(mode, crew),
         sure,
         why: format!("It reads like a {} job.", mode.label().to_lowercase()),
-        by: "fin-tiny".into(),
+        by: "peek-tiny".into(),
     }
 }
 
@@ -339,7 +339,7 @@ pub fn built_in(text: &str, crew: &[Member]) -> Route {
     tiny
 }
 
-/// Where `text` goes: the built-in pick when it's sure; else, when Smart Fin
+/// Where `text` goes: the built-in pick when it's sure; else, when Smart Peek
 /// is on, the local model, if its answer makes sense.
 pub fn route(st: &crate::settings::AppSettings, text: &str) -> Route {
     let crew = Member::all();

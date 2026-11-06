@@ -1,7 +1,7 @@
-//! What Fin says, and how Fin looks while saying it.
+//! What Peek says, and how Peek looks while saying it.
 //!
-//! Fin's voice: short, warm, plain words, one sentence, never more cheerful
-//! than the news. Each moment has a few lines so Fin doesn't repeat itself;
+//! Peek's voice: short, warm, plain words, one sentence, never more cheerful
+//! than the news. Each moment has a few lines so Peek doesn't repeat itself;
 //! which one is picked follows from the job, so the same job always reads the
 //! same way. The facts in a line (names, counts, titles) come from the crew,
 //! never from a model.
@@ -10,8 +10,8 @@ use runo_holo::Mood;
 
 use super::super::data::Member;
 
-/// Something that happened that Fin can speak to. The crew speaks bot ideas
-/// today; the window's Fin bubble takes the rest next.
+/// Something that happened that Peek can speak to. The crew speaks bot ideas
+/// today; the window's Peek bubble takes the rest next.
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Moment {
@@ -48,7 +48,7 @@ pub enum Moment {
     Quiet,
 }
 
-/// Fin's mood for a moment.
+/// Peek's mood for a moment.
 #[allow(dead_code)]
 pub fn mood(m: &Moment) -> Mood {
     match m {
@@ -84,7 +84,7 @@ fn pick(seed: &str, n: usize) -> usize {
     (h % n as u64) as usize
 }
 
-/// What Fin says for a moment.
+/// What Peek says for a moment.
 pub fn line(m: &Moment) -> String {
     let q = |s: &str| format!("\u{201c}{}\u{201d}", short(s));
     match m {

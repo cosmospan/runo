@@ -515,7 +515,6 @@ impl Shell {
             )
         }));
 
-
         let rights = Tool::ALL
             .iter()
             .copied()
