@@ -51,7 +51,7 @@ impl Pane {
         match self {
             Pane::General => "Alerts, motion and limits",
             Pane::Appearance => "Themes and frosted glass",
-            Pane::Mascot => "Fin, colours and props",
+            Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
         }
     }
@@ -1011,7 +1011,7 @@ impl Shell {
             .flex_col()
             .child(div().px(px(18.)).pt(px(16.)).pb(px(6.)).child(section(
                 "Crew look",
-                "How Fin looks, for every bot, everywhere in the app.",
+                "How Peek looks, for every bot, everywhere in the app.",
             )))
             .child(row(
                 "Finish",
@@ -1095,7 +1095,7 @@ impl Shell {
         Self::page(
             "settings-mascot",
             "Mascot",
-            "Meet Fin: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
+            "Meet Peek: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
             div()
                 .flex()
                 .flex_col()

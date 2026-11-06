@@ -239,7 +239,7 @@ impl Shell {
                         let who = Member::for_mode(m).name();
                         d.tooltip(move |window, cx| {
                             gpui_kit::component::tooltip::Tooltip::new(format!(
-                                "Nobody on your crew does this yet. Send a job and Fin offers {who}."
+                                "Nobody on your crew does this yet. Send a job and Peek offers {who}."
                             ))
                             .build(window, cx)
                         })
@@ -341,7 +341,7 @@ impl Shell {
                             .child(if target.on_crew() {
                                 target.name().to_string()
                             } else {
-                                format!("{} (Fin asks first)", target.name())
+                                format!("{} (Peek asks first)", target.name())
                             })
                             .tooltip(move |window, cx| {
                                 gpui_kit::component::tooltip::Tooltip::new(format!(

@@ -624,7 +624,7 @@ impl Shell {
                                     .min_w_0()
                                     .text_size(px(12.5))
                                     .text_color(c(ui::muted()))
-                                    .child("Dress a Fin, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
+                                    .child("Dress a Peek, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
                             .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
                                 this.maker = surprise(this.clock.elapsed().as_nanos() as u64);
