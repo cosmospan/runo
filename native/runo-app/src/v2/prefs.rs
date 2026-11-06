@@ -1011,11 +1011,11 @@ impl Shell {
             .flex_col()
             .child(div().px(px(18.)).pt(px(16.)).pb(px(6.)).child(section(
                 "Crew look",
-                "What Fin is made of, for every bot, everywhere in the app.",
+                "How Fin looks, for every bot, everywhere in the app.",
             )))
             .child(row(
-                "Material",
-                "Liquid glass, a slowly shifting rainbow glow, or solid colour.",
+                "Finish",
+                "Glowing eyes in a dark pill, the same with a turning rainbow rim, or a solid colour pill.",
                 segmented(mats),
             ));
 
@@ -1041,10 +1041,10 @@ impl Shell {
             .child(pick)
             .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
             .child(slot("ROLE", roles))
-            .child(slot("HEAD", hats))
-            .child(slot("LEFT FIN", lefts))
-            .child(slot("RIGHT FIN", rights))
-            .child(slot("CHEST", badges))
+            .child(slot("HAT", hats))
+            .child(slot("CARRIES", lefts))
+            .child(slot("TOOL", rights))
+            .child(slot("STICKER", badges))
             .child(slot("COLOUR", colours.flex().gap(px(8.))));
 
         let mut lineup = div().flex().flex_wrap().gap(px(space::M));
@@ -1095,7 +1095,7 @@ impl Shell {
         Self::page(
             "settings-mascot",
             "Mascot",
-            "Meet Fin. It hovers on a ring of light: the fins show effort, the brows show mood and the ring shows status.",
+            "Meet Fin: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
             div()
                 .flex()
                 .flex_col()

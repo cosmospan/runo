@@ -584,10 +584,10 @@ impl Shell {
             .collect();
         let like = row("Works like", likes, "mk-like", cx);
         let kits = row("Kit", kits, "mk-kit", cx);
-        let hats = row("Head", hats, "mk-hat", cx);
-        let lefts = row("Left fin", lefts, "mk-left", cx);
-        let rights = row("Right fin", rights, "mk-right", cx);
-        let badges = row("Chest", badges, "mk-badge", cx);
+        let hats = row("Hat", hats, "mk-hat", cx);
+        let lefts = row("Carries", lefts, "mk-left", cx);
+        let rights = row("Tool", rights, "mk-right", cx);
+        let badges = row("Sticker", badges, "mk-badge", cx);
         ui::card()
             .p(px(22.))
             .flex()
