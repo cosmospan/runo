@@ -154,15 +154,33 @@ const STEP: f32 = 16.;
 /// Paints the motifs whose whole shape lies in `area` and clear of `skip`, `gain` times
 /// their strength on the frame.
 pub fn paint(area: Bounds<Pixels>, skip: Option<Bounds<Pixels>>, gain: f32, window: &mut Window) {
-    let pattern = current();
+    paint_in(
+        current(),
+        area,
+        skip,
+        gain,
+        (c_text(), c_blue(), is_dark()),
+        window,
+    );
+}
+
+/// Paints `pattern` in `area`, in `ink` warming into `accent` toward the top-left, on a
+/// dark or light ground. The Squad Code window passes its own theme's colours.
+pub fn paint_in(
+    pattern: Pattern,
+    area: Bounds<Pixels>,
+    skip: Option<Bounds<Pixels>>,
+    gain: f32,
+    (ink, accent, dark): (u32, u32, bool),
+    window: &mut Window,
+) {
     if pattern == Pattern::Off {
         return;
     }
     let view = window.viewport_size();
     let (w, h) = (f32::from(view.width), f32::from(view.height));
     let diag = (w * w + h * h).sqrt();
-    let (ink, accent) = (c_text(), c_blue());
-    let strength = gain * if is_dark() { 0.16 } else { 0.12 };
+    let strength = gain * if dark { 0.16 } else { 0.12 };
     let (left, top) = (f32::from(area.origin.x), f32::from(area.origin.y));
     let (right, bottom) = (f32::from(area.right()), f32::from(area.bottom()));
     let inside = |b: &Bounds<Pixels>| {

@@ -95,6 +95,33 @@ pub fn term() -> Term {
     }
 }
 
+/// The background pattern picked under Settings > Appearance, on `area` (the page,
+/// or the sidebar), in the theme's own ink warming into violet. Laid under what the
+/// area holds; solid cards cover it.
+pub fn pattern(area: crate::pattern::Area) -> Option<AnyElement> {
+    use crate::pattern::{current, shows, Pattern};
+    let p = current();
+    if p == Pattern::Off || !shows(area) {
+        return None;
+    }
+    Some(pattern_of(p, 1.))
+}
+
+/// `p` painted over the element it's laid in, `gain` times its usual strength.
+pub fn pattern_of(p: crate::pattern::Pattern, gain: f32) -> AnyElement {
+    let t = theme();
+    let colors = (t.ink, VIOLET, !t.light);
+    canvas(
+        |_, _, _| (),
+        move |b, _, window, _| crate::pattern::paint_in(p, b, None, gain, colors, window),
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+    .into_any_element()
+}
+
 /// A card's corner radius.
 pub const CARD_R: f32 = 10.;
 

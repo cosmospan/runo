@@ -414,6 +414,8 @@ impl Shell {
             .bg(c(ground()))
             .border_r_1()
             .border_color(c(ui::line()))
+            .relative()
+            .children(ui::pattern(crate::pattern::Area::Panels))
             .child(head)
             .child(search)
             .child(

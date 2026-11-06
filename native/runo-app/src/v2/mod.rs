@@ -2303,6 +2303,10 @@ impl Render for Shell {
                     // Full height on its own; as a canvas, it stretches between its margins.
                     .when(setup, |d| d.h_full())
                     .when(!setup, |d| d.bg(c(ui::bg())))
+                    .relative()
+                    .when(!setup, |d| {
+                        d.children(ui::pattern(crate::pattern::Area::Content))
+                    })
                     .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()

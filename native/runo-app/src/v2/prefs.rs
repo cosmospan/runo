@@ -1367,6 +1367,7 @@ impl Shell {
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
         let window = self.transparency_card(cx);
+        let backdrop = self.pattern_card(cx);
         Self::page(
             "settings-appearance",
             "Appearance",
@@ -1376,6 +1377,7 @@ impl Shell {
                 .flex_col()
                 .gap(px(space::L))
                 .child(window)
+                .child(backdrop)
                 .child(
                     div()
                         .flex()
@@ -1474,6 +1476,95 @@ impl Shell {
         )
         .when(!on, |d| d.opacity(0.6));
         group("WINDOW", vec![switch_row, slider_row])
+    }
+
+    /// A background pattern behind the page, and the sidebar if you like: a fine
+    /// motif in the theme's ink, picked from a row of live previews.
+    fn pattern_card(&mut self, cx: &mut Context<Self>) -> Div {
+        use crate::pattern::{self as pat, Pattern};
+        let st = cx.global::<AppSettings>().clone();
+        let current = pat::current();
+        let apply = |st: &AppSettings| {
+            pat::set(
+                &st.pattern,
+                st.pattern_content,
+                st.pattern_panels,
+                st.pattern_frame,
+            )
+        };
+        let mut tiles = div().flex().flex_wrap().gap(px(10.));
+        for p in Pattern::ALL {
+            let on = p == current;
+            tiles = tiles.child(
+                div()
+                    .id(SharedString::from(format!("pattern-{}", p.id())))
+                    .w(px(104.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .h(px(64.))
+                            .w_full()
+                            .relative()
+                            .overflow_hidden()
+                            .rounded(px(8.))
+                            .bg(c(ui::bg()))
+                            .border_1()
+                            .border_color(c(if on { ui::VIOLET } else { ui::line() }))
+                            .when(on, |d| d.border_2())
+                            .child(ui::pattern_of(p, 2.))
+                            .when(p == Pattern::Off, |d| {
+                                d.flex().items_center().justify_center().child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(ui::faint()))
+                                        .child("Plain"),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .font_weight(if on {
+                                FontWeight::SEMIBOLD
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .text_color(c(if on { ui::ink() } else { ui::muted() }))
+                            .child(p.label()),
+                    )
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| {
+                            st.pattern = p.id().to_string();
+                            // The page always shows a pattern you pick.
+                            st.pattern_content = true;
+                        });
+                        apply(cx.global::<AppSettings>());
+                        cx.notify();
+                    })),
+            );
+        }
+        let sidebar_on = st.pattern_panels;
+        let sidebar_row = row(
+            "On the sidebar too",
+            "Carry the pattern under the sidebar as well as the page.",
+            div()
+                .id("pattern-sidebar")
+                .cursor_pointer()
+                .child(switch(sidebar_on))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    save(cx, |st| st.pattern_panels = !sidebar_on);
+                    apply(cx.global::<AppSettings>());
+                    cx.notify();
+                })),
+        )
+        .when(current == Pattern::Off, |d| d.opacity(0.6));
+        group(
+            "BACKGROUND PATTERN",
+            vec![div().px(px(18.)).pb(px(14.)).child(tiles), sidebar_row],
+        )
     }
 
     fn settings_mascot(&mut self, cx: &mut Context<Self>) -> AnyElement {
