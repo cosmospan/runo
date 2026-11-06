@@ -14,7 +14,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{Badge, FinPose, Hat, Held, Material, Outfit, State, Tool, ROLES};
+use runo_holo::fin::{FinPose, Material, Outfit, State, Tool, ROLES};
 use runo_holo::{Figure, Framing, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -941,32 +941,11 @@ impl Shell {
                     .on_click(cx.listener(dress(r.tint, r.outfit))),
             );
         }
-        let mut hats = div();
-        for (i, h) in Hat::ALL.iter().copied().enumerate() {
-            hats = hats.child(
-                choice(("fin-hat", i), h.name(), outfit.hat == h, true)
-                    .on_click(cx.listener(dress(tint, Outfit { hat: h, ..outfit }))),
-            );
-        }
-        let mut lefts = div();
-        for (i, h) in Held::ALL.iter().copied().enumerate() {
-            lefts = lefts.child(
-                choice(("fin-left", i), h.name(), outfit.left == h, true)
-                    .on_click(cx.listener(dress(tint, Outfit { left: h, ..outfit }))),
-            );
-        }
         let mut rights = div();
         for (i, t) in Tool::ALL.iter().copied().enumerate() {
             rights = rights.child(
                 choice(("fin-right", i), t.name(), outfit.right == t, true)
                     .on_click(cx.listener(dress(tint, Outfit { right: t, ..outfit }))),
-            );
-        }
-        let mut badges = div();
-        for (i, b) in Badge::ALL.iter().copied().enumerate() {
-            badges = badges.child(
-                choice(("fin-badge", i), b.name(), outfit.badge == b, true)
-                    .on_click(cx.listener(dress(tint, Outfit { badge: b, ..outfit }))),
             );
         }
         let mut colours = div().pt(px(2.));
@@ -1041,10 +1020,7 @@ impl Shell {
             .child(pick)
             .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
             .child(slot("ROLE", roles))
-            .child(slot("HAT", hats))
-            .child(slot("CARRIES", lefts))
-            .child(slot("TOOL", rights))
-            .child(slot("STICKER", badges))
+            .child(slot("PROP", rights))
             .child(slot("COLOUR", colours.flex().gap(px(8.))));
 
         let mut lineup = div().flex().flex_wrap().gap(px(space::M));

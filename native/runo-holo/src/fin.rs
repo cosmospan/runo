@@ -206,15 +206,24 @@ pub enum Held {
     Coffee,
 }
 
-/// A tool held in the right fin.
+/// The prop Peek carries, shown in the glowing badge beside the pill.
+///
+/// Saved as `right` in an [`Outfit`] for older saved looks. Baton and Broom
+/// came from the old Fin kit: they still load, as the shield and the key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tool {
     None,
+    Shield,
+    Wrench,
+    Bandage,
+    Key,
+    Pencil,
+    Compass,
+    Magnifier,
+    TestTube,
+    Branch,
     Baton,
     Broom,
-    Wrench,
-    Magnifier,
-    Pencil,
 }
 
 /// A badge on Fin's chest, under the visor.
@@ -265,14 +274,69 @@ named!(Held, [
     Coffee => ("coffee", "Coffee"),
 ]);
 
-named!(Tool, [
-    None => ("none", "None"),
-    Baton => ("baton", "Baton"),
-    Broom => ("broom", "Broom"),
-    Wrench => ("wrench", "Wrench"),
-    Magnifier => ("magnifier", "Magnifier"),
-    Pencil => ("pencil", "Pencil"),
-]);
+impl Tool {
+    /// The props to pick from.
+    pub const ALL: &'static [Tool] = &[
+        Tool::None,
+        Tool::Shield,
+        Tool::Wrench,
+        Tool::Bandage,
+        Tool::Key,
+        Tool::Pencil,
+        Tool::Compass,
+        Tool::Magnifier,
+        Tool::TestTube,
+        Tool::Branch,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Tool::None => "none",
+            Tool::Shield => "shield",
+            Tool::Wrench => "wrench",
+            Tool::Bandage => "bandage",
+            Tool::Key => "key",
+            Tool::Pencil => "pencil",
+            Tool::Compass => "compass",
+            Tool::Magnifier => "magnifier",
+            Tool::TestTube => "testtube",
+            Tool::Branch => "branch",
+            Tool::Baton => "baton",
+            Tool::Broom => "broom",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Tool::None => "None",
+            Tool::Shield => "Shield",
+            Tool::Wrench => "Wrench",
+            Tool::Bandage => "Bandage",
+            Tool::Key => "Key",
+            Tool::Pencil => "Quill",
+            Tool::Compass => "Compass",
+            Tool::Magnifier => "Magnifier",
+            Tool::TestTube => "Test tube",
+            Tool::Branch => "Branch",
+            Tool::Baton => "Baton",
+            Tool::Broom => "Broom",
+        }
+    }
+
+    /// Reads [`Tool::id`]. The old Fin kit's baton and broom become the shield
+    /// and the key; anything unknown is no prop.
+    pub fn from_id(id: &str) -> Tool {
+        match id {
+            "baton" => Tool::Shield,
+            "broom" => Tool::Key,
+            _ => Self::ALL
+                .iter()
+                .copied()
+                .find(|t| t.id() == id)
+                .unwrap_or(Tool::None),
+        }
+    }
+}
 
 named!(Badge, [
     None => ("none", "None"),
@@ -311,12 +375,11 @@ pub struct Role {
     pub tint: Tint,
 }
 
-const fn kit(hat: Hat, left: Held, right: Tool, badge: Badge) -> Outfit {
+/// A kit that carries one prop and nothing else.
+const fn carry(prop: Tool) -> Outfit {
     Outfit {
-        hat,
-        left,
-        right,
-        badge,
+        right: prop,
+        ..Outfit::PLAIN
     }
 }
 
@@ -326,56 +389,56 @@ pub const ROLES: [Role; 8] = [
         id: "security",
         name: "Security",
         line: "Guards the gate and checks every request.",
-        outfit: kit(Hat::Security, Held::Shield, Tool::Baton, Badge::Star),
+        outfit: carry(Tool::Shield),
         tint: Tint::BLUE,
     },
     Role {
         id: "support",
         name: "Customer support",
         line: "Answers people, keeps notes, stays friendly.",
-        outfit: kit(Hat::Headset, Held::Coffee, Tool::None, Badge::NameTag),
+        outfit: carry(Tool::Bandage),
         tint: Tint::VIOLET,
     },
     Role {
         id: "ops",
         name: "Cleanup and ops",
         line: "Sweeps stale files and tidies the logs.",
-        outfit: kit(Hat::Bandana, Held::None, Tool::Broom, Badge::Gear),
+        outfit: carry(Tool::Key),
         tint: Tint::AMBER,
     },
     Role {
         id: "eng",
         name: "Engineer",
         line: "Builds and fixes. Hard hat on.",
-        outfit: kit(Hat::HardHat, Held::None, Tool::Wrench, Badge::Id),
+        outfit: carry(Tool::Wrench),
         tint: Tint::ORANGE,
     },
     Role {
         id: "research",
         name: "Researcher",
         line: "Digs into sources and checks the facts.",
-        outfit: kit(Hat::Grad, Held::Clipboard, Tool::Magnifier, Badge::Id),
+        outfit: carry(Tool::Magnifier),
         tint: Tint::BLUE,
     },
     Role {
         id: "shipper",
         name: "Shipper",
         line: "Packs releases and gets them out the door.",
-        outfit: kit(Hat::Cap, Held::Parcel, Tool::None, Badge::NameTag),
+        outfit: carry(Tool::Branch),
         tint: Tint::GREEN,
     },
     Role {
         id: "designer",
         name: "Designer",
         line: "Sketches, mocks and polishes.",
-        outfit: kit(Hat::Beret, Held::None, Tool::Pencil, Badge::Heart),
+        outfit: carry(Tool::Pencil),
         tint: Tint::RED,
     },
     Role {
         id: "lead",
         name: "Lead",
         line: "Runs the crew and signs off the work.",
-        outfit: kit(Hat::Crown, Held::Clipboard, Tool::None, Badge::Star),
+        outfit: carry(Tool::Compass),
         tint: Tint::VIOLET,
     },
 ];
@@ -637,174 +700,6 @@ fn rainbow(a: f64) -> Vec<(f32, Rgb, f64)> {
         .enumerate()
         .map(|(i, c)| (i as f32 / 6.0, *c, a))
         .collect()
-}
-
-/// A badge from the old Fin kit, on its 120 grid.
-fn badge(p: &mut Pen, b: Badge) {
-    let f = |p: &mut Pen, d: &str, c: u32, a: f64| p.fill(&svg(d), Rgb(c), a);
-    let s = |p: &mut Pen, d: &str, w: f64, c: u32, a: f64| p.stroke(&svg(d), w, Rgb(c), a);
-    match b {
-        Badge::None => {}
-        Badge::Star => {
-            let d = "M60 72.5l2.3 4.6 5 .7-3.6 3.5.9 5L60 84l-4.6 2.3.9-5-3.6-3.5 5-.7z";
-            f(p, d, 0xFFC94A, 1.0);
-            s(p, d, 0.8, 0xE5A100, 1.0);
-        }
-        Badge::NameTag => {
-            p.fill(&RoundedRect::new(49.0, 73.5, 71.0, 83.5, 2.0), WHITE, 1.0);
-            p.fill(
-                &RoundedRect::new(49.0, 73.5, 71.0, 76.9, 1.5),
-                Rgb(0x1E95F0),
-                1.0,
-            );
-            s(p, "M52.5 80h12", 1.2, 0x9A9AA0, 1.0);
-        }
-        Badge::Id => {
-            p.fill(&RoundedRect::new(52.5, 72.0, 67.5, 84.0, 2.0), WHITE, 1.0);
-            p.fill(&Circle::new((56.5, 77.0), 2.1), Rgb(0x9A9AA0), 1.0);
-            s(p, "M60.5 75.8h4.5M60.5 78.6h4.5", 1.1, 0x9A9AA0, 1.0);
-            s(p, "M58 72v-2.5h4V72", 1.0, 0x55575E, 1.0);
-        }
-        Badge::Gear => {
-            p.ctx.set_transform(p.xf);
-            p.ctx.reset_paint_transform();
-            p.ctx
-                .set_stroke(Stroke::new(3.2).with_dashes(0.0, [2.1, 1.5]));
-            let col = p.color(WHITE, 1.0);
-            p.ctx.set_paint(col);
-            p.ctx
-                .stroke_path(&Circle::new((60.0, 79.0), 4.6).to_path(0.05));
-            p.fill(&Circle::new((60.0, 79.0), 2.6), WHITE, 1.0);
-        }
-        Badge::Heart => {
-            let d = "M60 85l-5.2-5.2a3.1 3.1 0 0 1 5.2-3.9a3.1 3.1 0 0 1 5.2 3.9z";
-            f(p, d, 0xFF6F86, 1.0);
-            s(p, d, 0.8, 0xFFFFFF, 1.0);
-        }
-    }
-}
-
-/// A hat from the old Fin kit, on its 120 grid.
-fn hat(p: &mut Pen, h: Hat) {
-    let f = |p: &mut Pen, d: &str, c: u32, a: f64| p.fill(&svg(d), Rgb(c), a);
-    let s = |p: &mut Pen, d: &str, w: f64, c: u32, a: f64| p.stroke(&svg(d), w, Rgb(c), a);
-    match h {
-        Hat::None => {}
-        Hat::Security => {
-            f(p, "M37 24Q38 6 60 5Q82 6 83 24Z", 0x26324F, 1.0);
-            s(p, "M44 13Q52 7 62 7", 1.6, 0xFFFFFF, 0.2);
-            p.fill(
-                &RoundedRect::new(36.0, 20.0, 84.0, 26.0, 2.0),
-                Rgb(0x141A2B),
-                1.0,
-            );
-            f(p, "M38 25Q60 33 82 25L86 29Q60 40 34 29Z", 0x0E1220, 1.0);
-            f(
-                p,
-                "M60 9l1.9 3.8 4.2.6-3 3 .7 4.1L60 18.6l-3.8 2 .7-4.2-3-3 4.2-.6z",
-                0xFFC94A,
-                1.0,
-            );
-        }
-        Hat::Headset => {
-            s(p, "M29 44Q28 10 60 9Q92 10 91 44", 3.6, 0x2B2C31, 1.0);
-            p.fill(
-                &RoundedRect::new(22.0, 37.0, 32.0, 56.0, 5.0),
-                Rgb(0x2B2C31),
-                1.0,
-            );
-            p.fill(
-                &RoundedRect::new(88.0, 37.0, 98.0, 56.0, 5.0),
-                Rgb(0x2B2C31),
-                1.0,
-            );
-            p.fill(
-                &RoundedRect::new(24.0, 41.0, 27.0, 52.0, 1.5),
-                Rgb(0x6A6C74),
-                1.0,
-            );
-            s(p, "M27 55Q28 72 44 75", 2.4, 0x2B2C31, 1.0);
-            p.fill(
-                &RoundedRect::new(42.0, 72.0, 50.0, 77.0, 2.5),
-                Rgb(0x2B2C31),
-                1.0,
-            );
-        }
-        Hat::Bandana => {
-            f(p, "M33 31Q33 9 60 8Q87 9 87 31Q60 21 33 31Z", 0x2F6FD0, 1.0);
-            for (x, y) in [
-                (44.0, 18.0),
-                (54.0, 13.0),
-                (66.0, 13.0),
-                (76.0, 19.0),
-                (60.0, 21.0),
-                (48.0, 25.0),
-                (72.0, 25.0),
-            ] {
-                p.fill(&Circle::new((x, y), 1.4), WHITE, 0.85);
-            }
-            f(p, "M85 26L97 21L94 30Z", 0x2459AE, 1.0);
-            f(p, "M85 28L95 36L86 35Z", 0x2459AE, 1.0);
-        }
-        Hat::HardHat => {
-            f(p, "M36 26Q36 5 60 5Q84 5 84 26Z", 0xFFC21A, 1.0);
-            s(
-                p,
-                "M60 6V25M49 8Q46 16 46 25M71 8Q74 16 74 25",
-                2.2,
-                0xE0A000,
-                1.0,
-            );
-            s(p, "M42 14Q49 8 57 7", 2.0, 0xFFFFFF, 0.55);
-            p.fill(
-                &RoundedRect::new(29.0, 23.0, 91.0, 29.0, 3.0),
-                Rgb(0xF2B000),
-                1.0,
-            );
-        }
-        Hat::Grad => {
-            f(p, "M44 17V26Q60 32 76 26V17L60 23Z", 0x2B2C31, 1.0);
-            f(p, "M60 4L91 14L60 24L29 14Z", 0x1F2026, 1.0);
-            s(p, "M60 7L83 14", 1.0, 0xFFFFFF, 0.18);
-            s(p, "M86 15V31", 1.6, 0xFFC94A, 1.0);
-            f(p, "M84 30h4l1 6h-6z", 0xFFC94A, 1.0);
-        }
-        Hat::Cap => {
-            f(p, "M38 25Q38 6 60 6Q82 6 82 25Z", 0x14B8A6, 1.0);
-            s(p, "M60 6V24", 1.6, 0x0F9488, 1.0);
-            s(p, "M45 13Q51 8 58 8", 1.8, 0xFFFFFF, 0.45);
-            p.fill(&Circle::new((60.0, 6.5), 2.0), Rgb(0x0F9488), 1.0);
-            p.fill(
-                &RoundedRect::new(37.0, 21.5, 83.0, 26.5, 2.0),
-                Rgb(0x0F9488),
-                1.0,
-            );
-            f(p, "M68 23Q90 21 100 27Q86 31 68 28Z", 0x0D7F75, 1.0);
-        }
-        Hat::Beret => {
-            f(p, "M34 24Q30 8 56 7Q84 6 82 18Q72 26 34 24Z", 0x2B2C31, 1.0);
-            s(p, "M36 23Q58 27 80 18", 3.0, 0x16171B, 1.0);
-            p.fill(
-                &RoundedRect::new(55.0, 2.5, 58.0, 8.5, 1.5),
-                Rgb(0x2B2C31),
-                1.0,
-            );
-            s(p, "M44 12Q52 9 60 9", 1.6, 0xFFFFFF, 0.15);
-        }
-        Hat::Crown => {
-            let d = "M41 23L38 5L50 14L60 1L70 14L82 5L79 23Z";
-            f(p, d, 0xFFC94A, 1.0);
-            s(p, d, 1.2, 0xE5A100, 1.0);
-            p.fill(
-                &RoundedRect::new(41.0, 19.0, 79.0, 24.0, 1.5),
-                Rgb(0xF2B000),
-                1.0,
-            );
-            p.fill(&Circle::new((60.0, 13.0), 2.2), Rgb(0xF2364F), 1.0);
-            p.fill(&Circle::new((48.0, 17.0), 1.5), Rgb(0x1E95F0), 1.0);
-            p.fill(&Circle::new((72.0, 17.0), 1.5), Rgb(0x1FC27A), 1.0);
-        }
-    }
 }
 
 /// How long one round of the Guard's block takes, in seconds.
@@ -1204,15 +1099,17 @@ fn eye(p: &mut Pen, at: (f64, f64), f: &Face, side: usize, col: Rgb, halo: Optio
 enum Prop {
     Shield,
     Wrench,
+    Bandage,
+    Key,
+    Quill,
+    Compass,
     Magnifier,
-    Pencil,
-    Broom,
-    Baton,
+    TestTube,
+    Branch,
     Clipboard,
     Parcel,
     Coffee,
     Hourglass,
-    Branch,
 }
 
 /// The prop to show: what the job is right now, else what the bot carries.
@@ -1225,22 +1122,25 @@ fn prop_for(pose: &FinPose) -> Option<Prop> {
         State::Proud => return Some(Prop::Branch),
         _ => {}
     }
-    if o.left == Held::Shield {
-        return Some(Prop::Shield);
-    }
     match o.right {
+        Tool::Shield | Tool::Baton => return Some(Prop::Shield),
         Tool::Wrench => return Some(Prop::Wrench),
+        Tool::Bandage => return Some(Prop::Bandage),
+        Tool::Key | Tool::Broom => return Some(Prop::Key),
+        Tool::Pencil => return Some(Prop::Quill),
+        Tool::Compass => return Some(Prop::Compass),
         Tool::Magnifier => return Some(Prop::Magnifier),
-        Tool::Pencil => return Some(Prop::Pencil),
-        Tool::Broom => return Some(Prop::Broom),
-        Tool::Baton => return Some(Prop::Baton),
+        Tool::TestTube => return Some(Prop::TestTube),
+        Tool::Branch => return Some(Prop::Branch),
         Tool::None => {}
     }
+    // Looks saved with the old Fin kit may carry something in the other fin.
     match o.left {
         Held::Clipboard => Some(Prop::Clipboard),
         Held::Parcel => Some(Prop::Parcel),
         Held::Coffee => Some(Prop::Coffee),
-        Held::Shield | Held::None => None,
+        Held::Shield => Some(Prop::Shield),
+        Held::None => None,
     }
 }
 
@@ -1267,7 +1167,7 @@ fn icon(p: &mut Pen, prop: Prop, col: Rgb, t: f64) {
                 s(p, "M2.2 2.2L7.5 7.5", 3.0, 1.0);
             });
         }
-        Prop::Pencil => {
+        Prop::Quill => {
             let k = (t * 0.8).rem_euclid(1.0);
             let mut ink = BezPath::new();
             ink.move_to((-9.0, 10.5));
@@ -1281,15 +1181,52 @@ fn icon(p: &mut Pen, prop: Prop, col: Rgb, t: f64) {
                 s(p, "M-4 7L4 -2", 1.4, 1.0);
             });
         }
-        Prop::Broom => p.at(rot((t * 4.0).sin() * 12.0), |p| {
-            s(p, "M-7 -9L2 2", 2.2, 1.0);
-            let d = "M0 0L8 -3L11 8Q4 11 -2 7Z";
-            f(p, d, 0.45);
-            s(p, d, 1.6, 1.0);
+        Prop::Bandage => p.at(rot(-40.0 + (t * 2.0).sin() * 8.0), |p| {
+            let band = RoundedRect::new(-10.5, -4.2, 10.5, 4.2, 4.2);
+            p.fill(&band, col, 0.2);
+            p.stroke(&band, 2.0, col, 1.0);
+            p.fill(&Rect::new(-3.2, -4.2, 3.2, 4.2), col, 0.55);
+            p.fill(&Circle::new((-6.5, 0.0), 0.9), col, 1.0);
+            p.fill(&Circle::new((6.5, 0.0), 0.9), col, 1.0);
         }),
-        Prop::Baton => p.at(rot((t * 3.0).sin() * 10.0), |p| {
-            s(p, "M-6 8L6 -8", 4.2, 1.0);
-            s(p, "M-6 8L-3.5 4.6", 5.4, 0.55);
+        Prop::Key => {
+            let k = t.rem_euclid(3.0) / 3.0;
+            let turn = if k < 0.25 {
+                -(k / 0.25 * std::f64::consts::PI).sin() * 60.0
+            } else {
+                0.0
+            };
+            p.at(rot(-20.0 + turn), |p| {
+                let bow = Circle::new((-5.0, 0.0), 4.2);
+                p.fill(&bow, col, 0.2);
+                p.stroke(&bow, 2.2, col, 1.0);
+                s(p, "M-.8 0H9.5M6.2 0V3.6M9.2 0V3", 2.2, 1.0);
+            });
+        }
+        Prop::Compass => {
+            let k = t.rem_euclid(4.0);
+            let a = if k < 2.0 {
+                (k * 9.0).sin() * 60.0 * (-k * 2.0).exp() + 20.0
+            } else {
+                20.0 + (t * 2.0).sin() * 4.0
+            };
+            let face = Circle::new((0.0, 0.0), 9.2);
+            p.fill(&face, col, 0.12);
+            p.stroke(&face, 2.0, col, 1.0);
+            p.at(rot(a), |p| {
+                f(p, "M0 -6.5L2.4 0H-2.4Z", 1.0);
+                f(p, "M0 6.5L2.4 0H-2.4Z", 0.35);
+            });
+            p.fill(&Circle::new((0.0, 0.0), 1.2), BADGE_INK, 1.0);
+        }
+        Prop::TestTube => p.at(rot(16.0), |p| {
+            f(p, "M-3.6 -1H3.6V5A3.6 3.6 0 0 1 -3.6 5Z", 0.6);
+            for i in 0..3 {
+                let k = (t * 0.9 + i as f64 / 3.0).rem_euclid(1.0);
+                let at = ((k * 9.0 + i as f64).sin() * 1.4, 4.0 - k * 9.0);
+                p.fill(&Circle::new(at, 0.8 + k * 0.5), col, 1.0 - k);
+            }
+            s(p, "M-3.6 -9V5A3.6 3.6 0 0 0 3.6 5V-9M-5.2 -9H5.2", 2.0, 1.0);
         }),
         Prop::Clipboard => {
             let board = RoundedRect::new(-6.5, -8.0, 6.5, 9.5, 2.0);
@@ -1571,30 +1508,6 @@ fn blocked(p: &mut Pen, col: Rgb, ph: f64) {
     });
 }
 
-/// Peek's hat, sitting on top of the pill. The shapes come from the old Fin
-/// kit, scaled down to fit.
-fn wear_hat(p: &mut Pen, h: Hat) {
-    if h == Hat::None {
-        return;
-    }
-    let fit = if h == Hat::Headset {
-        Affine::translate((60.0, 34.0)) * Affine::scale_non_uniform(1.25, 0.9)
-    } else {
-        Affine::translate((60.0, 36.5)) * Affine::scale(0.72)
-    } * Affine::translate((-60.0, -27.0));
-    p.at(fit, |p| hat(p, h));
-}
-
-/// Peek's badge, a sticker low on the pill's left.
-fn wear_badge(p: &mut Pen, b: Badge) {
-    if b == Badge::None {
-        return;
-    }
-    let fit =
-        Affine::translate((30.0, 79.0)) * Affine::scale(0.8) * Affine::translate((-60.0, -79.0));
-    p.at(fit, |p| badge(p, b));
-}
-
 /// The part of the 120 grid a framing shows: `(x0, y0, side)`.
 fn view(framing: Framing) -> (f64, f64, f64) {
     match framing {
@@ -1702,10 +1615,6 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         let halo = (!solid && !simple).then_some(f.glow * lit);
         eye(p, (l, cy), &f, 0, eye_col, halo, open);
         eye(p, (r, cy), &f, 1, eye_col, halo, open);
-        if !simple {
-            wear_badge(p, fin.outfit.badge);
-            wear_hat(p, fin.outfit.hat);
-        }
     });
 
     if simple {

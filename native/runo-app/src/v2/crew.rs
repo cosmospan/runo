@@ -528,28 +528,8 @@ impl Shell {
                 Box::new(move |s: &mut Shell| s.maker.1 = o),
             )
         }));
-        let hats = Hat::ALL
-            .iter()
-            .copied()
-            .map(|h| {
-                pick(
-                    h.name(),
-                    outfit.hat == h,
-                    Box::new(move |s: &mut Shell| s.maker.1.hat = h),
-                )
-            })
-            .collect();
-        let lefts = Held::ALL
-            .iter()
-            .copied()
-            .map(|h| {
-                pick(
-                    h.name(),
-                    outfit.left == h,
-                    Box::new(move |s: &mut Shell| s.maker.1.left = h),
-                )
-            })
-            .collect();
+
+
         let rights = Tool::ALL
             .iter()
             .copied()
@@ -561,17 +541,7 @@ impl Shell {
                 )
             })
             .collect();
-        let badges = Badge::ALL
-            .iter()
-            .copied()
-            .map(|b| {
-                pick(
-                    b.name(),
-                    outfit.badge == b,
-                    Box::new(move |s: &mut Shell| s.maker.1.badge = b),
-                )
-            })
-            .collect();
+
         let likes = Member::KINDS
             .into_iter()
             .map(|m| {
@@ -584,10 +554,7 @@ impl Shell {
             .collect();
         let like = row("Works like", likes, "mk-like", cx);
         let kits = row("Kit", kits, "mk-kit", cx);
-        let hats = row("Hat", hats, "mk-hat", cx);
-        let lefts = row("Carries", lefts, "mk-left", cx);
-        let rights = row("Tool", rights, "mk-right", cx);
-        let badges = row("Sticker", badges, "mk-badge", cx);
+        let rights = row("Prop", rights, "mk-right", cx);
         ui::card()
             .p(px(22.))
             .flex()
@@ -648,10 +615,7 @@ impl Shell {
                             .child(swatches),
                     )
                     .child(kits)
-                    .child(hats)
-                    .child(lefts)
                     .child(rights)
-                    .child(badges)
                     .child(like)
                     .child(
                         div()
