@@ -76,7 +76,7 @@ and scoring it. Re-running skips what's done; everything lands in `training/work
 
 ## Publishing a new Peek
 
-Peek is published on Hugging Face at `cosmospan/squad-peek`. Each release is
+Peek is published on Hugging Face at `cosmospan/peek`. Each release is
 a new file (`peek-q4_k_m-v<N>.gguf`) and an updated `latest.json` naming it,
 with its size and SHA-256. Squad reads `latest.json`, downloads the file to a
 temporary name, checks the size and checksum, and only then swaps it in, so a

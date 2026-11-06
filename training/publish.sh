@@ -14,7 +14,7 @@
 # huggingface.co. Score the model first: ship only if it beats the last one.
 set -euo pipefail
 
-REPO="${REPO:-cosmospan/squad-peek}"
+REPO="${REPO:-cosmospan/peek}"
 HF="${HF:-hf}"
 model="${1:?usage: publish.sh <model.gguf> [notes]}"
 notes="${2:-}"

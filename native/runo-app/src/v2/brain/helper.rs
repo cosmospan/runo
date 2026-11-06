@@ -29,7 +29,7 @@ pub const MODEL: &str = "peek";
 pub const OLD_MODEL: &str = "fin";
 /// Where Squad's own model is published. Each release is a new file there plus
 /// an updated `latest.json`, so people get new versions with no app release.
-pub const MODEL_REPO: &str = "https://huggingface.co/cosmospan/squad-peek/resolve/main";
+pub const MODEL_REPO: &str = "https://huggingface.co/cosmospan/peek/resolve/main";
 /// Roughly how big the model is, for the progress line before `latest.json` says.
 pub const MODEL_BYTES: u64 = 529_297_056;
 /// The server stops after this long without a question.
