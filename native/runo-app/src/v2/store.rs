@@ -449,6 +449,11 @@ pub struct Said {
     pub via: Option<String>,
     /// Squad Code speaking, not the bot: a problem or a hint.
     pub note: bool,
+    /// The project folder the DM line belongs to; empty in older saves,
+    /// which show in every project.
+    pub folder: String,
+    /// When it was said, to place it among the bot's jobs.
+    pub at: u64,
 }
 
 impl Said {
@@ -456,6 +461,7 @@ impl Said {
         Said {
             mine: true,
             text,
+            at: now(),
             ..Default::default()
         }
     }
@@ -463,6 +469,7 @@ impl Said {
         Said {
             text,
             via: Some(via),
+            at: now(),
             ..Default::default()
         }
     }
@@ -470,6 +477,7 @@ impl Said {
         Said {
             text: text.into(),
             note: true,
+            at: now(),
             ..Default::default()
         }
     }
@@ -915,8 +923,49 @@ impl Store {
         self.running().find(|j| j.bot == who)
     }
 
-    pub fn chat(&self, who: Member) -> &[Said] {
-        self.chats.get(&who).map(Vec::as_slice).unwrap_or(&[])
+    /// Your DM with `who` in the project you're in: one conversation per bot
+    /// per project.
+    pub fn chat(&self, who: Member) -> Vec<Said> {
+        let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
+        self.chats
+            .get(&who)
+            .map(|log| {
+                log.iter()
+                    .filter(|m| m.folder.is_empty() || m.folder == here)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Adds a line to the DM with `who` in the project you're in.
+    pub fn say_in_dm(&mut self, who: Member, mut said: Said) {
+        said.folder = self.folder().map(|f| f.path.clone()).unwrap_or_default();
+        self.chats.entry(who).or_default().push(said);
+    }
+
+    /// Clears the DM with `who` in the project you're in; other projects keep theirs.
+    pub fn clear_dm(&mut self, who: Member) {
+        let here = self.folder().map(|f| f.path.clone()).unwrap_or_default();
+        if let Some(log) = self.chats.get_mut(&who) {
+            log.retain(|m| !m.folder.is_empty() && m.folder != here);
+            if log.is_empty() {
+                self.chats.remove(&who);
+            }
+        }
+    }
+
+    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
+    pub fn dm_jobs(&self, who: Member) -> Vec<&Job> {
+        let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
+        let mut v: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.bot == who && j.folder.path == here)
+            .filter(|j| j.goal == 0 && (j.race == 0 || j.race == j.id))
+            .collect();
+        v.sort_by_key(|j| j.started);
+        v
     }
 }
 
@@ -1065,6 +1114,35 @@ mod tests {
         let back: Store = serde_json::from_str(r#"{"jobs":[{"id":4,"title":"x"}]}"#).unwrap();
         assert!(back.threads.is_empty());
         assert_eq!(back.jobs[0].thread, 0);
+    }
+
+    #[test]
+    fn each_project_has_its_own_dm_with_a_bot_and_its_jobs() {
+        let mut s = Store::default();
+        for (n, p) in [("a", "/a"), ("b", "/b")] {
+            s.folders.push(Folder {
+                name: n.into(),
+                path: p.into(),
+                ..Default::default()
+            });
+        }
+        s.current = 0;
+        s.say_in_dm(Member::Builder, Said::mine("in a".into()));
+        s.jobs.push(Job {
+            id: 1,
+            bot: Member::Builder,
+            folder: s.folders[0].clone(),
+            ..Default::default()
+        });
+        s.current = 1;
+        s.say_in_dm(Member::Builder, Said::mine("in b".into()));
+        assert_eq!(s.chat(Member::Builder).len(), 1);
+        assert_eq!(s.chat(Member::Builder)[0].text, "in b");
+        assert!(s.dm_jobs(Member::Builder).is_empty());
+        s.clear_dm(Member::Builder);
+        s.current = 0;
+        assert_eq!(s.chat(Member::Builder)[0].text, "in a");
+        assert_eq!(s.dm_jobs(Member::Builder).len(), 1);
     }
 
     #[test]

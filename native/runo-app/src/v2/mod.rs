@@ -1139,7 +1139,12 @@ impl Shell {
     }
 
     /// Starts an ask the way Peek routed it, without reading it again.
-    fn hand_to(&mut self, route: brain::route::Route, text: String, cx: &mut Context<Self>) {
+    pub(super) fn hand_to(
+        &mut self,
+        route: brain::route::Route,
+        text: String,
+        cx: &mut Context<Self>,
+    ) {
         let crew = Member::all();
         let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
         self.target = crew.contains(&route.bot).then_some(route.bot);
