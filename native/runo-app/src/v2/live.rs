@@ -124,11 +124,11 @@ impl Shell {
             .pt(px(if cfg!(target_os = "macos") { 22. } else { 14. }))
             .pb(px(16.))
             .border_b_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .bg(linear_gradient(
                 180.,
                 linear_color_stop(ca(accent, 0.10), 0.0),
-                linear_color_stop(ca(ui::PANEL, 0.0), 1.0),
+                linear_color_stop(ca(ui::panel(), 0.0), 1.0),
             ))
             .child(div().flex_none().mt(px(-4.)).child(hero))
             .child(
@@ -146,7 +146,7 @@ impl Shell {
                             .gap(px(6.))
                             .text_size(px(13.))
                             .child(div().font_weight(FontWeight::SEMIBOLD).child(who.name()))
-                            .child(div().text_color(c(ui::MUTED)).child(verb))
+                            .child(div().text_color(c(ui::muted())).child(verb))
                             .child(chip(IconName::Cpu, job.engine.clone()))
                             .child(chip(IconName::Folder, job.folder.name.clone())),
                     )
@@ -181,7 +181,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(12.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(meta.join(" · ")),
                             ),
                     ),
@@ -327,9 +327,9 @@ impl Shell {
                 .px(px(14.))
                 .py(px(8.))
                 .rounded(px(14.))
-                .bg(ca(ui::PANEL, 0.6))
+                .bg(ca(ui::panel(), 0.6))
                 .border_1()
-                .border_color(c(ui::LINE))
+                .border_color(c(ui::line()))
                 .flex()
                 .flex_col()
                 .gap(px(4.));
@@ -339,7 +339,7 @@ impl Shell {
                 list = list.child(
                     div()
                         .text_size(px(11.5))
-                        .text_color(c(ui::FAINT))
+                        .text_color(c(ui::faint()))
                         .child(format!("{hidden} earlier steps")),
                 );
             }
@@ -358,7 +358,7 @@ impl Shell {
                         .child(
                             Icon::new(tool_icon(&kind))
                                 .size(px(13.))
-                                .text_color(c(ui::MUTED)),
+                                .text_color(c(ui::muted())),
                         )
                         .child(
                             div()
@@ -367,7 +367,7 @@ impl Shell {
                                 .truncate()
                                 .font_family(ui::MONO)
                                 .text_size(px(11.5))
-                                .text_color(c(ui::BODY))
+                                .text_color(c(ui::body()))
                                 .child(label),
                         )
                         .child(if state == 0 {
@@ -414,9 +414,9 @@ impl Shell {
                                     .px(px(18.))
                                     .py(px(13.))
                                     .rounded(px(16.))
-                                    .bg(ca(ui::PANEL, 0.85))
+                                    .bg(ca(ui::panel(), 0.85))
                                     .border_1()
-                                    .border_color(c(ui::LINE))
+                                    .border_color(c(ui::line()))
                                     .shadow(ui::lift())
                                     .text_size(px(14.))
                                     .line_height(px(21.))
@@ -432,8 +432,8 @@ impl Shell {
                             .px(px(16.))
                             .py(px(10.))
                             .rounded(px(16.))
-                            .bg(c(ui::FILL))
-                            .text_color(c(ui::ON_FILL))
+                            .bg(c(ui::fill()))
+                            .text_color(c(ui::on_fill()))
                             .text_size(px(14.))
                             .line_height(px(20.))
                             .child(t.clone()),
@@ -457,7 +457,7 @@ impl Shell {
                                     .text_color(c(by.accent()))
                                     .child(by.name()),
                             )
-                            .child(div().flex_1().text_color(c(ui::BODY)).child(t.clone())),
+                            .child(div().flex_1().text_color(c(ui::body())).child(t.clone())),
                     )
                 }
                 Item::Error(t) => feed.child(
@@ -471,7 +471,7 @@ impl Shell {
                         .border_color(ca(ui::RED, 0.25))
                         .text_size(px(13.5))
                         .line_height(px(20.))
-                        .text_color(c(ui::T_RED))
+                        .text_color(c(ui::t_red()))
                         .child(t.clone()),
                 ),
                 Item::Tool { .. } => feed,
@@ -496,7 +496,7 @@ impl Shell {
                     .child(
                         div()
                             .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .child(job.doing()),
                     ),
             );
@@ -563,7 +563,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(11.))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child(input_hint),
                             ),
                     ),
@@ -576,7 +576,7 @@ impl Shell {
             plan = plan.child(
                 div()
                     .text_size(px(12.5))
-                    .text_color(c(ui::FAINT))
+                    .text_color(c(ui::faint()))
                     .line_height(px(18.))
                     .child(if job.status == Status::Running {
                         "Its steps show here when it writes a plan."
@@ -589,7 +589,7 @@ impl Shell {
             let (dot, col, weight) = match mark {
                 2 => ("✓", ui::GREEN, FontWeight::NORMAL),
                 1 => ("●", job.bot.accent(), FontWeight::SEMIBOLD),
-                _ => ("○", ui::FAINT, FontWeight::NORMAL),
+                _ => ("○", ui::faint(), FontWeight::NORMAL),
             };
             plan = plan.child(
                 div()
@@ -603,7 +603,7 @@ impl Shell {
                             .flex_1()
                             .min_w_0()
                             .font_weight(weight)
-                            .text_color(c(if *mark == 0 { ui::MUTED } else { ui::INK }))
+                            .text_color(c(if *mark == 0 { ui::muted() } else { ui::ink() }))
                             .child(text.clone()),
                     ),
             );
@@ -616,7 +616,7 @@ impl Shell {
         };
         let mut files = div().flex().flex_col().gap(px(6.));
         if touched.is_empty() {
-            files = files.child(div().text_size(px(12.5)).text_color(c(ui::FAINT)).child(
+            files = files.child(div().text_size(px(12.5)).text_color(c(ui::faint())).child(
                 if job.mode.writes() {
                     "Nothing changed yet."
                 } else {
@@ -633,7 +633,7 @@ impl Shell {
                     .child(
                         Icon::new(IconName::Pencil)
                             .size(px(12.))
-                            .text_color(c(ui::MUTED)),
+                            .text_color(c(ui::muted())),
                     )
                     .child(
                         div()
@@ -673,7 +673,7 @@ impl Shell {
                     .py(px(5.))
                     .rounded(px(9.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .hover(|s| s.bg(c(ui::hover())))
                     .child(
                         div()
                             .size(px(7.))
@@ -698,8 +698,8 @@ impl Shell {
             .h_full()
             .overflow_y_scroll()
             .border_l_1()
-            .border_color(c(ui::LINE))
-            .bg(ca(ui::PANEL, 0.45))
+            .border_color(c(ui::line()))
+            .bg(ca(ui::panel(), 0.45))
             .px(px(24.))
             .pt(px(if cfg!(target_os = "macos") { 30. } else { 24. }))
             .pb(px(24. + super::DOCK_ROOM))
@@ -717,7 +717,7 @@ impl Shell {
                         div()
                             .text_size(px(13.))
                             .line_height(px(19.))
-                            .text_color(c(ui::BODY))
+                            .text_color(c(ui::body()))
                             .child(match job.status {
                                 Status::Running => format!(
                                     "Started {} in {}. You can leave this screen; it keeps going.",
@@ -788,7 +788,7 @@ impl Shell {
             .child(
                 div()
                     .text_size(px(14.))
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(line),
             )
             // Nothing anywhere yet: point back to where a first job starts.
@@ -815,7 +815,7 @@ pub(super) fn status_color(s: Status) -> u32 {
         Status::Running => ui::ORANGE,
         Status::Done | Status::Shipped => ui::GREEN,
         Status::Failed => ui::RED,
-        Status::Discarded => ui::FAINT,
+        Status::Discarded => ui::faint(),
         _ => ui::AMBER,
     }
 }
@@ -830,10 +830,10 @@ fn chip(icon: IconName, text: String) -> Div {
         .py(px(3.))
         .rounded_full()
         .border_1()
-        .border_color(c(ui::LINE))
-        .bg(c(ui::PANEL))
+        .border_color(c(ui::line()))
+        .bg(c(ui::panel()))
         .text_size(px(11.5))
-        .child(Icon::new(icon).size(px(11.)).text_color(c(ui::MUTED)))
+        .child(Icon::new(icon).size(px(11.)).text_color(c(ui::muted())))
         .child(text)
 }
 
@@ -855,7 +855,7 @@ pub(super) fn note_line(text: &str) -> Div {
     div()
         .ml(px(40.))
         .text_size(px(12.5))
-        .text_color(c(ui::MUTED))
+        .text_color(c(ui::muted()))
         .italic()
         .child(text.to_string())
 }
@@ -866,9 +866,9 @@ pub(super) fn typing(now: f64) -> Div {
         .px(px(14.))
         .h(px(34.))
         .rounded(px(14.))
-        .bg(ca(ui::PANEL, 0.85))
+        .bg(ca(ui::panel(), 0.85))
         .border_1()
-        .border_color(c(ui::LINE))
+        .border_color(c(ui::line()))
         .shadow(ui::lift())
         .flex()
         .items_center()

@@ -4,6 +4,8 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.5] - 2026-11-05
+
 ### Added
 - Squad's intelligence layer is now called Peek (it was Fin): Smart Peek in Engines, `peek` as the model name. Settings that say `fin` keep working, and a model downloaded as `fin.gguf` is moved over.
 - Peek updates without an app release: Squad reads `latest.json` from the published model repo, checks each download's size and SHA-256 before swapping it in, and `squad brain update` or "Check for a newer model" in Settings moves to the newest one. `training/publish.sh` publishes a new version.
@@ -13,6 +15,12 @@ All notable changes to Runo are documented here.
 - Squad's own intelligence layer (`v2/brain`): it routes a typed job to the right bot and kind of job, decides whether a job runs here or on your server (and says why in the job's feed), suggests a bot to make when the same kind of job keeps coming up, and writes Peek's lines. Rules do all of it with no download; Smart Peek (`brain_model` in settings) asks a small model on your own computer first, over llama-server's or Ollama's local API, and keeps its answer only if it checks out.
 - `squad do <words>` lets Peek pick the bot. `squad brain why|ideas|export|eval` shows where a job would go, the bot Peek would suggest, writes your finished jobs as training examples, and scores routing on a fixed test set.
 - `training/`: the fixed test set and the scripts to fine-tune Squad's own model from an open base model.
+
+- Themes. Settings has a new Appearance pane with seven themes, each with a live preview: Midnight (the original look), Graphite, Deep sea and Daylight, which are solid, and three frosted glass themes, Frost, Mist and Aurora, which let your desktop show through the window, blurred. A theme applies the moment you pick it and is remembered.
+
+### Fixed
+
+- Bot avatars show the whole bot. Guard's cap, shield and baton (and every other hat and prop) were cut off at the edge of the square, most visibly in the job inspector.
 
 ## [2.0.0-alpha.4] - 2026-11-03
 

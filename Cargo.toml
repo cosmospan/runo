@@ -4,7 +4,7 @@ members = ["native/runo-app", "native/runo-holo"]
 exclude = ["vendor/block", "vendor/portable-pty", "vendor/gpui-pre-apple", "vendor/vt100"]
 
 [workspace.package]
-version = "2.0.0-alpha.4"
+version = "2.0.0-alpha.5"
 edition = "2021"
 license = "MIT"
 # The toolchain in rust-toolchain.toml; older ones aren't tested.

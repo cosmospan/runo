@@ -61,6 +61,20 @@ pub struct Goal {
 }
 
 impl Goal {
+    /// The bots its jobs need that aren't on the crew yet, each once, in the
+    /// order the jobs come. Starting the goal adds them.
+    pub fn needs(&self) -> Vec<Member> {
+        let mut out: Vec<Member> = Vec::new();
+        for s in self.steps.iter().filter(|s| !s.skipped && s.job == 0) {
+            if let Some(m) = Member::needed_for(s.mode) {
+                if !out.contains(&m) {
+                    out.push(m);
+                }
+            }
+        }
+        out
+    }
+
     /// The step it is on: the first one not yet shipped or finished.
     pub fn current(&self, jobs: &[Job]) -> Option<usize> {
         self.steps.iter().position(|s| {
@@ -184,12 +198,12 @@ impl Shell {
                 .count();
             let n = g.steps.len().max(1);
             let (word, color) = match g.state {
-                State::Planning => ("Splitting", ui::T_BLUE),
-                State::Ready => ("Ready to start", ui::T_AMBER),
-                State::Running => ("Running", ui::T_BLUE),
-                State::Paused => ("Needs you", ui::T_AMBER),
-                State::Failed => ("Couldn't split", ui::T_RED),
-                State::Done => ("Done", ui::T_GREEN),
+                State::Planning => ("Splitting", ui::t_blue()),
+                State::Ready => ("Ready to start", ui::t_amber()),
+                State::Running => ("Running", ui::t_blue()),
+                State::Paused => ("Needs you", ui::t_amber()),
+                State::Failed => ("Couldn't split", ui::t_red()),
+                State::Done => ("Done", ui::t_green()),
             };
             row = row.child(
                 ui::card()
@@ -202,7 +216,7 @@ impl Shell {
                     .flex_col()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .hover(|s| s.border_color(c(ui::LINE_HI)))
+                    .hover(|s| s.border_color(c(ui::line_hi())))
                     .child(
                         div()
                             .flex()
@@ -216,7 +230,7 @@ impl Shell {
                         div()
                             .text_size(px(13.5))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .truncate()
                             .child(g.text.clone()),
                     )
@@ -233,7 +247,7 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child(format!("{done} of {} jobs", g.steps.len())),
                             ),
                     )
@@ -249,6 +263,7 @@ impl Shell {
         };
         let jobs = self.crew.store.jobs.clone();
         let current = goal.current(&jobs);
+        let needs = goal.needs();
         let shipped = goal
             .steps
             .iter()
@@ -256,6 +271,12 @@ impl Shell {
             .count();
         let line = match goal.state {
             State::Planning => "Squad Code is reading the code and splitting this into jobs\u{2026}".to_string(),
+            State::Ready if !needs.is_empty() => format!(
+                "Look over the jobs, then start. Fin: this plan needs {}, who {} on your crew yet. Starting adds {}.",
+                super::and_list(&needs.iter().map(|m| m.name()).collect::<Vec<_>>()),
+                if needs.len() == 1 { "isn't" } else { "aren't" },
+                if needs.len() == 1 { "it" } else { "them" },
+            ),
             State::Ready => "Look over the jobs, drop any you don't want, then start. They run one after another, each building on the last.".to_string(),
             State::Running => format!("{shipped} of {} done. The next job starts when the one before it ships.", goal.steps.len()),
             State::Paused => "A job stopped, so the goal is waiting for you.".to_string(),
@@ -277,13 +298,13 @@ impl Shell {
                     div()
                         .text_size(px(22.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::INK))
+                        .text_color(c(ui::ink()))
                         .child(goal.text.clone()),
                 )
                 .child(
                     div()
                         .text_size(px(13.))
-                        .text_color(c(ui::MUTED))
+                        .text_color(c(ui::muted()))
                         .child(line),
                 ),
         );
@@ -295,8 +316,15 @@ impl Shell {
                             .on_click(cx.listener(move |this, _, _, cx| this.drop_goal(id, cx))),
                     )
                     .child(
-                        ui::solid("goal-start", format!("Start {} jobs", goal.steps.len()))
-                            .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
+                        ui::solid(
+                            "goal-start",
+                            match needs.as_slice() {
+                                [] => format!("Start {} jobs", goal.steps.len()),
+                                [one] => format!("Add {} and start", one.name()),
+                                _ => "Add the bots and start".to_string(),
+                            },
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
                     );
             }
             State::Paused => {
@@ -321,9 +349,9 @@ impl Shell {
 
         let mut list = div()
             .w_full()
-            .bg(c(ui::PANEL))
+            .bg(c(ui::panel()))
             .border_1()
-            .border_color(c(ui::LINE))
+            .border_color(c(ui::line()))
             .rounded(px(12.))
             .overflow_hidden();
         if goal.state == State::Planning {
@@ -339,9 +367,9 @@ impl Shell {
                     home::pill(&w, t)
                 }
                 None if goal.state == State::Running && current == Some(k) => {
-                    home::pill("Starting", (ui::T_BLUE, 0x131C2F, 0x1C325A))
+                    home::pill("Starting", ui::run_tone())
                 }
-                None => home::pill("Waiting", (ui::BODY, 0x1E1E26, 0x2A2A33)),
+                None => home::pill("Waiting", ui::grey_tone()),
             };
             let job_id = s.job;
             list = list.child(
@@ -353,16 +381,16 @@ impl Shell {
                     .items_center()
                     .gap(px(12.))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .when(current == Some(k) && goal.state != State::Ready, |d| {
-                        d.bg(c(ui::RAISED))
+                        d.bg(c(ui::raised()))
                     })
                     .child(
                         div()
                             .w(px(18.))
                             .font_family(ui::MONO)
                             .text_size(px(12.))
-                            .text_color(c(ui::FAINT))
+                            .text_color(c(ui::faint()))
                             .child(format!("{}", k + 1)),
                     )
                     .child(face)
@@ -373,14 +401,14 @@ impl Shell {
                             .child(
                                 div()
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::INK))
+                                    .text_color(c(ui::ink()))
                                     .truncate()
                                     .child(s.title.clone()),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.5))
-                                    .text_color(c(ui::FAINT))
+                                    .text_color(c(ui::faint()))
                                     .child(format!("{} \u{b7} {}", s.mode.label(), who.name())),
                             ),
                     )
@@ -396,9 +424,9 @@ impl Shell {
                                 .id(("goal-remove", k))
                                 .px(px(8.))
                                 .text_size(px(12.))
-                                .text_color(c(ui::FAINT))
+                                .text_color(c(ui::faint()))
                                 .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::T_RED)))
+                                .hover(|s| s.text_color(c(ui::t_red())))
                                 .child("Remove")
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(g) =

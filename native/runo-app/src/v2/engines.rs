@@ -39,15 +39,15 @@ pub(super) fn choice(
         .cursor_pointer()
         .map(|d| {
             if on {
-                d.bg(c(ui::FILL))
-                    .text_color(c(ui::ON_FILL))
+                d.bg(c(ui::fill()))
+                    .text_color(c(ui::on_fill()))
                     .font_weight(FontWeight::MEDIUM)
             } else {
                 d.border_1()
-                    .border_color(c(ui::LINE))
-                    .bg(c(ui::PANEL))
-                    .text_color(c(if ok { ui::INK } else { ui::FAINT }))
-                    .hover(|s| s.bg(c(ui::HOVER)))
+                    .border_color(c(ui::line()))
+                    .bg(c(ui::panel()))
+                    .text_color(c(if ok { ui::ink() } else { ui::faint() }))
+                    .hover(|s| s.bg(c(ui::hover())))
             }
         })
         .child(label.into())
@@ -67,7 +67,7 @@ pub(super) fn section(title: &'static str, line: &'static str) -> Div {
         .child(
             div()
                 .text_size(px(13.))
-                .text_color(c(ui::MUTED))
+                .text_color(c(ui::muted()))
                 .child(line),
         )
 }
@@ -161,7 +161,7 @@ impl Shell {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(c(if warn { ui::AMBER } else { ui::MUTED }))
+                    .text_color(c(if warn { ui::AMBER } else { ui::muted() }))
                     .child(line),
             )
     }
@@ -262,7 +262,7 @@ impl Shell {
                     .child(div().w(px(200.)).flex_none().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).child("Shapes jobs, writes the one question"))
                     .child(div().flex_1().flex().flex_col().gap(px(8.)).child(brain_agents).child(div().flex().items_center().gap(px(8.)).child(ui::caption("MODEL")).child(brain_models))),
             )
-            .child(div().h(px(1.)).bg(c(ui::LINE)))
+            .child(div().h(px(1.)).bg(c(ui::line())))
             .child(
                 div()
                     .flex()
@@ -275,14 +275,14 @@ impl Shell {
                             .flex_col()
                             .gap(px(8.))
                             .child(challengers)
-                            .child(div().text_size(px(12.)).text_color(c(if same_vendor { ui::AMBER } else { ui::MUTED })).child(if same_vendor {
+                            .child(div().text_size(px(12.)).text_color(c(if same_vendor { ui::AMBER } else { ui::muted() })).child(if same_vendor {
                                 format!("Same company as the work ({work_vendor}). One from another company catches more.")
                             } else {
                                 "One vendor writes, another checks. Pick an agent from a different company than the default.".to_string()
                             })),
                     ),
             )
-            .child(div().h(px(1.)).bg(c(ui::LINE)))
+            .child(div().h(px(1.)).bg(c(ui::line())))
             .child(
                 div()
                     .flex()
@@ -313,7 +313,7 @@ impl Shell {
                                 div()
                                     .mt(px(6.))
                                     .text_size(px(13.5))
-                                    .text_color(c(ui::MUTED))
+                                    .text_color(c(ui::muted()))
                                     .child("Every bot works through a coding agent you already use. Pick one to see which bots run on it."),
                             ),
                     )
@@ -321,7 +321,7 @@ impl Shell {
                         d.child(
                             div()
                                 .text_size(px(13.))
-                                .text_color(c(ui::T_AMBER))
+                                .text_color(c(ui::t_amber()))
                                 .child("None of the agents' command-line tools were found. Install one (for example Claude Code or Codex) and it shows up here."),
                         )
                     })
@@ -369,12 +369,12 @@ impl Shell {
                     .px(px(14.))
                     .flex()
                     .items_center()
-                    .bg(c(ui::RAISED))
+                    .bg(c(ui::raised()))
                     .border_b_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .text_size(px(11.5))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::MUTED))
+                    .text_color(c(ui::muted()))
                     .child(title),
             );
             for i in group {
@@ -393,13 +393,13 @@ impl Shell {
                         .items_center()
                         .gap(px(10.))
                         .border_b_1()
-                        .border_color(c(ui::LINE2))
+                        .border_color(c(ui::line2()))
                         .cursor_pointer()
                         .map(|d| {
                             if i == sel {
-                                d.bg(c(ui::HOVER))
+                                d.bg(c(ui::hover()))
                             } else {
-                                d.hover(|s| s.bg(c(ui::HOVER)))
+                                d.hover(|s| s.bg(c(ui::hover())))
                             }
                         })
                         .child(
@@ -408,7 +408,7 @@ impl Shell {
                                 .flex_none()
                                 .rounded(px(8.))
                                 .bg(ca(p.color, if ok { 0.18 } else { 0.08 }))
-                                .text_color(c(if ok { p.color } else { ui::MUTED }))
+                                .text_color(c(if ok { p.color } else { ui::muted() }))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -424,11 +424,11 @@ impl Shell {
                                     div()
                                         .text_size(px(13.))
                                         .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c(if ok { ui::INK } else { ui::BODY }))
+                                        .text_color(c(if ok { ui::ink() } else { ui::body() }))
                                         .truncate()
                                         .child(p.name),
                                 )
-                                .child(div().text_size(px(11.5)).text_color(c(ui::MUTED)).child(
+                                .child(div().text_size(px(11.5)).text_color(c(ui::muted())).child(
                                     if ok && bots > 0 {
                                         format!(
                                             "{} \u{b7} {bots} {}",
@@ -446,9 +446,9 @@ impl Shell {
                                 .py(px(1.))
                                 .rounded_full()
                                 .border_1()
-                                .border_color(c(ui::LINE_HI))
+                                .border_color(c(ui::line_hi()))
                                 .text_size(px(10.5))
-                                .text_color(c(ui::INK))
+                                .text_color(c(ui::ink()))
                                 .child("Default")
                         } else if ok {
                             div().size(px(7.)).rounded_full().bg(c(ui::GREEN))
@@ -493,45 +493,43 @@ impl Shell {
             .iter()
             .filter(|j| j.agent == id)
             .count();
-        let mut head = div()
-            .flex()
-            .items_center()
-            .gap(px(12.))
-            .child(
-                div()
-                    .size(px(40.))
-                    .flex_none()
-                    .rounded(px(12.))
-                    .bg(ca(p.color, 0.18))
-                    .text_color(c(p.color))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(18.))
-                    .font_weight(FontWeight::BOLD)
-                    .child(p.mark),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .text_size(px(17.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(p.name),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::MUTED))
-                            .child(format!(
+        let mut head =
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .size(px(40.))
+                        .flex_none()
+                        .rounded(px(12.))
+                        .bg(ca(p.color, 0.18))
+                        .text_color(c(p.color))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(18.))
+                        .font_weight(FontWeight::BOLD)
+                        .child(p.mark),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .text_size(px(17.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(p.name),
+                        )
+                        .child(div().text_size(px(12.5)).text_color(c(ui::muted())).child(
+                            format!(
                                 "{} \u{b7} {} \u{b7} {jobs} jobs \u{b7} ${spent:.2} today",
                                 vendor(id),
                                 if ok { "ready" } else { "not installed" }
-                            )),
-                    ),
-            );
+                            ),
+                        )),
+                );
         if ok && sel != default_i {
             head = head.child(
                 ui::solid("engine-default", "Make default").on_click(cx.listener(
@@ -573,7 +571,7 @@ impl Shell {
             body = body.child(
                 div()
                     .text_size(px(13.))
-                    .text_color(c(ui::BODY))
+                    .text_color(c(ui::body()))
                     .child(format!("{} isn't on this computer. Install its command-line tool, sign in once, and it shows as ready here.", p.name)),
             );
             if let Some(cmd) = install {
@@ -590,9 +588,9 @@ impl Shell {
                                 .px(px(12.))
                                 .py(px(8.))
                                 .rounded(px(8.))
-                                .bg(c(ui::BG))
+                                .bg(c(ui::bg()))
                                 .border_1()
-                                .border_color(c(ui::LINE))
+                                .border_color(c(ui::line()))
                                 .font_family(ui::MONO)
                                 .text_size(px(12.))
                                 .truncate()
@@ -667,9 +665,9 @@ impl Shell {
                             .items_center()
                             .rounded(px(7.))
                             .border_1()
-                            .border_color(c(ui::LINE))
+                            .border_color(c(ui::line()))
                             .text_size(px(12.))
-                            .text_color(c(ui::INK))
+                            .text_color(c(ui::ink()))
                             .child(current),
                     )
                     .child(
@@ -677,9 +675,9 @@ impl Shell {
                             .id(("engine-change", n))
                             .px(px(6.))
                             .text_size(px(12.))
-                            .text_color(c(ui::MUTED))
+                            .text_color(c(ui::muted()))
                             .cursor_pointer()
-                            .hover(|s| s.text_color(c(ui::INK)))
+                            .hover(|s| s.text_color(c(ui::ink())))
                             .child("Change model")
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.engine_open = Some(who);
@@ -721,7 +719,7 @@ impl Shell {
                     .items_center()
                     .gap(px(12.))
                     .border_t_1()
-                    .border_color(c(ui::LINE2))
+                    .border_color(c(ui::line2()))
                     .child(face)
                     .child(
                         div()
@@ -733,7 +731,7 @@ impl Shell {
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(who.name()),
                             )
-                            .child(div().text_size(px(11.5)).text_color(c(ui::FAINT)).child(
+                            .child(div().text_size(px(11.5)).text_color(c(ui::faint())).child(
                                 if own.agent.is_empty() {
                                     "follows the default"
                                 } else {
@@ -747,9 +745,9 @@ impl Shell {
                             div()
                                 .id(("engine-reset", n))
                                 .text_size(px(12.))
-                                .text_color(c(ui::MUTED))
+                                .text_color(c(ui::muted()))
                                 .cursor_pointer()
-                                .hover(|s| s.text_color(c(ui::INK)))
+                                .hover(|s| s.text_color(c(ui::ink())))
                                 .child("Use default")
                                 .on_click(cx.listener(move |_, _, _, cx| {
                                     save(cx, |st| engine::set(st, who, BotEngine::default()));

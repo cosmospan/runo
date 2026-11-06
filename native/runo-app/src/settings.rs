@@ -146,6 +146,9 @@ pub struct AppSettings {
     pub glass: String,
     /// Cards, menus and dialogs are translucent too.
     pub glass_cards: bool,
+    /// The Squad Code window's theme, by id from `v2::theme::THEMES`: "midnight",
+    /// "daylight", "frost"…
+    pub v2_theme: String,
     /// Background pattern, by id from `pattern::Pattern`: "off", "dots", "grid"…
     pub pattern: String,
     /// Where the pattern lies: on the page and the terminal, on the side panels, and on
@@ -362,6 +365,7 @@ impl Default for AppSettings {
             fin_looks: HashMap::new(),
             glass: "off".into(),
             glass_cards: true,
+            v2_theme: "midnight".into(),
             font: "bundled".into(),
             font_smoothing: false,
             memory_server: true,
