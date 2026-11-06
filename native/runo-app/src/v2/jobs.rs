@@ -22,26 +22,90 @@ pub struct Runner {
     stopped: bool,
 }
 
-/// Commands a bot that changes files may run without asking: the project's
-/// own checks, and git's read-only views. Anything else is still refused,
-/// since a headless run can't ask.
-pub fn may_run(checks: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = checks.iter().map(|c| format!("Bash({c}:*)")).collect();
-    for c in ["git status", "git diff", "git log", "git show", "ls"] {
-        out.push(format!("Bash({c}:*)"));
+/// What a bot that changes files may run without asking: any command, so
+/// it can install, build, test and start what it made, in its own worktree.
+pub const MAY_RUN: &[&str] = &["Bash"];
+
+/// Commands a bot never runs on its own, since they're hard to undo or reach
+/// past the job's worktree: pushing and shipping (Shipper's job, after your
+/// yes), deploys, publishing, wiping files or history, and admin rights. The
+/// engine refuses these; the job's ask itself is checked by the guard rails
+/// before a bot starts.
+pub const NEVER_RUN: &[&str] = &[
+    "rm -rf",
+    "rm -fr",
+    "rm -r /",
+    "sudo",
+    "su ",
+    "chmod 777",
+    "chown",
+    "git push",
+    "git reset --hard",
+    "git clean",
+    "git checkout --",
+    "git branch -D",
+    "git rebase",
+    "git filter-branch",
+    "npm publish",
+    "yarn publish",
+    "pnpm publish",
+    "cargo publish",
+    "twine upload",
+    "docker push",
+    "kubectl",
+    "terraform apply",
+    "terraform destroy",
+    "vercel",
+    "netlify deploy",
+    "fly deploy",
+    "flyctl deploy",
+    "firebase deploy",
+    "heroku",
+    "aws",
+    "gcloud",
+    "mkfs",
+    "dd if=",
+    "shutdown",
+    "reboot",
+];
+
+/// The engine's rules for `NEVER_RUN`, Claude Code style.
+pub fn never_run() -> Vec<String> {
+    NEVER_RUN
+        .iter()
+        .map(|c| format!("Bash({}:*)", c.trim()))
+        .collect()
+}
+
+/// What a bot that changes files is told about running things.
+fn run_rule(checks: &[String]) -> String {
+    let mut out = String::from(
+        " You can run commands here: install, build, run the tests, and start what you made to see it work. \
+         Start a server in the background, check it (for example with curl on localhost), then stop it, so the job can finish. \
+         Don't push, deploy, publish or delete outside this folder; Squad Code does those after the person says yes.",
+    );
+    if !checks.is_empty() {
+        out.push_str(&format!(
+            " The project's checks are {}; Squad Code runs them again when you finish.",
+            checks.join(", ")
+        ));
     }
     out
 }
 
-/// What a bot that changes files is told about the checks.
-fn check_rule(checks: &[String]) -> String {
-    if checks.is_empty() {
-        return String::new();
+/// Adds `more` to a comma-separated rule list, each once.
+fn add_rules(list: &str, more: &[String]) -> String {
+    let mut rules: Vec<String> = list
+        .split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    for r in more {
+        if !rules.contains(r) {
+            rules.push(r.clone());
+        }
     }
-    format!(
-        " You may run the project's checks ({}) to see your change work; Squad Code runs them again when you finish.",
-        checks.join(", ")
-    )
+    rules.join(",")
 }
 
 /// What the bot is told, around the person's words.
@@ -55,7 +119,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
         }
         _ => format!(
             "Make the change in this folder. Keep a short todo list as you work.{}",
-            check_rule(checks)
+            run_rule(checks)
         ),
     };
     let part = if job.context.is_empty() {
@@ -118,19 +182,14 @@ pub fn start(
     } else {
         Vec::new()
     };
-    if !checks.is_empty() {
-        let mut rules: Vec<String> = opts
-            .allowed_tools
-            .split(',')
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect();
-        for r in may_run(&checks) {
-            if !rules.contains(&r) {
-                rules.push(r);
-            }
-        }
-        opts.allowed_tools = rules.join(",");
+    // A bot that changes files works in its own worktree, so it may run
+    // what it needs to build and test; only the hard-to-undo commands stay
+    // off. A tool the person turned off in Settings stays off: their deny
+    // rules win over this allow.
+    if job.mode.writes() {
+        let may: Vec<String> = MAY_RUN.iter().map(|t| t.to_string()).collect();
+        opts.allowed_tools = add_rules(&opts.allowed_tools, &may);
+        opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
     }
     let sent = prompt(job, text, resume, &checks);
     let spec = agent::RunSpec {
@@ -310,7 +369,7 @@ fn apply(job: &mut Job, e: AgentEvent) {
         AgentEvent::Error(s) => job.feed.push(Item::Error(s)),
         AgentEvent::Notice(s) => job.feed.push(Item::Note(s)),
         AgentEvent::Denied(tools) => job.feed.push(Item::Note(format!(
-            "It wanted to use {}, which this kind of job doesn't allow.",
+            "It was stopped from using {}. Bots don't push, deploy, publish or wipe files on their own; ask in a follow-up if this job needs it.",
             tools.join(", ")
         ))),
         AgentEvent::Todos(steps) => {
@@ -343,13 +402,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_bot_that_changes_files_may_run_the_checks() {
-        let checks = vec!["npm test".to_string(), "cargo test".to_string()];
-        let rules = may_run(&checks);
-        assert!(rules.contains(&"Bash(npm test:*)".to_string()));
-        assert!(rules.contains(&"Bash(git diff:*)".to_string()));
-        assert!(!rules.iter().any(|r| r == "Bash"));
-        assert!(check_rule(&checks).contains("npm test, cargo test"));
-        assert!(check_rule(&[]).is_empty());
+    fn a_bot_that_changes_files_may_run_things_but_not_ship_or_wipe() {
+        assert_eq!(MAY_RUN, &["Bash"]);
+        let never = never_run();
+        for want in [
+            "Bash(git push:*)",
+            "Bash(rm -rf:*)",
+            "Bash(sudo:*)",
+            "Bash(vercel:*)",
+        ] {
+            assert!(never.iter().any(|r| r == want), "{want}");
+        }
+        for ok in ["npm", "node", "cargo", "pytest", "curl"] {
+            assert!(!never.iter().any(|r| r == &format!("Bash({ok}:*)")), "{ok}");
+        }
+        let rule = run_rule(&["npm test".to_string()]);
+        assert!(
+            rule.contains("background") && rule.contains("npm test"),
+            "{rule}"
+        );
+        assert_eq!(
+            add_rules("Read, Bash", &["Bash".into(), "Edit".into()]),
+            "Read,Bash,Edit"
+        );
     }
 }
