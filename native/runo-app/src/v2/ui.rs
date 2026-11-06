@@ -9,8 +9,8 @@ use gpui_kit::*;
 // Named, not globbed: names like `fill` would clash with the kit's prelude.
 #[allow(unused_imports)]
 pub use super::theme::{
-    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, grey_tone, hover,
-    ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel, press, raised, run_tone,
+    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, float, grey_tone,
+    hover, ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel, press, raised, run_tone,
     set_theme, t_amber, t_blue, t_green, t_red, t_violet, theme, well, Tone, RUNO, THEMES,
 };
 
@@ -55,6 +55,46 @@ fn alpha(hex: u32) -> f32 {
     }
 }
 
+/// The colours of a terminal: the drawer, and the tails of running jobs.
+pub struct Term {
+    pub bg: u32,
+    pub fg: u32,
+    pub dim: u32,
+    pub line: u32,
+    /// The marks for a step that passed, failed, or is running.
+    pub ok: u32,
+    pub bad: u32,
+    pub run: u32,
+}
+
+/// A terminal is dark in every theme. A dark theme gives it its own sunken well,
+/// so it sits in the theme (navy in Deep sea, violet in Aurora); a light theme
+/// gets a neutral dark one. Always solid, so the output reads over any desktop.
+pub fn term() -> Term {
+    let t = theme();
+    if t.light {
+        return Term {
+            bg: 0x15151C,
+            fg: 0xD8D8E0,
+            dim: 0x8A8A97,
+            line: 0x2A2A34,
+            ok: 0x3DD68C,
+            bad: 0xFF6B7A,
+            run: 0x5AA2FF,
+        };
+    }
+    let bg = t.well & 0xff_ffff;
+    Term {
+        bg,
+        fg: t.body,
+        dim: t.muted,
+        line: super::theme::mix(bg, t.ink, 0.12),
+        ok: t.t_green,
+        bad: t.t_red,
+        run: t.t_blue,
+    }
+}
+
 /// A card's corner radius.
 pub const CARD_R: f32 = 10.;
 
@@ -65,14 +105,14 @@ pub fn ground() -> u32 {
     let t = theme();
     // Crew Chat's sidebar and Jobs panel: a cool, soft grey.
     if t.id == "crew-chat" {
-        return 0xF6F6F9;
+        return super::theme::glass(0xF6F6F9);
     }
     let (base, k) = if t.light {
         (t.bg, 0.045)
     } else {
         (t.well, 0.3)
     };
-    super::theme::mix(base & 0xff_ffff, 0x000000, k) | (base & 0xff00_0000)
+    super::theme::glass(super::theme::mix(base & 0xff_ffff, 0x000000, k) | (base & 0xff00_0000))
 }
 
 /// A panel on the ground: flat, with a hairline edge and no shadow.

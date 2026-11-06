@@ -544,17 +544,18 @@ impl Shell {
                 .px(px(12.))
                 .py(px(9.))
                 .rounded(px(8.))
-                .bg(c(0x14141A))
+                .bg(c(ui::term().bg))
                 .flex()
                 .flex_col()
                 .gap(px(3.))
                 .font_family(ui::MONO)
                 .text_size(px(12.));
             for (state, label) in tail {
+                let tc = ui::term();
                 let (mark, color) = match state {
-                    1 => ("\u{2713}", 0x3DD68C),
-                    2 => ("\u{2717}", 0xFF6B7A),
-                    _ => ("\u{25cf}", 0x5AA2FF),
+                    1 => ("\u{2713}", tc.ok),
+                    2 => ("\u{2717}", tc.bad),
+                    _ => ("\u{25cf}", tc.run),
                 };
                 term = term.child(
                     div()
@@ -562,13 +563,7 @@ impl Shell {
                         .gap(px(8.))
                         .min_w_0()
                         .child(div().flex_none().text_color(c(color)).child(mark))
-                        .child(
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .text_color(c(0xC9C9D4))
-                                .child(label),
-                        ),
+                        .child(div().min_w_0().truncate().text_color(c(tc.fg)).child(label)),
                 );
             }
             body = body.child(term);
@@ -1283,7 +1278,7 @@ impl Shell {
                             .justify_center()
                             .map(|d| {
                                 if ready {
-                                    d.bg(c(ui::t_violet()))
+                                    d.bg(c(ui::VIOLET))
                                         .cursor_pointer()
                                         .hover(|s| s.opacity(0.9))
                                 } else {

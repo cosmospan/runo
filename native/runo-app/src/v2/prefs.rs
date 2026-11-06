@@ -22,7 +22,7 @@ use crate::settings::AppSettings;
 use super::data::Member;
 use super::engines::{choice, section};
 use super::mascot;
-use super::theme::Theme;
+use super::theme::{self, Theme};
 use super::ui::{self, c, ca, space};
 use super::{Place, Shell};
 
@@ -1366,6 +1366,7 @@ impl Shell {
         };
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
+        let window = self.transparency_card(cx);
         Self::page(
             "settings-appearance",
             "Appearance",
@@ -1374,6 +1375,7 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap(px(space::L))
+                .child(window)
                 .child(
                     div()
                         .flex()
@@ -1394,6 +1396,77 @@ impl Shell {
                         .child(frosted),
                 ),
         )
+    }
+
+    /// Window transparency: a switch, and a slider for how far the desktop shows
+    /// through. It works with every theme; a frosted one just starts see-through.
+    fn transparency_card(&mut self, cx: &mut Context<Self>) -> Div {
+        let on = theme::see_through();
+        let clear = (theme::amount() * 100.).round() as u8;
+        let frosted = ui::theme().frosted;
+        let switch_row = row(
+            "See-through window",
+            if frosted {
+                "This theme is frosted glass already. Turn this on to clear it further."
+            } else {
+                "Let your desktop show through the window, blurred, in any theme."
+            },
+            div()
+                .id("see-through")
+                .cursor_pointer()
+                .child(switch(on))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let clear = this.clear_slider.read(cx).value().end().round() as u8;
+                    theme::set_see_through(!on, clear);
+                    save(cx, |st| {
+                        st.v2_see_through = !on;
+                        st.v2_clear = clear;
+                    });
+                    cx.notify();
+                })),
+        );
+        let label = |text: &'static str| {
+            div()
+                .flex_none()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child(text)
+        };
+        let slider_row = row(
+            "Transparency",
+            "Quieter text brightens as the window clears, so everything stays readable.",
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(label("Solid"))
+                .child(
+                    div().w(px(180.)).child(
+                        gpui_kit::component::slider::Slider::new(&self.clear_slider)
+                            .disabled(!on)
+                            .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
+                            .text_color(c(0xFFFFFF)),
+                    ),
+                )
+                .child(label("Clear"))
+                .child(
+                    div()
+                        .w(px(38.))
+                        .flex_none()
+                        .text_right()
+                        .font_family(ui::MONO)
+                        .text_size(px(12.))
+                        .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                        .child(if on {
+                            format!("{clear}%")
+                        } else {
+                            "Off".to_string()
+                        }),
+                ),
+        )
+        .when(!on, |d| d.opacity(0.6));
+        group("WINDOW", vec![switch_row, slider_row])
     }
 
     fn settings_mascot(&mut self, cx: &mut Context<Self>) -> AnyElement {

@@ -311,7 +311,7 @@ impl Shell {
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
-                                    .text_color(c(if ready { ui::on_fill() } else { 0xFFFFFF })),
+                                    .text_color(c(if ready { ui::on_fill() } else { ui::faint() })),
                             )
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let text = this.composer.read(cx).value().trim().to_string();

@@ -506,7 +506,7 @@ impl Shell {
             .flex_col()
             .gap(px(1.))
             .rounded(px(12.))
-            .bg(c(ui::raised()))
+            .bg(c(ui::float()))
             .border_1()
             .border_color(c(ui::line()))
             .shadow(vec![BoxShadow {
@@ -950,7 +950,7 @@ impl Shell {
                     .flex_col()
                     .gap(px(10.))
                     .rounded(px(16.))
-                    .bg(c(ui::panel()))
+                    .bg(c(ui::float()))
                     .border_1()
                     .border_color(c(ui::line()))
                     .shadow(vec![BoxShadow {
