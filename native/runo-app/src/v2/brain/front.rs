@@ -291,6 +291,94 @@ pub fn answerer(crew: &[Member]) -> Member {
     route::doer(Mode::Ask, crew)
 }
 
+/// The outcome's name, as the front door's test set writes it.
+pub fn outcome(f: &Front) -> &'static str {
+    match f {
+        Front::Chat { .. } => "chat",
+        Front::Answer { .. } => "answer",
+        Front::AskBack { .. } => "ask_back",
+        Front::Confirm { .. } => "confirm",
+        Front::Hand(_) => "hand",
+    }
+}
+
+/// How the front door did on a test set.
+#[derive(Default)]
+pub struct Score {
+    pub total: usize,
+    pub right: usize,
+    /// Of the work it handed on, how many had the right kind of job.
+    pub mode_total: usize,
+    pub mode_right: usize,
+    /// (wanted, got) → count.
+    pub confusion: std::collections::BTreeMap<(String, String), usize>,
+    pub misses: Vec<(String, String, String)>,
+}
+
+impl Score {
+    pub fn report(&self) -> String {
+        let pct = |a: usize, b: usize| {
+            if b == 0 {
+                0.0
+            } else {
+                a as f64 * 100.0 / b as f64
+            }
+        };
+        let mut out = format!(
+            "Front door: {}/{} right ({:.0}%). Kind of job, when handed on: {}/{} ({:.0}%).",
+            self.right,
+            self.total,
+            pct(self.right, self.total),
+            self.mode_right,
+            self.mode_total,
+            pct(self.mode_right, self.mode_total)
+        );
+        let mut wrong: Vec<_> = self.confusion.iter().filter(|((w, g), _)| w != g).collect();
+        wrong.sort_by(|a, b| b.1.cmp(a.1));
+        for ((w, g), n) in wrong.into_iter().take(8) {
+            out.push_str(&format!("\n  wanted {w}, got {g}: {n}"));
+        }
+        for (t, w, g) in self.misses.iter().take(25) {
+            out.push_str(&format!("\n  missed: {t:?} wanted {w}, got {g}"));
+        }
+        out
+    }
+}
+
+/// Scores [`read`] on JSON lines of {"text", "want", "mode"}.
+pub fn score(st: &AppSettings, jsonl: &str) -> Score {
+    let mut s = Score::default();
+    for line in jsonl.lines().filter(|l| !l.trim().is_empty()) {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let (Some(text), Some(want)) = (v["text"].as_str(), v["want"].as_str()) else {
+            continue;
+        };
+        let f = read(st, text, &[]);
+        let got = outcome(&f);
+        s.total += 1;
+        *s.confusion
+            .entry((want.to_string(), got.to_string()))
+            .or_default() += 1;
+        if got == want {
+            s.right += 1;
+        } else {
+            s.misses
+                .push((text.chars().take(90).collect(), want.into(), got.into()));
+        }
+        let mode = match &f {
+            Front::Hand(r) | Front::Confirm { route: r, .. } => Some(r.mode),
+            _ => None,
+        };
+        if let (Some(m), Some(w)) = (mode, v["mode"].as_str().filter(|m| !m.is_empty())) {
+            s.mode_total += 1;
+            s.mode_right += usize::from(m.label().eq_ignore_ascii_case(w));
+        }
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,6 +453,16 @@ mod tests {
             read0("hi, please fix the login crash"),
             Front::Hand(_)
         ));
+    }
+
+    #[test]
+    fn the_score_counts_outcomes_and_kinds() {
+        let s = score(
+            &AppSettings::default(),
+            "{\"text\":\"hi\",\"want\":\"chat\",\"mode\":\"\"}\n{\"text\":\"fix the login crash\",\"want\":\"hand\",\"mode\":\"fix\"}\n{\"text\":\"fix it\",\"want\":\"hand\",\"mode\":\"fix\"}",
+        );
+        assert_eq!((s.right, s.total, s.mode_right, s.mode_total), (2, 3, 1, 1));
+        assert!(s.report().contains("wanted hand, got ask_back: 1"));
     }
 
     #[test]

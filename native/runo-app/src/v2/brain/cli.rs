@@ -148,6 +148,14 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 lines.len()
             ))
         }
+        "eval" if args.get(1).is_some_and(|a| a == "front") => {
+            let path = args
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| "training/eval/front.jsonl".into());
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+            Ok(super::front::score(&st, &text).report())
+        }
         "eval" => {
             let cases = match args.get(1) {
                 Some(h) if h == "hard" => teach::HARD.to_string(),

@@ -2,6 +2,8 @@
 
     # once: the held-out test sets (eval/*.jsonl), written carefully
     python make_tasks.py tests
+    # the front door's test: what Peek should do with each message
+    python make_tasks.py front --route 400
     # then the training examples (data/<task>.jsonl), which never repeat a test
     python make_tasks.py train --title 2500 --clarify 1500 --recap 1500 --route 2400
 
@@ -259,6 +261,54 @@ def recap_example(j):
 # ---- files ----------------------------------------------------------------
 
 
+# ---- front door ------------------------------------------------------------
+
+FRONT_KINDS = {
+    "chat": "small talk with no request: greetings, thanks, 'what can you do', goodbyes, how are you",
+    "answer": "a question to answer, where nothing should change: about the code ('how does auth work'), "
+    "or about the world, research, advice, maths, writing help ('best laptop under $1000', 'summarise GDPR')",
+    "ask_back": "work that names nothing to act on, so a developer would have to guess: 'fix it', 'make it better', "
+    "'do the thing we discussed', 'update the page' with no hint which or how",
+    "confirm": "real work that is hard or impossible to undo: deploying or changing production, deleting files or "
+    "data in bulk, force-pushing or rewriting history, changing secrets or keys, sending emails or messages to "
+    "people, moving money, merging straight to main",
+    "hand": "ordinary work for a coding bot that is safe to start: build, fix, test, review, tidy",
+}
+
+FRONT_ITEM = {
+    "text": S,
+    "want": {"type": "string", "enum": list(FRONT_KINDS)},
+    "mode": {"type": "string", "enum": list(KINDS) + [""]},
+}
+
+
+def front_rows(client, n, rng, avoid):
+    kinds = "\n".join(f"- {k}: {v}" for k, v in FRONT_KINDS.items())
+    out = []
+    while len(out) < n:
+        k = min(40, n - len(out))
+        prompt = (
+            "Squad Code is an app where anyone, developer or not, types to Peek, the guide of a crew of coding "
+            "bots. Peek reads every message first and does one of these:\n" + kinds + "\n\n"
+            f"Write {k} messages people really send, set in {rng.choice(SETTINGS)} or everyday life. Mix the five "
+            "evenly, and make about a third of them look-alikes that test the line: questions that mention risky "
+            "words ('how does our deploy work?', 'review the payment code'), safe work with scary words ('fix the "
+            "password reset email', 'the delete button is misaligned'), greetings with work in them ('hi, fix the "
+            "login crash'), short but clear work ('flaky checkout test'), and vague work. Vary styles: "
+            + "; ".join(rng.sample(STYLES, 3))
+            + ".\nLabel each as a careful product designer would: want is what Peek should do; mode is the kind of "
+            "coding job for hand and confirm (one of ask, build, fix, review, test, tidy), else \"\".\n"
+            "These are test questions: leave out anything reasonable people would label differently."
+        )
+        for j in teach(client, prompt, items(FRONT_ITEM), "high"):
+            t = j["text"].strip()
+            if t and t.lower() not in avoid:
+                avoid.add(t.lower())
+                out.append({"text": t, "want": j["want"], "mode": j["mode"] if j["want"] in ("hand", "confirm") else ""})
+        print(f"  front: {len(out)}/{n}")
+    return out[:n]
+
+
 def read_jsonl(p: pathlib.Path) -> list[dict]:
     return [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
 
@@ -282,7 +332,7 @@ def teacher_texts() -> list[str]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("what", choices=["tests", "train"])
+    ap.add_argument("what", choices=["tests", "train", "front"])
     ap.add_argument("--route", type=int, default=0)
     ap.add_argument("--title", type=int, default=0)
     ap.add_argument("--clarify", type=int, default=0)
@@ -294,7 +344,9 @@ def main() -> None:
     client = anthropic.Anthropic()
     rng = random.Random(11 if args.what == "tests" else 7)
 
-    if args.what == "tests":
+    if args.what == "front":
+        write_jsonl(EVAL / "front.jsonl", front_rows(client, args.route or 400, rng, held_out()))
+    elif args.what == "tests":
         avoid = held_out() | {t.lower() for t in teacher_texts()}
         write_jsonl(EVAL / "route_wild.jsonl", [
             {"text": j["text"].strip(), "mode": j["mode"]}
