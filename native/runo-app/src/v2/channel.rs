@@ -266,7 +266,6 @@ impl Shell {
                             .children(offer)
                             .children(self.slash_strip(cx))
                             .children(self.hash_strip(cx))
-                            .children(self.at_strip(cx))
                             .child(self.thread_composer(&name, cx)),
                     ),
             )
@@ -1190,32 +1189,42 @@ impl Shell {
     fn at_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let text = self.composer.read(cx).value().to_string();
         if let Some((head, found)) = self.at_matches(&text) {
-            let mut row = div().flex().flex_wrap().items_center().gap(px(6.));
-            for (i, m) in found.into_iter().enumerate() {
-                let head = head.clone();
-                let face = self.avatar(m, 18.);
-                let accent = m.accent();
-                row = row.child(
+            let mut list = div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .pb(px(8.))
+                .border_b_1()
+                .border_color(c(ui::line()))
+                .child(
                     div()
-                        .id(("at", i))
-                        .h(px(32.))
-                        .pl(px(6.))
-                        .pr(px(10.))
+                        .px(px(4.))
+                        .pb(px(4.))
                         .flex()
                         .items_center()
-                        .gap(px(7.))
-                        .rounded(px(9.))
-                        .border_1()
-                        .map(|d| {
-                            if i == 0 {
-                                d.bg(c(super::theme::mix(ui::raised(), accent, 0.12)))
-                                    .border_color(c(super::theme::mix(ui::raised(), accent, 0.45)))
-                            } else {
-                                d.bg(c(ui::raised())).border_color(c(ui::line()))
-                            }
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(div().flex_1().child("Bring in a bot"))
+                        .child("\u{21b5} picks the first"),
+                );
+            for (i, m) in found.into_iter().enumerate() {
+                let head = head.clone();
+                let face = self.avatar(m, 22.);
+                let accent = m.accent();
+                list = list.child(
+                    div()
+                        .id(("at", i))
+                        .h(px(34.))
+                        .px(px(6.))
+                        .flex()
+                        .items_center()
+                        .gap(px(9.))
+                        .rounded(px(8.))
+                        .when(i == 0, |d| {
+                            d.bg(c(super::theme::mix(ui::raised(), accent, 0.12)))
                         })
                         .cursor_pointer()
-                        .hover(|s| s.border_color(c(ui::line_hi())))
+                        .hover(|s| s.bg(c(super::theme::mix(ui::raised(), accent, 0.08))))
                         .child(face)
                         .child(
                             div()
@@ -1240,14 +1249,7 @@ impl Shell {
                         })),
                 );
             }
-            return Some(
-                row.child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(c(ui::faint()))
-                        .child("\u{21b5} picks the first"),
-                ),
-            );
+            return Some(list);
         }
         // Bots named in full: shown as who's being brought in.
         let named: Vec<Member> = Member::all()
@@ -1543,6 +1545,7 @@ impl Shell {
                 spread_radius: px(0.),
                 inset: false,
             }])
+            .children(self.at_strip(cx))
             .child(
                 div()
                     .min_h(px(44.))
