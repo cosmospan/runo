@@ -26,7 +26,7 @@ fn here() -> store::Folder {
     }
 }
 
-/// `squad brain why|ideas|export|eval|install|update|remove`.
+/// `squad brain why|may|ideas|export|eval|install|update|remove`.
 pub fn main(args: &[String]) -> Result<String, String> {
     let sub = args.first().map(String::as_str).unwrap_or("");
     let rest = args.get(1..).unwrap_or(&[]).join(" ");
@@ -34,6 +34,31 @@ pub fn main(args: &[String]) -> Result<String, String> {
     let st = crate::settings::AppSettings::load();
     let crew = Member::all();
     match sub {
+        // How a bot's step would be handled: `squad brain may npm install -g x`.
+        "may" => {
+            if rest.trim().is_empty() {
+                return Err("usage: squad brain may <command...>".into());
+            }
+            let here = std::env::current_dir()
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let j = super::permit::judge(
+                "The bot",
+                "Bash",
+                &serde_json::json!({ "command": rest }),
+                &here,
+            );
+            let tier = match j.tier {
+                super::permit::Tier::Auto => "Just does it.",
+                super::permit::Tier::Ask if j.can_always => "Asks: Allow once, Always allow, Deny.",
+                super::permit::Tier::Ask => "Asks: Allow once, Deny.",
+                super::permit::Tier::EveryTime => "Asks every time: Allow once, Deny.",
+                super::permit::Tier::Never => "Refused.",
+            };
+            Ok(format!("{tier}\n{} {}", j.headline, j.why)
+                .trim_end()
+                .to_string())
+        }
         "why" => {
             if rest.trim().is_empty() {
                 return Err("usage: squad brain why <words...>".into());
@@ -255,6 +280,6 @@ pub fn main(args: &[String]) -> Result<String, String> {
             st.save();
             Ok("Smart Peek is off and its model is deleted.".into())
         }
-        _ => Err("usage: squad brain why|ideas|export|eval|install|update|remove".into()),
+        _ => Err("usage: squad brain why|may|ideas|export|eval|install|update|remove".into()),
     }
 }

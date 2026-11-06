@@ -26,58 +26,17 @@ pub struct Runner {
 /// it can install, build, test and start what it made, in its own worktree.
 pub const MAY_RUN: &[&str] = &["Bash"];
 
-/// Commands a bot never runs on its own, since they're hard to undo or reach
-/// past the job's worktree: pushing and shipping (Shipper's job, after your
-/// yes), deploys, publishing, wiping files or history, and admin rights. The
-/// engine refuses these; the job's ask itself is checked by the guard rails
-/// before a bot starts.
-pub const NEVER_RUN: &[&str] = &[
-    "rm -rf",
-    "rm -fr",
-    "rm -r /",
-    "sudo",
-    "su ",
-    "chmod 777",
-    "chown",
-    "git push",
-    "git reset --hard",
-    "git clean",
-    "git checkout --",
-    "git branch -D",
-    "git rebase",
-    "git filter-branch",
-    "npm publish",
-    "yarn publish",
-    "pnpm publish",
-    "cargo publish",
-    "twine upload",
-    "docker push",
-    "kubectl",
-    "terraform apply",
-    "terraform destroy",
-    "vercel",
-    "netlify deploy",
-    "fly deploy",
-    "flyctl deploy",
-    "firebase deploy",
-    "heroku",
-    "aws",
-    "gcloud",
-    "mkfs",
-    "dd if=",
-    "shutdown",
-    "reboot",
-];
-
-/// The engine's rules for `NEVER_RUN`, Claude Code style.
+/// The engine's rules for the commands a bot never runs on its own (see
+/// `brain::permit::EVERY_TIME`), Claude Code style. Without a way to ask
+/// mid-run, the engine refuses these.
 pub fn never_run() -> Vec<String> {
-    NEVER_RUN
+    super::brain::permit::EVERY_TIME
         .iter()
         .map(|c| format!("Bash({}:*)", c.trim()))
         .collect()
 }
 
-/// Whether NEVER_RUN commands are asked about rather than refused: only
+/// Whether hard-to-undo commands are asked about rather than refused: only
 /// Claude Code with Squad Code's prompt tool can ask mid-run.
 fn asks_first(provider: &str, prompt_tool: bool) -> bool {
     provider == "claude" && prompt_tool
