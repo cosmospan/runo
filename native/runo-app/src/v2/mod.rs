@@ -48,6 +48,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
+use gpui_kit::component::slider::{SliderEvent, SliderState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{CrewRenderer, Figure, Framing, Mood};
@@ -383,8 +384,9 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
 /// The v2 window's root.
 pub struct Shell {
     place: Place,
-    /// The theme last put on the window, so a change in Settings is applied once.
-    applied_theme: &'static str,
+    /// The look last put on the window (theme, transparency on, how see-through),
+    /// so a change in Settings is applied once.
+    applied_theme: Look,
     clock: Instant,
     holos: Holos,
     scale: f32,
@@ -519,6 +521,8 @@ pub struct Shell {
     term_cols: u16,
     /// The window's width, for fitting the terminal to it.
     view_w: f32,
+    /// How see-through the window is, under Settings > Appearance.
+    clear_slider: Entity<SliderState>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -619,7 +623,34 @@ impl Shell {
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
+        let clear = cx
+            .global::<crate::settings::AppSettings>()
+            .v2_clear
+            .min(100);
+        let clear_slider = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(100.)
+                .step(1.)
+                .default_value(clear as f32)
+        });
         let subs = vec![
+            // Dragging previews the window as it goes; letting go keeps it.
+            cx.subscribe_in(&clear_slider, window, |_, _, event, _, cx| {
+                let (value, keep) = match event {
+                    SliderEvent::Change(v) => (v.end(), false),
+                    SliderEvent::Release(v) => (v.end(), true),
+                };
+                let clear = value.round().clamp(0., 100.) as u8;
+                theme::set_see_through(theme::see_through(), clear);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_clear = clear;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
             cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
@@ -789,7 +820,7 @@ impl Shell {
             engine_sel: None,
             engine_brains: false,
             settings_pane: Pane::Work,
-            applied_theme: ui::theme().id,
+            applied_theme: look(),
             fin_sel: Member::Guard,
             fin_state: None,
             home_pick: None,
@@ -837,6 +868,7 @@ impl Shell {
             term_grab: 0,
             term_cols: 100,
             view_w: 1280.,
+            clear_slider,
             _subs: subs,
             _pump: pump,
         }
@@ -2032,8 +2064,8 @@ impl Render for Shell {
             window.request_animation_frame();
         }
         self.poll(cx);
-        if self.applied_theme != ui::theme().id {
-            self.applied_theme = ui::theme().id;
+        if self.applied_theme != look() {
+            self.applied_theme = look();
             apply_theme(window, cx);
         }
         // A box that had focus may be gone (a new place opened): take focus back,
@@ -2258,7 +2290,13 @@ impl Render for Shell {
             .font_family("Geist")
             .text_color(c(ui::ink()))
             // The ground the sidebar sits on; the page floats over it as a canvas.
-            .bg(c(if setup { ui::bg() } else { ui::ground() }))
+            // When the desktop shows through, the sidebar and the page each paint
+            // their own ground instead: stacked, two see-through layers would add
+            // up to nearly solid.
+            .when(!theme::window_clear(), |d| {
+                d.bg(c(if setup { ui::bg() } else { ui::ground() }))
+            })
+            .when(theme::window_clear() && setup, |d| d.bg(c(ui::bg())))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
@@ -2270,6 +2308,10 @@ impl Render for Shell {
                     // Full height on its own; as a canvas, it stretches between its margins.
                     .when(setup, |d| d.h_full())
                     .when(!setup, |d| d.bg(c(ui::bg())))
+                    .relative()
+                    .when(!setup, |d| {
+                        d.children(ui::pattern(crate::pattern::Area::Content))
+                    })
                     .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
@@ -2297,16 +2339,52 @@ impl Render for Shell {
                     .size_0(),
             );
         crate::framestats::rendered();
-        root
+        // A stand-in desktop under a see-through window, for screenshots taken where
+        // the window can't really be see-through (Xvfb): RUNO_BACKDROP names an image.
+        match backdrop() {
+            Some(desk) => div()
+                .size_full()
+                .relative()
+                .child(desk)
+                .child(div().absolute().inset_0().flex().child(root))
+                .into_any_element(),
+            None => root.into_any_element(),
+        }
     }
+}
+
+fn backdrop() -> Option<AnyElement> {
+    let path = std::env::var_os("RUNO_BACKDROP")?;
+    theme::window_clear().then(|| {
+        img(std::path::PathBuf::from(path))
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .object_fit(ObjectFit::Cover)
+            .into_any_element()
+    })
+}
+
+/// What the window looks like: the theme, whether transparency is on, and how
+/// see-through it is.
+type Look = (&'static str, bool, u8);
+
+fn look() -> Look {
+    (
+        ui::theme().id,
+        theme::see_through(),
+        (theme::amount() * 100.).round() as u8,
+    )
 }
 
 /// The window's background for the theme in use. Solid themes keep it opaque: the
 /// app paints every pixel, and blending what's behind the window costs every frame.
-/// Frosted themes let the desktop show through, blurred (vibrancy on macOS, acrylic
-/// on Windows, the compositor's blur on Linux; without one the window stays solid).
+/// Frosted themes, and any theme with window transparency on, let the desktop show
+/// through, blurred (vibrancy on macOS, acrylic on Windows, the compositor's blur on
+/// Linux; without one the window stays solid).
 fn background() -> WindowBackgroundAppearance {
-    if ui::theme().frosted {
+    if theme::window_clear() {
         WindowBackgroundAppearance::Blurred
     } else {
         WindowBackgroundAppearance::Opaque
@@ -2333,7 +2411,7 @@ fn apply_theme(window: &mut Window, cx: &mut App) {
         k.border = ui::c(ui::line());
         k.input = ui::c(ui::line());
         k.muted_foreground = ui::c(ui::muted());
-        k.popover = ui::c(ui::raised());
+        k.popover = ui::c(ui::float());
         k.popover_foreground = ui::c(ui::ink());
         k.caret = ui::c(ui::ink());
         k.ring = ui::ca(ui::VIOLET, 0.6);
@@ -2344,6 +2422,10 @@ fn apply_theme(window: &mut Window, cx: &mut App) {
 
 /// Opens the v2 window.
 pub fn open_window(cx: &mut App) {
+    // The look first: the window opens with the background it needs.
+    let st = cx.global::<crate::settings::AppSettings>();
+    ui::set_theme(&st.v2_theme);
+    theme::set_see_through(st.v2_see_through, st.v2_clear);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
@@ -2359,7 +2441,6 @@ pub fn open_window(cx: &mut App) {
         window_background: background(),
         ..Default::default()
     };
-    ui::set_theme(&cx.global::<crate::settings::AppSettings>().v2_theme);
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
         apply_theme(window, cx);
         cx.new(|cx| Shell::new(window, cx))

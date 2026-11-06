@@ -458,7 +458,7 @@ impl Shell {
                     .max_h(px(520.))
                     .opacity(k)
                     .rounded(px(20.))
-                    .bg(c(ui::panel()))
+                    .bg(c(ui::float()))
                     .border_1()
                     .border_color(c(ui::line()))
                     .shadow(vec![BoxShadow {

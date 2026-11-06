@@ -217,7 +217,7 @@ impl Shell {
             .cursor_pointer()
             .map(|d| {
                 if term_on {
-                    d.bg(c(ui::ink())).text_color(c(ui::bg()))
+                    d.bg(c(ui::ink())).text_color(c(ui::theme().bg & 0xff_ffff))
                 } else {
                     d.hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
                 }
@@ -483,7 +483,7 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .rounded(px(12.))
-                    .bg(c(ui::raised()))
+                    .bg(c(ui::float()))
                     .border_1()
                     .border_color(c(ui::line_hi()))
                     .shadow(vec![BoxShadow {

@@ -22,7 +22,7 @@ use crate::settings::AppSettings;
 use super::data::Member;
 use super::engines::{choice, section};
 use super::mascot;
-use super::theme::Theme;
+use super::theme::{self, Theme};
 use super::ui::{self, c, ca, space};
 use super::{Place, Shell};
 
@@ -1366,6 +1366,8 @@ impl Shell {
         };
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
+        let window = self.transparency_card(cx);
+        let backdrop = self.pattern_card(cx);
         Self::page(
             "settings-appearance",
             "Appearance",
@@ -1374,12 +1376,21 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap(px(space::L))
+                .child(window)
+                .child(backdrop)
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(space::SM))
-                        .child(heading("Solid", "An opaque window, quickest to draw."))
+                        .child(heading(
+                            "Solid",
+                            if theme::see_through() {
+                                "Opaque by design, see-through while the window switch is on."
+                            } else {
+                                "An opaque window, quickest to draw."
+                            },
+                        ))
                         .child(solid),
                 )
                 .child(
@@ -1393,6 +1404,166 @@ impl Shell {
                         ))
                         .child(frosted),
                 ),
+        )
+    }
+
+    /// Window transparency: a switch, and a slider for how far the desktop shows
+    /// through. It works with every theme; a frosted one just starts see-through.
+    fn transparency_card(&mut self, cx: &mut Context<Self>) -> Div {
+        let on = theme::see_through();
+        let clear = (theme::amount() * 100.).round() as u8;
+        let frosted = ui::theme().frosted;
+        let switch_row = row(
+            "See-through window",
+            if frosted {
+                "This theme is frosted glass already. Turn this on to clear it further."
+            } else {
+                "Let your desktop show through the window, blurred, in any theme."
+            },
+            div()
+                .id("see-through")
+                .cursor_pointer()
+                .child(switch(on))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let clear = this.clear_slider.read(cx).value().end().round() as u8;
+                    theme::set_see_through(!on, clear);
+                    save(cx, |st| {
+                        st.v2_see_through = !on;
+                        st.v2_clear = clear;
+                    });
+                    cx.notify();
+                })),
+        );
+        let label = |text: &'static str| {
+            div()
+                .flex_none()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child(text)
+        };
+        let slider_row = row(
+            "Transparency",
+            "Quieter text brightens as the window clears, so everything stays readable.",
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(label("Solid"))
+                .child(
+                    div().w(px(180.)).child(
+                        gpui_kit::component::slider::Slider::new(&self.clear_slider)
+                            .disabled(!on)
+                            .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
+                            .text_color(c(0xFFFFFF)),
+                    ),
+                )
+                .child(label("Clear"))
+                .child(
+                    div()
+                        .w(px(38.))
+                        .flex_none()
+                        .text_right()
+                        .font_family(ui::MONO)
+                        .text_size(px(12.))
+                        .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                        .child(if on {
+                            format!("{clear}%")
+                        } else {
+                            "Off".to_string()
+                        }),
+                ),
+        )
+        .when(!on, |d| d.opacity(0.6));
+        group("WINDOW", vec![switch_row, slider_row])
+    }
+
+    /// A background pattern behind the page, and the sidebar if you like: a fine
+    /// motif in the theme's ink, picked from a row of live previews.
+    fn pattern_card(&mut self, cx: &mut Context<Self>) -> Div {
+        use crate::pattern::{self as pat, Pattern};
+        let st = cx.global::<AppSettings>().clone();
+        let current = pat::current();
+        let apply = |st: &AppSettings| {
+            pat::set(
+                &st.pattern,
+                st.pattern_content,
+                st.pattern_panels,
+                st.pattern_frame,
+            )
+        };
+        let mut tiles = div().flex().flex_wrap().gap(px(10.));
+        for p in Pattern::ALL {
+            let on = p == current;
+            tiles = tiles.child(
+                div()
+                    .id(SharedString::from(format!("pattern-{}", p.id())))
+                    .w(px(104.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .h(px(64.))
+                            .w_full()
+                            .relative()
+                            .overflow_hidden()
+                            .rounded(px(8.))
+                            .bg(c(ui::bg()))
+                            .border_1()
+                            .border_color(c(if on { ui::VIOLET } else { ui::line() }))
+                            .when(on, |d| d.border_2())
+                            .child(ui::pattern_of(p, 2.))
+                            .when(p == Pattern::Off, |d| {
+                                d.flex().items_center().justify_center().child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(c(ui::faint()))
+                                        .child("Plain"),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .font_weight(if on {
+                                FontWeight::SEMIBOLD
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .text_color(c(if on { ui::ink() } else { ui::muted() }))
+                            .child(p.label()),
+                    )
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| {
+                            st.pattern = p.id().to_string();
+                            // The page always shows a pattern you pick.
+                            st.pattern_content = true;
+                        });
+                        apply(cx.global::<AppSettings>());
+                        cx.notify();
+                    })),
+            );
+        }
+        let sidebar_on = st.pattern_panels;
+        let sidebar_row = row(
+            "On the sidebar too",
+            "Carry the pattern under the sidebar as well as the page.",
+            div()
+                .id("pattern-sidebar")
+                .cursor_pointer()
+                .child(switch(sidebar_on))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    save(cx, |st| st.pattern_panels = !sidebar_on);
+                    apply(cx.global::<AppSettings>());
+                    cx.notify();
+                })),
+        )
+        .when(current == Pattern::Off, |d| d.opacity(0.6));
+        group(
+            "BACKGROUND PATTERN",
+            vec![div().px(px(18.)).pb(px(14.)).child(tiles), sidebar_row],
         )
     }
 

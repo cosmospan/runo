@@ -149,6 +149,11 @@ pub struct AppSettings {
     /// The Squad Code window's theme, by id from `v2::theme::THEMES`: "midnight",
     /// "daylight", "frost"…
     pub v2_theme: String,
+    /// Window transparency for the Squad Code window: the desktop shows through
+    /// whatever theme is picked, blurred.
+    pub v2_see_through: bool,
+    /// How see-through the window is while transparency is on, 0 to 100.
+    pub v2_clear: u8,
     /// The window has been switched to Crew Chat once; after that the theme is
     /// whatever the person picks.
     pub v2_crew_chat: bool,
@@ -376,6 +381,8 @@ impl Default for AppSettings {
             glass: "off".into(),
             glass_cards: true,
             v2_theme: "crew-chat".into(),
+            v2_see_through: false,
+            v2_clear: 50,
             v2_crew_chat: true,
             v2_ask: "balanced".into(),
             v2_plan_first: false,
