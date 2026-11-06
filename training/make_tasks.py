@@ -50,12 +50,14 @@ N = {"type": "number"}
 
 
 def teach(client, prompt: str, schema: dict, effort: str) -> list[dict]:
-    msg = client.messages.create(
+    # Streamed: the SDK won't wait on a 32K-token answer without it.
+    with client.messages.stream(
         model=TEACHER,
         max_tokens=32000,
         output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
         messages=[{"role": "user", "content": prompt}],
-    )
+    ) as stream:
+        msg = stream.get_final_message()
     USAGE["in"] += msg.usage.input_tokens
     USAGE["out"] += msg.usage.output_tokens
     if msg.stop_reason != "end_turn":

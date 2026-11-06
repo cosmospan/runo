@@ -1,0 +1,100 @@
+{"text": "fix it", "clear": false, "question": "What should be fixed? Please name the page, component, or error you're seeing."}
+{"text": "why is ci red", "clear": true, "question": ""}
+{"text": "update the pricing page", "clear": false, "question": "What should change on the pricing page: the prices, the plan features, the layout, or something else?"}
+{"text": "sitemap.xml is missing all the blog posts, fix pls", "clear": true, "question": ""}
+{"text": "do the changes we talked about on the call", "clear": false, "question": "Which changes from the call should be made? Please list them."}
+{"text": "the contact form submits twice if u double click the button", "clear": true, "question": ""}
+{"text": "please to make the navbar stay on top when user is scroll down", "clear": true, "question": ""}
+{"text": "robots.txt is blocking EVERYTHING in production. how did nobody notice this. fix it NOW", "clear": true, "question": ""}
+{"text": "change the font", "clear": false, "question": "Which font should the site use instead, and should it apply everywhere or only to headings or body text?"}
+{"text": "hydration error on homepage", "clear": true, "question": ""}
+{"text": "the bug Priya found yesterday", "clear": false, "question": "What bug did Priya find? Please describe it or say which page it's on."}
+{"text": "mobile menu doesnt close after you tap a link, super annoying", "clear": true, "question": ""}
+{"text": "swap the logo", "clear": false, "question": "Where is the new logo file, or what should the new logo be?"}
+{"text": "footer still says \u00a9 2023", "clear": true, "question": ""}
+{"text": "add the new testimonials", "clear": false, "question": "What are the new testimonials? Please share the quotes, names, and any photos."}
+{"text": "build failing on vercel again ugh", "clear": true, "question": ""}
+{"text": "make the homepage pop more", "clear": false, "question": "What would make it pop for you: bolder colors, animations, new imagery, or a different hero layout?"}
+{"text": "add open graph images for the blog posts so they look good when shared", "clear": true, "question": ""}
+{"text": "translate the site", "clear": false, "question": "Which language or languages should the site be translated into?"}
+{"text": "hero image jumps around when the pricing page loads on mobile, layout shift is awful", "clear": true, "question": ""}
+{"text": "redo the hero", "clear": false, "question": "Which page's hero, and what should change: the copy, the image, the layout, or all of it?"}
+{"text": "images not lazy load, please convert all of them to next/image", "clear": true, "question": ""}
+{"text": "add canonical urls to every page", "clear": true, "question": ""}
+{"text": "change the brand color", "clear": false, "question": "What should the new brand color be? Please give a hex code or a color name."}
+{"text": "we still have the default next.js 404 page, make a custom one that matches the rest of the site", "clear": true, "question": ""}
+{"text": "same as last time but for the blog", "clear": false, "question": "What did you do last time that should now be done for the blog?"}
+{"text": "flaky e2e test for newsletter signup", "clear": true, "question": ""}
+{"text": "add the new guy to the about page", "clear": false, "question": "What is the new team member's name, role, and photo or bio?"}
+{"text": "favicon missing in safari", "clear": true, "question": ""}
+{"text": "revert it", "clear": false, "question": "Which change or commit should be reverted?"}
+{"text": "why does the blog take like 10 min to build now??", "clear": true, "question": ""}
+{"text": "make our landing page look like the competitor one", "clear": false, "question": "Which competitor's landing page do you mean, and which parts should we copy: layout, style, or sections?"}
+{"text": "clean up the eslint warnings, there are hundreds", "clear": true, "question": ""}
+{"text": "add tracking", "clear": false, "question": "What kind of tracking do you want: Google Analytics, Plausible, Meta Pixel, or something else?"}
+{"text": "cookie consent banner", "clear": true, "question": ""}
+{"text": "fix the layout", "clear": false, "question": "Which page's layout is broken, and on what screen size?"}
+{"text": "pls remove the unused npm packages, node_modules is huge", "clear": true, "question": ""}
+{"text": "I am want that the contact page show map of our office, address is already in the footer", "clear": true, "question": ""}
+{"text": "links in the footer go to 404, the old /features urls. add redirects to the new pages", "clear": true, "question": ""}
+{"text": "fix teh logn buton on the pricing page, it dosnt go anywhere", "clear": true, "question": ""}
+{"text": "still broken pls fix", "clear": false, "question": "What's broken, and where do you see it?"}
+{"text": "ci's been failing on main since this morning, can you see what broke and fix it", "clear": true, "question": ""}
+{"text": "make the landing page pop more", "clear": false, "question": "What kind of change do you want on the landing page: new colors, animations, or a different layout?"}
+{"text": "add dark mode to the marketing site", "clear": true, "question": ""}
+{"text": "wher is the confg loded in the godot project", "clear": true, "question": ""}
+{"text": "do the thing we talked about for the boss fight", "clear": false, "question": "What change to the boss fight did you have in mind?"}
+{"text": "The player can jump forever if you spam space in the Unity build. Pretty sure the grounded check is off. Can you fix the infinite jump?", "clear": true, "question": ""}
+{"text": "update the enemies", "clear": false, "question": "What should change about the enemies: stats, behavior, or art?"}
+{"text": "can u add a sitemap.xml to the next site", "clear": true, "question": ""}
+{"text": "The marketing team sent over new copy yesterday. Can you put it in?", "clear": false, "question": "Can you paste the new copy and say which pages it goes on?"}
+{"text": "bump next to the latest 14.x and fix whatever breaks", "clear": true, "question": ""}
+{"text": "is there a reason the enemy spawner uses Update instead of a coroutine? if not switch it to a coroutine", "clear": true, "question": ""}
+{"text": "fix the bug Priya found in the save system", "clear": false, "question": "What bug did Priya find, and how do you trigger it?"}
+{"text": "add a 404 page that matches the rest of the site", "clear": true, "question": ""}
+{"text": "can you change the colors", "clear": false, "question": "Which colors should change, and to what?"}
+{"text": "rename the PlayerCtrl script to PlayerController and update all the refs", "clear": true, "question": ""}
+{"text": "the footer copyright still says 2023, make it pull the current year", "clear": true, "question": ""}
+{"text": "make the movement feel better", "clear": false, "question": "Better how: faster, snappier to stop and turn, or less floaty in the air?"}
+{"text": "godot keeps warning about unused variables in like every script, clean those up", "clear": true, "question": ""}
+{"text": "swap the font", "clear": false, "question": "Which font should it use instead?"}
+{"text": "add alt text to all the images on the about page that dont have any", "clear": true, "question": ""}
+{"text": "plz chnge teh price on the site", "clear": false, "question": "Which price should change, and what's the new amount?"}
+{"text": "Pause menu in the Godot game doesn't actually pause physics, enemies keep moving behind it. Fix please", "clear": true, "question": ""}
+{"text": "The client looked at the staging site last week and had a bunch of feedback. Go through it and apply the changes.", "clear": false, "question": "What was the client's feedback? Can you paste it here?"}
+{"text": "cn you add og:image meta tags to the blog posts", "clear": true, "question": ""}
+{"text": "wht does the SaveManager do when the save file is corrupted? just tell me dont change anything", "clear": true, "question": ""}
+{"text": "redo the shop screen", "clear": false, "question": "What should the new shop screen change: the layout, the visual style, or the buying flow?"}
+{"text": "the contact form submits twice if you double click. disable the button while its sending", "clear": true, "question": ""}
+{"text": "Design finally signed off on the new logo. Swap it in everywhere.", "clear": false, "question": "Can you share the new logo file or tell me where it is in the repo?"}
+{"text": "add unit tests for the inventory stacking logic", "clear": true, "question": ""}
+{"text": "mobile nav doesnt close after tapping a link?? fix", "clear": true, "question": ""}
+{"text": "balance the weapons", "clear": false, "question": "Which weapons feel off, and are they too strong or too weak?"}
+{"text": "We keep getting a NullReferenceException in AudioManager when switching scenes. It happens every time you go from the main menu to level 1. Can you track it down?", "clear": true, "question": ""}
+{"text": "same fix as last time but for the inventory", "clear": false, "question": "Which earlier fix do you mean?"}
+{"text": "remove the unused npm packages from the marketing site", "clear": true, "question": ""}
+{"text": "remove the old section from the homepage", "clear": false, "question": "Which homepage section should be removed?"}
+{"text": "add a lint step to the github actions workflow for the next site", "clear": true, "question": ""}
+{"text": "turn off the debug fps counter in release builds", "clear": true, "question": ""}
+{"text": "could you make the cookie banner stop showing up again after someone already clicked accept", "clear": true, "question": ""}
+{"text": "why does fct_daily_revenue double count refunds??", "clear": true, "question": ""}
+{"text": "fix teh nullref in PlayerController.Update when u respawn", "clear": true, "question": ""}
+{"text": "fix the query", "clear": false, "question": "Which query should I fix, and what's going wrong with it?"}
+{"text": "add an index on events.user_id, the funnel query is crawling", "clear": true, "question": ""}
+{"text": "wher is the warehouse conection string loaded", "clear": true, "question": ""}
+{"text": "make the boss fight better", "clear": false, "question": "What should change about the boss fight: harder, easier, better visuals, or something else?"}
+{"text": "rename dim_customer.cust_nm to customer_name and update everything downstream", "clear": true, "question": ""}
+{"text": "do the changes from yesterdays standup", "clear": false, "question": "Which changes were agreed at yesterday's standup?"}
+{"text": "dbt test failing on main, pls look", "clear": true, "question": ""}
+{"text": "update the revenue dashboard sql", "clear": false, "question": "What should change in the revenue dashboard SQL: a new metric, a fix to a number, or a performance improvement?"}
+{"text": "add a pause menu w resume and quit buttons", "clear": true, "question": ""}
+{"text": "can u fix the bug maria found in the inventory", "clear": false, "question": "What bug did Maria find in the inventory? What happens, and how do you trigger it?"}
+{"text": "convert stg_orders from a view to an incremental model", "clear": true, "question": ""}
+{"text": "add the new metric to the kpi model", "clear": false, "question": "Which metric should I add, and how is it calculated?"}
+{"text": "enemy spawner keeps spawning stuff inside walls sometimes, fix", "clear": true, "question": ""}
+{"text": "chnage the colrs", "clear": false, "question": "Which colors should change, where in the game, and what should they be?"}
+{"text": "is there a weekly active users by country model? add one if not", "clear": true, "question": ""}
+{"text": "upgrade the project to godot 4.3", "clear": true, "question": ""}
+{"text": "port it to the new schema", "clear": false, "question": "Which model or query should I move, and which schema is the new one?"}
+{"text": "bump coyote time in player.gd to 0.15s", "clear": true, "question": ""}
+{"text": "PROJ-412 follow up \u2014 same thing for the other level", "clear": false, "question": "What was done in PROJ-412, and which level should get the same change?"}
