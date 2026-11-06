@@ -195,7 +195,7 @@ impl Shell {
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
-                Entry::Talk(t) => self.talk_entry(&t).into_any_element(),
+                Entry::Talk(t) => self.talk_entry(&t, cx).into_any_element(),
             });
         }
         feed = feed.child(self.thread_intro(thread, &name, empty, total));
@@ -247,7 +247,7 @@ impl Shell {
     }
 
     /// A question asked in the thread, and the bot's answer under it.
-    fn talk_entry(&mut self, t: &store::Talk) -> Div {
+    fn talk_entry(&mut self, t: &store::Talk, cx: &mut Context<Self>) -> Div {
         let face = self.avatar(t.bot, 34.);
         let waiting = t.answer.is_none() && self.crew.asking_talk == Some(t.id);
         let accent = t.bot.accent();
@@ -327,10 +327,33 @@ impl Shell {
                                         .text_size(px(11.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
-                                        .child("Answers"),
+                                        .child(if t.bot == Member::Fin {
+                                            "Lead"
+                                        } else {
+                                            "Answers"
+                                        }),
                                 ),
                             )
-                            .child(answer),
+                            .child(answer)
+                            .when(!t.choices.is_empty(), |d| {
+                                let mut row = div().pt(px(4.)).flex().flex_wrap().gap(px(6.));
+                                for (k, choice) in t.choices.iter().enumerate() {
+                                    let said = choice.clone();
+                                    row = row.child(
+                                        ui::ghost(
+                                            ("talk-choice", t.id as usize * 16 + k),
+                                            choice.clone(),
+                                        )
+                                        .h(px(28.))
+                                        .on_click(
+                                            cx.listener(move |this, _, _, cx| {
+                                                this.hand_over(said.clone(), cx)
+                                            }),
+                                        ),
+                                    );
+                                }
+                                d.child(row)
+                            }),
                     ),
             )
     }

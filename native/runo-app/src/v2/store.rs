@@ -65,6 +65,9 @@ pub struct Talk {
     /// None while the bot is still reading the code.
     pub answer: Option<Said>,
     pub at: u64,
+    /// Quick answers Peek offers with a question back, as buttons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<String>,
 }
 
 impl Default for Talk {
@@ -77,6 +80,7 @@ impl Default for Talk {
             question: String::new(),
             answer: None,
             at: 0,
+            choices: Vec::new(),
         }
     }
 }
@@ -701,6 +705,29 @@ impl Store {
             t.name = name.to_string();
         }
         true
+    }
+
+    /// A thread's conversation so far, oldest first, as (who, words): what you
+    /// asked and what came back, for Peek to read a follow-up by.
+    pub fn recent(&self, folder: &str, thread: u64) -> Vec<(String, String)> {
+        let mut said: Vec<(u64, String, String)> = Vec::new();
+        for t in &self.talks {
+            if t.folder == folder && self.thread_for(folder, t.thread) == thread {
+                said.push((t.at, "you".into(), t.question.clone()));
+                if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
+                    said.push((t.at, t.bot.name().to_lowercase(), a.text.clone()));
+                }
+            }
+        }
+        for j in self.jobs_in(folder, thread) {
+            said.push((j.started, "you".into(), j.title.clone()));
+        }
+        said.sort_by_key(|s| s.0);
+        let n = said.len();
+        said.into_iter()
+            .skip(n.saturating_sub(12))
+            .map(|(_, who, words)| (who, words))
+            .collect()
     }
 
     /// Who's in a thread: Peek, the bots you brought in, and any bot that has

@@ -1002,7 +1002,7 @@ impl Shell {
         // whatever its words would otherwise suggest.
         let mention = (!text.starts_with('/')).then(|| mentioned(&text)).flatten();
         let Some((who, rest)) = mention else {
-            return self.hand_over_inner(text, cx);
+            return self.read_first(text, cx);
         };
         if self.place == Place::Today {
             let here = self.crew.store.thread_here();
@@ -1021,6 +1021,60 @@ impl Shell {
         self.mode = mode;
         self.mode_pinned = pinned;
         self.crew.store.save();
+    }
+
+    /// Peek reads a message in a thread before anyone works on it: small talk
+    /// it answers itself, a question goes to an engine to answer here, a vague
+    /// ask gets a question back, and real work goes to the bot it's for. A
+    /// slash command, a picked bot or a pinned kind of work skips the read.
+    fn read_first(&mut self, text: String, cx: &mut Context<Self>) {
+        let skip = text.starts_with('/')
+            || self.place != Place::Today
+            || self.target.is_some()
+            || self.mode_pinned
+            || self.crew.store.folder().is_none();
+        if skip {
+            return self.hand_over_inner(text, cx);
+        }
+        let st = Self::app_settings(cx);
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let recent = self
+            .crew
+            .store
+            .recent(&folder, self.crew.store.thread_here());
+        match brain::front::read(&st, &text, &recent) {
+            brain::front::Front::Chat { reply } => {
+                self.crew.peek_says(text, reply, Vec::new());
+                cx.notify();
+            }
+            brain::front::Front::AskBack { question, choices } => {
+                self.crew.peek_says(text, question, choices);
+                cx.notify();
+            }
+            brain::front::Front::Answer { question, .. } => {
+                if !self.sample_guard(cx) {
+                    let who = self.ask_who();
+                    self.crew.ask_in_thread(&st, who, question);
+                }
+                cx.notify();
+            }
+            brain::front::Front::Hand(route) => {
+                let crew = Member::all();
+                let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
+                self.target = crew.contains(&route.bot).then_some(route.bot);
+                self.mode = route.mode;
+                self.mode_pinned = true;
+                self.hand_over_inner(text, cx);
+                self.target = target;
+                self.mode = mode;
+                self.mode_pinned = pinned;
+            }
+        }
     }
 
     fn hand_over_inner(&mut self, text: String, cx: &mut Context<Self>) {

@@ -389,6 +389,7 @@ pub fn seed() -> Store {
                 "Claude Code \u{b7} 9s".into(),
             )),
             at: t - 1_500,
+            choices: Vec::new(),
         }],
         folders: vec![folder.clone(), other("api"), other("docs-site")],
         current: 0,

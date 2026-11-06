@@ -1152,6 +1152,7 @@ impl Runtime {
             question: text.clone(),
             answer: None,
             at: store::now(),
+            choices: Vec::new(),
         };
         if self.asking.is_some() {
             talk.answer = Some(Said::note(
@@ -1167,6 +1168,30 @@ impl Runtime {
             }
         }
         self.store.talks.push(talk);
+        self.store.save();
+    }
+
+    /// Peek says something in the thread you're in without an engine: a reply
+    /// to small talk, or a question back with quick answers.
+    pub fn peek_says(&mut self, text: String, reply: String, choices: Vec<String>) {
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            return;
+        };
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let thread = self.store.thread_here();
+        self.store.talks.push(Talk {
+            id,
+            folder: folder.path,
+            thread,
+            bot: Member::Fin,
+            question: text,
+            answer: Some(Said {
+                text: reply,
+                ..Default::default()
+            }),
+            at: store::now(),
+            choices,
+        });
         self.store.save();
     }
 
