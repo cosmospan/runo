@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use crate::settings::AppSettings;
 
 use super::data::{Member, Mode};
-use super::store::{self, Said, Status, Store};
+use super::store::{self, Said, Status, Store, Talk};
 use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 
 type Landing = Receiver<Result<(), String>>;
@@ -36,6 +36,8 @@ pub struct Runtime {
     pub runners: Vec<jobs::Runner>,
     /// A question on its way to a bot's engine.
     pub asking: Option<engine::Ask>,
+    /// The thread question the answer being read goes to, if it's for one.
+    pub asking_talk: Option<u64>,
     /// What the crew wants said, oldest first, until a client takes it.
     pub notes: Vec<String>,
     /// When the store was last kept while jobs ran.
@@ -65,6 +67,7 @@ impl Runtime {
             store,
             runners: Vec::new(),
             asking: None,
+            asking_talk: None,
             notes: Vec::new(),
             saved: Instant::now(),
             checking: Vec::new(),
@@ -1113,6 +1116,52 @@ impl Runtime {
         self.store.save();
     }
 
+    /// Asks `who` a question in the thread you're in. The answer lands in the
+    /// thread, with the thread's earlier questions as context.
+    pub fn ask_in_thread(&mut self, st: &AppSettings, who: Member, text: String) {
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            return;
+        };
+        let thread = self.store.thread_here();
+        let mut history: Vec<(bool, String)> = Vec::new();
+        for t in self
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.folder == folder.path && t.thread == thread && t.bot == who)
+        {
+            if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
+                history.push((true, t.question.clone()));
+                history.push((false, a.text.clone()));
+            }
+        }
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let mut talk = Talk {
+            id,
+            folder: folder.path.clone(),
+            thread,
+            bot: who,
+            question: text.clone(),
+            answer: None,
+            at: store::now(),
+        };
+        if self.asking.is_some() {
+            talk.answer = Some(Said::note(
+                "One question at a time: ask again when the last answer is in.",
+            ));
+        } else {
+            match engine::Ask::start(st, who, &folder, &text, &history) {
+                Ok(ask) => {
+                    self.asking = Some(ask);
+                    self.asking_talk = Some(id);
+                }
+                Err(why) => talk.answer = Some(Said::note(why)),
+            }
+        }
+        self.store.talks.push(talk);
+        self.store.save();
+    }
+
     // ---------- the poll ----------
 
     /// Moves everything along: answers and job output that have arrived, checks
@@ -1124,7 +1173,7 @@ impl Runtime {
             if let Some(reply) = ask.poll() {
                 let (who, engine) = (ask.who, ask.engine.clone());
                 let secs = ask.started.elapsed().as_secs_f32();
-                self.store.chats.entry(who).or_default().push(match reply {
+                let said = match reply {
                     engine::Reply::Answer(text) if !text.is_empty() => {
                         Said::bot(text, format!("{engine} · {secs:.0}s"))
                     }
@@ -1132,7 +1181,16 @@ impl Runtime {
                         Said::note("The engine answered with nothing. Try asking again.")
                     }
                     engine::Reply::Failed(why) => Said::note(why),
-                });
+                };
+                // A thread question's answer goes back to its thread.
+                match self
+                    .asking_talk
+                    .take()
+                    .and_then(|id| self.store.talks.iter_mut().find(|t| t.id == id))
+                {
+                    Some(t) => t.answer = Some(said),
+                    None => self.store.chats.entry(who).or_default().push(said),
+                }
                 self.asking = None;
                 self.store.save();
             }

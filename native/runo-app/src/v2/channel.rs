@@ -37,12 +37,14 @@ const COLUMN: f32 = 760.;
 enum Entry {
     Job(Box<Job>),
     Plan(Goal),
+    Talk(store::Talk),
 }
 
 impl Entry {
     fn at(&self) -> u64 {
         match self {
             Entry::Job(j) => j.started,
+            Entry::Talk(t) => t.at,
             Entry::Plan(g) => g.started,
         }
     }
@@ -164,6 +166,18 @@ impl Shell {
                 .cloned()
                 .map(Entry::Plan),
         );
+        entries.extend(
+            self.crew
+                .store
+                .talks
+                .iter()
+                .filter(|t| {
+                    t.folder == folder.path
+                        && self.crew.store.thread_for(&folder.path, t.thread) == thread
+                })
+                .cloned()
+                .map(Entry::Talk),
+        );
         entries.sort_by_key(|e| e.at());
         let total = entries.len();
         // The last 30 things, newest at the bottom beside the composer.
@@ -181,6 +195,7 @@ impl Shell {
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
+                Entry::Talk(t) => self.talk_entry(&t).into_any_element(),
             });
         }
         feed = feed.child(self.thread_intro(thread, &name, empty, total));
@@ -229,6 +244,95 @@ impl Shell {
             .into_any_element();
         let pick = None;
         self.split(pick, page, cx)
+    }
+
+    /// A question asked in the thread, and the bot's answer under it.
+    fn talk_entry(&mut self, t: &store::Talk) -> Div {
+        let face = self.avatar(t.bot, 34.);
+        let waiting = t.answer.is_none() && self.crew.asking_talk == Some(t.id);
+        let accent = t.bot.accent();
+        let answer: Div = match &t.answer {
+            Some(a) if a.note => super::live::note_line(&a.text),
+            Some(a) => div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .line_height(px(21.))
+                        .text_color(c(ui::body()))
+                        .child(super::live::plain(&a.text)),
+                )
+                .when_some(a.via.clone(), |d, via| {
+                    d.child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(c(ui::faint()))
+                            .child(via),
+                    )
+                }),
+            None if waiting => {
+                let secs = self
+                    .crew
+                    .asking
+                    .as_ref()
+                    .map(|a| a.started.elapsed().as_secs())
+                    .unwrap_or(0);
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(super::live::typing(self.now()))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::muted()))
+                            .child(format!("reading the code \u{b7} {secs}s")),
+                    )
+            }
+            None => super::live::note_line("No answer came back. Ask again."),
+        };
+        div()
+            .flex()
+            .flex_col()
+            .child(mine(t.question.clone(), t.at))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(12.))
+                    .py(px(8.))
+                    .child(
+                        div()
+                            .size(px(34.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(face),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                byline(t.bot.name(), t.at).child(
+                                    div()
+                                        .px(px(6.))
+                                        .rounded(px(5.))
+                                        .bg(ca(accent, 0.12))
+                                        .text_size(px(11.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
+                                        .child("Answers"),
+                                ),
+                            )
+                            .child(answer),
+                    ),
+            )
     }
 
     /// The top of a thread: what it's for and who's in it.
@@ -939,6 +1043,9 @@ impl Shell {
             "Renames this thread".to_string()
         } else if value.starts_with("/archive") {
             "Archives this thread".to_string()
+        } else if value.starts_with("/ask") {
+            let who = Member::doer_for(Mode::Ask).unwrap_or(Member::Fin);
+            format!("{} answers here", who.name())
         } else if value.starts_with("/race") {
             // A race runs as asked, plan-first or not, as hand_over does.
             format!("{} races it", target.name())

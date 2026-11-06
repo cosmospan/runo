@@ -376,6 +376,20 @@ pub fn seed() -> Store {
             thread(3, "flaky-tests", vec![Member::Fixer]),
         ],
         thread_now: 1,
+        talks: vec![super::store::Talk {
+            id: 1,
+            folder: folder.path.clone(),
+            thread: 1,
+            bot: Member::Explainer,
+            question: "Where does the tax get added to the total?".into(),
+            answer: Some(super::store::Said::bot(
+                "In src/checkout/total.ts: totalWithTax() adds it after discounts, \
+                 so gift cards and coupons come off before tax is worked out."
+                    .into(),
+                "Claude Code \u{b7} 9s".into(),
+            )),
+            at: t - 1_500,
+        }],
         folders: vec![folder.clone(), other("api"), other("docs-site")],
         current: 0,
         jobs,

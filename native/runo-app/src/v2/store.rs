@@ -44,9 +44,41 @@ pub struct Store {
     pub threads: Vec<Thread>,
     /// The thread new work goes to, by id; 0 is the project's #general.
     pub thread_now: u64,
+    /// Questions asked in threads, with the answers that came back.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub talks: Vec<Talk>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+}
+
+/// A question asked in a thread and the bot's answer, kept in the thread.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Talk {
+    pub id: u64,
+    /// The project's folder path.
+    pub folder: String,
+    pub thread: u64,
+    pub bot: Member,
+    pub question: String,
+    /// None while the bot is still reading the code.
+    pub answer: Option<Said>,
+    pub at: u64,
+}
+
+impl Default for Talk {
+    fn default() -> Self {
+        Talk {
+            id: 0,
+            folder: String::new(),
+            thread: 0,
+            bot: Member::Explainer,
+            question: String::new(),
+            answer: None,
+            at: 0,
+        }
+    }
 }
 
 /// A # thread inside a project: a group chat with some bots, around one piece

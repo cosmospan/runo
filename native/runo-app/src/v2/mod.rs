@@ -1104,6 +1104,15 @@ impl Shell {
         self.offer = None;
         let doer = self.doer();
         if self.mode == Mode::Ask {
+            // Asked in a thread: the answer comes back in the thread.
+            if self.place == Place::Today {
+                if !self.sample_guard(cx) {
+                    let st = Self::app_settings(cx);
+                    self.crew.ask_in_thread(&st, doer, text);
+                }
+                cx.notify();
+                return;
+            }
             self.go(Place::Chat(doer), cx);
             self.ask(doer, text, cx);
             return;
@@ -1128,8 +1137,29 @@ impl Shell {
     fn doer(&self) -> Member {
         self.target
             .filter(|t| t.mode() == self.mode && Member::all().contains(t))
+            .or_else(|| self.thread_doer())
             .or_else(|| Member::doer_for(self.mode))
             .unwrap_or(Member::for_mode(self.mode))
+    }
+
+    /// In a thread with its own bots, the one of them that does this kind of
+    /// work, so the thread's work goes to the bots you put in it.
+    fn thread_doer(&self) -> Option<Member> {
+        if self.place != Place::Today {
+            return None;
+        }
+        let here = self.crew.store.thread_here();
+        let t = self.crew.store.threads.iter().find(|t| t.id == here)?;
+        let crew = Member::all();
+        t.bots
+            .iter()
+            .copied()
+            // Shipper and Peek take no jobs of their own, as in doer_for.
+            .find(|b| {
+                !matches!(b, Member::Shipper | Member::Fin)
+                    && b.mode() == self.mode
+                    && crew.contains(b)
+            })
     }
 
     /// Adds the bot in the maker to the crew.
