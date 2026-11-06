@@ -145,6 +145,7 @@ impl Shell {
         };
         let thread = self.crew.store.thread_here();
         let name = self.crew.store.thread_label(thread);
+        self.crew.store.mark_seen(&folder.path, thread);
         let mut entries: Vec<Entry> = self
             .crew
             .store
@@ -238,6 +239,7 @@ impl Shell {
                             .gap(px(8.))
                             .children(offer)
                             .children(self.slash_strip(cx))
+                            .children(self.hash_strip(cx))
                             .child(self.thread_composer(&name, cx)),
                     ),
             )
@@ -288,15 +290,17 @@ impl Shell {
                         div()
                             .text_size(px(12.5))
                             .text_color(c(ui::muted()))
-                            .child(format!("reading the code \u{b7} {secs}s")),
+                            .child(format!("thinking \u{b7} {secs}s")),
                     )
             }
             None => super::live::note_line("No answer came back. Ask again."),
         };
+        let refs = self.ref_chips(t.id, &t.question, cx);
         div()
             .flex()
             .flex_col()
             .child(mine(t.question.clone(), t.at))
+            .children(refs)
             .child(
                 div()
                     .flex()
@@ -979,6 +983,136 @@ impl Shell {
     }
 
     /// While the composer starts with `/`: the commands that match, to click.
+    /// Threads to point at while you type #: pick one and its name goes in.
+    fn hash_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let text = self.composer.read(cx).value().to_string();
+        if text.ends_with(char::is_whitespace) {
+            return None;
+        }
+        let last = text.split_whitespace().last()?.to_string();
+        let typed = last.strip_prefix('#')?.to_lowercase();
+        let folder = self.crew.store.folder()?.path.clone();
+        let mut names: Vec<String> = vec!["general".into()];
+        names.extend(
+            self.crew
+                .store
+                .threads_in(&folder)
+                .into_iter()
+                .map(|t| t.name.clone()),
+        );
+        let matches: Vec<String> = names
+            .into_iter()
+            .filter(|n| n.starts_with(&typed))
+            .take(6)
+            .collect();
+        if matches.is_empty() {
+            return None;
+        }
+        let head = text[..text.len() - last.len()].to_string();
+        let mut row = div().flex().flex_wrap().gap(px(6.));
+        for (i, n) in matches.into_iter().enumerate() {
+            let head = head.clone();
+            row = row.child(
+                div()
+                    .id(("hash", i))
+                    .h(px(30.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .bg(c(ui::raised()))
+                    .cursor_pointer()
+                    .hover(|s| s.border_color(c(ui::line_hi())))
+                    .child(div().text_color(c(ui::faint())).child("#"))
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(ui::ink()))
+                            .child(n.clone()),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let text = format!("{head}#{n} ");
+                        this.composer.update(cx, |i, cx| {
+                            ui::put_text(i, text, window, cx);
+                            i.focus(window, cx);
+                        });
+                        cx.notify();
+                    })),
+            );
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child("Point at a thread and Peek reads it. Send just #name to go there."),
+                )
+                .child(row),
+        )
+    }
+
+    /// The threads a message points at, as chips that take you there.
+    fn ref_chips(&mut self, key: u64, text: &str, cx: &mut Context<Self>) -> Option<Div> {
+        let folder = self.crew.store.folder()?.path.clone();
+        let here = self.crew.store.thread_here();
+        let refs: Vec<u64> = self
+            .crew
+            .store
+            .thread_refs(&folder, text)
+            .into_iter()
+            .filter(|t| *t != here)
+            .collect();
+        if refs.is_empty() {
+            return None;
+        }
+        let mut row = div()
+            .pl(px(46.))
+            .pb(px(2.))
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap(px(6.))
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .text_color(c(ui::faint()))
+                    .child("Read from"),
+            );
+        for t in refs {
+            let name = self.crew.store.thread_label(t);
+            row = row.child(
+                div()
+                    .id(SharedString::from(format!("ref-{key}-{t}")))
+                    .h(px(22.))
+                    .px(px(8.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.))
+                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.08)))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(ui::t_violet()))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.16))))
+                    .child(format!("#{name}"))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.crew.store.thread_now = t;
+                        this.crew.store.save();
+                        this.go(Place::Today, cx);
+                    })),
+            );
+        }
+        Some(row)
+    }
+
     fn slash_strip(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let text = self.composer.read(cx).value().to_string();
         let typed = text.trim_start();

@@ -260,8 +260,16 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
             );
         }
+        let here_folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
         for (id, name, busy, asks) in rows {
             let on = in_thread && id == here;
+            // Something new since you last looked, in a thread you're not in.
+            let unread = !on && self.crew.store.unread(&here_folder, id);
             threads = threads.child(
                 row(("side-thread", id as usize), on)
                     .child(
@@ -273,7 +281,19 @@ impl Shell {
                             .text_color(c(if on { ui::ink() } else { ui::faint() }))
                             .child("#"),
                     )
-                    .child(div().flex_1().min_w_0().truncate().child(name))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .when(unread, |d| {
+                                d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
+                            })
+                            .child(name),
+                    )
+                    .when(unread && asks == 0 && busy == 0, |d| {
+                        d.child(div().size(px(7.)).rounded_full().bg(c(ui::VIOLET)))
+                    })
                     .when(asks > 0, |d| d.child(count(asks, Some(ui::ask_tone()))))
                     .when(busy > 0, |d| {
                         d.child(

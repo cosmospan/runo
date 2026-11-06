@@ -1043,10 +1043,21 @@ impl Shell {
             .folder()
             .map(|f| f.path.clone())
             .unwrap_or_default();
-        let recent = self
-            .crew
-            .store
-            .recent(&folder, self.crew.store.thread_here());
+        // Just "#name": go to that thread, as in Slack.
+        let refs = self.crew.store.thread_refs(&folder, &text);
+        if text.split_whitespace().count() == 1 && refs.len() == 1 {
+            self.crew.store.thread_now = refs[0];
+            self.crew.store.save();
+            self.go(Place::Today, cx);
+            return;
+        }
+        // Threads named with # are read too, before this one.
+        let here = self.crew.store.thread_here();
+        let mut recent = Vec::new();
+        for other in refs.iter().filter(|t| **t != here) {
+            recent.extend(self.crew.store.recent(&folder, *other));
+        }
+        recent.extend(self.crew.store.recent(&folder, here));
         match brain::front::read(&st, &text, &recent) {
             brain::front::Front::Chat { reply } => {
                 self.crew.peek_says(text, reply, Vec::new());

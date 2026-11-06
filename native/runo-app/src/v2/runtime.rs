@@ -1132,6 +1132,29 @@ impl Runtime {
         };
         let thread = self.store.thread_here();
         let mut history: Vec<(bool, String)> = Vec::new();
+        // Threads named with #: the bot reads what was said there first.
+        for other in self.store.thread_refs(&folder.path, &text) {
+            if other == thread {
+                continue;
+            }
+            let said = self.store.recent(&folder.path, other);
+            if said.is_empty() {
+                continue;
+            }
+            let label = self.store.thread_label(other);
+            let lines: Vec<String> = said
+                .iter()
+                .map(|(who, words)| format!("{who}: {words}"))
+                .collect();
+            history.push((
+                true,
+                format!(
+                    "For context, here is what was said in #{label}:\n{}",
+                    lines.join("\n")
+                ),
+            ));
+            history.push((false, format!("Got it, I've read #{label}.")));
+        }
         for t in self
             .store
             .talks

@@ -376,6 +376,11 @@ pub fn seed() -> Store {
             thread(3, "flaky-tests", vec![Member::Fixer]),
         ],
         thread_now: 1,
+        // #order-history has news you haven't looked at; the rest are read.
+        seen_at: [(0, t + 10), (1, t + 10), (2, 1), (3, t + 10)]
+            .into_iter()
+            .map(|(id, at)| (format!("{}#{id}", folder.path), at))
+            .collect(),
         talks: vec![super::store::Talk {
             id: 1,
             folder: folder.path.clone(),

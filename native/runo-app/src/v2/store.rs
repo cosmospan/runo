@@ -44,6 +44,9 @@ pub struct Store {
     pub threads: Vec<Thread>,
     /// The thread new work goes to, by id; 0 is the project's #general.
     pub thread_now: u64,
+    /// When you last looked at each thread, by "folder#id", for unread dots.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub seen_at: HashMap<String, u64>,
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<Talk>,
@@ -730,6 +733,59 @@ impl Store {
             .collect()
     }
 
+    /// A thread of a project by its name; "general" is 0.
+    pub fn thread_named(&self, folder: &str, name: &str) -> Option<u64> {
+        let name = thread_name(name);
+        if name == "general" {
+            return Some(0);
+        }
+        self.threads
+            .iter()
+            .find(|t| t.folder == folder && t.name == name && !t.archived)
+            .map(|t| t.id)
+    }
+
+    /// The threads a message points at with #name, in order, each once.
+    pub fn thread_refs(&self, folder: &str, text: &str) -> Vec<u64> {
+        let mut out = Vec::new();
+        for word in text.split_whitespace() {
+            let Some(name) = word.strip_prefix('#') else {
+                continue;
+            };
+            let name = name.trim_end_matches(|c: char| !c.is_alphanumeric());
+            if let Some(id) = self.thread_named(folder, name) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+
+    /// You're looking at a thread now: it has nothing unread.
+    pub fn mark_seen(&mut self, folder: &str, thread: u64) {
+        self.seen_at.insert(format!("{folder}#{thread}"), now());
+    }
+
+    /// Something happened in a thread since you last looked: an answer came
+    /// back, or a job started or ended there.
+    pub fn unread(&self, folder: &str, thread: u64) -> bool {
+        let Some(&seen) = self.seen_at.get(&format!("{folder}#{thread}")) else {
+            return false;
+        };
+        let jobs = self
+            .jobs_in(folder, thread)
+            .into_iter()
+            .any(|j| j.started > seen || j.ended.is_some_and(|e| e > seen));
+        let talks = self.talks.iter().any(|t| {
+            t.folder == folder
+                && self.thread_for(folder, t.thread) == thread
+                && t.answer.is_some()
+                && t.at > seen
+        });
+        jobs || talks
+    }
+
     /// Who's in a thread: Peek, the bots you brought in, and any bot that has
     /// done work or answered there. Nobody else until they're needed.
     pub fn members(&self, folder: &str, thread: u64) -> Vec<Member> {
@@ -910,6 +966,17 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(s.members(&folder.path, 0), vec![Member::Fin, Member::Fixer]);
+    }
+
+    #[test]
+    fn hash_names_point_at_threads() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().path.clone();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        assert_eq!(
+            s.thread_refs(&folder, "see #checkout, and #general. Not #nope"),
+            vec![id, 0]
+        );
     }
 
     #[test]
