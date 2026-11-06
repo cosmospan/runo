@@ -38,6 +38,27 @@ pub fn main(args: &[String]) -> Result<String, String> {
             if rest.trim().is_empty() {
                 return Err("usage: squad brain why <words...>".into());
             }
+            // What Peek does with it, before any bot is picked.
+            match super::front::read(&st, &rest, &[]) {
+                super::front::Front::Chat { reply } => {
+                    return Ok(format!("Peek replies itself, no job:\n{reply}"))
+                }
+                super::front::Front::AskBack { question, choices } => {
+                    let mut out = format!("Peek asks first, no job yet:\n{question}");
+                    if !choices.is_empty() {
+                        out.push_str(&format!("\n[{}]", choices.join("] [")));
+                    }
+                    return Ok(out);
+                }
+                super::front::Front::Answer { code, .. } => {
+                    return Ok(format!(
+                        "{} answers it, read-only, with no job{}.",
+                        super::front::answerer(&crew).name(),
+                        if code { ", reading the project" } else { "" }
+                    ))
+                }
+                super::front::Front::Hand(_) => {}
+            }
             // From a terminal, wait for Squad's own server to load when the
             // rules aren't sure, rather than answering with the rules.
             if route::built_in(&rest, &crew).sure < route::Route::SURE {

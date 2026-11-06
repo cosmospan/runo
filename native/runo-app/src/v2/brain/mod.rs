@@ -1,6 +1,8 @@
 //! Squad Code's own intelligence layer: the small decisions the crew makes for
 //! itself, without asking a coding agent.
 //!
+//! - [`front`]: every message first: small talk Peek answers itself, a
+//!   question for an engine, a question back, or work for a bot.
 //! - [`route`]: which bot, and what kind of job, a sentence the person typed is.
 //! - [`place`]: whether a job runs on this computer or on the person's server,
 //!   and on which engine, with the reason said in plain words.
@@ -21,6 +23,7 @@
 //! that model, in the same prompt format the model is asked in.
 
 pub mod cli;
+pub mod front;
 pub mod helper;
 pub mod ideas;
 pub mod model;

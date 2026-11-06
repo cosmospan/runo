@@ -1571,6 +1571,9 @@ impl Shell {
     /// What a bot in the sidebar shows: its real state when it has one (answering,
     /// working, waiting on you, just done), else an idle of its own that changes
     /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
+    // Unused since the split view (#15) replaced the sidebar crew list that
+    // called it; kept for the Crew Chat sidebar to pick up.
+    #[allow(dead_code)]
     fn side_mood(&self, who: Member) -> Mood {
         let mood = self.mood(who);
         if mood != Mood::Signature {
@@ -2014,6 +2017,7 @@ pub fn open_window(cx: &mut App) {
 /// An idle bot's mood for the moment: mostly hovering, now and then a wave,
 /// and dozing off once the person has been away a while. Each bot keeps its own
 /// rhythm, picked from `seed`.
+#[allow(dead_code)]
 fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
     if away_secs > 120 {
         return Mood::Asleep;
