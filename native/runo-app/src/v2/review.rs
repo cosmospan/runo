@@ -94,6 +94,7 @@ impl Shell {
             .py(px(12.))
             .flex()
             .items_center()
+            .flex_wrap()
             .gap(px(10.))
             .border_b_1()
             .border_color(c(ui::line()))
@@ -323,6 +324,7 @@ impl Shell {
             .py(px(12.))
             .flex()
             .items_center()
+            .flex_wrap()
             .gap(px(8.))
             .border_t_1()
             .border_color(c(ui::line()))
@@ -342,6 +344,7 @@ impl Shell {
             .child(
                 div()
                     .flex_1()
+                    .min_w(px(160.))
                     .text_size(px(12.))
                     .text_color(c(ui::faint()))
                     .child("Or write below to send it back with changes."),

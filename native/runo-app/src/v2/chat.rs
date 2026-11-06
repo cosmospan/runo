@@ -211,7 +211,7 @@ impl Shell {
                             this.set_mode(mode, window, cx);
                             this.target = Some(doer);
                             this.composer
-                                .update(cx, |i, cx| i.set_value(q.clone(), window, cx));
+                                .update(cx, |i, cx| ui::put_text(i, q.clone(), window, cx));
                             this.go(Place::Today, cx);
                             this.say(
                                 "It's in the box on Today. Edit it if you like, then press Enter.",

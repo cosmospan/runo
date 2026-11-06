@@ -971,6 +971,27 @@ impl Shell {
         .detach();
     }
 
+    /// Puts a thread away: its jobs show in #general from then on, and making a
+    /// thread with its name brings it back.
+    pub(super) fn archive_thread(&mut self, id: u64, cx: &mut Context<Self>) {
+        if id == 0 {
+            self.say("#general always stays. Archive any other thread.");
+            return;
+        }
+        let name = self.crew.store.thread_label(id);
+        if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == id) {
+            t.archived = true;
+        }
+        if self.crew.store.thread_now == id {
+            self.crew.store.thread_now = 0;
+        }
+        self.crew.store.save();
+        self.say(format!(
+            "Archived #{name}. Its jobs are in #general now; /thread {name} brings it back."
+        ));
+        self.go(Place::Today, cx);
+    }
+
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
@@ -1014,6 +1035,26 @@ impl Shell {
                     self.go(Place::Today, cx);
                     return;
                 }
+                "rename" => {
+                    let now = self.crew.store.thread_now;
+                    let name = store::thread_name(&arg);
+                    if now == 0 {
+                        self.say("#general keeps its name. Rename any other thread.");
+                    } else if name.is_empty() || name == "general" {
+                        self.say("Give the new name, like /rename gift cards.");
+                    } else if self.crew.store.rename_thread(now, &name) {
+                        self.crew.store.save();
+                        self.say(format!("Renamed to #{name}."));
+                    } else {
+                        self.say(format!("There's already a #{name} in this project."));
+                    }
+                    cx.notify();
+                    return;
+                }
+                "archive" => {
+                    self.archive_thread(self.crew.store.thread_now, cx);
+                    return;
+                }
                 "plan" => plan = true,
                 "race" => race = 2,
                 "ask" => {
@@ -1022,7 +1063,7 @@ impl Shell {
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /ask or /thread."
+                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename or /archive."
                     ));
                     return;
                 }
@@ -1172,7 +1213,7 @@ impl Shell {
     pub(super) fn skip_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(o) = self.offer.take() else { return };
         self.composer
-            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+            .update(cx, |i, cx| ui::put_text(i, o.text, window, cx));
         cx.notify();
     }
 
@@ -1181,7 +1222,7 @@ impl Shell {
     pub(super) fn make_for_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(o) = self.offer.take() else { return };
         self.composer
-            .update(cx, |i, cx| i.set_value(o.text, window, cx));
+            .update(cx, |i, cx| ui::put_text(i, o.text, window, cx));
         if Member::KINDS.contains(&o.who) {
             self.maker_like = o.who;
         }
@@ -1320,6 +1361,11 @@ impl Shell {
 
     /// Goes to what starting something opened.
     fn open(&mut self, opened: runtime::Opened, cx: &mut Context<Self>) {
+        // Asked in a thread: the job's card shows up right there, so stay.
+        if self.place == Place::Today {
+            cx.notify();
+            return;
+        }
         let place = match opened {
             runtime::Opened::Job(id) | runtime::Opened::Busy(id) => Place::Live(id),
             runtime::Opened::Race(id) => Place::Race(id),

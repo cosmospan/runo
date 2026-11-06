@@ -800,7 +800,7 @@ impl Shell {
                             .bg(c(super::theme::mix(ui::bg(), p.color, 0.12)))
                             .text_size(px(11.))
                             .font_weight(FontWeight::BOLD)
-                            .text_color(c(super::theme::mix(p.color, 0x000000, 0.25)))
+                            .text_color(c(super::theme::mix(p.color, ui::ink(), 0.25)))
                             .child(p.mark),
                     )
                     .child(
@@ -930,7 +930,7 @@ impl Shell {
                     .items_center()
                     .justify_center()
                     .rounded(px(8.))
-                    .bg(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.14)))
+                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.14)))
                     .text_size(px(11.))
                     .font_weight(FontWeight::BOLD)
                     .text_color(c(ui::t_violet()))

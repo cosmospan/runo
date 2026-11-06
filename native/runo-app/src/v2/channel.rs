@@ -18,11 +18,16 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The commands the composer knows, with what each does.
-pub(super) const COMMANDS: [(&str, &str); 4] = [
+pub(super) const COMMANDS: [(&str, &str); 6] = [
     ("/plan", "Peek plans it first, you press Start"),
     ("/race", "Try it on two engines, keep the best"),
     ("/ask", "A question, no code changes"),
     ("/thread", "Start a new thread: /thread gift cards @Builder"),
+    ("/rename", "Rename this thread"),
+    (
+        "/archive",
+        "Put this thread away; its jobs move to #general",
+    ),
 ];
 
 /// How wide the chat column reads at most.
@@ -106,7 +111,7 @@ fn mine(text: String, at: u64) -> Div {
                 .items_center()
                 .justify_center()
                 .rounded(px(10.))
-                .bg(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.14)))
+                .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.14)))
                 .text_color(c(ui::t_violet()))
                 .text_size(px(13.))
                 .font_weight(FontWeight::BOLD)
@@ -328,7 +333,10 @@ impl Shell {
         let frac = j.progress().map(|(d, n)| d as f32 / n.max(1) as f32);
         let accent = j.bot.accent();
         let said = match j.status {
-            Status::Running => format!("On it. {}.", j.mode.label()),
+            Status::Running => match j.progress() {
+                Some((_, n)) if n > 1 => format!("On it. {n} steps, I'll post when it's done."),
+                _ => "On it. I'll post when it's done.".to_string(),
+            },
             Status::Review => "Done. The changes wait for your OK.".to_string(),
             Status::Done => j
                 .last_words()
@@ -359,7 +367,14 @@ impl Shell {
         let added: usize = j.changes.iter().map(|c| c.added).sum();
         let removed: usize = j.changes.iter().map(|c| c.removed).sum();
         let review = j.status == Status::Review;
-        let approve = review.then(|| self.approve_label(j));
+        // A race shows as one card: you pick the winner side by side, not here.
+        let tries = if j.race != 0 {
+            self.tries(j.race).len()
+        } else {
+            0
+        };
+        let racing = tries > 1;
+        let approve = (review && !racing).then(|| self.approve_label(j));
         let failed_checks = j.checks.iter().filter(|c| !c.ok).count();
 
         let head = div()
@@ -490,16 +505,36 @@ impl Shell {
                     .truncate()
                     .text_size(px(12.))
                     .text_color(c(ui::faint()))
-                    .child(format!("#{id} \u{b7} {}", j.engine)),
+                    .child(if racing {
+                        format!("Race of {tries} engines")
+                    } else {
+                        format!("#{id} \u{b7} {}", j.engine)
+                    }),
             )
-            .child(
-                ui::ghost(
-                    ("thread-open", id as usize),
-                    if running { "Open live" } else { "Open" },
-                )
-                .h(px(28.))
-                .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
-            );
+            .map(|d| {
+                if racing {
+                    let race = j.race;
+                    d.child(
+                        ui::solid(
+                            ("thread-compare", id as usize),
+                            format!("Compare {tries} tries"),
+                        )
+                        .h(px(28.))
+                        .on_click(
+                            cx.listener(move |this, _, _, cx| this.go(Place::Race(race), cx)),
+                        ),
+                    )
+                } else {
+                    d.child(
+                        ui::ghost(
+                            ("thread-open", id as usize),
+                            if running { "Open live" } else { "Open" },
+                        )
+                        .h(px(28.))
+                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                    )
+                }
+            });
         if running {
             actions = actions.child(
                 ui::ghost(("thread-stop", id as usize), "Stop")
@@ -560,7 +595,7 @@ impl Shell {
                                 .bg(ca(accent, 0.12))
                                 .text_size(px(10.5))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(super::theme::mix(accent, 0x000000, 0.35)))
+                                .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
                                 .child(j.bot.role().to_string()),
                         ),
                     )
@@ -689,7 +724,7 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .bg(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.07)))
+                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.07)))
                     .child(
                         Icon::new(IconName::Sparkles)
                             .size(px(15.))
@@ -854,8 +889,8 @@ impl Shell {
                     .border_1()
                     .map(|d| {
                         if i == 0 {
-                            d.bg(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.08)))
-                                .border_color(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.3)))
+                            d.bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.08)))
+                                .border_color(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.3)))
                         } else {
                             d.bg(c(ui::raised())).border_color(c(ui::line()))
                         }
@@ -878,7 +913,7 @@ impl Shell {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         let text = format!("{cmd} ");
                         this.composer.update(cx, |i, cx| {
-                            i.set_value(text, window, cx);
+                            ui::put_text(i, text, window, cx);
                             i.focus(window, cx);
                         });
                         cx.notify();
@@ -900,11 +935,16 @@ impl Shell {
         let plan_first = cx.global::<crate::settings::AppSettings>().v2_plan_first;
         let goes = if value.starts_with("/thread") {
             "Makes a new thread".to_string()
+        } else if value.starts_with("/rename") {
+            "Renames this thread".to_string()
+        } else if value.starts_with("/archive") {
+            "Archives this thread".to_string()
+        } else if value.starts_with("/race") {
+            // A race runs as asked, plan-first or not, as hand_over does.
+            format!("{} races it", target.name())
         } else if (value.starts_with("/plan") || plan_first || self.splitting) && self.mode.writes()
         {
             "Peek plans it first".to_string()
-        } else if value.starts_with("/race") {
-            format!("{} races it", target.name())
         } else {
             format!("{} \u{b7} {}", target.name(), self.mode.label())
         };
@@ -921,7 +961,7 @@ impl Shell {
             .bg(c(ui::raised()))
             .border_1()
             .border_color(c(if ready {
-                super::theme::mix(0xFFFFFF, ui::VIOLET, 0.55)
+                super::theme::mix(ui::raised(), ui::VIOLET, 0.55)
             } else {
                 ui::line_hi()
             }))

@@ -424,7 +424,15 @@ impl Shell {
         );
         ids.into_iter()
             .map(|(id, name)| {
-                let jobs = store.jobs_in(&folder.path, id);
+                // One row per race, as everywhere else, so the counts add up.
+                let listed = store.listed();
+                let jobs: Vec<_> = listed
+                    .iter()
+                    .filter(|j| {
+                        j.folder.path == folder.path
+                            && store.thread_for(&folder.path, j.thread) == id
+                    })
+                    .collect();
                 let busy = jobs
                     .iter()
                     .filter(|j| matches!(j.status, Status::Running | Status::Shipping))
@@ -439,7 +447,7 @@ impl Shell {
     pub(super) fn new_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.go(Place::Today, cx);
         self.composer.update(cx, |i, cx| {
-            i.set_value("/thread ", window, cx);
+            ui::put_text(i, "/thread ", window, cx);
             i.focus(window, cx);
         });
         cx.notify();
@@ -604,6 +612,13 @@ impl Shell {
     }
 
     /// The top bar over every page: where you are, the engine, and a new job.
+    /// "#name" for a thread of the current project.
+    fn thread_crumb(&self, thread: u64) -> String {
+        let store = &self.crew.store;
+        let here = store.folder().map(|f| f.path.clone()).unwrap_or_default();
+        format!("#{}", store.thread_label(store.thread_for(&here, thread)))
+    }
+
     pub(super) fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let folder = self
             .crew
@@ -620,17 +635,18 @@ impl Shell {
             Place::History => "All jobs".into(),
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
+            // A job sits in its thread, so the path goes through it.
             Place::Live(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / #{id} {}", j.title),
+                Some(j) => format!("{} / #{id} {}", self.thread_crumb(j.thread), j.title),
                 None => format!("Jobs / #{id}"),
             },
             Place::Race(id) => match self.crew.store.job(id) {
-                Some(j) => format!("Jobs / Race / {}", j.title),
+                Some(j) => format!("{} / Race / {}", self.thread_crumb(j.thread), j.title),
                 None => "Jobs / Race".into(),
             },
             Place::Goal(id) => match self.crew.store.goals.iter().find(|g| g.id == id) {
-                Some(g) => format!("Jobs / Goal / {}", g.text),
-                None => "Jobs / Goal".into(),
+                Some(g) => format!("{} / Plan / {}", self.thread_crumb(g.thread), g.text),
+                None => "Jobs / Plan".into(),
             },
             Place::Settings(_) => "Settings".into(),
             Place::Usage => "Usage".into(),
@@ -638,6 +654,27 @@ impl Shell {
         };
         // Settings apply to every project, so they get a plain title, not a path.
         let global = matches!(self.place, Place::Settings(_));
+        // The thread a job or plan sits in: its crumb takes you back there.
+        let back_to = match self.place {
+            Place::Live(id) | Place::Race(id) => self.crew.store.job(id).map(|j| j.thread),
+            Place::Goal(id) => self
+                .crew
+                .store
+                .goals
+                .iter()
+                .find(|g| g.id == id)
+                .map(|g| g.thread),
+            _ => None,
+        }
+        .map(|t| {
+            let here = self
+                .crew
+                .store
+                .folder()
+                .map(|f| f.path.clone())
+                .unwrap_or_default();
+            self.crew.store.thread_for(&here, t)
+        });
         let running = self.crew.store.running().count();
         // Each step of the path after a chevron; the last, where you are, in full ink.
         let parts: Vec<&str> = here.split(" / ").collect();
@@ -662,8 +699,20 @@ impl Shell {
                             d.flex_none().text_color(c(ui::muted()))
                         }
                     })
-                    .child(part.to_string())
-                    .into_any_element();
+                    .child(part.to_string());
+                let text = match back_to {
+                    Some(t) if i == 0 => text
+                        .id("crumb-thread")
+                        .cursor_pointer()
+                        .hover(|s| s.text_color(c(ui::ink())))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.crew.store.thread_now = t;
+                            this.crew.store.save();
+                            this.go(Place::Today, cx);
+                        }))
+                        .into_any_element(),
+                    _ => text.into_any_element(),
+                };
                 if global {
                     vec![text]
                 } else {

@@ -626,6 +626,29 @@ impl Store {
         Some(id)
     }
 
+    /// Renames a thread, unless its project already has one by that name.
+    pub fn rename_thread(&mut self, id: u64, name: &str) -> bool {
+        let Some(folder) = self
+            .threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.folder.clone())
+        else {
+            return false;
+        };
+        if self
+            .threads
+            .iter()
+            .any(|t| t.id != id && t.folder == folder && t.name == name && !t.archived)
+        {
+            return false;
+        }
+        if let Some(t) = self.threads.iter_mut().find(|t| t.id == id) {
+            t.name = name.to_string();
+        }
+        true
+    }
+
     /// Jobs in one thread of a project, oldest first.
     pub fn jobs_in(&self, folder: &str, thread: u64) -> Vec<&Job> {
         let mut out: Vec<&Job> = self
@@ -755,6 +778,17 @@ mod tests {
         // "general" is always there and never stored.
         assert_eq!(s.add_thread("general", Vec::new()), Some(0));
         assert_eq!(s.threads.len(), 1);
+    }
+
+    #[test]
+    fn a_thread_can_be_renamed_but_not_onto_another() {
+        let mut s = with_project();
+        let a = s.add_thread("checkout", Vec::new()).unwrap();
+        let b = s.add_thread("payments", Vec::new()).unwrap();
+        assert!(s.rename_thread(a, "cart"));
+        assert_eq!(s.thread_label(a), "cart");
+        assert!(!s.rename_thread(b, "cart"));
+        assert_eq!(s.thread_label(b), "payments");
     }
 
     #[test]

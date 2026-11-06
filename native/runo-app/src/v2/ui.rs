@@ -398,3 +398,26 @@ pub fn rise<E: Styled>(el: E, k: f32) -> E {
         .relative()
         .top(px(8. * (1. - k)))
 }
+
+/// Puts text in a box with the caret after it, so typing carries on from there.
+pub(super) fn put_text(
+    i: &mut gpui_kit::component::input::TextareaState,
+    text: impl Into<String>,
+    window: &mut Window,
+    cx: &mut Context<gpui_kit::component::input::TextareaState>,
+) {
+    let text: String = text.into();
+    let line = text.matches('\n').count() as u32;
+    let character = text
+        .rsplit('\n')
+        .next()
+        .unwrap_or("")
+        .encode_utf16()
+        .count() as u32;
+    i.set_value(text, window, cx);
+    i.set_cursor_position(
+        gpui_kit::component::input::Position { line, character },
+        window,
+        cx,
+    );
+}
