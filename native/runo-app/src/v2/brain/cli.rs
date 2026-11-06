@@ -89,7 +89,8 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 super::Site::Server(name) => name.clone(),
             };
             let out = format!(
-                "{} \u{b7} {} job \u{b7} {:.0}% sure (by {})\n{}\nRuns on {site}, on {}. {}",
+                "Peek: {}\n{} \u{b7} {} job \u{b7} {:.0}% sure (by {})\n{}\nRuns on {site}, on {}. {}",
+                r.handoff(),
                 r.bot.name(),
                 r.mode.label(),
                 r.sure * 100.0,

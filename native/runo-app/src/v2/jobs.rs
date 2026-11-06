@@ -77,6 +77,12 @@ pub fn never_run() -> Vec<String> {
         .collect()
 }
 
+/// Whether NEVER_RUN commands are asked about rather than refused: only
+/// Claude Code with Squad Code's prompt tool can ask mid-run.
+fn asks_first(provider: &str, prompt_tool: bool) -> bool {
+    provider == "claude" && prompt_tool
+}
+
 /// What a bot that changes files is told about running things.
 fn run_rule(checks: &[String]) -> String {
     let mut out = String::from(
@@ -128,7 +134,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
         format!("{}\n\n", job.context)
     };
     format!(
-        "{}\n\n{part}{rules} When you finish, end with two or three plain sentences for someone who may not code: what you found or changed, and how to check it.\n\nThe job: {text}",
+        "{}\n\n{part}{rules} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         job.bot.persona()
     )
 }
@@ -186,10 +192,16 @@ pub fn start(
     // what it needs to build and test; only the hard-to-undo commands stay
     // off. A tool the person turned off in Settings stays off: their deny
     // rules win over this allow.
+    // When Claude Code can ask through Squad Code's prompt tool (a run with
+    // memory), the hard-to-undo commands are asked about with Go ahead /
+    // Deny instead of refused: Claude never asks about a disallowed tool.
+    let memory = None;
     if job.mode.writes() {
         let may: Vec<String> = MAY_RUN.iter().map(|t| t.to_string()).collect();
         opts.allowed_tools = add_rules(&opts.allowed_tools, &may);
-        opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
+        if !asks_first(p.id, memory.is_some()) {
+            opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
+        }
     }
     let sent = prompt(job, text, resume, &checks);
     let spec = agent::RunSpec {
@@ -201,7 +213,7 @@ pub fn start(
         in_git: std::path::Path::new(&dir).join(".git").exists(),
         session_id: &job.conversation,
         images: &[],
-        memory: None,
+        memory,
         local: true,
         thread: 0,
         trusted: false,
@@ -404,6 +416,8 @@ mod tests {
     #[test]
     fn a_bot_that_changes_files_may_run_things_but_not_ship_or_wipe() {
         assert_eq!(MAY_RUN, &["Bash"]);
+        assert!(asks_first("claude", true));
+        assert!(!asks_first("claude", false) && !asks_first("grok", true));
         let never = never_run();
         for want in [
             "Bash(git push:*)",
