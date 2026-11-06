@@ -270,6 +270,54 @@ impl Shell {
             let on = in_thread && id == here;
             // Something new since you last looked, in a thread you're not in.
             let unread = !on && self.crew.store.unread(&here_folder, id);
+            if self.deleting == Some(id) {
+                threads = threads.child(
+                    div()
+                        .my(px(2.))
+                        .p(px(10.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .rounded(px(8.))
+                        .border_1()
+                        .border_color(c(ui::bad_tone().2))
+                        .bg(c(ui::bad_tone().1))
+                        .child(
+                            div()
+                                .text_size(px(12.5))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(ui::ink()))
+                                .child(format!("Delete #{name}?")),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(c(ui::muted()))
+                                .child("What was said here goes. Its jobs move to #general."),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(6.))
+                                .child(
+                                    ui::solid(("thread-delete", id as usize), "Delete")
+                                        .h(px(26.))
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.delete_thread(id, cx)
+                                        })),
+                                )
+                                .child(
+                                    ui::ghost(("thread-keep", id as usize), "Cancel")
+                                        .h(px(26.))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.deleting = None;
+                                            cx.notify();
+                                        })),
+                                ),
+                        ),
+                );
+                continue;
+            }
             threads = threads.child(
                 row(("side-thread", id as usize), on)
                     .child(
@@ -305,6 +353,30 @@ impl Shell {
                                 .text_color(c(ui::t_blue()))
                                 .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
                                 .child(busy.to_string()),
+                        )
+                    })
+                    // The thread you're in can be deleted from its row.
+                    .when(on && id != 0, |d| {
+                        d.child(
+                            div()
+                                .id(("thread-trash", id as usize))
+                                .size(px(20.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(5.))
+                                .text_color(c(ui::faint()))
+                                .hover(|s| s.text_color(c(ui::t_red())).bg(c(ui::hover())))
+                                .child(Icon::new(IconName::Trash).size(px(13.)))
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new("Delete thread")
+                                        .build(window, cx)
+                                })
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.deleting = Some(id);
+                                    cx.notify();
+                                })),
                         )
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {

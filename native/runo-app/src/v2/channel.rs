@@ -18,7 +18,7 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The commands the composer knows, with what each does.
-pub(super) const COMMANDS: [(&str, &str); 6] = [
+pub(super) const COMMANDS: [(&str, &str); 7] = [
     ("/plan", "Peek plans it first, you press Start"),
     ("/race", "Try it on two engines, keep the best"),
     ("/ask", "A question, no code changes"),
@@ -28,6 +28,7 @@ pub(super) const COMMANDS: [(&str, &str); 6] = [
         "/archive",
         "Put this thread away; its jobs move to #general",
     ),
+    ("/delete", "Delete this thread; its jobs move to #general"),
 ];
 
 /// How wide the chat column reads at most.
@@ -1195,6 +1196,8 @@ impl Shell {
             "Renames this thread".to_string()
         } else if value.starts_with("/archive") {
             "Archives this thread".to_string()
+        } else if value.starts_with("/delete") {
+            "Deletes this thread".to_string()
         } else if value.starts_with("/ask") || (self.mode == Mode::Ask && !value.starts_with('/')) {
             format!("{} answers here", self.ask_who().name())
         } else if value.starts_with("/race") {

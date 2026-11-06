@@ -733,6 +733,36 @@ impl Store {
             .collect()
     }
 
+    /// Deletes a thread and what was said in it. Its jobs and plans hold real
+    /// work, so they move to #general rather than vanish.
+    pub fn delete_thread(&mut self, id: u64) -> bool {
+        let Some(i) = self.threads.iter().position(|t| t.id == id) else {
+            return false;
+        };
+        let t = self.threads.remove(i);
+        self.talks
+            .retain(|k| !(k.folder == t.folder && k.thread == id));
+        for j in self
+            .jobs
+            .iter_mut()
+            .filter(|j| j.folder.path == t.folder && j.thread == id)
+        {
+            j.thread = 0;
+        }
+        for g in self
+            .goals
+            .iter_mut()
+            .filter(|g| g.folder.path == t.folder && g.thread == id)
+        {
+            g.thread = 0;
+        }
+        self.seen_at.remove(&format!("{}#{id}", t.folder));
+        if self.thread_now == id {
+            self.thread_now = 0;
+        }
+        true
+    }
+
     /// A thread of a project by its name; "general" is 0.
     pub fn thread_named(&self, folder: &str, name: &str) -> Option<u64> {
         let name = thread_name(name);
@@ -966,6 +996,30 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(s.members(&folder.path, 0), vec![Member::Fin, Member::Fixer]);
+    }
+
+    #[test]
+    fn deleting_a_thread_keeps_its_jobs_in_general() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().clone();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        s.jobs.push(Job {
+            id: 1,
+            thread: id,
+            folder: folder.clone(),
+            ..Default::default()
+        });
+        s.talks.push(Talk {
+            id: 1,
+            folder: folder.path.clone(),
+            thread: id,
+            ..Default::default()
+        });
+        assert!(s.delete_thread(id));
+        assert!(s.threads.is_empty() && s.talks.is_empty());
+        assert_eq!(s.jobs[0].thread, 0);
+        assert_eq!(s.thread_now, 0);
+        assert!(!s.delete_thread(0));
     }
 
     #[test]

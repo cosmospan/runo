@@ -459,6 +459,8 @@ pub struct Shell {
     list_all: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
+    /// A thread waiting for you to confirm deleting it.
+    deleting: Option<u64>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -792,6 +794,7 @@ impl Shell {
             list_filter: 0,
             list_all: false,
             jobs_open: false,
+            deleting: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -986,6 +989,21 @@ impl Shell {
         .detach();
     }
 
+    /// Deletes a thread for good, once confirmed: what was said goes, and its
+    /// jobs move to #general.
+    pub(super) fn delete_thread(&mut self, id: u64, cx: &mut Context<Self>) {
+        self.deleting = None;
+        let name = self.crew.store.thread_label(id);
+        if id != 0 && self.crew.store.delete_thread(id) {
+            self.crew.store.save();
+            self.say(format!(
+                "Deleted #{name}. Its jobs are in #general, so no work is lost."
+            ));
+            self.go(Place::Today, cx);
+        }
+        cx.notify();
+    }
+
     /// Puts a thread away: its jobs show in #general from then on, and making a
     /// thread with its name brings it back.
     pub(super) fn archive_thread(&mut self, id: u64, cx: &mut Context<Self>) {
@@ -1157,6 +1175,17 @@ impl Shell {
                     cx.notify();
                     return;
                 }
+                "delete" => {
+                    let now = self.crew.store.thread_now;
+                    if now == 0 {
+                        self.say("#general always stays. Delete any other thread.");
+                    } else {
+                        self.deleting = Some(now);
+                        self.say("Confirm in the sidebar: Delete or Cancel.");
+                    }
+                    cx.notify();
+                    return;
+                }
                 "archive" => {
                     self.archive_thread(self.crew.store.thread_now, cx);
                     return;
@@ -1169,7 +1198,7 @@ impl Shell {
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename or /archive."
+                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename, /archive or /delete."
                     ));
                     return;
                 }
