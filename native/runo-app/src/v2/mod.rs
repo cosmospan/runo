@@ -701,7 +701,8 @@ impl Shell {
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
-            Ok("settings") => Place::Settings(Pane::General),
+            Ok("settings") => Place::Settings(Pane::Work),
+            Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("appearance") => Place::Settings(Pane::Appearance),
             Ok("usage") => Place::Usage,
@@ -769,7 +770,7 @@ impl Shell {
             maker_open: false,
             usage_open: false,
             engine_sel: None,
-            settings_pane: Pane::General,
+            settings_pane: Pane::Work,
             applied_theme: ui::theme().id,
             fin_sel: Member::Guard,
             fin_state: None,
@@ -1484,6 +1485,16 @@ impl Shell {
             return;
         }
         self.crew.approve(id);
+        // Hands off: a pull request Shipper opens merges once its checks pass.
+        if cx.global::<crate::settings::AppSettings>().v2_auto_merge
+            && self
+                .crew
+                .store
+                .job(id)
+                .is_some_and(|j| j.status == store::Status::Shipping)
+        {
+            self.crew.set_auto_merge(id, true);
+        }
         cx.notify();
     }
 

@@ -29,6 +29,8 @@ use super::{Place, Shell};
 /// A pane of Settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Pane {
+    /// How work runs: how often the crew checks with you.
+    Work,
     General,
     Appearance,
     Mascot,
@@ -36,10 +38,17 @@ pub enum Pane {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 4] = [Pane::General, Pane::Appearance, Pane::Mascot, Pane::Engines];
+    pub const ALL: [Pane; 5] = [
+        Pane::Work,
+        Pane::General,
+        Pane::Appearance,
+        Pane::Mascot,
+        Pane::Engines,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
+            Pane::Work => "How work runs",
             Pane::General => "General",
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
@@ -49,6 +58,7 @@ impl Pane {
 
     fn line(self) -> &'static str {
         match self {
+            Pane::Work => "When the crew checks with you",
             Pane::General => "Alerts, motion and limits",
             Pane::Appearance => "Themes and frosted glass",
             Pane::Mascot => "Peek, colours and props",
@@ -58,6 +68,7 @@ impl Pane {
 
     fn icon(self) -> IconName {
         match self {
+            Pane::Work => IconName::Compass,
             Pane::General => IconName::Settings,
             Pane::Appearance => IconName::Palette,
             Pane::Mascot => IconName::Bot,
@@ -397,6 +408,7 @@ impl Shell {
             .border_color(c(ui::line2()))
             .child(tabs);
         let body = match pane {
+            Pane::Work => self.settings_work(cx),
             Pane::General => self.settings_general(cx),
             Pane::Appearance => self.settings_appearance(cx),
             Pane::Mascot => self.settings_mascot(cx),
@@ -445,6 +457,364 @@ impl Shell {
                     .child(body),
             )
             .into_any_element()
+    }
+
+    /// How work runs: one choice for how often the crew checks with you, the
+    /// switches it sets, the engines, and a preview of what an ask looks like.
+    fn settings_work(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let st = cx.global::<AppSettings>().clone();
+        let level = match (st.v2_plan_first, st.v2_auto_merge) {
+            (true, false) => "a_lot",
+            (false, false) => "balanced",
+            (false, true) => "hands_off",
+            _ => "",
+        };
+        let levels: [(&'static str, &'static str, &'static str, usize); 3] = [
+            ("a_lot", "Ask a lot", "Peek's plan, the changes and the merge wait for you.", 3),
+            ("balanced", "Balanced", "You approve changes and press merge.", 2),
+            ("hands_off", "Hands off", "Approved PRs merge once checks pass.", 1),
+        ];
+        let mut cards = div().flex().gap(px(10.)).px(px(18.)).pb(px(16.));
+        for (i, (key, name, line, bars)) in levels.into_iter().enumerate() {
+            let on = level == key;
+            let mut meter = div().flex().gap(px(3.));
+            for b in 0..3 {
+                meter = meter.child(
+                    div()
+                        .w(px(16.))
+                        .h(px(5.))
+                        .rounded(px(2.))
+                        .bg(c(if b < bars { ui::VIOLET } else { ui::press() })),
+                );
+            }
+            cards = cards.child(
+                div()
+                    .id(("work-level", i))
+                    .flex_1()
+                    .min_w_0()
+                    .p(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .cursor_pointer()
+                    .map(|d| {
+                        if on {
+                            d.border_color(c(ui::VIOLET))
+                                .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.05)))
+                        } else {
+                            d.border_color(c(ui::line()))
+                                .hover(|s| s.border_color(c(ui::line_hi())))
+                        }
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .size(px(16.))
+                                    .rounded_full()
+                                    .border_color(c(if on { ui::VIOLET } else { ui::line_hi() }))
+                                    .map(|d| if on { d.border(px(5.)) } else { d.border_1() }),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(name),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .line_height(px(17.))
+                            .text_color(c(ui::muted()))
+                            .child(line),
+                    )
+                    .child(meter)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| {
+                            st.v2_ask = key.to_string();
+                            st.v2_plan_first = key == "a_lot";
+                            st.v2_auto_merge = key == "hands_off";
+                        });
+                        cx.notify();
+                    })),
+            );
+        }
+        let ask = group("WHEN SHOULD THE CREW ASK YOU?", Vec::new()).child(cards);
+
+        let toggle = |id: &'static str,
+                      title: &'static str,
+                      line: &'static str,
+                      on: bool,
+                      set: fn(&mut AppSettings, bool),
+                      cx: &mut Context<Self>| {
+            row(
+                title,
+                line,
+                div()
+                    .id(id)
+                    .cursor_pointer()
+                    .child(switch(on))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| {
+                            set(st, !on);
+                            st.v2_ask = match (st.v2_plan_first, st.v2_auto_merge) {
+                                (true, false) => "a_lot",
+                                (false, false) => "balanced",
+                                (false, true) => "hands_off",
+                                _ => "custom",
+                            }
+                            .into();
+                        });
+                        cx.notify();
+                    })),
+            )
+        };
+        let checkpoints = group(
+            "CHECKPOINTS",
+            vec![
+                toggle(
+                    "work-plan-first",
+                    "Approve Peek's plan first",
+                    "Writing jobs arrive as a plan card. Nothing starts until you press Start.",
+                    st.v2_plan_first,
+                    |st, on| st.v2_plan_first = on,
+                    cx,
+                ),
+                row(
+                    "Changes wait for you",
+                    "Every job that changes files stops in Review until you approve it.",
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .px(px(7.))
+                                .py(px(2.))
+                                .rounded(px(5.))
+                                .bg(c(ui::well()))
+                                .text_size(px(11.5))
+                                .text_color(c(ui::muted()))
+                                .child("Always on"),
+                        )
+                        .child(div().opacity(0.45).child(switch(true))),
+                ),
+                toggle(
+                    "work-auto-merge",
+                    "Merge on its own",
+                    "A pull request Shipper opens merges once its checks pass.",
+                    st.v2_auto_merge,
+                    |st, on| st.v2_auto_merge = on,
+                    cx,
+                ),
+            ],
+        );
+
+        // Who runs on what.
+        let mut engines = Vec::new();
+        for who in super::data::Member::all().into_iter().take(6) {
+            let face = self.avatar(who, 22.);
+            let label = super::engine::label(&st, who);
+            engines.push(
+                div()
+                    .px(px(18.))
+                    .py(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .border_t_1()
+                    .border_color(c(ui::line2()))
+                    .child(face)
+                    .child(
+                        div()
+                            .w(px(110.))
+                            .text_size(px(13.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(ui::ink()))
+                            .child(who.name()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::muted()))
+                            .child(label),
+                    ),
+            );
+        }
+        let engines = group("ENGINES", engines).child(
+            div()
+                .id("work-engines")
+                .px(px(18.))
+                .py(px(11.))
+                .border_t_1()
+                .border_color(c(ui::line2()))
+                .text_size(px(12.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::t_violet()))
+                .cursor_pointer()
+                .child("Change engines \u{2192}")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.settings_pane = Pane::Engines;
+                    this.place = Place::Settings(Pane::Engines);
+                    cx.notify();
+                })),
+        );
+
+        let preview = self.work_preview(&st);
+        let body = div()
+            .flex()
+            .items_start()
+            .gap(px(20.))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(space::M))
+                    .child(ask)
+                    .child(checkpoints)
+                    .child(engines),
+            )
+            .child(preview);
+        Self::page(
+            "settings-work",
+            "How work runs",
+            "Decide how often the crew checks with you. It applies to every project.",
+            body,
+        )
+    }
+
+    /// What asking for something looks like with these settings, step by step,
+    /// with the steps that wait for you marked.
+    fn work_preview(&mut self, st: &AppSettings) -> Div {
+        use super::data::Member;
+        let mut steps: Vec<(Option<Member>, &str, &str, bool)> =
+            vec![(None, "You ask in a thread", "", false)];
+        if st.v2_plan_first {
+            steps.push((Some(Member::Fin), "Peek posts a plan", "You press Start", true));
+        }
+        steps.push((Some(Member::Builder), "Builder writes it", "On its own branch", false));
+        steps.push((Some(Member::Builder), "The changes wait", "You approve them", true));
+        if st.v2_auto_merge {
+            steps.push((
+                Some(Member::Shipper),
+                "Shipper opens the PR",
+                "Merges once checks pass",
+                false,
+            ));
+        } else {
+            steps.push((Some(Member::Shipper), "Shipper opens the PR", "You press merge", true));
+        }
+        let asks = steps.iter().filter(|s| s.3).count();
+        let mut flow = div().flex().flex_col().gap(px(8.));
+        for (who, what, sub, yours) in steps {
+            let face: AnyElement = match who {
+                Some(m) => self.avatar(m, 26.).into_any_element(),
+                None => div()
+                    .size(px(26.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .bg(c(super::theme::mix(0xFFFFFF, ui::VIOLET, 0.14)))
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::t_violet()))
+                    .child("Y")
+                    .into_any_element(),
+            };
+            flow = flow.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(div().w(px(28.)).flex().justify_center().child(face))
+                    .child(
+                        div()
+                            .flex_1()
+                            .px(px(10.))
+                            .py(px(7.))
+                            .rounded(px(9.))
+                            .border_1()
+                            .map(|d| {
+                                if yours {
+                                    d.border_color(c(ui::ask_tone().2)).bg(c(ui::ask_tone().1))
+                                } else {
+                                    d.border_color(c(ui::line())).bg(c(ui::raised()))
+                                }
+                            })
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(what),
+                            )
+                            .when(!sub.is_empty(), |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(c(if yours { ui::t_amber() } else { ui::muted() }))
+                                        .child(sub),
+                                )
+                            }),
+                    ),
+            );
+        }
+        div()
+            .w(px(300.))
+            .flex_none()
+            .p(px(16.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .rounded(px(14.))
+            .bg(c(ui::ground()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .child(
+                div()
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::faint()))
+                            .child("PREVIEW"),
+                    )
+                    .child(
+                        div()
+                            .mt(px(2.))
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("What \u{201c}Add gift cards\u{201d} looks like"),
+                    ),
+            )
+            .child(flow)
+            .child(
+                div()
+                    .pt(px(10.))
+                    .border_t_1()
+                    .border_color(c(ui::line()))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .child(format!(
+                        "You're asked {asks} {}. The crew does the rest alone.",
+                        if asks == 1 { "time" } else { "times" }
+                    )),
+            )
     }
 
     fn settings_general(&mut self, cx: &mut Context<Self>) -> AnyElement {

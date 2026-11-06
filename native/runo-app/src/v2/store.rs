@@ -729,6 +729,63 @@ pub fn span(s: u64) -> String {
 mod tests {
     use super::*;
 
+    fn with_project() -> Store {
+        let mut s = Store::default();
+        s.add_folder(PathBuf::from("/work/shop"));
+        s
+    }
+
+    #[test]
+    fn thread_names_read_like_channels() {
+        assert_eq!(thread_name("Gift Cards!"), "gift-cards");
+        assert_eq!(thread_name("  flaky   tests "), "flaky-tests");
+        assert_eq!(thread_name("@#$"), "");
+    }
+
+    #[test]
+    fn a_new_thread_becomes_the_one_you_are_in() {
+        let mut s = with_project();
+        let id = s.add_thread("Gift cards", vec![Member::Builder]).unwrap();
+        assert_eq!(s.thread_here(), id);
+        assert_eq!(s.thread_label(id), "gift-cards");
+        // The same name picks the same thread instead of making another.
+        s.thread_now = 0;
+        assert_eq!(s.add_thread("gift cards", Vec::new()), Some(id));
+        assert_eq!(s.threads.len(), 1);
+        // "general" is always there and never stored.
+        assert_eq!(s.add_thread("general", Vec::new()), Some(0));
+        assert_eq!(s.threads.len(), 1);
+    }
+
+    #[test]
+    fn jobs_from_gone_threads_land_in_general() {
+        let mut s = with_project();
+        let id = s.add_thread("checkout", Vec::new()).unwrap();
+        let folder = s.folder().unwrap().clone();
+        for (n, thread) in [(1, id), (2, 0), (3, 99)] {
+            s.jobs.push(Job {
+                id: n,
+                thread,
+                folder: folder.clone(),
+                started: n,
+                ..Default::default()
+            });
+        }
+        let ids = |s: &Store, t| s.jobs_in(&folder.path, t).iter().map(|j| j.id).collect::<Vec<_>>();
+        assert_eq!(ids(&s, id), vec![1]);
+        assert_eq!(ids(&s, 0), vec![2, 3]);
+        s.threads[0].archived = true;
+        assert_eq!(ids(&s, 0), vec![1, 2, 3]);
+        assert!(s.threads_in(&folder.path).is_empty());
+    }
+
+    #[test]
+    fn stores_from_before_threads_still_load() {
+        let back: Store = serde_json::from_str(r#"{"jobs":[{"id":4,"title":"x"}]}"#).unwrap();
+        assert!(back.threads.is_empty());
+        assert_eq!(back.jobs[0].thread, 0);
+    }
+
     #[test]
     fn chats_with_made_bots_save_and_load() {
         let mut s = Store::default();
