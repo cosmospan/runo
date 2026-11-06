@@ -337,35 +337,26 @@ impl Shell {
 
     /// The top of a thread: what it's for and who's in it.
     fn thread_intro(&mut self, thread: u64, name: &str, empty: bool, total: usize) -> Div {
-        let bots: Vec<Member> = std::iter::once(Member::Fin)
-            .chain(
-                self.crew
-                    .store
-                    .threads
-                    .iter()
-                    .find(|t| t.id == thread)
-                    .map(|t| t.bots.clone())
-                    .unwrap_or_else(|| {
-                        Member::all()
-                            .into_iter()
-                            .filter(|m| *m != Member::Fin)
-                            .collect()
-                    }),
-            )
-            .collect();
+        let here = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let bots = self.crew.store.members(&here, thread);
         let mut faces = div().flex().items_center();
         for (i, b) in bots.iter().take(8).enumerate() {
             let f = self.avatar(*b, 26.);
             faces = faces.child(div().when(i > 0, |d| d.ml(px(-6.))).child(f));
         }
         let names: Vec<&str> = bots.iter().map(|b| b.name()).collect();
-        let who = if thread == 0 {
-            "Everyone on your crew is here. Asks that don't fit a thread land here.".to_string()
+        let who = if bots.len() == 1 {
+            "Peek is here. Bring a bot in with @, like @Builder, or Peek brings one in when there's work."
+                .to_string()
         } else {
             format!(
-                "{} {} in this thread.",
-                super::and_list(&names),
-                if names.len() == 1 { "is" } else { "are" }
+                "{} are here. Bring another in with @, like @Checker.",
+                super::and_list(&names)
             )
         };
         div()

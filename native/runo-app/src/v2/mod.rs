@@ -998,6 +998,32 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        // "@Builder do this": that bot joins the thread and takes the ask,
+        // whatever its words would otherwise suggest.
+        let mention = (!text.starts_with('/')).then(|| mentioned(&text)).flatten();
+        let Some((who, rest)) = mention else {
+            return self.hand_over_inner(text, cx);
+        };
+        if self.place == Place::Today {
+            let here = self.crew.store.thread_here();
+            if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == here) {
+                if who != Member::Fin && !t.bots.contains(&who) {
+                    t.bots.push(who);
+                }
+            }
+        }
+        let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
+        self.target = Some(who);
+        self.mode = who.mode();
+        self.mode_pinned = true;
+        self.hand_over_inner(rest, cx);
+        self.target = target;
+        self.mode = mode;
+        self.mode_pinned = pinned;
+        self.crew.store.save();
+    }
+
+    fn hand_over_inner(&mut self, text: String, cx: &mut Context<Self>) {
         // Slash commands from the composer.
         let mut text = text;
         let mut plan = false;
@@ -2268,4 +2294,21 @@ mod drop_tests {
         assert_eq!(got, vec![dir.clone(), dir.join("sub")]);
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// The first crew bot named with @ in a message, and the message without it.
+fn mentioned(text: &str) -> Option<(Member, String)> {
+    let crew = Member::all();
+    let mut found = None;
+    let mut rest = Vec::new();
+    for word in text.split_whitespace() {
+        let name = word
+            .strip_prefix('@')
+            .map(|w| w.trim_end_matches(|c: char| !c.is_alphanumeric()));
+        match name.and_then(|n| crew.iter().find(|m| m.name().eq_ignore_ascii_case(n))) {
+            Some(m) if found.is_none() => found = Some(*m),
+            _ => rest.push(word),
+        }
+    }
+    found.map(|m| (m, rest.join(" ")))
 }

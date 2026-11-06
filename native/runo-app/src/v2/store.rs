@@ -681,6 +681,31 @@ impl Store {
         true
     }
 
+    /// Who's in a thread: Peek, the bots you brought in, and any bot that has
+    /// done work or answered there. Nobody else until they're needed.
+    pub fn members(&self, folder: &str, thread: u64) -> Vec<Member> {
+        let mut out = vec![Member::Fin];
+        let mut add = |m: Member| {
+            if !out.contains(&m) {
+                out.push(m);
+            }
+        };
+        if let Some(t) = self.threads.iter().find(|t| t.id == thread) {
+            t.bots.iter().copied().for_each(&mut add);
+        }
+        for j in self.jobs_in(folder, thread) {
+            add(j.bot);
+        }
+        for t in &self.talks {
+            if t.folder == folder && self.thread_for(folder, t.thread) == thread {
+                add(t.bot);
+            }
+        }
+        let crew = Member::all();
+        out.retain(|m| *m == Member::Fin || crew.contains(m));
+        out
+    }
+
     /// Jobs in one thread of a project, oldest first.
     pub fn jobs_in(&self, folder: &str, thread: u64) -> Vec<&Job> {
         let mut out: Vec<&Job> = self
@@ -821,6 +846,21 @@ mod tests {
         assert_eq!(s.thread_label(a), "cart");
         assert!(!s.rename_thread(b, "cart"));
         assert_eq!(s.thread_label(b), "payments");
+    }
+
+    #[test]
+    fn a_thread_starts_with_just_peek() {
+        let mut s = with_project();
+        let folder = s.folder().unwrap().clone();
+        assert_eq!(s.members(&folder.path, 0), vec![Member::Fin]);
+        // A bot that works there joins.
+        s.jobs.push(Job {
+            id: 1,
+            bot: Member::Fixer,
+            folder: folder.clone(),
+            ..Default::default()
+        });
+        assert_eq!(s.members(&folder.path, 0), vec![Member::Fin, Member::Fixer]);
     }
 
     #[test]
