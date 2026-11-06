@@ -137,7 +137,8 @@ pub struct AppSettings {
     pub thread_ref_titles: bool,
     /// Places pinned out on the rail beside the main ones, by label, such as "Notes".
     pub rail_pins: Vec<String>,
-    /// What Fin is made of: "glass", "bubble" (rainbow bubble glow) or "solid".
+    /// What Fin is made of: "glass", "bubble" (rainbow bubble glow), "solid" or
+    /// "outline".
     pub fin_material: String,
     /// Each bot's Fin, by bot key: `colour.hat.left.right.badge`, such as
     /// `blue.security.shield.baton.star`. Bots not listed wear their default kit.

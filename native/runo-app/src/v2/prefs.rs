@@ -1769,7 +1769,7 @@ impl Shell {
             )))
             .child(row(
                 "Finish",
-                "Glowing eyes in a dark pill, the same with a turning rainbow rim, or a solid colour pill.",
+                "Glowing eyes in a dark pill, the same with a turning rainbow rim, a solid colour pill, or just the outlines.",
                 segmented(mats),
             ));
 
