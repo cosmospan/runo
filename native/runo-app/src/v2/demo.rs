@@ -365,7 +365,12 @@ pub fn seed() -> Store {
             thread(
                 1,
                 "checkout",
-                vec![Member::Builder, Member::Guard, Member::Fixer, Member::Shipper],
+                vec![
+                    Member::Builder,
+                    Member::Guard,
+                    Member::Fixer,
+                    Member::Shipper,
+                ],
             ),
             thread(2, "order-history", vec![Member::Builder, Member::Checker]),
             thread(3, "flaky-tests", vec![Member::Fixer]),

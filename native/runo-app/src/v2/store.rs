@@ -771,7 +771,12 @@ mod tests {
                 ..Default::default()
             });
         }
-        let ids = |s: &Store, t| s.jobs_in(&folder.path, t).iter().map(|j| j.id).collect::<Vec<_>>();
+        let ids = |s: &Store, t| {
+            s.jobs_in(&folder.path, t)
+                .iter()
+                .map(|j| j.id)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(ids(&s, id), vec![1]);
         assert_eq!(ids(&s, 0), vec![2, 3]);
         s.threads[0].archived = true;

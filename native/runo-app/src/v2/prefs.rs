@@ -470,9 +470,24 @@ impl Shell {
             _ => "",
         };
         let levels: [(&'static str, &'static str, &'static str, usize); 3] = [
-            ("a_lot", "Ask a lot", "Peek's plan, the changes and the merge wait for you.", 3),
-            ("balanced", "Balanced", "You approve changes and press merge.", 2),
-            ("hands_off", "Hands off", "Approved PRs merge once checks pass.", 1),
+            (
+                "a_lot",
+                "Ask a lot",
+                "Peek's plan, the changes and the merge wait for you.",
+                3,
+            ),
+            (
+                "balanced",
+                "Balanced",
+                "You approve changes and press merge.",
+                2,
+            ),
+            (
+                "hands_off",
+                "Hands off",
+                "Approved PRs merge once checks pass.",
+                1,
+            ),
         ];
         let mut cards = div().flex().gap(px(10.)).px(px(18.)).pb(px(16.));
         for (i, (key, name, line, bars)) in levels.into_iter().enumerate() {
@@ -501,8 +516,11 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.border_color(c(ui::VIOLET))
-                                .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.05)))
+                            d.border_color(c(ui::VIOLET)).bg(c(super::theme::mix(
+                                ui::raised(),
+                                ui::VIOLET,
+                                0.05,
+                            )))
                         } else {
                             d.border_color(c(ui::line()))
                                 .hover(|s| s.border_color(c(ui::line_hi())))
@@ -702,10 +720,25 @@ impl Shell {
         let mut steps: Vec<(Option<Member>, &str, &str, bool)> =
             vec![(None, "You ask in a thread", "", false)];
         if st.v2_plan_first {
-            steps.push((Some(Member::Fin), "Peek posts a plan", "You press Start", true));
+            steps.push((
+                Some(Member::Fin),
+                "Peek posts a plan",
+                "You press Start",
+                true,
+            ));
         }
-        steps.push((Some(Member::Builder), "Builder writes it", "On its own branch", false));
-        steps.push((Some(Member::Builder), "The changes wait", "You approve them", true));
+        steps.push((
+            Some(Member::Builder),
+            "Builder writes it",
+            "On its own branch",
+            false,
+        ));
+        steps.push((
+            Some(Member::Builder),
+            "The changes wait",
+            "You approve them",
+            true,
+        ));
         if st.v2_auto_merge {
             steps.push((
                 Some(Member::Shipper),
@@ -714,7 +747,12 @@ impl Shell {
                 false,
             ));
         } else {
-            steps.push((Some(Member::Shipper), "Shipper opens the PR", "You press merge", true));
+            steps.push((
+                Some(Member::Shipper),
+                "Shipper opens the PR",
+                "You press merge",
+                true,
+            ));
         }
         let asks = steps.iter().filter(|s| s.3).count();
         let mut flow = div().flex().flex_col().gap(px(8.));
@@ -766,7 +804,11 @@ impl Shell {
                                     div()
                                         .text_size(px(12.))
                                         .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c(if yours { ui::t_amber() } else { ui::muted() }))
+                                        .text_color(c(if yours {
+                                            ui::t_amber()
+                                        } else {
+                                            ui::muted()
+                                        }))
                                         .child(sub),
                                 )
                             }),

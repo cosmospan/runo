@@ -300,11 +300,7 @@ impl Shell {
             .into_iter()
             .filter(|m| m.on_crew())
             .collect();
-        let mut crew = div()
-            .flex()
-            .flex_col()
-            .gap(px(1.))
-            .child(label("Crew"));
+        let mut crew = div().flex().flex_col().gap(px(1.)).child(label("Crew"));
         for who in members {
             let (word, _) = self.status_of(who);
             let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
@@ -343,9 +339,9 @@ impl Shell {
                                 .child(word),
                         )
                     })
-                    .on_hover(cx.listener(move |this, on: &bool, _, cx| {
-                        this.hover_bot(who, *on, cx)
-                    }))
+                    .on_hover(
+                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
             );
         }
@@ -442,11 +438,10 @@ impl Shell {
     /// Starts a new thread: the composer gets `/thread ` to type its name after.
     pub(super) fn new_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.go(Place::Today, cx);
-        self.composer
-            .update(cx, |i, cx| {
-                i.set_value("/thread ", window, cx);
-                i.focus(window, cx);
-            });
+        self.composer.update(cx, |i, cx| {
+            i.set_value("/thread ", window, cx);
+            i.focus(window, cx);
+        });
         cx.notify();
     }
 
@@ -525,7 +520,13 @@ impl Shell {
                             .text_color(c(if on { ui::on_fill() } else { ui::body() }))
                             .text_size(px(12.))
                             .font_weight(FontWeight::BOLD)
-                            .child(name.chars().next().unwrap_or('?').to_uppercase().to_string()),
+                            .child(
+                                name.chars()
+                                    .next()
+                                    .unwrap_or('?')
+                                    .to_uppercase()
+                                    .to_string(),
+                            ),
                     )
                     .child(
                         div()
@@ -570,26 +571,28 @@ impl Shell {
                     })),
             );
         }
-        menu = menu.child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2()))).child(
-            div()
-                .id("project-add")
-                .px(px(10.))
-                .h(px(34.))
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .rounded(px(8.))
-                .cursor_pointer()
-                .text_size(px(13.))
-                .text_color(c(ui::muted()))
-                .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                .child(Icon::new(IconName::FolderOpen).size(px(15.)))
-                .child("Add a project folder")
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.folder_menu = false;
-                    this.pick_folder(cx);
-                })),
-        );
+        menu = menu
+            .child(div().h(px(1.)).my(px(4.)).bg(c(ui::line2())))
+            .child(
+                div()
+                    .id("project-add")
+                    .px(px(10.))
+                    .h(px(34.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .text_size(px(13.))
+                    .text_color(c(ui::muted()))
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::FolderOpen).size(px(15.)))
+                    .child("Add a project folder")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.folder_menu = false;
+                        this.pick_folder(cx);
+                    })),
+            );
         deferred(
             div()
                 .absolute()

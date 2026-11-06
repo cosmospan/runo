@@ -30,7 +30,7 @@ const COLUMN: f32 = 760.;
 
 /// One thing in the thread, by when it happened.
 enum Entry {
-    Job(Job),
+    Job(Box<Job>),
     Plan(Goal),
 }
 
@@ -145,7 +145,7 @@ impl Shell {
             .into_iter()
             .filter(|j| j.goal == 0 && (j.race == 0 || j.race == j.id))
             .cloned()
-            .map(Entry::Job)
+            .map(|j| Entry::Job(Box::new(j)))
             .collect();
         entries.extend(
             self.crew
@@ -253,7 +253,11 @@ impl Shell {
         let who = if thread == 0 {
             "Everyone on your crew is here. Asks that don't fit a thread land here.".to_string()
         } else {
-            format!("{} {} in this thread.", super::and_list(&names), if names.len() == 1 { "is" } else { "are" })
+            format!(
+                "{} {} in this thread.",
+                super::and_list(&names),
+                if names.len() == 1 { "is" } else { "are" }
+            )
         };
         div()
             .w_full()
@@ -292,7 +296,9 @@ impl Shell {
                         .mt(px(6.))
                         .text_size(px(13.5))
                         .text_color(c(ui::faint()))
-                        .child("Nothing here yet. Ask for something below, or type / for commands."),
+                        .child(
+                            "Nothing here yet. Ask for something below, or type / for commands.",
+                        ),
                 )
             })
             .when(total > 30, |d| {
@@ -300,7 +306,9 @@ impl Shell {
                     div()
                         .text_size(px(12.))
                         .text_color(c(ui::faint()))
-                        .child(format!("Showing the last 30 of {total}. All jobs has the rest.")),
+                        .child(format!(
+                            "Showing the last 30 of {total}. All jobs has the rest."
+                        )),
                 )
             })
     }
@@ -438,15 +446,15 @@ impl Shell {
                     .text_size(px(12.))
                     .child(ui::badge(ui::ok_tone(), format!("+{added}")))
                     .child(ui::badge(ui::bad_tone(), format!("\u{2212}{removed}")))
-                    .child(
-                        div()
-                            .text_color(c(ui::muted()))
-                            .child(format!(
-                                "{} {}",
-                                j.changes.len(),
-                                if j.changes.len() == 1 { "file" } else { "files" }
-                            )),
-                    )
+                    .child(div().text_color(c(ui::muted())).child(format!(
+                        "{} {}",
+                        j.changes.len(),
+                        if j.changes.len() == 1 {
+                            "file"
+                        } else {
+                            "files"
+                        }
+                    )))
                     .child(div().flex_1())
                     .when(!j.checks.is_empty(), |d| {
                         d.child(
@@ -485,9 +493,12 @@ impl Shell {
                     .child(format!("#{id} \u{b7} {}", j.engine)),
             )
             .child(
-                ui::ghost(("thread-open", id as usize), if running { "Open live" } else { "Open" })
-                    .h(px(28.))
-                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                ui::ghost(
+                    ("thread-open", id as usize),
+                    if running { "Open live" } else { "Open" },
+                )
+                .h(px(28.))
+                .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
             );
         if running {
             actions = actions.child(
@@ -509,7 +520,10 @@ impl Shell {
                         .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
                 );
         }
-        if matches!(j.status, Status::Failed | Status::Interrupted | Status::Stopped) {
+        if matches!(
+            j.status,
+            Status::Failed | Status::Interrupted | Status::Stopped
+        ) {
             actions = actions.child(
                 ui::ghost(("thread-retry", id as usize), "Try again")
                     .h(px(28.))
@@ -591,9 +605,9 @@ impl Shell {
             .iter()
             .filter(|s| {
                 s.job != 0
-                    && jobs
-                        .iter()
-                        .any(|j| j.id == s.job && matches!(j.status, Status::Done | Status::Shipped))
+                    && jobs.iter().any(|j| {
+                        j.id == s.job && matches!(j.status, Status::Done | Status::Shipped)
+                    })
             })
             .count();
         let n = g.steps.iter().filter(|s| !s.skipped).count();
@@ -665,7 +679,9 @@ impl Shell {
             );
         }
         let mut card = card()
-            .when(g.state == State::Ready, |d| d.border_color(c(ui::ask_tone().2)))
+            .when(g.state == State::Ready, |d| {
+                d.border_color(c(ui::ask_tone().2))
+            })
             .child(
                 div()
                     .px(px(14.))
@@ -694,14 +710,17 @@ impl Shell {
                                 if n == 1 { "step" } else { "steps" }
                             )),
                     )
-                    .when(matches!(g.state, State::Running | State::Paused | State::Done), |d| {
-                        d.child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(c(ui::muted()))
-                                .child(format!("{done} of {n} done")),
-                        )
-                    }),
+                    .when(
+                        matches!(g.state, State::Running | State::Paused | State::Done),
+                        |d| {
+                            d.child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::muted()))
+                                    .child(format!("{done} of {n} done")),
+                            )
+                        },
+                    ),
             );
         if !g.steps.is_empty() {
             card = card.child(steps);
@@ -727,7 +746,9 @@ impl Shell {
                     .child(
                         ui::ghost(("plan-edit", id as usize), "Edit plan")
                             .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Goal(id), cx))),
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.go(Place::Goal(id), cx)),
+                            ),
                     )
                     .child(
                         ui::solid(("plan-start", id as usize), "Start the crew")
@@ -751,7 +772,9 @@ impl Shell {
                     .child(
                         ui::ghost(("plan-open", id as usize), "Open plan")
                             .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Goal(id), cx))),
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.go(Place::Goal(id), cx)),
+                            ),
                     ),
             ),
         };
@@ -877,7 +900,8 @@ impl Shell {
         let plan_first = cx.global::<crate::settings::AppSettings>().v2_plan_first;
         let goes = if value.starts_with("/thread") {
             "Makes a new thread".to_string()
-        } else if (value.starts_with("/plan") || plan_first || self.splitting) && self.mode.writes() {
+        } else if (value.starts_with("/plan") || plan_first || self.splitting) && self.mode.writes()
+        {
             "Peek plans it first".to_string()
         } else if value.starts_with("/race") {
             format!("{} races it", target.name())
@@ -896,7 +920,11 @@ impl Shell {
             .rounded(px(14.))
             .bg(c(ui::raised()))
             .border_1()
-            .border_color(c(if ready { super::theme::mix(0xFFFFFF, ui::VIOLET, 0.55) } else { ui::line_hi() }))
+            .border_color(c(if ready {
+                super::theme::mix(0xFFFFFF, ui::VIOLET, 0.55)
+            } else {
+                ui::line_hi()
+            }))
             .shadow(vec![BoxShadow {
                 color: hsla(0., 0., 0., 0.05),
                 offset: point(px(0.), px(2.)),
@@ -953,7 +981,9 @@ impl Shell {
                             .justify_center()
                             .map(|d| {
                                 if ready {
-                                    d.bg(c(ui::t_violet())).cursor_pointer().hover(|s| s.opacity(0.9))
+                                    d.bg(c(ui::t_violet()))
+                                        .cursor_pointer()
+                                        .hover(|s| s.opacity(0.9))
                                 } else {
                                     d.bg(c(ui::press()))
                                 }
@@ -976,7 +1006,8 @@ impl Shell {
         if text.is_empty() {
             return;
         }
-        self.composer.update(cx, |i, cx| i.set_value("", window, cx));
+        self.composer
+            .update(cx, |i, cx| i.set_value("", window, cx));
         self.hand_over(text, cx);
         self.unpin_mode(window, cx);
     }

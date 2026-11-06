@@ -412,7 +412,10 @@ impl Shell {
         // The thread in view: the picked job's, else the one you're in.
         let store = &self.crew.store;
         let (folder, thread) = match pick.and_then(|id| store.job(id)) {
-            Some(j) => (j.folder.path.clone(), store.thread_for(&j.folder.path, j.thread)),
+            Some(j) => (
+                j.folder.path.clone(),
+                store.thread_for(&j.folder.path, j.thread),
+            ),
             None => (
                 store.folder().map(|f| f.path.clone()).unwrap_or_default(),
                 store.thread_here(),
@@ -533,8 +536,12 @@ impl Shell {
                             .text_size(px(11.5))
                             .font_weight(FontWeight::SEMIBOLD)
                             .cursor_pointer()
-                            .children([(false, format!("#{thread_name}")), (true, "All".to_string())].map(
-                                |(all, label)| {
+                            .children(
+                                [
+                                    (false, format!("#{thread_name}")),
+                                    (true, "All".to_string()),
+                                ]
+                                .map(|(all, label)| {
                                     let on = self.list_all == all;
                                     div()
                                         .max_w(px(120.))
@@ -552,8 +559,8 @@ impl Shell {
                                             }
                                         })
                                         .child(label)
-                                },
-                            ))
+                                }),
+                            )
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.list_all = !this.list_all;
                                 cx.notify();

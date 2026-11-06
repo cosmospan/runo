@@ -9,6 +9,7 @@
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
 mod brain;
+mod channel;
 mod chat;
 pub mod cli;
 mod crew;
@@ -36,7 +37,6 @@ mod store;
 mod term;
 mod theme;
 mod today;
-mod channel;
 mod trouble;
 mod ui;
 mod usage;
@@ -994,7 +994,12 @@ impl Shell {
                     }
                     let bots: Vec<Member> = Member::all()
                         .into_iter()
-                        .filter(|m| *m != Member::Fin && arg.to_lowercase().contains(&format!("@{}", m.name().to_lowercase())))
+                        .filter(|m| {
+                            *m != Member::Fin
+                                && arg
+                                    .to_lowercase()
+                                    .contains(&format!("@{}", m.name().to_lowercase()))
+                        })
                         .collect();
                     let name: String = arg
                         .split_whitespace()
@@ -1030,9 +1035,8 @@ impl Shell {
         if plan && !self.mode.writes() {
             self.mode = Mode::Build;
         }
-        let plan = plan
-            || self.splitting
-            || cx.global::<crate::settings::AppSettings>().v2_plan_first;
+        let plan =
+            plan || self.splitting || cx.global::<crate::settings::AppSettings>().v2_plan_first;
         let racing = if race > 0 { race } else { self.racing };
         let text = match (text.is_empty(), self.mode.default_job()) {
             (false, _) => text,
