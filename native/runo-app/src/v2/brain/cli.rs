@@ -57,6 +57,13 @@ pub fn main(args: &[String]) -> Result<String, String> {
                         if code { ", reading the project" } else { "" }
                     ))
                 }
+                super::front::Front::Confirm { why, route } => {
+                    return Ok(format!(
+                        "{} would take it as a {} job, after your yes.\n{why}",
+                        route.bot.name(),
+                        route.mode.label().to_lowercase()
+                    ))
+                }
                 super::front::Front::Hand(_) => {}
             }
             // From a terminal, wait for Squad's own server to load when the

@@ -104,6 +104,56 @@ pub fn recap_input(job: &Job) -> String {
     )
 }
 
+/// How a job ended, from facts only (its status, the diff, the checks): the
+/// line notices use, and the recap until Peek's arrives.
+pub fn facts(job: &Job) -> String {
+    let changed = || {
+        let (a, r) = job
+            .changes
+            .iter()
+            .fold((0, 0), |(a, r), c| (a + c.added, r + c.removed));
+        let n = job.changes.len();
+        format!(
+            "Changed {n} file{} (+{a} \u{2212}{r})",
+            if n == 1 { "" } else { "s" }
+        )
+    };
+    let checks = || {
+        if job.checking {
+            " Checks are running.".to_string()
+        } else if job.checks.is_empty() {
+            String::new()
+        } else {
+            let failed = job.checks.iter().filter(|c| !c.ok).count();
+            if failed == 0 {
+                " Checks passed.".to_string()
+            } else {
+                format!(" {failed} of {} checks failed.", job.checks.len())
+            }
+        }
+    };
+    match job.status {
+        Status::Review => format!("{}.{} Waiting for your approval.", changed(), checks()),
+        Status::Failed => job
+            .feed
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                Item::Error(t) => Some(format!(
+                    "Stopped with a problem: {}",
+                    t.lines().next().unwrap_or("").trim()
+                )),
+                _ => None,
+            })
+            .unwrap_or_else(|| "Stopped with a problem.".into()),
+        Status::Stopped => "Stopped by you.".into(),
+        Status::Interrupted => "Interrupted before it finished.".into(),
+        Status::Shipped => format!("Shipped. {}", job.shipped),
+        _ if !job.changes.is_empty() => format!("{}.{}", changed(), checks()),
+        _ => "Done, with no files changed.".into(),
+    }
+}
+
 fn object(reply: &str) -> Option<Value> {
     let start = reply.find('{')?;
     let end = reply.rfind('}')?;
@@ -301,6 +351,37 @@ mod tests {
             recap_input(&job),
             "Job: fix the csv export\nBot: Fixer\nEnded: waiting for your approval\n\
              Changed: src/export.ts (+12 -3)\nLast message:\nFixed the header row."
+        );
+    }
+
+    #[test]
+    fn the_facts_line_says_what_changed_and_what_is_next() {
+        let job = Job {
+            status: Status::Review,
+            changes: vec![
+                Changed {
+                    path: "a.rs".into(),
+                    status: "M".into(),
+                    added: 10,
+                    removed: 2,
+                },
+                Changed {
+                    path: "b.rs".into(),
+                    status: "A".into(),
+                    added: 5,
+                    removed: 0,
+                },
+            ],
+            checks: vec![crate::proof::CheckRun {
+                command: "cargo test".into(),
+                ok: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            facts(&job),
+            "Changed 2 files (+15 \u{2212}2). Checks passed. Waiting for your approval."
         );
     }
 

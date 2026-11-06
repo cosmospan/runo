@@ -25,6 +25,7 @@
 pub mod cli;
 pub mod digest;
 pub mod front;
+pub mod guard;
 pub mod helper;
 pub mod ideas;
 pub mod maker;
