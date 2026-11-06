@@ -396,13 +396,14 @@ impl Shell {
         detail: AnyElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let list = self.job_list(pick, cx);
-        // Crew Chat: the conversation in front, the Jobs panel on its right.
+        // Crew Chat: the conversation in front, and the Jobs panel on its right
+        // only when you open it from the top bar.
+        let list = self.jobs_open.then(|| self.job_list(pick, cx));
         div()
             .size_full()
             .flex()
             .child(div().flex_1().min_w_0().h_full().child(detail))
-            .child(list)
+            .children(list)
             .into_any_element()
     }
 

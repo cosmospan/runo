@@ -453,6 +453,8 @@ pub struct Shell {
     /// Which jobs the list beside a job shows: all, needing you, running or done.
     /// The Jobs panel shows the thread you're in (false) or every job (true).
     list_all: bool,
+    /// The Jobs panel beside a thread or job, opened from the top bar.
+    jobs_open: bool,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -779,6 +781,7 @@ impl Shell {
             inbox_pick: None,
             list_filter: 0,
             list_all: false,
+            jobs_open: false,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1108,7 +1111,8 @@ impl Shell {
             if self.place == Place::Today {
                 if !self.sample_guard(cx) {
                     let st = Self::app_settings(cx);
-                    self.crew.ask_in_thread(&st, doer, text);
+                    let who = self.ask_who();
+                    self.crew.ask_in_thread(&st, who, text);
                 }
                 cx.notify();
                 return;
@@ -1140,6 +1144,14 @@ impl Shell {
             .or_else(|| self.thread_doer())
             .or_else(|| Member::doer_for(self.mode))
             .unwrap_or(Member::for_mode(self.mode))
+    }
+
+    /// Who answers a question or a chat in a thread: the bot you picked, else
+    /// Peek, who leads the crew and talks about anything.
+    pub(super) fn ask_who(&self) -> Member {
+        self.target
+            .filter(|t| t.mode() == Mode::Ask && Member::all().contains(t))
+            .unwrap_or(Member::Fin)
     }
 
     /// In a thread with its own bots, the one of them that does this kind of

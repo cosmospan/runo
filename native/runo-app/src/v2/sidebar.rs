@@ -755,24 +755,65 @@ impl Shell {
                     .children(crumbs),
             )
             .child(div().flex_1())
-            .when(running > 0, |d| {
-                d.child(
-                    div()
-                        .h(px(26.))
-                        .px(px(9.))
-                        .flex()
-                        .items_center()
-                        .gap(px(7.))
-                        .rounded(px(7.))
-                        .bg(c(ui::run_tone().1))
-                        .border_1()
-                        .border_color(c(ui::run_tone().2))
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(ui::t_blue()))
-                        .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
-                        .child(format!("{running} running")),
-                )
+            // The Jobs panel toggle: what's running and what needs you, at a glance.
+            .child({
+                let asks = self.inbox_count();
+                let open = self.jobs_open;
+                div()
+                    .id("top-jobs")
+                    .h(px(30.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .cursor_pointer()
+                    .map(|d| {
+                        if open {
+                            d.bg(c(ui::hover()))
+                                .border_color(c(ui::line_hi()))
+                                .text_color(c(ui::ink()))
+                        } else {
+                            d.border_color(c(ui::line()))
+                                .text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
+                        }
+                    })
+                    .child(Icon::new(IconName::PanelRight).size(px(14.)))
+                    .child("Jobs")
+                    .when(running > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_color(c(ui::t_blue()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_blue())))
+                                .child(running.to_string()),
+                        )
+                    })
+                    .when(asks > 0, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_color(c(ui::t_amber()))
+                                .child(div().size(px(6.)).rounded_full().bg(c(ui::t_amber())))
+                                .child(asks.to_string()),
+                        )
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.jobs_open = !this.jobs_open;
+                        // The panel sits beside a thread or a job: open it there.
+                        if this.jobs_open && !matches!(this.place, Place::Today | Place::Live(_)) {
+                            this.go(Place::Today, cx);
+                        }
+                        cx.notify();
+                    }))
             })
             // Search, as a quiet field: the palette finds places, bots and jobs.
             .child(

@@ -343,7 +343,7 @@ impl Member {
     pub fn persona(self) -> &'static str {
         match self {
             Member::Made(id) => made(id, |k| k.persona).unwrap_or(""),
-            Member::Fin => "You are Peek, who leads the crew in Squad Code. You answer questions about this codebase in plain words for people who may not code: lead with the answer, then the evidence (files, numbers). When what the person wants is work for another bot (building, fixing, testing, reviewing or tidying), say which bot should take it and that they can add it from the Jobs page or Crew.",
+            Member::Fin => "You are Peek, who leads the crew in Squad Code and is the person's everyday assistant. Talk with them about anything: say hi back, answer questions, research, plan their day, think things through, and explain the files in this folder in plain words when asked. Many people using you don't code, so keep it plain and friendly, and lead with the answer. Don't change files yourself. When what they want is real work on this folder (building, fixing, testing, reviewing or tidying), say which bot should take it and that they can just ask for it in the thread.",
             Member::Builder => "You are Builder, a bot in Squad Code's crew that writes code. Plan briefly, make the change with tests, and keep to the project's style.",
             Member::Checker => "You are Checker, a bot in Squad Code's crew that tries things for real. Run the project's tests and checks, and report plainly what passed and what broke.",
             Member::Guard => "You are Guard, a bot in Squad Code's crew that keeps the team's rules. Point out risks to login, payments, data and secrets in plain words.",
@@ -435,12 +435,11 @@ impl Mode {
     }
 
     /// The job box's hint while the kind of work is still read from the text.
-    pub const ANY_PLACEHOLDER: &'static str =
-        "Describe what to build, fix, test or tidy, or ask a question…";
+    pub const ANY_PLACEHOLDER: &'static str = "Ask Peek anything, or give the crew a job…";
 
     pub fn placeholder(self) -> &'static str {
         match self {
-            Mode::Ask => "Ask anything about the code…",
+            Mode::Ask => "Ask anything…",
             Mode::Build => "Describe what to build, in a sentence or two…",
             Mode::Fix => "Paste an error, or describe what's broken…",
             Mode::Review => "What should Guard look at? Leave empty for your uncommitted changes…",
@@ -456,7 +455,7 @@ impl Mode {
     pub fn guess(text: &str) -> Mode {
         let t = text.trim().to_lowercase();
         if t.is_empty() {
-            return Mode::Build;
+            return Mode::Ask;
         }
         let first = t
             .split(|c: char| !c.is_alphanumeric())
@@ -500,8 +499,39 @@ impl Mode {
             Mode::Tidy
         } else if has(&["run the tests", "test suite", "coverage"]) {
             Mode::Test
-        } else {
+        } else if has(&[
+            "page",
+            "button",
+            "screen",
+            "form",
+            "feature",
+            "component",
+            "endpoint",
+            " api",
+            "function",
+            "module",
+            "database",
+            "schema",
+            "the app",
+            "the site",
+            "website",
+            "css",
+            "script",
+            "code",
+            "repo",
+            "branch",
+            "dark mode",
+            "login",
+            "signup",
+            "checkout",
+            "cart",
+        ]) {
+            // Talk about a piece of the product: work for Builder.
             Mode::Build
+        } else {
+            // Anything else is a conversation: hi, plans, research, questions.
+            // Peek answers, and suggests a job when one would help.
+            Mode::Ask
         }
     }
 
@@ -533,7 +563,11 @@ mod tests {
         assert_eq!(Mode::guess("Review my uncommitted changes"), Mode::Review);
         assert_eq!(Mode::guess("Run the tests and report failures"), Mode::Test);
         assert_eq!(Mode::guess("Refactor the payment module"), Mode::Tidy);
-        assert_eq!(Mode::guess(""), Mode::Build);
+        assert_eq!(Mode::guess(""), Mode::Ask);
+        // Everyday talk is a conversation, not a job.
+        assert_eq!(Mode::guess("hi"), Mode::Ask);
+        assert_eq!(Mode::guess("good morning"), Mode::Ask);
+        assert_eq!(Mode::guess("plan my week around the gym"), Mode::Ask);
     }
 
     #[test]

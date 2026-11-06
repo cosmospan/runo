@@ -1033,7 +1033,11 @@ impl Shell {
         if !self.mode_pinned && !value.starts_with('/') {
             self.mode = Mode::guess(&value);
         }
-        let target = self.doer();
+        let target = if self.mode == Mode::Ask {
+            self.ask_who()
+        } else {
+            self.doer()
+        };
         let ready = !value.trim().is_empty();
         let face = self.avatar(target, 20.);
         let plan_first = cx.global::<crate::settings::AppSettings>().v2_plan_first;
@@ -1043,9 +1047,8 @@ impl Shell {
             "Renames this thread".to_string()
         } else if value.starts_with("/archive") {
             "Archives this thread".to_string()
-        } else if value.starts_with("/ask") {
-            let who = Member::doer_for(Mode::Ask).unwrap_or(Member::Fin);
-            format!("{} answers here", who.name())
+        } else if value.starts_with("/ask") || (self.mode == Mode::Ask && !value.starts_with('/')) {
+            format!("{} answers here", self.ask_who().name())
         } else if value.starts_with("/race") {
             // A race runs as asked, plan-first or not, as hand_over does.
             format!("{} races it", target.name())
