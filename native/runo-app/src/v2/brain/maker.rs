@@ -46,7 +46,11 @@ const PLAIN: [&str; 48] = [
 pub fn skill_words(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for w in words(text) {
-        if w.len() < 3 || PLAIN.contains(&w.as_str()) || w.chars().all(|c| c.is_ascii_digit()) {
+        if w.len() < 3
+            || PLAIN.contains(&w.as_str())
+            || super::route::COMMON.contains(&w.as_str())
+            || w.chars().all(|c| c.is_ascii_digit())
+        {
             continue;
         }
         if !out.contains(&w) {
@@ -150,9 +154,12 @@ pub fn design_prompt(name: &str, d: &Design, project: &str) -> String {
          then set the bot up to fit it. Change no files.\n\n\
          Reply with JSON only, nothing else:\n\
          {{\"role\": \"what it's for, one short line\", \
-         \"skills\": [\"3 to 10 single lowercase words a job about its subject would use\"], \
+         \"skills\": [\"3 to 10 single lowercase words naming its subject, specific to it \
+         (such as stripe, webhooks, invoices), never general ones like code, app, api, npm, javascript or tests\"], \
          \"rules\": [\"3 to 6 short rules for how it works in this project, such as the exact test command, \
-         tools to use, folders to leave alone, when to ask first\"]}}",
+         tools to use, folders to leave alone, when to ask first\"]}}\n\n\
+         Rules must stay true for months: how to work here, never what's true today \
+         (no failing tests, open bugs, current versions or work in progress).",
         role = d.role,
         kind = d.like.mode().label().to_lowercase(),
     )
@@ -180,6 +187,7 @@ pub fn parse_design(reply: &str) -> Option<(String, Vec<String>, Vec<String>)> {
     let skills: Vec<String> = list("skills", 2)
         .into_iter()
         .map(|s| s.to_lowercase())
+        .filter(|s| !super::route::COMMON.contains(&s.as_str()) && !PLAIN.contains(&s.as_str()))
         .collect();
     let rules = list("rules", 40);
     (!role.is_empty()

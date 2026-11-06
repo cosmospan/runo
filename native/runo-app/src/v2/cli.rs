@@ -156,7 +156,7 @@ pub fn main(args: &[String]) -> i32 {
     };
     let result: Result<String, String> = match cmd {
         "ls" | "list" => {
-            let s = Store::load();
+            let s = Store::load_view();
             Ok(if s.jobs.is_empty() {
                 "No jobs yet.".to_string()
             } else {
@@ -170,7 +170,7 @@ pub fn main(args: &[String]) -> i32 {
             })
         }
         "show" => id().and_then(|id| {
-            let s = Store::load();
+            let s = Store::load_view();
             let j = s.job(id).ok_or(format!("No job #{id}."))?;
             let mut out = format!(
                 "#{} {}\n{} \u{b7} {} \u{b7} {}\n",

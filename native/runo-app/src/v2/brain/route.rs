@@ -230,20 +230,91 @@ fn cap(s: &str) -> String {
     }
 }
 
-/// Words too common to tie a sentence to a made bot.
-const COMMON: [&str; 24] = [
-    "the", "a", "an", "and", "or", "for", "to", "of", "in", "on", "it", "is", "my", "our", "your",
-    "this", "that", "with", "bot", "job", "jobs", "code", "all", "any",
+/// Words too common to tie a sentence to a made bot: glue words, and the
+/// tools and kinds of work nearly every job names.
+pub const COMMON: &[&str] = &[
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "for",
+    "to",
+    "of",
+    "in",
+    "on",
+    "it",
+    "is",
+    "my",
+    "our",
+    "your",
+    "this",
+    "that",
+    "with",
+    "bot",
+    "job",
+    "jobs",
+    "code",
+    "all",
+    "any",
+    "app",
+    "api",
+    "npm",
+    "javascript",
+    "typescript",
+    "node",
+    "python",
+    "rust",
+    "project",
+    "file",
+    "files",
+    "repo",
+    "test",
+    "tests",
+    "build",
+    "builds",
+    "fix",
+    "fixes",
+    "bug",
+    "bugs",
+    "run",
+    "runs",
+    "add",
+    "make",
+    "update",
+    "change",
+    "changes",
+    "version",
+    "bump",
+    "new",
+    "feature",
+    "error",
+    "errors",
 ];
 
-/// A made bot whose name or job shares a word with the sentence, if any.
-fn made_bot_for(text: &str, crew: &[Member]) -> Option<(Member, String)> {
+/// Whether a made bot of kind `theirs` should take a job of kind `job`:
+/// the same kind, or making and fixing, which are close.
+fn same_kind(theirs: Mode, job: Mode) -> bool {
+    theirs == job
+        || matches!(
+            (theirs, job),
+            (Mode::Build, Mode::Fix) | (Mode::Fix, Mode::Build)
+        )
+}
+
+/// A made bot of a fitting kind whose name, job or skills share a word with
+/// the sentence, if any.
+fn made_bot_for(text: &str, crew: &[Member], mode: Mode) -> Option<(Member, String)> {
     let ws: Vec<String> = words(text)
         .into_iter()
         .filter(|w| w.len() > 2 && !COMMON.contains(&w.as_str()))
         .collect();
     let mut best: Option<(Member, usize, String)> = None;
-    for m in crew.iter().copied().filter(|m| m.is_made()) {
+    for m in crew
+        .iter()
+        .copied()
+        .filter(|m| m.is_made() && same_kind(m.mode(), mode))
+    {
         let theirs: Vec<String> = words(&format!("{} {} {}", m.name(), m.role(), m.skills()))
             .into_iter()
             .filter(|w| w.len() > 2 && !COMMON.contains(&w.as_str()))
@@ -276,7 +347,7 @@ pub fn by_rules(text: &str, crew: &[Member]) -> Route {
         (0.35 + 0.45 * lead + 0.05 * top.min(4.0)).min(0.97)
     };
     let mut why = because(mode, &hit);
-    let bot = match made_bot_for(text, crew) {
+    let bot = match made_bot_for(text, crew, mode) {
         Some((m, word)) => {
             why = format!("{} is your bot for \u{201c}{word}\u{201d}. {why}", m.name());
             m
@@ -310,8 +381,8 @@ pub fn doer(mode: Mode, crew: &[Member]) -> Member {
 pub fn by_tiny(text: &str, crew: &[Member]) -> Route {
     let (mode, sure) = super::tiny::classify(text);
     let why = format!("It reads like a {} job.", mode.label().to_lowercase());
-    // A bot the person made for the subject takes it, whatever the kind.
-    let (bot, why) = match made_bot_for(text, crew) {
+    // A bot the person made for the subject takes it, when it does this kind of work.
+    let (bot, why) = match made_bot_for(text, crew, mode) {
         Some((m, word)) => (
             m,
             format!("{} is your bot for \u{201c}{word}\u{201d}. {why}", m.name()),
@@ -361,7 +432,7 @@ pub fn route(st: &crate::settings::AppSettings, text: &str) -> Route {
         if let Some(mut r) = m.route(text, &crew) {
             // The model knows only the built-in crew; a bot the person made
             // for the subject still takes it.
-            if let Some((made, word)) = made_bot_for(text, &crew) {
+            if let Some((made, word)) = made_bot_for(text, &crew, r.mode) {
                 r.why = format!(
                     "{} is your bot for \u{201c}{word}\u{201d}. {}",
                     made.name(),
@@ -385,6 +456,19 @@ mod tests {
 
     fn mode_of(text: &str) -> Mode {
         by_rules(text, &crew()).mode
+    }
+
+    #[test]
+    fn a_made_bot_takes_only_its_kind_of_work() {
+        // A docs writer (a Build bot) can fix docs, but not run tests or tidy.
+        assert!(same_kind(Mode::Build, Mode::Fix));
+        assert!(same_kind(Mode::Test, Mode::Test));
+        assert!(!same_kind(Mode::Build, Mode::Test));
+        assert!(!same_kind(Mode::Build, Mode::Tidy));
+        assert!(!same_kind(Mode::Ask, Mode::Build));
+        for w in ["npm", "javascript", "api", "code", "app", "bump"] {
+            assert!(COMMON.contains(&w), "{w}");
+        }
     }
 
     #[test]

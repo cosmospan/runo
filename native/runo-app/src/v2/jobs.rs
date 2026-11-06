@@ -22,14 +22,41 @@ pub struct Runner {
     stopped: bool,
 }
 
+/// Commands a bot that changes files may run without asking: the project's
+/// own checks, and git's read-only views. Anything else is still refused,
+/// since a headless run can't ask.
+pub fn may_run(checks: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = checks.iter().map(|c| format!("Bash({c}:*)")).collect();
+    for c in ["git status", "git diff", "git log", "git show", "ls"] {
+        out.push(format!("Bash({c}:*)"));
+    }
+    out
+}
+
+/// What a bot that changes files is told about the checks.
+fn check_rule(checks: &[String]) -> String {
+    if checks.is_empty() {
+        return String::new();
+    }
+    format!(
+        " You may run the project's checks ({}) to see your change work; Squad Code runs them again when you finish.",
+        checks.join(", ")
+    )
+}
+
 /// What the bot is told, around the person's words.
-fn prompt(job: &Job, text: &str, follow_up: bool) -> String {
+fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
     if follow_up {
         return text.to_string();
     }
     let rules = match job.mode {
-        Mode::Ask | Mode::Review => "Read the code to be sure, and don't change any files.",
-        _ => "Make the change in this folder. Keep a short todo list as you work.",
+        Mode::Ask | Mode::Review => {
+            "Read the code to be sure, and don't change any files.".to_string()
+        }
+        _ => format!(
+            "Make the change in this folder. Keep a short todo list as you work.{}",
+            check_rule(checks)
+        ),
     };
     let part = if job.context.is_empty() {
         String::new()
@@ -51,7 +78,7 @@ pub fn start(
 ) -> Result<Runner, String> {
     let (i, model) = engine::for_job(st, job);
     let p = &agent::PROVIDERS[i];
-    let opts = st.agent(p.id);
+    let mut opts = st.agent(p.id);
     if !agent::available(p.bin, &opts.binary) {
         return Err(format!(
             "{} isn't installed on this computer. Pick another engine for {} in Engines.",
@@ -84,7 +111,28 @@ pub fn start(
         };
     }
     let dir = job.dir().to_string();
-    let sent = prompt(job, text, resume);
+    // A bot that changes files may run the project's checks, so it can see
+    // its change work instead of being refused.
+    let checks = if job.mode.writes() {
+        super::work::checks_for(&dir)
+    } else {
+        Vec::new()
+    };
+    if !checks.is_empty() {
+        let mut rules: Vec<String> = opts
+            .allowed_tools
+            .split(',')
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .collect();
+        for r in may_run(&checks) {
+            if !rules.contains(&r) {
+                rules.push(r);
+            }
+        }
+        opts.allowed_tools = rules.join(",");
+    }
+    let sent = prompt(job, text, resume, &checks);
     let spec = agent::RunSpec {
         provider: p.id,
         prompt: &sent,
@@ -287,5 +335,21 @@ fn apply(job: &mut Job, e: AgentEvent) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bot_that_changes_files_may_run_the_checks() {
+        let checks = vec!["npm test".to_string(), "cargo test".to_string()];
+        let rules = may_run(&checks);
+        assert!(rules.contains(&"Bash(npm test:*)".to_string()));
+        assert!(rules.contains(&"Bash(git diff:*)".to_string()));
+        assert!(!rules.iter().any(|r| r == "Bash"));
+        assert!(check_rule(&checks).contains("npm test, cargo test"));
+        assert!(check_rule(&[]).is_empty());
     }
 }

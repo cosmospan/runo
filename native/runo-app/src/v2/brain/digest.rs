@@ -50,6 +50,29 @@ pub fn referenced<'a>(text: &str, jobs: &'a [Job]) -> Vec<&'a Job> {
     out
 }
 
+/// The threads `text` points at whose changes wait, unmerged, on their own
+/// branch: a new job starts from the base without them.
+pub fn unmerged<'a>(text: &str, jobs: &'a [Job]) -> Vec<&'a Job> {
+    referenced(text, jobs)
+        .into_iter()
+        .filter(|j| j.status == Status::Review && !j.branch.is_empty())
+        .collect()
+}
+
+/// What a bot is told about an unmerged thread it builds on, so it can read
+/// those changes where they are.
+pub fn unmerged_hint(j: &Job) -> String {
+    let base = if j.base_sha.is_empty() {
+        j.base.as_str()
+    } else {
+        j.base_sha.as_str()
+    };
+    format!(
+        "#{}'s changes aren't merged yet, so they aren't in this folder. They're on branch {} (in {}); `git diff {base} {}` shows them. Build on them only if the job needs them, and say so.",
+        j.id, j.branch, j.worktree, j.branch
+    )
+}
+
 fn clip(s: &str, n: usize) -> String {
     let s = s.trim();
     if s.chars().count() <= n {
@@ -188,6 +211,19 @@ mod tests {
         );
         assert!(referenced("#99 and #nothing-here, and C# code", &jobs).is_empty());
         assert_eq!(referenced("#12 and again #12", &jobs).len(), 1);
+    }
+
+    #[test]
+    fn an_unmerged_thread_is_named_with_its_branch() {
+        let mut j = job();
+        assert!(unmerged("like #12", &[j.clone()]).is_empty());
+        j.status = Status::Review;
+        j.branch = "squad/12-safari-export".into();
+        j.base = "main".into();
+        let jobs = vec![j];
+        let hit = unmerged("like #12 but for pdf", &jobs);
+        assert_eq!(hit.len(), 1);
+        assert!(unmerged_hint(hit[0]).contains("squad/12-safari-export"));
     }
 
     #[test]

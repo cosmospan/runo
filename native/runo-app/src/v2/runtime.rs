@@ -189,6 +189,25 @@ impl Runtime {
                 format!("{}\n\n{refs}", job.context)
             };
         }
+        // A thread it builds on that isn't merged yet: this job starts from
+        // the base without those changes, so say so and show where they are.
+        if mode.writes() {
+            for j in brain::digest::unmerged(text, &self.store.jobs) {
+                if j.folder.path != job.folder.path {
+                    continue;
+                }
+                job.feed.push(store::Item::Note(format!(
+                    "#{} isn't approved yet, so this starts without its changes. {} can read them on #{}'s branch; approve #{} first if this should build on it.",
+                    j.id,
+                    bot.name(),
+                    j.id,
+                    j.id
+                )));
+                job.context = format!("{}\n\n{}", job.context, brain::digest::unmerged_hint(j))
+                    .trim()
+                    .to_string();
+            }
+        }
         // Peek's short title for the card, when Smart Peek is on.
         if let Some(rx) = brain::tasks::ask(st, &job, false) {
             self.peeking.push((job.id, rx));
@@ -363,6 +382,13 @@ impl Runtime {
     /// More words for a job: while it runs they wait; once it's done they start a
     /// follow-up that continues the same conversation when the engine can.
     pub fn follow_up(&mut self, st: &AppSettings, id: u64, text: String) {
+        self.send_on(st, id, text, None);
+    }
+
+    /// Sends `text` to a job's bot as its next turn. `note` is None when the
+    /// person wrote it; Squad Code's own asks (a fix turn, carrying on) show
+    /// as that note instead, so they're never taken for the person's words.
+    fn send_on(&mut self, st: &AppSettings, id: u64, text: String, note: Option<String>) {
         let refs = brain::digest::context_for(&text, &self.store.jobs);
         let Some(job) = self.store.job_mut(id) else {
             return;
@@ -371,7 +397,13 @@ impl Runtime {
             self.say("It's still working. Add this once it finishes.");
             return;
         }
-        job.feed.push(store::Item::You(text.clone()));
+        match note {
+            None => job.feed.push(store::Item::You(text.clone())),
+            Some(n) if !n.is_empty() => job.feed.push(store::Item::Note(n)),
+            Some(_) => {}
+        }
+        // The last turn's recap no longer tells how it ends.
+        job.recap.clear();
         let text = if refs.is_empty() {
             text
         } else {
@@ -386,11 +418,12 @@ impl Runtime {
 
     /// A stopped or interrupted job picks up where it was.
     pub fn carry_on(&mut self, st: &AppSettings, id: u64) {
-        self.follow_up(
+        self.send_on(
             st,
             id,
             "Carry on from where you stopped. Check what is already done in the files first."
                 .into(),
+            Some("Picking up where it stopped.".into()),
         );
     }
 
@@ -404,7 +437,12 @@ impl Runtime {
         if let Some(j) = self.store.job_mut(id) {
             j.conflict.clear();
         }
-        self.follow_up(st, id, text);
+        self.send_on(
+            st,
+            id,
+            text,
+            Some("Bringing the branch up to date with its base.".into()),
+        );
     }
 
     pub fn stop(&mut self, id: u64) {
@@ -1223,7 +1261,8 @@ impl Runtime {
                 retry = fix_turn(job);
             }
             if let Some(prompt) = retry {
-                self.follow_up(st, id, prompt);
+                // fix_turn already said why in the feed.
+                self.send_on(st, id, prompt, Some(String::new()));
             }
             self.store.save();
         }

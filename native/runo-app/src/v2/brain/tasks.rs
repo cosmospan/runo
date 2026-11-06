@@ -78,18 +78,28 @@ pub fn recap_input(job: &Job) -> String {
     } else {
         changed.join(", ")
     };
-    let mut last = job
-        .feed
-        .iter()
-        .rev()
-        .find_map(|i| match i {
-            Item::Text(t) if !t.trim().is_empty() => Some(t.trim().to_string()),
-            Item::Error(t) => Some(t.trim().to_string()),
-            _ => None,
-        })
-        .unwrap_or_default();
+    // The last thing the bot said in each turn: a fix turn's "done" alone
+    // would hide what the first turn changed.
+    let mut turns: Vec<String> = Vec::new();
+    let mut said: Option<String> = None;
+    for i in &job.feed {
+        match i {
+            Item::You(_) | Item::Note(_) => {
+                if let Some(t) = said.take() {
+                    turns.push(t);
+                }
+            }
+            Item::Text(t) if !t.trim().is_empty() => said = Some(t.trim().to_string()),
+            Item::Error(t) => said = Some(t.trim().to_string()),
+            _ => {}
+        }
+    }
+    turns.extend(said);
+    let mut last = turns.join("\n\n");
     if last.chars().count() > 1500 {
-        last = last.chars().take(1500).collect::<String>() + "…";
+        // Keep the end, where the latest turn is.
+        let n = last.chars().count();
+        last = "\u{2026}".to_string() + &last.chars().skip(n - 1500).collect::<String>();
     }
     let ended = match job.status {
         Status::Review => "waiting for your approval",
@@ -97,8 +107,23 @@ pub fn recap_input(job: &Job) -> String {
         Status::Stopped | Status::Interrupted => "stopped",
         _ => "done",
     };
+    let checks = if job.checks.is_empty() {
+        String::new()
+    } else {
+        let failed: Vec<&str> = job
+            .checks
+            .iter()
+            .filter(|c| !c.ok)
+            .map(|c| c.command.as_str())
+            .collect();
+        if failed.is_empty() {
+            "\nChecks: all passed".to_string()
+        } else {
+            format!("\nChecks: failed: {}", failed.join(", "))
+        }
+    };
     format!(
-        "Job: {}\nBot: {}\nEnded: {ended}\nChanged: {changed}\nLast message:\n{last}",
+        "Job: {}\nBot: {}\nEnded: {ended}\nChanged: {changed}{checks}\nLast message:\n{last}",
         job.title.trim(),
         job.bot.name()
     )
@@ -352,6 +377,30 @@ mod tests {
             "Job: fix the csv export\nBot: Fixer\nEnded: waiting for your approval\n\
              Changed: src/export.ts (+12 -3)\nLast message:\nFixed the header row."
         );
+    }
+
+    #[test]
+    fn the_recap_input_covers_every_turn_and_the_final_checks() {
+        let job = Job {
+            bot: Member::Fixer,
+            title: "fix the csv export".into(),
+            status: Status::Review,
+            feed: vec![
+                Item::Text("Rewrote the header row in export.ts.".into()),
+                Item::Note("`npm test` failed, so Fixer is fixing it.".into()),
+                Item::Text("Updated the snapshot; tests pass.".into()),
+            ],
+            checks: vec![crate::proof::CheckRun {
+                command: "npm test".into(),
+                ok: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let i = recap_input(&job);
+        assert!(i.contains("Rewrote the header row"), "{i}");
+        assert!(i.contains("Updated the snapshot"), "{i}");
+        assert!(i.contains("Checks: all passed"), "{i}");
     }
 
     #[test]

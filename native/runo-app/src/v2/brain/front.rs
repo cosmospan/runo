@@ -17,7 +17,7 @@ use crate::settings::AppSettings;
 
 use super::super::data::{Member, Mode};
 use super::route::{self, Route};
-use super::{tasks, words};
+use super::words;
 
 /// What Peek does with a message.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,20 +56,11 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
         }
     }
     let r = route::route(st, t);
-    if r.mode == Mode::Ask || (r.sure < Route::SURE && general_question(t)) {
+    if r.mode == Mode::Ask || (general_question(t) && !asks_for_work(t)) {
         return Front::Answer {
             question: t.to_string(),
             code: about_code(t),
         };
-    }
-    // Smart Peek, when it's on and up, catches vague work the rules let by.
-    if !follow_up {
-        if let Some(question) = tasks::clarify(st, t) {
-            return Front::AskBack {
-                question,
-                choices: Vec::new(),
-            };
-        }
     }
     match super::guard::risk(t) {
         Some(why) => Front::Confirm { why, route: r },
@@ -77,123 +68,430 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
     }
 }
 
-/// Words that only make small talk.
-const GREETINGS: [&str; 17] = [
+fn all_in(ws: &[String], set: &[&str]) -> bool {
+    !ws.is_empty() && ws.iter().all(|w| set.contains(&w.as_str()))
+}
+
+/// Words that ask for work or name something to work on. A message with
+/// none of these and a social word in it is small talk.
+const WORK: &[&str] = &[
+    "fix",
+    "add",
+    "build",
+    "make",
+    "change",
+    "update",
+    "write",
+    "run",
+    "test",
+    "tests",
+    "review",
+    "delete",
+    "remove",
+    "deploy",
+    "push",
+    "merge",
+    "explain",
+    "show",
+    "create",
+    "refactor",
+    "bump",
+    "check",
+    "rename",
+    "move",
+    "clean",
+    "upgrade",
+    "install",
+    "set",
+    "setup",
+    "find",
+    "look",
+    "debug",
+    "improve",
+    "speed",
+    "sort",
+    "help",
+    "why",
+    "where",
+    "when",
+    "which",
+    "code",
+    "bug",
+    "error",
+    "crash",
+    "page",
+    "file",
+    "files",
+    "app",
+    "api",
+    "script",
+    "query",
+    "table",
+    "test",
+    "pr",
+    "branch",
+    "build",
+    "issue",
+    "broken",
+    "wrong",
+    "slow",
+    "failing",
+    "summarise",
+    "summarize",
+    "draft",
+];
+
+/// Words that only make small talk: greetings, thanks, praise, goodbyes.
+const SOCIAL: &[&str] = &[
     "hi",
     "hii",
     "hello",
     "hey",
     "heya",
-    "yo",
     "hiya",
+    "yo",
     "sup",
+    "gm",
     "morning",
     "evening",
     "afternoon",
-    "good",
-    "day",
-    "there",
-    "peek",
-    "all",
-    "everyone",
-];
-const THANKS: [&str; 12] = [
-    "thanks", "thank", "you", "ty", "thx", "cheers", "great", "nice", "cool", "awesome", "perfect",
+    "night",
+    "thanks",
+    "thank",
+    "thx",
+    "ty",
+    "cheers",
+    "appreciate",
+    "great",
+    "nice",
+    "cool",
+    "awesome",
+    "perfect",
     "lovely",
+    "amazing",
+    "lol",
+    "wow",
+    "bye",
+    "goodbye",
+    "cya",
+    "later",
+    "tomorrow",
+    "tmrw",
+    "logging",
+    "signing",
+    "off",
+    "welcome",
+    "worked",
+    "fixed",
+    "done",
+    "ok",
+    "okay",
+    "alright",
+    "sweet",
+    "lifesaver",
+    "legend",
+    "genius",
+    "star",
+    "gn",
+    "ttyl",
+    "gtg",
+    "brb",
+    "apprecated",
+    "appreciated",
+    "thnx",
+    "tysm",
 ];
-const BYE: [&str; 6] = ["bye", "goodbye", "night", "later", "see", "ya"];
-const OK: [&str; 6] = ["ok", "okay", "k", "sure", "alright", "got"];
 
-fn all_in(ws: &[String], set: &[&str]) -> bool {
-    !ws.is_empty() && ws.iter().all(|w| set.contains(&w.as_str()))
+const ABOUT_ME: &str = "I'm Peek. Ask me anything, and I'll answer or look it up. Tell me what you want done, and I'll hand it to the right bot on your crew. If something's unclear, I'll ask first.";
+
+/// Whether the message asks what Peek and the crew can do.
+fn asks_what_we_do(lower: &str, ws: &[String]) -> bool {
+    let has = |w: &str| ws.iter().any(|x| x == w);
+    ((has("what") || has("wat") || has("wht"))
+        && (has("can") || has("could"))
+        && (has("do") || has("help")))
+        && ws.len() <= 12
+        || lower.contains("who are you")
+        || lower.contains("what are you")
+        || lower.contains("how do you work")
+        || ws == ["help"]
+}
+
+/// Whether the message asks how Peek is.
+fn asks_how_are_you(ws: &[String]) -> bool {
+    let has = |w: &str| ws.iter().any(|x| x == w);
+    let how = has("how") || has("hows") || has("how's");
+    how && (has("you")
+        || has("u")
+        || has("going")
+        || has("goin")
+        || has("day")
+        || has("doing")
+        || has("doin"))
+        && !ws.iter().any(|w| WORK.contains(&w.as_str()) && w != "help")
+        && ws.len() <= 8
 }
 
 /// Peek's reply to small talk, or None when the message is more than that.
 pub fn small_talk(text: &str) -> Option<String> {
     let ws = words(text);
-    if ws.is_empty() || ws.len() > 6 {
+    if ws.is_empty() || ws.len() > 16 {
         return None;
     }
     let lower = text.to_lowercase();
-    let has = |p: &str| lower.contains(p);
-    if has("what can you do")
-        || has("who are you")
-        || has("what are you")
-        || has("how do you work")
-        || ws == ["help"]
-    {
-        return Some(
-            "I'm Peek. Ask me anything, and I'll answer or look it up. Tell me what you want done, and I'll hand it to the right bot on your crew. If something's unclear, I'll ask first."
-                .into(),
-        );
+    if asks_what_we_do(&lower, &ws) {
+        return Some(ABOUT_ME.into());
     }
-    if has("how are you") || has("how's it going") || has("hows it going") {
+    if asks_how_are_you(&ws) {
         return Some("All good here, and the crew's ready. What can I do for you?".into());
     }
-    if all_in(&ws, &GREETINGS) {
-        return Some(
-            "Hi! What can I do for you? Ask me something, or tell me what you need done.".into(),
-        );
+    // A question that isn't about Peek is a question, not small talk.
+    if text.trim_end().ends_with('?') || starts_like_a_question(&ws) {
+        return None;
     }
-    if all_in(
-        &ws,
-        &[THANKS.as_slice(), &["so", "much", "a", "lot", "peek"]].concat(),
-    ) {
-        return Some("Any time.".into());
+    let has = |w: &str| ws.iter().any(|x| x == w);
+    let social = ws.iter().any(|w| SOCIAL.contains(&w.as_str()));
+    // Thanks and goodbyes may name the work they're about ("thanks, the
+    // query runs faster now"); only a new request makes them work.
+    let thanks_or_bye = has("thanks")
+        || has("thank")
+        || has("thx")
+        || has("thnx")
+        || has("ty")
+        || has("tysm")
+        || has("cheers")
+        || has("appreciate")
+        || has("apprecated")
+        || has("appreciated")
+        || has("lifesaver")
+        || has("legend")
+        || has("bye")
+        || has("gn")
+        || has("ttyl")
+        || has("cya");
+    let work = if thanks_or_bye {
+        asks_for_work(text)
+            || lower.contains("but ")
+            || lower.contains("can you")
+            || lower.contains("could you")
+    } else {
+        ws.iter().any(|w| WORK.contains(&w.as_str()))
+    };
+    // "nothing needed", "just checking in", "first time here", "new here".
+    let idle = lower.contains("nothing for")
+        || lower.contains("nothing needed")
+        || lower.contains("nothing else")
+        || lower.contains("nothing much")
+        || lower.contains("checking in")
+        || lower.contains("saying hello")
+        || lower.contains("new here")
+        || lower.contains("first time")
+        || lower.contains("that's all")
+        || lower.contains("thats all");
+    if !(social || idle) || work {
+        return None;
     }
-    if all_in(&ws, &BYE) {
-        return Some("See you. The crew keeps going while you're away.".into());
-    }
-    if all_in(&ws, &[OK.as_slice(), &["it", "thanks"]].concat()) {
-        return Some("Okay. Anything else?".into());
-    }
-    None
+    let reply = if has("thanks")
+        || has("thank")
+        || has("thx")
+        || has("ty")
+        || has("cheers")
+        || has("appreciate")
+        || has("worked")
+        || has("fixed")
+    {
+        "Glad it helped. Anything else?"
+    } else if has("bye")
+        || has("goodbye")
+        || has("cya")
+        || has("night")
+        || has("tomorrow")
+        || has("tmrw")
+        || has("logging")
+        || has("signing")
+        || lower.contains("that's all")
+        || lower.contains("thats all")
+    {
+        "See you. The crew keeps going while you're away."
+    } else if lower.contains("new here") || lower.contains("first time") {
+        "Welcome! Ask me anything, or tell me what you'd like done, in your own words. I'll answer, or hand it to the right bot."
+    } else if has("hi")
+        || has("hii")
+        || has("hello")
+        || has("hey")
+        || has("heya")
+        || has("hiya")
+        || has("yo")
+        || has("gm")
+        || has("morning")
+        || has("evening")
+        || has("afternoon")
+        || has("sup")
+    {
+        "Hi! What can I do for you? Ask me something, or tell me what you need done."
+    } else {
+        "Thanks! What's next?"
+    };
+    Some(reply.into())
 }
 
-/// Words that name no thing to work on.
-const EMPTY: [&str; 22] = [
+/// Words that ask for work without naming what: verbs, fillers, and nouns
+/// too general to point at one thing ("the page", "the numbers").
+const VAGUE: &[&str] = &[
     "fix",
+    "sort",
+    "out",
+    "make",
+    "do",
+    "change",
+    "update",
+    "clean",
+    "cleanup",
+    "up",
+    "tidy",
+    "improve",
+    "better",
+    "faster",
+    "nicer",
+    "cleaner",
+    "speed",
     "it",
+    "its",
+    "it's",
     "this",
     "that",
-    "make",
-    "better",
-    "improve",
-    "do",
+    "these",
+    "those",
+    "they",
+    "them",
     "the",
+    "a",
+    "an",
+    "bit",
+    "little",
+    "things",
     "thing",
     "stuff",
-    "update",
-    "change",
+    "something",
+    "issue",
+    "problem",
+    "bug",
+    "page",
+    "script",
+    "query",
+    "job",
+    "numbers",
+    "number",
+    "colors",
+    "color",
+    "colours",
+    "colour",
+    "report",
+    "app",
+    "one",
     "please",
     "pls",
     "plz",
-    "something",
-    "now",
+    "can",
+    "could",
+    "you",
+    "u",
     "again",
-    "all",
+    "still",
+    "now",
+    "broken",
+    "wrong",
     "work",
     "on",
+    "is",
+    "are",
+    "all",
+    "some",
+    "hi",
+    "hey",
+    "hello",
+    "peek",
+    "just",
+    "quick",
+    "same",
+    "for",
+    "other",
+    "we",
+    "of",
+    "something's",
+    "somethings",
+    "out",
+    "pipeline",
+    "dashboard",
+    "site",
+    "website",
+    "ui",
+    "design",
+    "file",
+    "screen",
+    "code",
+    "layout",
+    "view",
+    "flow",
+    "feature",
+    "model",
+    "data",
+    "styling",
+    "style",
+    "look",
 ];
 
 /// The question to ask when `text` names nothing to work on: "fix it", "make
-/// it better".
+/// it better", "update the page", "do the thing we talked about".
 pub fn vague(text: &str) -> Option<(String, Vec<String>)> {
     let ws = words(text);
-    if ws.is_empty() || ws.len() > 5 || !all_in(&ws, &EMPTY) {
+    let lower = text.to_lowercase();
+    // Something only the person knows about.
+    let elsewhere = [
+        "we talked about",
+        "we discussed",
+        "as yesterday",
+        "same as before",
+        "the other one",
+        "you know what",
+        "like last time",
+        "as last time",
+        "like i said",
+        "like i told",
+        "from earlier",
+        "from before",
+        "i mentioned",
+    ]
+    .iter()
+    .any(|p| lower.contains(p));
+    let empty = !ws.is_empty() && ws.len() <= 12 && all_in(&ws, VAGUE)
+        // A message of only fillers ("hi peek") is small talk, not vague work.
+        && ws.iter().any(|w| ["fix", "sort", "make", "do", "change", "update", "clean", "cleanup", "tidy", "improve", "speed", "broken", "wrong"].contains(&w.as_str()));
+    if !(empty || (elsewhere && ws.len() <= 14)) {
         return None;
     }
-    let lead = if ws.iter().any(|w| w == "fix") {
-        "Happy to fix it. What's going wrong, and where? A page, a file or an error message helps."
-    } else if ws.iter().any(|w| w == "better" || w == "improve") {
-        "What should get better: how it looks, how fast it is, or how it works?"
+    let has = |w: &str| ws.iter().any(|x| x == w);
+    let (lead, choices): (&str, Vec<String>) = if elsewhere {
+        ("I don't have that conversation. Which one do you mean? Name it, or point me at its thread with #.", Vec::new())
+    } else if has("fix")
+        || has("broken")
+        || has("wrong")
+        || has("sort")
+        || has("bug")
+        || has("issue")
+        || has("problem")
+    {
+        ("Happy to look. What's going wrong, and where? A page, a file or an error message helps.", Vec::new())
+    } else if has("better") || has("improve") || has("faster") || has("speed") || has("nicer") {
+        (
+            "What should get better: how it looks, how fast it is, or how it works?",
+            vec!["How it looks".into(), "Speed".into(), "How it works".into()],
+        )
     } else {
-        "What would you like done? Name the thing, and I'll take it from there."
-    };
-    let choices = if ws.iter().any(|w| w == "better" || w == "improve") {
-        vec!["How it looks".into(), "Speed".into(), "How it works".into()]
-    } else {
-        Vec::new()
+        (
+            "Which one, and what should change? Name the thing, and I'll take it from there.",
+            Vec::new(),
+        )
     };
     Some((lead.to_string(), choices))
 }
@@ -260,10 +558,31 @@ pub fn about_code(text: &str) -> bool {
 /// or starts like one, and asks for no change.
 pub fn general_question(text: &str) -> bool {
     let ws = words(text);
-    let Some(first) = ws.first() else {
-        return false;
-    };
-    const STARTS: [&str; 18] = [
+    if starts_like_a_question(&ws) {
+        return true;
+    }
+    // A long message that ends in a question is judged by that question:
+    // "the CSV loader crashes on empty files, can you fix that?" asks for work.
+    text.trim_end().ends_with('?') && {
+        let last = last_sentence(text);
+        let lw = words(last);
+        starts_like_a_question(&lw) && !asks_for_work(last)
+    }
+}
+
+/// The last sentence or clause of a message.
+fn last_sentence(text: &str) -> &str {
+    let t = text.trim().trim_end_matches(['?', '!', '.', ' ']);
+    t.rsplit(['.', '!', '?', '\n', ','])
+        .map(str::trim)
+        .find(|s| !s.is_empty())
+        .unwrap_or(t)
+}
+
+/// Whether the words open like a question ("what", "how", "is it", "can you
+/// help me word…").
+fn starts_like_a_question(ws: &[String]) -> bool {
+    const STARTS: &[&str] = &[
         "what",
         "how",
         "why",
@@ -282,8 +601,93 @@ pub fn general_question(text: &str) -> bool {
         "summarise",
         "summarize",
         "tell",
+        "wher",
+        "wat",
+        "whats",
+        "hows",
+        "whos",
+        "what's",
+        "how's",
+        "where's",
+        "if",
+        "would",
+        "will",
+        "whats",
     ];
-    text.trim_end().ends_with('?') || STARTS.contains(&first.as_str())
+    ws.first().is_some_and(|f| STARTS.contains(&f.as_str()))
+}
+
+/// Verbs that start a request for work, even when it's put as a question
+/// ("can you fix the login?").
+const DO: &[&str] = &[
+    "fix",
+    "add",
+    "build",
+    "make",
+    "change",
+    "update",
+    "write",
+    "run",
+    "test",
+    "delete",
+    "remove",
+    "deploy",
+    "push",
+    "merge",
+    "create",
+    "refactor",
+    "bump",
+    "rename",
+    "move",
+    "clean",
+    "upgrade",
+    "install",
+    "set",
+    "migrate",
+    "implement",
+    "sort",
+    "speed",
+    "drop",
+    "rewrite",
+    "convert",
+    "port",
+    "review",
+    "debug",
+    "improve",
+    "add",
+    "wipe",
+    "squash",
+    "rotate",
+    "send",
+    "email",
+    "ship",
+];
+
+/// Whether a message asks for work, after any "hi", "please" or "can you".
+pub fn asks_for_work(text: &str) -> bool {
+    const LEAD: &[&str] = &[
+        "hi", "hey", "hello", "peek", "please", "pls", "plz", "can", "could", "would", "will",
+        "you", "u", "quickly", "just", "quick", "one", "ok", "so", "and", "also", "then",
+    ];
+    // Each sentence or clause, and whatever follows "can you" or "please".
+    let lower = text.to_lowercase();
+    let mut starts: Vec<&str> = lower.split(['.', '!', '?', '\n', ',', ';']).collect();
+    for cue in [
+        "can you ",
+        "could you ",
+        "can u ",
+        "would you ",
+        "please ",
+        "pls ",
+    ] {
+        starts.extend(lower.match_indices(cue).map(|(i, _)| &lower[i..]));
+    }
+    starts.iter().any(|part| {
+        words(part)
+            .iter()
+            .find(|w| !LEAD.contains(&w.as_str()))
+            .is_some_and(|w| DO.contains(&w.as_str()))
+    })
 }
 
 /// Who answers a question when nobody was picked: the crew's explainer.
