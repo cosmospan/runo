@@ -1288,6 +1288,12 @@ impl Runtime {
         let Some(job) = self.store.job(id) else {
             return;
         };
+        // The small model mixes up a job of several turns (a fix turn, a
+        // follow-up); there the bot's own last words and the facts line
+        // tell it better.
+        if recap && several_turns(job) {
+            return;
+        }
         if let Some(rx) = brain::tasks::ask(st, job, recap) {
             self.peeking.push((id, rx));
         }
@@ -1403,6 +1409,11 @@ impl Runtime {
     }
 }
 
+/// Whether the bot has had more than one turn on `job`.
+fn several_turns(job: &store::Job) -> bool {
+    job.fix_turns > 0 || job.feed.iter().any(|i| matches!(i, store::Item::You(_)))
+}
+
 /// How many times a job's failing checks go back to its bot before the
 /// person is asked.
 pub const FIX_TURNS: u8 = 1;
@@ -1426,7 +1437,15 @@ fn fix_turn(job: &mut store::Job) -> Option<String> {
         names.join(" and "),
         job.bot.name()
     )));
-    Some(crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran"))
+    let mut prompt = crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran");
+    // Checks can fail before a job touches anything; fixing that here would
+    // redo other work and clash with it later.
+    prompt.push_str(
+        "\nFirst check whether each failure comes from your change: compare with the code before it \
+         (git stash, or the base branch). Fix only what your change broke. If a failure was already \
+         there, leave it and say so in one line.",
+    );
+    Some(prompt)
 }
 
 #[cfg(test)]

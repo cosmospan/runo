@@ -302,29 +302,70 @@ fn same_kind(theirs: Mode, job: Mode) -> bool {
         )
 }
 
-/// A made bot of a fitting kind whose name, job or skills share a word with
-/// the sentence, if any.
-fn made_bot_for(text: &str, crew: &[Member], mode: Mode) -> Option<(Member, String)> {
-    let ws: Vec<String> = words(text)
+fn plain_words(text: &str) -> Vec<String> {
+    words(text)
         .into_iter()
         .filter(|w| w.len() > 2 && !COMMON.contains(&w.as_str()))
-        .collect();
+        .collect()
+}
+
+/// The same word, give or take an ending: "docs" and "doc", "pricing" and
+/// "price", but not "read" and "readme".
+fn same_word(a: &str, b: &str) -> bool {
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    if short == long {
+        return true;
+    }
+    let short = short.strip_suffix('e').unwrap_or(short);
+    short.len() >= 3
+        && long.strip_prefix(short).is_some_and(|rest| {
+            [
+                "s", "es", "ed", "d", "ing", "er", "ers", "ation", "ations", "ment", "ments",
+            ]
+            .contains(&rest)
+        })
+}
+
+/// How well a sentence's words `ws` fit a made bot, and the word that tied
+/// them. Its name or what it's for counts double, a skill once; one skill
+/// alone isn't enough, since skills often name the whole project's subject.
+fn fit(ws: &[String], name_role: &str, skills: &str) -> Option<(usize, String)> {
+    let shares = |theirs: &[String], w: &String| theirs.iter().any(|t| same_word(w, t));
+    let named = plain_words(name_role);
+    let skilled = plain_words(skills);
+    let mut score = 0;
+    let mut word: Option<String> = None;
+    for w in ws {
+        let n = if shares(&named, w) {
+            2
+        } else if shares(&skilled, w) {
+            1
+        } else {
+            0
+        };
+        if n > 0 {
+            score += n;
+            word.get_or_insert_with(|| w.clone());
+        }
+    }
+    (score >= 2).then(|| (score, word.unwrap_or_default()))
+}
+
+/// A made bot of a fitting kind whose name or job, or two of its skills,
+/// share words with the sentence, if any.
+fn made_bot_for(text: &str, crew: &[Member], mode: Mode) -> Option<(Member, String)> {
+    let ws = plain_words(text);
     let mut best: Option<(Member, usize, String)> = None;
     for m in crew
         .iter()
         .copied()
         .filter(|m| m.is_made() && same_kind(m.mode(), mode))
     {
-        let theirs: Vec<String> = words(&format!("{} {} {}", m.name(), m.role(), m.skills()))
-            .into_iter()
-            .filter(|w| w.len() > 2 && !COMMON.contains(&w.as_str()))
-            .collect();
-        let shared: Vec<&String> = ws
-            .iter()
-            .filter(|w| theirs.iter().any(|t| stem_match(w, t) || stem_match(t, w)))
-            .collect();
-        if !shared.is_empty() && best.as_ref().is_none_or(|b| shared.len() > b.1) {
-            best = Some((m, shared.len(), shared[0].clone()));
+        let name_role = format!("{} {}", m.name(), m.role());
+        if let Some((score, word)) = fit(&ws, &name_role, m.skills()) {
+            if best.as_ref().is_none_or(|b| score > b.1) {
+                best = Some((m, score, word));
+            }
         }
     }
     best.map(|(m, _, w)| (m, w))
@@ -456,6 +497,19 @@ mod tests {
 
     fn mode_of(text: &str) -> Mode {
         by_rules(text, &crew()).mode
+    }
+
+    #[test]
+    fn one_project_word_in_the_skills_is_not_enough() {
+        let docs = ("Docs", "Keeps the readme and docs current");
+        let skills = "readme, docs, cart, subtotal, pricing";
+        let fits = |t: &str| fit(&plain_words(t), &format!("{} {}", docs.0, docs.1), skills);
+        assert!(fits("refactor subtotal so it's easier to read").is_none());
+        assert!(fits("clean up the pricing helpers").is_none());
+        assert!(fits("update the readme for the new install steps").is_some());
+        assert!(fits("document cart pricing").is_some());
+        assert!(same_word("docs", "doc") && same_word("price", "pricing"));
+        assert!(!same_word("read", "readme"));
     }
 
     #[test]

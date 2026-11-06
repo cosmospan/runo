@@ -154,8 +154,9 @@ pub fn design_prompt(name: &str, d: &Design, project: &str) -> String {
          then set the bot up to fit it. Change no files.\n\n\
          Reply with JSON only, nothing else:\n\
          {{\"role\": \"what it's for, one short line\", \
-         \"skills\": [\"3 to 10 single lowercase words naming its subject, specific to it \
-         (such as stripe, webhooks, invoices), never general ones like code, app, api, npm, javascript or tests\"], \
+         \"skills\": [\"3 to 10 single lowercase words naming the bot's own area of work, the things only it handles \
+         (a docs bot: readme, docs, changelog, markdown; a payments bot: stripe, webhooks, invoices). \
+         Not the project's general subject, which every job shares, and never general words like code, app, api, npm, javascript or tests\"], \
          \"rules\": [\"3 to 6 short rules for how it works in this project, such as the exact test command, \
          tools to use, folders to leave alone, when to ask first\"]}}\n\n\
          Rules must stay true for months: how to work here, never what's true today \

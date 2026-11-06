@@ -68,8 +68,8 @@ pub fn unmerged_hint(j: &Job) -> String {
         j.base_sha.as_str()
     };
     format!(
-        "#{}'s changes aren't merged yet, so they aren't in this folder. They're on branch {} (in {}); `git diff {base} {}` shows them. Build on them only if the job needs them, and say so.",
-        j.id, j.branch, j.worktree, j.branch
+        "#{}'s changes aren't merged yet, so they aren't in this folder. They're on branch {}, in the folder {}, and may not be committed; `git -C {} diff {base}` shows them all. Build on them only if the job needs them, and say so.",
+        j.id, j.branch, j.worktree, j.worktree
     )
 }
 
@@ -223,7 +223,9 @@ mod tests {
         let jobs = vec![j];
         let hit = unmerged("like #12 but for pdf", &jobs);
         assert_eq!(hit.len(), 1);
-        assert!(unmerged_hint(hit[0]).contains("squad/12-safari-export"));
+        let hint = unmerged_hint(hit[0]);
+        assert!(hint.contains("squad/12-safari-export"), "{hint}");
+        assert!(hint.contains("git -C"), "{hint}");
     }
 
     #[test]
