@@ -9,6 +9,8 @@
 //! - [`ideas`]: a bot worth making, when the same kind of job keeps coming up
 //!   and no bot on the crew is for it. The person decides; nothing is made for them.
 //! - [`voice`]: what Peek says when something happens.
+//! - [`permit`]: what a bot may do on its own, what it asks about first,
+//!   and what it never does.
 //! - [`tasks`]: with Smart Peek on, a short title for each job's card and a
 //!   recap when it ends.
 //!
@@ -30,6 +32,7 @@ pub mod helper;
 pub mod ideas;
 pub mod maker;
 pub mod model;
+pub mod permit;
 pub mod place;
 pub mod route;
 pub mod tasks;
