@@ -108,6 +108,19 @@ pub fn start(
     let (i, model) = engine::for_job(st, job);
     let p = &agent::PROVIDERS[i];
     let mut opts = st.agent(p.id);
+    // "Always allow" rules saved for this project from a job's card.
+    if let Some(rules) = opts
+        .project_tools
+        .get(&job.folder.path)
+        .filter(|r| !r.trim().is_empty())
+        .cloned()
+    {
+        opts.allowed_tools = [opts.allowed_tools.trim(), rules.trim()]
+            .into_iter()
+            .filter(|r| !r.is_empty())
+            .collect::<Vec<_>>()
+            .join(",");
+    }
     if !agent::available(p.bin, &opts.binary) {
         return Err(format!(
             "{} isn't installed on this computer. Pick another engine for {} in Engines.",
@@ -154,7 +167,12 @@ pub fn start(
     // When Claude Code can ask through Squad Code's prompt tool (a run with
     // memory), the hard-to-undo commands are asked about with Go ahead /
     // Deny instead of refused: Claude never asks about a disallowed tool.
-    let memory = None;
+    // Runo's own MCP server asks you, in the job's card, before a tool the bot
+    // isn't allowed runs, rather than the run being refused.
+    let exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let memory = (!exe.is_empty() && p.id == "claude").then_some((exe.as_str(), dir.as_str()));
     if job.mode.writes() {
         let may: Vec<String> = MAY_RUN.iter().map(|t| t.to_string()).collect();
         opts.allowed_tools = add_rules(&opts.allowed_tools, &may);

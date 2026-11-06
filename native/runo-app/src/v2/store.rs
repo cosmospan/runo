@@ -225,6 +225,8 @@ pub struct Job {
     pub mode: Mode,
     /// What the person typed: the bot's instructions.
     pub title: String,
+    /// Peek's line on why it brought this bot in; empty when you picked the bot.
+    pub handoff: String,
     /// Peek's short title for the card, when Smart Peek is on; empty before.
     pub short: String,
     /// Peek's sentence or two on how it went, once it ended.
@@ -322,6 +324,7 @@ impl Default for Job {
         Job {
             id: 0,
             thread: 0,
+            handoff: String::new(),
             bot: Member::Builder,
             mode: Mode::Build,
             title: String::new(),
@@ -981,6 +984,127 @@ impl Store {
     }
 }
 
+/// A step in plain words: "Ran cat > package.json <<'EOF'" reads "Writing
+/// package.json", "Ran npm install" reads "Installing packages". `now` picks
+/// the running form ("Writing") over the finished one ("Wrote").
+pub fn plain_step(label: &str, now: bool) -> String {
+    let pick = |doing: &str, done: &str, what: &str| {
+        let verb = if now { doing } else { done };
+        if what.is_empty() {
+            verb.to_string()
+        } else {
+            format!("{verb} {what}")
+        }
+    };
+    let base = |p: &str| -> String {
+        let p = p.trim().trim_matches(|c| c == '\'' || c == '"');
+        p.rsplit('/')
+            .find(|x| !x.is_empty())
+            .unwrap_or(p)
+            .to_string()
+    };
+    // Steps written as orders ("Run npm test") read like the agents' own.
+    for (order, done) in [
+        ("Run ", "Ran "),
+        ("Edit ", "Edited "),
+        ("Write ", "Wrote "),
+        ("Search for ", "Searched for "),
+    ] {
+        if let Some(rest) = label.strip_prefix(order) {
+            return plain_step(&format!("{done}{rest}"), now);
+        }
+    }
+    if let Some(p) = label.strip_prefix("Read ") {
+        return pick("Reading", "Read", &base(p));
+    }
+    if let Some(p) = label.strip_prefix("Edited ") {
+        return pick("Editing", "Edited", &base(p));
+    }
+    if let Some(p) = label.strip_prefix("Wrote ") {
+        return pick("Writing", "Wrote", &base(p));
+    }
+    if label.starts_with("Searched the web") {
+        return pick("Searching the web", "Searched the web", "");
+    }
+    if let Some(p) = label.strip_prefix("Searched for ") {
+        return pick("Searching for", "Searched for", p.trim());
+    }
+    if label.starts_with("Listed ") {
+        return pick("Looking around the folder", "Looked around the folder", "");
+    }
+    if label.starts_with("Fetched ") {
+        return pick("Reading a web page", "Read a web page", "");
+    }
+    let Some(cmd) = label.strip_prefix("Ran ") else {
+        return label.to_string();
+    };
+    // The part that matters: past any "cd somewhere &&".
+    let mut cmd = cmd.trim();
+    while let Some((head, rest)) = cmd.split_once("&&") {
+        if head.trim_start().starts_with("cd ") {
+            cmd = rest.trim();
+        } else {
+            break;
+        }
+    }
+    let words: Vec<&str> = cmd.split_whitespace().collect();
+    let first = words.first().copied().unwrap_or("");
+    let second = words.get(1).copied().unwrap_or("");
+    // Writing a file through the shell: cat > f, tee f, echo … > f.
+    if matches!(first, "cat" | "echo" | "printf" | "tee") {
+        if let Some(i) = words
+            .iter()
+            .position(|w| *w == ">" || *w == ">>" || *w == "tee")
+        {
+            if let Some(f) = words.get(i + 1).filter(|f| !f.starts_with("<<")) {
+                return pick("Writing", "Wrote", &base(f));
+            }
+        }
+        if first == "cat" && !second.is_empty() && !second.starts_with('-') {
+            return pick("Reading", "Read", &base(second));
+        }
+    }
+    let tests = cmd.contains("test") || cmd.contains("pytest") || cmd.contains("jest");
+    match first {
+        "npm" | "yarn" | "pnpm" | "bun" | "pip" | "pip3" | "uv" | "cargo" | "go"
+            if matches!(second, "install" | "i" | "add" | "ci" | "fetch" | "get") =>
+        {
+            pick("Installing packages", "Installed packages", "")
+        }
+        _ if tests => pick("Running the tests", "Ran the tests", ""),
+        "npm" | "yarn" | "pnpm" | "bun" if matches!(second, "start" | "run" | "dev") => {
+            pick("Running the app", "Ran the app", "")
+        }
+        "cargo" | "make" | "tsc" | "go"
+            if cmd.contains("build") || first == "make" || first == "tsc" =>
+        {
+            pick("Building", "Built it", "")
+        }
+        "node" | "python" | "python3" | "deno" | "ruby"
+            if !second.is_empty() && !second.starts_with('-') =>
+        {
+            pick("Running", "Ran", &base(second))
+        }
+        "ls" | "find" | "tree" | "pwd" | "du" | "stat" | "node" | "python" | "python3"
+        | "which" => pick("Looking around the folder", "Looked around the folder", ""),
+        "head" | "tail" | "sed" | "less" | "wc" => pick(
+            "Reading",
+            "Read",
+            &base(words.last().copied().unwrap_or("")),
+        ),
+        "grep" | "rg" | "ag" => pick("Searching the code", "Searched the code", ""),
+        "git" if matches!(second, "commit" | "add") => {
+            pick("Saving the work in git", "Saved the work in git", "")
+        }
+        "git" => pick("Checking git", "Checked git", ""),
+        "mkdir" => pick("Making folders", "Made folders", ""),
+        "rm" | "mv" | "cp" => pick("Moving files around", "Moved files around", ""),
+        "curl" | "wget" => pick("Fetching from the web", "Fetched from the web", ""),
+        "chmod" => pick("Setting file permissions", "Set file permissions", ""),
+        _ => pick("Running a command", "Ran a command", ""),
+    }
+}
+
 /// "just now", "4m", "2h", "3d".
 pub fn ago(at: u64) -> String {
     let s = now().saturating_sub(at);
@@ -1009,6 +1133,29 @@ mod tests {
         let mut s = Store::default();
         s.add_folder(PathBuf::from("/work/shop"));
         s
+    }
+
+    #[test]
+    fn steps_read_in_plain_words() {
+        assert_eq!(
+            plain_step("Ran cat > package.json <<'EOF'\u{2026}", true),
+            "Writing package.json"
+        );
+        assert_eq!(
+            plain_step("Ran ls -A && node -v", false),
+            "Looked around the folder"
+        );
+        assert_eq!(
+            plain_step("Ran cd app && npm install", true),
+            "Installing packages"
+        );
+        assert_eq!(plain_step("Ran node server.js", true), "Running server.js");
+        assert_eq!(plain_step("Ran npm test", false), "Ran the tests");
+        assert_eq!(plain_step("Read src/main.rs", true), "Reading main.rs");
+        assert_eq!(plain_step("Edited src/app.ts", false), "Edited app.ts");
+        assert_eq!(plain_step("Planning", true), "Planning");
+        assert_eq!(plain_step("Run git log -S key", true), "Checking git");
+        assert_eq!(plain_step("Edit src/a.ts", false), "Edited a.ts");
     }
 
     #[test]

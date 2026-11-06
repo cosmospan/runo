@@ -38,6 +38,12 @@ impl Shell {
         );
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
         let log = self.crew.store.chat(who);
+        let dir = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
         let jobs: Vec<super::store::Job> =
             self.crew.store.dm_jobs(who).into_iter().cloned().collect();
         let project = self
@@ -175,7 +181,7 @@ impl Shell {
                                     .border_color(c(ui::line()))
                                     .text_size(px(14.))
                                     .line_height(px(21.))
-                                    .child(plain(&m.text)),
+                                    .child(self.rich(format!("dm-{i}"), &plain(&m.text), &dir, cx)),
                             )
                             .when_some(m.via.clone(), |d, via| {
                                 d.child(

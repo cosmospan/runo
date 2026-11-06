@@ -133,9 +133,34 @@ fn mine(text: String, at: u64) -> Div {
                         .text_size(px(14.))
                         .line_height(px(21.))
                         .text_color(c(ui::body()))
-                        .child(text),
+                        .child(tagged(text)),
                 ),
         )
+}
+
+/// Your words with @bots and #threads picked out in colour.
+fn tagged(text: String) -> StyledText {
+    let mut runs = Vec::new();
+    let mut at = 0;
+    for word in text.split_inclusive(char::is_whitespace) {
+        let w = word.trim_end();
+        if (w.starts_with('@') || w.starts_with('#')) && w.len() > 1 {
+            let end = at
+                + w.trim_end_matches(|ch: char| !ch.is_alphanumeric() && ch != '-')
+                    .len();
+            runs.push((
+                at..end,
+                HighlightStyle {
+                    color: Some(c(ui::t_violet())),
+                    font_weight: Some(FontWeight::SEMIBOLD),
+                    background_color: Some(ca(ui::VIOLET, 0.1)),
+                    ..Default::default()
+                },
+            ));
+        }
+        at += word.len();
+    }
+    StyledText::new(text).with_highlights(runs)
 }
 
 impl Shell {
@@ -241,6 +266,7 @@ impl Shell {
                             .children(offer)
                             .children(self.slash_strip(cx))
                             .children(self.hash_strip(cx))
+                            .children(self.at_strip(cx))
                             .child(self.thread_composer(&name, cx)),
                     ),
             )
@@ -265,7 +291,12 @@ impl Shell {
                         .text_size(px(14.))
                         .line_height(px(21.))
                         .text_color(c(ui::body()))
-                        .child(super::live::plain(&a.text)),
+                        .child(self.rich(
+                            format!("talk-{}", t.id),
+                            &super::live::plain(&a.text),
+                            &t.folder,
+                            cx,
+                        )),
                 )
                 .when_some(a.via.clone(), |d, via| {
                     d.child(
@@ -475,15 +506,17 @@ impl Shell {
         let said: String = said.chars().take(220).collect();
 
         // The last few steps it took, as a terminal tail while it runs.
-        let tail: Vec<(u8, String)> = j
+        let tail: Vec<(u8, String, String)> = j
             .feed
             .iter()
             .filter_map(|i| match i {
-                Item::Tool { label, state, .. } => Some((*state, label.clone())),
+                Item::Tool {
+                    label, state, kind, ..
+                } => Some((*state, label.clone(), kind.clone())),
                 _ => None,
             })
             .rev()
-            .take(3)
+            .take(4)
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -516,7 +549,7 @@ impl Shell {
                     .text_size(px(13.5))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(c(ui::ink()))
-                    .child(if running { j.doing() } else { j.title.clone() }),
+                    .child(j.label().to_string()),
             )
             .child(
                 div()
@@ -537,36 +570,108 @@ impl Shell {
         if let Some(f) = frac.filter(|_| running) {
             body = body.child(div().px(px(14.)).child(ui::bar(f, ui::BLUE).h(px(4.))));
         }
-        if running && !tail.is_empty() {
-            let mut term = div()
+        if running {
+            // What it's doing now, in plain words, then its last few steps.
+            let now_doing = match tail.last() {
+                Some((0, label, _)) => store::plain_step(label, true),
+                _ if !j.plan.is_empty() => j.doing(),
+                _ => "Thinking it through".to_string(),
+            };
+            let open = self.raw_open.contains(&id);
+            let mut steps = div()
                 .mx(px(14.))
-                .mt(px(10.))
-                .px(px(12.))
-                .py(px(9.))
-                .rounded(px(8.))
-                .bg(c(ui::term().bg))
+                .mt(px(8.))
+                .mb(px(10.))
                 .flex()
                 .flex_col()
-                .gap(px(3.))
-                .font_family(ui::MONO)
-                .text_size(px(12.));
-            for (state, label) in tail {
-                let tc = ui::term();
-                let (mark, color) = match state {
-                    1 => ("\u{2713}", tc.ok),
-                    2 => ("\u{2717}", tc.bad),
-                    _ => ("\u{25cf}", tc.run),
+                .gap(px(6.));
+            steps = steps.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .text_size(px(13.))
+                    .text_color(c(ui::ink()))
+                    .child({
+                        let k = 0.35
+                            + 0.65
+                                * runo_holo::anim::alternate(self.now(), 0.9, runo_holo::anim::SOFT)
+                                    as f32;
+                        div()
+                            .size(px(8.))
+                            .mx(px(3.))
+                            .flex_none()
+                            .rounded_full()
+                            .bg(c(ui::t_blue()))
+                            .opacity(k)
+                    })
+                    .child(div().min_w_0().truncate().child(now_doing)),
+            );
+            let done: Vec<&(u8, String, String)> =
+                tail.iter().filter(|(st, _, _)| *st != 0).collect();
+            for (n, (state, label, kind)) in done.into_iter().enumerate() {
+                let (icon, color, text) = match state {
+                    1 => (
+                        IconName::Check,
+                        ui::t_green(),
+                        store::plain_step(label, false),
+                    ),
+                    _ => (
+                        IconName::RotateCcw,
+                        ui::muted(),
+                        format!(
+                            "{} didn't work, trying another way",
+                            store::plain_step(label, false)
+                        ),
+                    ),
                 };
-                term = term.child(
+                let raw = if kind.is_empty() {
+                    label.clone()
+                } else {
+                    format!("{kind}: {label}")
+                };
+                steps = steps.child(
                     div()
+                        .id(("job-step", (id as usize) * 8 + n))
                         .flex()
+                        .items_center()
                         .gap(px(8.))
-                        .min_w_0()
-                        .child(div().flex_none().text_color(c(color)).child(mark))
-                        .child(div().min_w_0().truncate().text_color(c(tc.fg)).child(label)),
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .child(Icon::new(icon).size(px(12.)).text_color(c(color)))
+                        .child(div().min_w_0().truncate().child(text))
+                        .tooltip(move |window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(raw.clone())
+                                .build(window, cx)
+                        }),
                 );
             }
-            body = body.child(term);
+            body = body.child(steps);
+            if open && !tail.is_empty() {
+                let mut raw = div()
+                    .mx(px(14.))
+                    .mb(px(10.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(c(ui::well()))
+                    .border_1()
+                    .border_color(c(ui::line2()))
+                    .flex()
+                    .flex_col()
+                    .gap(px(3.))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .text_color(c(ui::muted()));
+                for (_, label, _) in &tail {
+                    raw = raw.child(div().min_w_0().truncate().child(label.clone()));
+                }
+                body = body.child(raw);
+            }
+        }
+        // What the bot needs your yes for, right here in the chat.
+        if let Some(asks) = self.ask_card(j, cx) {
+            body = body.child(asks);
         }
         if review || matches!(j.status, Status::Done | Status::Shipped) && !j.changes.is_empty() {
             body = body.child(
@@ -654,6 +759,25 @@ impl Shell {
                     )
                 }
             });
+        if running && !tail.is_empty() {
+            let open = self.raw_open.contains(&id);
+            actions = actions.child(
+                div()
+                    .id(("job-raw", id as usize))
+                    .px(px(6.))
+                    .text_size(px(12.))
+                    .text_color(c(ui::muted()))
+                    .cursor_pointer()
+                    .hover(|s| s.text_color(c(ui::ink())))
+                    .child(if open { "Hide details" } else { "Show details" })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !this.raw_open.remove(&id) {
+                            this.raw_open.insert(id);
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
         if running {
             actions = actions.child(
                 ui::ghost(("thread-stop", id as usize), "Stop")
@@ -727,11 +851,39 @@ impl Shell {
                     )
                     .child(body),
             );
+        // Peek's hand-off, when it picked the bot: a small line between your
+        // ask and the bot's reply.
+        let handoff = (!j.handoff.is_empty()).then(|| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .py(px(4.))
+                .pl(px(46.))
+                .child(self.avatar(Member::Fin, 20.))
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child("Peek"),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(13.))
+                        .text_color(c(ui::muted()))
+                        .child(j.handoff.clone()),
+                )
+        });
         div()
             .w_full()
             .flex()
             .flex_col()
             .child(mine(j.title.clone(), j.started))
+            .children(handoff)
             .child(reply)
     }
 
@@ -981,6 +1133,132 @@ impl Shell {
 
     /// While the composer starts with `/`: the commands that match, to click.
     /// Threads to point at while you type #: pick one and its name goes in.
+    /// The bots an "@bu" being typed could be: the text before it, and the matches.
+    pub(super) fn at_matches(&self, text: &str) -> Option<(String, Vec<Member>)> {
+        if text.ends_with(char::is_whitespace) {
+            return None;
+        }
+        let last = text.split_whitespace().last()?;
+        let typed = last.strip_prefix('@')?.to_lowercase();
+        let found: Vec<Member> = Member::all()
+            .into_iter()
+            .filter(|m| !self.crew.store.removed.contains(m))
+            .filter(|m| m.name().to_lowercase().starts_with(&typed))
+            .take(6)
+            .collect();
+        if found.is_empty() {
+            return None;
+        }
+        Some((text[..text.len() - last.len()].to_string(), found))
+    }
+
+    /// "@" in the box: the crew to pick from, each with its face and job, and
+    /// the bots already named, highlighted as they'll be brought in.
+    fn at_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let text = self.composer.read(cx).value().to_string();
+        if let Some((head, found)) = self.at_matches(&text) {
+            let mut row = div().flex().flex_wrap().items_center().gap(px(6.));
+            for (i, m) in found.into_iter().enumerate() {
+                let head = head.clone();
+                let face = self.avatar(m, 18.);
+                let accent = m.accent();
+                row = row.child(
+                    div()
+                        .id(("at", i))
+                        .h(px(32.))
+                        .pl(px(6.))
+                        .pr(px(10.))
+                        .flex()
+                        .items_center()
+                        .gap(px(7.))
+                        .rounded(px(9.))
+                        .border_1()
+                        .map(|d| {
+                            if i == 0 {
+                                d.bg(c(super::theme::mix(ui::raised(), accent, 0.12)))
+                                    .border_color(c(super::theme::mix(ui::raised(), accent, 0.45)))
+                            } else {
+                                d.bg(c(ui::raised())).border_color(c(ui::line()))
+                            }
+                        })
+                        .cursor_pointer()
+                        .hover(|s| s.border_color(c(ui::line_hi())))
+                        .child(face)
+                        .child(
+                            div()
+                                .text_size(px(12.5))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(ui::ink()))
+                                .child(m.name()),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(c(ui::muted()))
+                                .child(m.role().to_string()),
+                        )
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            let text = format!("{head}@{} ", m.name());
+                            this.composer.update(cx, |i, cx| {
+                                ui::put_text(i, text, window, cx);
+                                i.focus(window, cx);
+                            });
+                            cx.notify();
+                        })),
+                );
+            }
+            return Some(
+                row.child(
+                    div()
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child("\u{21b5} picks the first"),
+                ),
+            );
+        }
+        // Bots named in full: shown as who's being brought in.
+        let named: Vec<Member> = Member::all()
+            .into_iter()
+            .filter(|m| {
+                text.split_whitespace().any(|w| {
+                    w.strip_prefix('@').is_some_and(|n| {
+                        n.trim_end_matches(|ch: char| !ch.is_alphanumeric())
+                            .eq_ignore_ascii_case(m.name())
+                    })
+                })
+            })
+            .collect();
+        if named.is_empty() {
+            return None;
+        }
+        let mut row = div().flex().flex_wrap().items_center().gap(px(6.)).child(
+            div()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child("Brings in"),
+        );
+        for m in named {
+            let accent = m.accent();
+            row = row.child(
+                div()
+                    .h(px(24.))
+                    .pl(px(4.))
+                    .pr(px(8.))
+                    .flex()
+                    .items_center()
+                    .gap(px(5.))
+                    .rounded(px(7.))
+                    .bg(c(super::theme::mix(ui::raised(), accent, 0.14)))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
+                    .child(self.avatar(m, 16.))
+                    .child(format!("@{}", m.name())),
+            );
+        }
+        Some(row)
+    }
+
     fn hash_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let text = self.composer.read(cx).value().to_string();
         if text.ends_with(char::is_whitespace) {
@@ -1186,7 +1464,10 @@ impl Shell {
         let ready = !value.trim().is_empty();
         let face = self.avatar(target, 20.);
         let plan_first = cx.global::<crate::settings::AppSettings>().v2_plan_first;
-        let goes = if value.starts_with("/thread") {
+        let named = super::mentioned(&value).map(|(m, _)| m);
+        let goes = if let Some(m) = named.filter(|_| !value.starts_with('/')) {
+            format!("{} takes it", m.name())
+        } else if value.starts_with("/thread") {
             "Makes a new thread".to_string()
         } else if value.starts_with("/rename") {
             "Renames this thread".to_string()
