@@ -448,6 +448,8 @@ pub struct Shell {
     maker_open: bool,
     /// The engines popover over the status bar is open.
     usage_open: bool,
+    /// Where across the window the engines popover was opened from.
+    usage_x: f32,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
     /// Engines shows each bot's brain rather than the engines themselves.
@@ -531,6 +533,8 @@ pub struct Shell {
     view_w: f32,
     /// How see-through the window is, under Settings > Appearance.
     clear_slider: Entity<SliderState>,
+    /// How see-through popovers, menus and dialogs go.
+    pop_slider: Entity<SliderState>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -644,7 +648,34 @@ impl Shell {
                 .step(1.)
                 .default_value(clear as f32)
         });
+        let pop_clear = cx
+            .global::<crate::settings::AppSettings>()
+            .v2_pop_clear
+            .min(100);
+        let pop_slider = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(100.)
+                .step(1.)
+                .default_value(pop_clear as f32)
+        });
         let subs = vec![
+            // Popovers too: dragging previews, letting go keeps it.
+            cx.subscribe_in(&pop_slider, window, |_, _, event, _, cx| {
+                let (value, keep) = match event {
+                    SliderEvent::Change(v) => (v.end(), false),
+                    SliderEvent::Release(v) => (v.end(), true),
+                };
+                let clear = value.round().clamp(0., 100.) as u8;
+                theme::set_glass_popovers(theme::glass_popovers(), clear);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_pop_clear = clear;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
             // Dragging previews the window as it goes; letting go keeps it.
             cx.subscribe_in(&clear_slider, window, |_, _, event, _, cx| {
                 let (value, keep) = match event {
@@ -837,6 +868,7 @@ impl Shell {
             setup_step: 0,
             maker_open: false,
             usage_open: false,
+            usage_x: 0.,
             engine_sel: None,
             engine_brains: false,
             settings_pane: Pane::Work,
@@ -890,6 +922,7 @@ impl Shell {
             term_cols: 100,
             view_w: 1280.,
             clear_slider,
+            pop_slider,
             _subs: subs,
             _pump: pump,
         }
@@ -2398,7 +2431,7 @@ fn backdrop() -> Option<AnyElement> {
 
 /// What the window looks like: the theme, whether transparency is on, and how
 /// see-through it is.
-type Look = (&'static str, bool, u8, bool);
+type Look = (&'static str, bool, u8, bool, u8);
 
 fn look() -> Look {
     (
@@ -2406,6 +2439,7 @@ fn look() -> Look {
         theme::see_through(),
         (theme::amount() * 100.).round() as u8,
         theme::glass_popovers(),
+        (theme::pop_amount() * 100.).round() as u8,
     )
 }
 
@@ -2457,7 +2491,7 @@ pub fn open_window(cx: &mut App) {
     let st = cx.global::<crate::settings::AppSettings>();
     ui::set_theme(&st.v2_theme);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
-    theme::set_glass_popovers(st.v2_glass_popovers);
+    theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,

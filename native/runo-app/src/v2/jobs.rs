@@ -20,6 +20,28 @@ pub struct Runner {
     parser: Option<crate::stream::Parser>,
     errors: Vec<String>,
     stopped: bool,
+    /// When the engine gave its final answer, and whether it went well. A run that
+    /// started something meant to keep going (a dev server, a watcher) can leave
+    /// the engine's process waiting on it, so the job ends a moment after its
+    /// answer rather than when the process exits, and what it started keeps going.
+    answered: Option<(std::time::Instant, bool)>,
+}
+
+/// How long after the engine's final answer a run that hasn't exited is taken
+/// as done.
+const SETTLE: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// Whether a line of an engine's JSON output is its final answer for the run,
+/// and whether it went well.
+fn final_answer(v: &serde_json::Value) -> Option<bool> {
+    (v["type"] == "result").then(|| v["is_error"].as_bool() != Some(true))
+}
+
+/// Whether the engine is still at work: it said or did something.
+fn busy(events: &[AgentEvent]) -> bool {
+    events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::Text(_) | AgentEvent::Tool(_)))
 }
 
 /// What a bot that changes files may run without asking: any command, so
@@ -209,6 +231,7 @@ pub fn start(
         parser: crate::stream::Parser::for_provider(p.id, &dir),
         errors: Vec::new(),
         stopped: false,
+        answered: None,
     })
 }
 
@@ -233,10 +256,18 @@ impl Runner {
                     None => say(job, &agent::strip_ansi(&line), true),
                 },
                 Event::Json(_, line, v) => {
+                    let answer = final_answer(&v);
                     if let Some(p) = &mut self.parser {
-                        for e in p.feed_parsed(&line, Some(v)) {
+                        let events = p.feed_parsed(&line, Some(v));
+                        if busy(&events) {
+                            self.answered = None;
+                        }
+                        for e in events {
                             apply(job, e);
                         }
+                    }
+                    if let Some(ok) = answer {
+                        self.answered = Some((std::time::Instant::now(), ok));
                     }
                 }
                 Event::Err(_, line) => {
@@ -248,6 +279,14 @@ impl Runner {
                 Event::Done(_, ok) => ended = Some(ok),
                 Event::Output(..) | Event::Partial(..) => {}
             }
+        }
+        if ended.is_none() && !self.stopped {
+            // Answered, but the process is still up (waiting on something it
+            // started): the job is over all the same.
+            ended = self
+                .answered
+                .filter(|(at, _)| at.elapsed() >= SETTLE)
+                .map(|(_, ok)| ok);
         }
         let Some(ok) = ended else { return false };
         // Steps still marked running ended with the run.
@@ -416,5 +455,26 @@ mod tests {
             add_rules("Read, Bash", &["Bash".into(), "Edit".into()]),
             "Read,Bash,Edit"
         );
+    }
+}
+
+#[cfg(test)]
+mod answer_tests {
+    use super::*;
+
+    #[test]
+    fn a_result_line_is_the_final_answer() {
+        let ok = serde_json::json!({"type": "result", "subtype": "success", "is_error": false});
+        let bad = serde_json::json!({"type": "result", "is_error": true});
+        let other = serde_json::json!({"type": "assistant"});
+        assert_eq!(final_answer(&ok), Some(true));
+        assert_eq!(final_answer(&bad), Some(false));
+        assert_eq!(final_answer(&other), None);
+    }
+
+    #[test]
+    fn more_work_after_an_answer_counts_as_busy() {
+        assert!(busy(&[AgentEvent::Text("more".into())]));
+        assert!(!busy(&[AgentEvent::Summary("3s".into())]));
     }
 }

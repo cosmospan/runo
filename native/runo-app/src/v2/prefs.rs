@@ -1478,10 +1478,12 @@ impl Shell {
         // Popovers follow the window: only meaningful while the desktop shows through.
         let clear_window = theme::window_clear();
         let pops = theme::glass_popovers();
+        let pop_clear = (theme::pop_amount() * 100.).round() as u8;
+        let pop_live = clear_window && pops;
         let pop_row = row(
             "See-through popovers",
             if clear_window {
-                "Menus, popovers, the command palette and dialogs go see-through with the window. They stay a little more opaque, so their text reads."
+                "Menus, popovers, the command palette and dialogs go see-through with the window."
             } else {
                 "Menus, popovers, the command palette and dialogs follow the window once it's see-through."
             },
@@ -1489,14 +1491,55 @@ impl Shell {
                 .id("glass-popovers")
                 .cursor_pointer()
                 .child(switch(pops))
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    theme::set_glass_popovers(!pops);
-                    save(cx, |st| st.v2_glass_popovers = !pops);
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let clear = this.pop_slider.read(cx).value().end().round() as u8;
+                    theme::set_glass_popovers(!pops, clear);
+                    save(cx, |st| {
+                        st.v2_glass_popovers = !pops;
+                        st.v2_pop_clear = clear;
+                    });
                     cx.notify();
                 })),
         )
         .when(!clear_window, |d| d.opacity(0.6));
-        group("WINDOW", vec![switch_row, slider_row, pop_row])
+        let pop_slider_row = row(
+            "Popover transparency",
+            "Separate from the window's. Even at its clearest a popover stays opaque enough to read.",
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(label("Solid"))
+                .child(
+                    div().w(px(180.)).child(
+                        gpui_kit::component::slider::Slider::new(&self.pop_slider)
+                            .disabled(!pop_live)
+                            .bg(c(if pop_live { ui::VIOLET } else { ui::line_hi() }))
+                            .text_color(c(0xFFFFFF)),
+                    ),
+                )
+                .child(label("Clear"))
+                .child(
+                    div()
+                        .w(px(38.))
+                        .flex_none()
+                        .text_right()
+                        .font_family(ui::MONO)
+                        .text_size(px(12.))
+                        .text_color(c(if pop_live { ui::ink() } else { ui::faint() }))
+                        .child(if pop_live {
+                            format!("{pop_clear}%")
+                        } else {
+                            "Off".to_string()
+                        }),
+                ),
+        )
+        .when(!pop_live, |d| d.opacity(0.6));
+        group(
+            "WINDOW",
+            vec![switch_row, slider_row, pop_row, pop_slider_row],
+        )
     }
 
     /// A background pattern behind the page, and the sidebar if you like: a fine

@@ -101,14 +101,41 @@ fn meter(used: f32, w: f32, h: f32) -> Div {
         )
 }
 
+/// The engines popover's width.
+const USAGE_W: f32 = 360.;
+
+/// The left edge of a popover `w` wide opened by a click at `x` in a window `view`
+/// wide: it reaches right from the click on the left half, left from it on the
+/// right half, and keeps a margin from both sides.
+fn popover_left(x: f32, view: f32, w: f32) -> f32 {
+    const NUDGE: f32 = 24.;
+    const MARGIN: f32 = 8.;
+    let left = if x > view / 2. {
+        x + NUDGE - w
+    } else {
+        x - NUDGE
+    };
+    left.clamp(MARGIN, (view - w - MARGIN).max(MARGIN))
+}
+
 impl Shell {
-    fn toggle_usage(&mut self, cx: &mut Context<Self>) {
+    /// Opens or closes the engines popover, next to where it was clicked (`x`,
+    /// across the window).
+    fn toggle_usage(&mut self, x: f32, cx: &mut Context<Self>) {
         self.usage_open = !self.usage_open;
+        self.usage_x = x;
         // A fresh read of the plans each time it opens, unless one ran lately.
         if self.usage_open && !self.crew.store.demo {
             crate::usage::refresh(false);
         }
         cx.notify();
+    }
+
+    /// Where the engines popover's left edge goes: over the item that opened it,
+    /// lined up with its start on the left half of the window and with its end on
+    /// the right half, and always inside the window.
+    fn usage_left(&self) -> f32 {
+        popover_left(self.usage_x, self.view_w, USAGE_W)
     }
 
     /// The status bar along the bottom of the page.
@@ -160,7 +187,9 @@ impl Shell {
                         }
                         None => el,
                     })
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx))),
+                    .on_click(cx.listener(|this, e: &ClickEvent, _, cx| {
+                        this.toggle_usage(f32::from(e.position().x), cx)
+                    })),
             );
         }
         if days.len() > BAR_ENGINES {
@@ -200,7 +229,9 @@ impl Shell {
                 .size(px(12.))
                 .text_color(c(ui::faint())),
             )
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx)));
+            .on_click(cx.listener(|this, e: &ClickEvent, _, cx| {
+                this.toggle_usage(f32::from(e.position().x), cx)
+            }));
 
         // The project's terminal: a toggle at the start of the bar, lit while
         // it's open, that opens it as a drawer just above.
@@ -475,9 +506,9 @@ impl Shell {
                 div()
                     .id("usage-popover")
                     .absolute()
-                    .left(px(super::sidebar::WIDTH + 8.))
+                    .left(px(self.usage_left()))
                     .bottom(px(36.))
-                    .w(px(360.))
+                    .w(px(USAGE_W))
                     .max_h(px(560.))
                     .overflow_y_scroll()
                     .flex()
@@ -528,4 +559,21 @@ fn note(text: impl Into<SharedString>) -> Div {
         .text_size(px(11.5))
         .text_color(c(ui::faint()))
         .child(text.into())
+}
+
+#[cfg(test)]
+mod popover_tests {
+    use super::popover_left;
+
+    #[test]
+    fn popover_opens_beside_what_was_clicked() {
+        // On the left half it reaches right from the click.
+        assert_eq!(popover_left(300., 1400., 360.), 276.);
+        // On the right half it reaches left, its end just past the click.
+        assert_eq!(popover_left(1300., 1400., 360.), 964.);
+        // It never leaves the window.
+        assert_eq!(popover_left(2., 1400., 360.), 8.);
+        assert_eq!(popover_left(1398., 1400., 360.), 1032.);
+        assert_eq!(popover_left(100., 300., 360.), 8.);
+    }
 }
