@@ -34,6 +34,9 @@ pub enum Front {
     },
     /// Real work, for this bot.
     Hand(Route),
+    /// Real work that can't easily be undone (production, deleting, secrets,
+    /// sending): show `why` and start it as `Hand` only on the person's yes.
+    Confirm { why: String, route: Route },
 }
 
 /// Reads `text` and decides. `recent` is the conversation so far, oldest
@@ -68,7 +71,10 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
             };
         }
     }
-    Front::Hand(r)
+    match super::guard::risk(t) {
+        Some(why) => Front::Confirm { why, route: r },
+        None => Front::Hand(r),
+    }
 }
 
 /// Words that only make small talk.
@@ -345,6 +351,13 @@ mod tests {
         }
         match read0("add a dark mode toggle to settings") {
             Front::Hand(r) => assert_eq!(r.mode, Mode::Build),
+            other => panic!("{other:?}"),
+        }
+        match read0("deploy the new pricing page to production") {
+            Front::Confirm { why, route } => {
+                assert!(why.contains("production"), "{why}");
+                assert_ne!(route.mode, Mode::Ask);
+            }
             other => panic!("{other:?}"),
         }
         // A greeting with work in it is work.
