@@ -55,16 +55,12 @@ fn alpha(hex: u32) -> f32 {
     }
 }
 
-/// The colours of a terminal: the drawer, and the tails of running jobs.
+/// The colours of a terminal: the drawer.
 pub struct Term {
     pub bg: u32,
     pub fg: u32,
     pub dim: u32,
     pub line: u32,
-    /// The marks for a step that passed, failed, or is running.
-    pub ok: u32,
-    pub bad: u32,
-    pub run: u32,
 }
 
 /// A terminal is dark in every theme. A dark theme gives it its own sunken well,
@@ -78,9 +74,6 @@ pub fn term() -> Term {
             fg: 0xD8D8E0,
             dim: 0x8A8A97,
             line: 0x2A2A34,
-            ok: 0x3DD68C,
-            bad: 0xFF6B7A,
-            run: 0x5AA2FF,
         };
     }
     let bg = t.well & 0xff_ffff;
@@ -89,9 +82,6 @@ pub fn term() -> Term {
         fg: t.body,
         dim: t.muted,
         line: super::theme::mix(bg, t.ink, 0.12),
-        ok: t.t_green,
-        bad: t.t_red,
-        run: t.t_blue,
     }
 }
 

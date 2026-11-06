@@ -64,6 +64,9 @@ pub struct Runtime {
     /// New bots the crew's engine is setting up for the project, by made id,
     /// with whether the person set its skills and its rules (kept as they are).
     designing: Vec<(u16, (bool, bool), Receiver<crate::agent::Event>)>,
+    /// Tool uses running jobs wait on your yes for, oldest first.
+    pub asks: Vec<crate::approvals::Request>,
+    asks_at: Instant,
 }
 
 impl Runtime {
@@ -86,7 +89,45 @@ impl Runtime {
             sites: brain::Sites::default(),
             peeking: Vec::new(),
             designing: Vec::new(),
+            asks: Vec::new(),
+            asks_at: Instant::now(),
         }
+    }
+
+    /// What a running job is waiting for you to allow, oldest first.
+    pub fn asks_for(&self, job: &store::Job) -> Vec<crate::approvals::Request> {
+        if job.status != store::Status::Running {
+            return Vec::new();
+        }
+        self.asks
+            .iter()
+            .filter(|r| r.dir == job.dir())
+            .cloned()
+            .collect()
+    }
+
+    /// Answers a job's request: `yes` lets the tool run; no tells the bot to
+    /// find another way, with your reason when you gave one.
+    pub fn answer_ask(&mut self, id: &str, yes: bool, why: &str) {
+        let Some(req) = self.asks.iter().find(|r| r.id == id).cloned() else {
+            return;
+        };
+        let answer = if yes {
+            crate::approvals::Answer::Allow {
+                updated_input: req.input.clone(),
+            }
+        } else {
+            let why = why.trim();
+            crate::approvals::Answer::Deny {
+                message: if why.is_empty() {
+                    "The person said no. Don't try this again; say what you'd need instead.".into()
+                } else {
+                    format!("The person said no: {why}")
+                },
+            }
+        };
+        let _ = crate::approvals::answer(&crate::approvals::folder(), id, &answer);
+        self.asks.retain(|r| r.id != id);
     }
 
     fn say(&mut self, text: impl Into<String>) {
@@ -1345,6 +1386,29 @@ impl Runtime {
     /// is the job a client has open, which counts as seen when it ends. Returns
     /// the jobs whose runs ended, for the client to say so.
     pub fn poll(&mut self, st: &AppSettings, viewing: Option<u64>) -> Vec<u64> {
+        // Requests from running jobs' agents, read about once a second.
+        if self.asks_at.elapsed() > Duration::from_millis(800) {
+            self.asks_at = Instant::now();
+            self.asks = if self.runners.is_empty() {
+                Vec::new()
+            } else {
+                let now = store::now();
+                crate::approvals::pending(&crate::approvals::folder())
+                    .into_iter()
+                    .filter(|r| !r.expired(now))
+                    .collect()
+            };
+            // An hour without an answer: the bot hears no, rather than waiting on.
+            let stale: Vec<String> = self
+                .asks
+                .iter()
+                .filter(|r| store::now().saturating_sub(r.asked) > 3600)
+                .map(|r| r.id.clone())
+                .collect();
+            for id in stale {
+                self.answer_ask(&id, false, "No answer");
+            }
+        }
         if let Some(ask) = &self.asking {
             if let Some(reply) = ask.poll() {
                 let (who, engine) = (ask.who, ask.engine.clone());

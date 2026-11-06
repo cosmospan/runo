@@ -242,6 +242,9 @@ pub fn seed() -> Store {
     );
     j.status = Status::Review;
     j.seen = false;
+    j.handoff = "This is a build job, so I'm bringing in Builder.".into();
+    j.short = "Gift cards at checkout".into();
+    j.summary = "7m · 12 turns · $0.41 · 62% from cache".into();
     j.changes = vec![
         change("src/checkout/total.ts", "M", 18, 6),
         change("src/cart/summary.tsx", "M", 25, 2),
@@ -252,7 +255,11 @@ pub fn seed() -> Store {
         "src/cart/summary.tsx".into(),
     ];
     j.feed = vec![
-        Item::Text("Gift cards can be added at checkout and come off the total.".into()),
+        tool("Read src/checkout/total.ts", "read", 1),
+        tool("Ran cat > src/cart/gift.ts <<'EOF'", "shell", 1),
+        Item::Text("I'll create the files with the Write tool instead.".into()),
+        tool("Ran npm test", "shell", 1),
+        Item::Text("Gift cards can be added at checkout and come off the total.\n\nTo try it, run `npm run dev` and open `http://localhost:3000/checkout`. The new code is in `src/cart/gift.ts`.".into()),
         Item::Note("main moved on and src/checkout/total.ts, src/cart/summary.tsx now clash, so nothing was merged.".into()),
     ];
     jobs.push(j);

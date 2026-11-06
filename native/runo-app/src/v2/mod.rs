@@ -8,6 +8,7 @@
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
+mod asks;
 mod brain;
 mod channel;
 mod chat;
@@ -27,6 +28,7 @@ mod palette;
 mod prefs;
 mod race;
 mod review;
+mod rich;
 mod runtime;
 pub mod server;
 mod ship;
@@ -395,6 +397,10 @@ pub struct Shell {
     crew: runtime::Runtime,
     composer: Entity<TextareaState>,
     chat_input: Entity<InputState>,
+    /// Why you said no to a bot's request, when you say.
+    deny_input: Entity<InputState>,
+    /// The request whose Deny is open for a reason.
+    denying: Option<String>,
     live_input: Entity<InputState>,
     /// Live's feed scrolls itself to the newest line while the job runs.
     live_scroll: ScrollHandle,
@@ -463,6 +469,8 @@ pub struct Shell {
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
+    /// Running job cards showing their raw commands.
+    raw_open: std::collections::HashSet<u64>,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
@@ -606,6 +614,8 @@ impl Shell {
         let chat_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the code…"));
         let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
+        let deny_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Tell it why (optional)"));
         let palette_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Jump to a place, a bot, a job or a folder…")
         });
@@ -667,6 +677,14 @@ impl Shell {
                     cx.notify();
                 }
                 if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
+                    // Enter on "@bu" picks Builder rather than sending.
+                    let raw = input.read(cx).value().trim_end_matches('\n').to_string();
+                    if let Some((head, found)) = this.at_matches(&raw) {
+                        let text = format!("{head}@{} ", found[0].name());
+                        input.update(cx, |i, cx| ui::put_text(i, text, window, cx));
+                        cx.notify();
+                        return;
+                    }
                     let text = input.read(cx).value().trim().to_string();
                     input.update(cx, |i, cx| i.set_value("", window, cx));
                     this.hand_over(text, cx);
@@ -797,6 +815,8 @@ impl Shell {
             crew: runtime::Runtime::new(store),
             composer,
             chat_input,
+            deny_input,
+            denying: None,
             live_input,
             live_scroll: ScrollHandle::new(),
             live_len: 0,
@@ -829,6 +849,7 @@ impl Shell {
             list_all: false,
             jobs_open: false,
             deleting: None,
+            raw_open: Default::default(),
             confirming: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
@@ -1147,7 +1168,16 @@ impl Shell {
                 self.confirming = Some((id, text, route));
                 cx.notify();
             }
-            brain::front::Front::Hand(route) => self.hand_to(route, text, cx),
+            brain::front::Front::Hand(route) => {
+                // Peek says who it brought in, on the job's card.
+                let line = handoff_line(&route);
+                let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
+                self.hand_to(route, text, cx);
+                for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
+                    j.handoff = line.clone();
+                }
+                self.crew.store.save();
+            }
         }
     }
 
@@ -2563,4 +2593,17 @@ fn mentioned(text: &str) -> Option<(Member, String)> {
         }
     }
     found.map(|m| (m, rest.join(" ")))
+}
+
+/// Peek's one line on a hand-off: "This is a build job, so I'm bringing in Builder."
+fn handoff_line(route: &brain::route::Route) -> String {
+    let kind = match route.mode {
+        Mode::Build => "a build job",
+        Mode::Fix => "a bug to hunt down",
+        Mode::Test => "a job for tests",
+        Mode::Review => "a job for a careful review",
+        Mode::Ask => "a question about the code",
+        Mode::Tidy => "a tidy-up job",
+    };
+    format!("This is {kind}, so I'm bringing in {}.", route.bot.name())
 }
