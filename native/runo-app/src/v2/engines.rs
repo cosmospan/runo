@@ -296,7 +296,7 @@ impl Shell {
                     .gap(px(space::L))
                     .child(
                         div()
-                            .child(div().text_size(px(22.)).font_weight(FontWeight::SEMIBOLD).child("Engines"))
+                            .child(div().text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child("Engines"))
                             .child(
                                 div()
                                     .mt(px(6.))

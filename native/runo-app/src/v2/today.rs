@@ -9,7 +9,7 @@ use gpui_kit::*;
 
 use runo_holo::{Framing, Mood};
 
-use super::data::{Member, Mode};
+use super::data::Mode;
 use super::store::{self, Status};
 use super::ui::{self, c, ca};
 use super::Pane;
@@ -55,9 +55,6 @@ fn full_name() -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// A mode tab's width: the bot's face and the word.
-const TAB: f32 = 76.;
-
 fn greeting() -> String {
     use chrono::Timelike;
     let part = match chrono::Local::now().hour() {
@@ -89,11 +86,16 @@ impl Shell {
             .count();
         // The line under the greeting carries the folder picker in its words.
         let lead = match (&folder, running, today_done) {
-            (None, ..) => "Pick a folder to start:".to_string(),
-            (Some(_), 0, 0) => "What should we do in".to_string(),
-            (Some(_), 0, d) => format!("{d} {} done today. What next in", plural(d, "job", "jobs")),
+            (None, ..) => format!("{} Pick a folder to start:", greeting()),
+            (Some(_), 0, 0) => format!("{} What should we do in", greeting()),
+            (Some(_), 0, d) => format!(
+                "{} {d} {} done today. What next in",
+                greeting(),
+                plural(d, "job", "jobs")
+            ),
             (Some(_), r, _) => format!(
-                "{r} {} running. What else in",
+                "{} {r} {} running. What else in",
+                greeting(),
                 plural(r, "job is", "jobs are")
             ),
         };
@@ -122,28 +124,17 @@ impl Shell {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap(px(4.))
                     .child(
                         div()
-                            .flex()
-                            .items_baseline()
-                            .gap(px(10.))
-                            .child(
-                                div()
-                                    .text_size(px(22.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Jobs"),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .text_color(c(ui::faint()))
-                                    .child(greeting()),
-                            ),
+                            .text_size(px(24.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Jobs"),
                     )
                     .child(sub.mt(px(0.)).text_size(px(13.5))),
                 self.stagger(0),
             ))
+            .children(self.getting_started(cx))
             .children(self.sample_banner(cx))
             .children(self.fin_offer(cx))
             .child(ui::rise(
@@ -152,105 +143,47 @@ impl Shell {
             ))
             .child(ui::rise(
                 div().w_full().child(if has_jobs {
+                    let goals = self.goals_strip(cx);
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(20.))
-                        .children(self.goals_strip(cx))
+                        .gap(px(12.))
+                        .when_some(goals, |d, (n, row)| {
+                            d.child(ui::heading("Goals", None, Some(n)).mt(px(8.)))
+                                .child(row)
+                        })
+                        .child(ui::heading("Today", None, None).mt(px(8.)))
                         .child(self.kpis())
-                        .child(self.jobs_table(cx))
                         .into_any_element()
                 } else {
                     self.start_here(cx)
                 }),
                 self.stagger(2),
             ));
-        let inspector = if has_jobs { self.inspector(cx) } else { None };
-        div()
+        let main = div()
+            .id("today")
             .size_full()
-            .flex()
-            .child(
-                div()
-                    .id("today")
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .overflow_y_scroll()
-                    .child(page),
-            )
-            .children(inspector)
-            .into_any_element()
+            .overflow_y_scroll()
+            .child(page)
+            .into_any_element();
+        // With jobs to show, the list sits beside the page, as on a job.
+        if has_jobs {
+            self.split(None, main, cx)
+        } else {
+            main
+        }
     }
 
     fn composer_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        // The kind of work comes from what's typed, unless a job was set up
+        // on purpose (Give a job, a hand-off from chat).
+        if !self.mode_pinned {
+            self.mode = Mode::guess(&self.composer.read(cx).value());
+        }
         let target = self.doer();
         let ready =
             !self.composer.read(cx).value().trim().is_empty() || self.mode.default_job().is_some();
         let face = self.avatar(target, 26.);
-        let accent = target.accent();
-        // The white highlight glides under the tabs as the mode changes.
-        let x = self.mode_x();
-        let mut modes = div()
-            .relative()
-            .flex()
-            .items_center()
-            .p(px(3.))
-            .gap(px(super::MODE_STEP - TAB))
-            .rounded(px(12.))
-            .bg(c(ui::raised()))
-            .child(
-                div()
-                    .absolute()
-                    .top(px(3.))
-                    .left(px(3. + x))
-                    .w(px(TAB))
-                    .h(px(32.))
-                    .rounded(px(9.))
-                    .bg(c(ui::panel()))
-                    .shadow(ui::lift()),
-            );
-        // Every kind of work. One nobody on the crew does yet is fainter, and a
-        // job sent in it makes Fin offer the bot for it.
-        for (i, m) in Mode::ALL.into_iter().enumerate() {
-            let on = self.mode == m;
-            let staffed = Member::doer_for(m).is_some();
-            modes = modes.child(
-                div()
-                    .id(("mode", i))
-                    .w(px(TAB))
-                    .h(px(32.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(5.))
-                    .rounded(px(9.))
-                    .text_size(px(13.))
-                    .cursor_pointer()
-                    .map(|d| {
-                        if on {
-                            d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
-                        } else {
-                            d.text_color(c(if staffed { ui::muted() } else { ui::faint() }))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                        }
-                    })
-                    .child(m.label())
-                    .when(!staffed, |d| {
-                        let who = Member::for_mode(m).name();
-                        d.tooltip(move |window, cx| {
-                            gpui_kit::component::tooltip::Tooltip::new(format!(
-                                "Nobody on your crew does this yet. Send a job and Fin offers {who}."
-                            ))
-                            .build(window, cx)
-                        })
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.target = None;
-                        this.set_mode(m, window, cx);
-                        this.composer.update(cx, |i, cx| i.focus(window, cx));
-                    })),
-            );
-        }
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), target);
         let box_ = div()
             .flex_1()
@@ -275,12 +208,11 @@ impl Shell {
                     .flex_wrap()
                     .items_center()
                     .gap(px(8.))
-                    .child(modes)
                     .child(div().flex_1())
                     .when(self.mode.writes(), |d| {
                         let on = self.splitting;
                         d.child(
-                            ui::pill("split-toggle", "Split", on)
+                            ui::pill_i("split-toggle", IconName::Split, "Split", on)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "For a bigger goal: Squad Code splits it into a few jobs that run one after another",
@@ -303,7 +235,7 @@ impl Shell {
                             _ => "Race".to_string(),
                         };
                         d.child(
-                            ui::pill("race-toggle", label, n > 1)
+                            ui::pill_i("race-toggle", IconName::Swords, label, n > 1)
                                 .tooltip(|window, cx| {
                                     gpui_kit::component::tooltip::Tooltip::new(
                                         "Run it on several engines at once and keep the best try",
@@ -343,6 +275,12 @@ impl Shell {
                             } else {
                                 format!("{} (Fin asks first)", target.name())
                             })
+                            // What it reads the request as, so a wrong guess shows.
+                            .child(
+                                div()
+                                    .text_color(c(ui::faint()))
+                                    .child(format!("· {}", self.mode.label())),
+                            )
                             .tooltip(move |window, cx| {
                                 gpui_kit::component::tooltip::Tooltip::new(format!(
                                     "Runs on {engine}. Click to change it."
@@ -354,18 +292,15 @@ impl Shell {
                     .child(
                         div()
                             .id("send")
-                            .size(px(38.))
-                            .rounded_full()
+                            .size(px(34.))
+                            .rounded(px(9.))
                             // Dark once there is something to send.
-                            .bg(c(if ready { accent } else { ui::off() }))
-                            .when(ready, |d| {
-                                d.shadow(vec![BoxShadow {
-                                    color: ca(accent, 0.45),
-                                    offset: point(px(0.), px(6.)),
-                                    blur_radius: px(16.),
-                                    spread_radius: px(-2.),
-                                    inset: false,
-                                }])
+                            .map(|d| {
+                                if ready {
+                                    d.bg(c(ui::fill()))
+                                } else {
+                                    d.bg(c(ui::off()))
+                                }
                             })
                             .flex()
                             .items_center()
@@ -376,13 +311,14 @@ impl Shell {
                             .child(
                                 Icon::new(IconName::ArrowUp)
                                     .size(px(16.))
-                                    .text_color(c(0xFFFFFF)),
+                                    .text_color(c(if ready { ui::on_fill() } else { 0xFFFFFF })),
                             )
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let text = this.composer.read(cx).value().trim().to_string();
                                 this.composer
                                     .update(cx, |i, cx| i.set_value("", window, cx));
                                 this.hand_over(text, cx);
+                                this.unpin_mode(window, cx);
                             })),
                     ),
             );
@@ -390,9 +326,9 @@ impl Shell {
             .w_full()
             .flex()
             .gap(px(18.))
-            .px(px(18.))
-            .pt(px(18.))
-            .pb(px(14.))
+            .px(px(16.))
+            .pt(px(16.))
+            .pb(px(12.))
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
@@ -427,7 +363,7 @@ impl Shell {
                 .bg(c(ui::panel()))
                 .border_1()
                 .border_color(ca(who.accent(), 0.45))
-                .rounded(px(12.))
+                .rounded(px(ui::CARD_R))
                 .child(face)
                 .child(
                     div()
@@ -527,7 +463,6 @@ impl Shell {
                 .bg(c(ui::panel()))
                 .border_1()
                 .border_color(c(ui::line()))
-                .shadow(ui::lift())
                 .flex()
                 .flex_col();
             for (i, f) in self.crew.store.folders.iter().enumerate() {

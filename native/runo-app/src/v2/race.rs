@@ -107,7 +107,7 @@ impl Shell {
                 )
                 .child(
                     div()
-                        .text_size(px(22.))
+                        .text_size(px(24.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::ink()))
                         .truncate()

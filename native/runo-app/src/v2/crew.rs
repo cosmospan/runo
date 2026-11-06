@@ -12,6 +12,8 @@ use super::store::Status;
 use super::ui::{self, c, ca};
 use super::Pane;
 use super::{Place, Shell};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 
 /// A look picked by `seed`, for "Surprise me": any colour, a role kit or a
 /// mix of props.
@@ -44,54 +46,13 @@ impl Shell {
         let all = Member::all();
         let n = all.len();
         let busy = self.crew.store.running().count();
+        // The crew as a grid of cards, three across on a wide window.
+        let wide = self.view_w - super::sidebar::WIDTH > 1100.;
         let mut list = div()
             .w_full()
-            .bg(c(ui::panel()))
-            .border_1()
-            .border_color(c(ui::line()))
-            .rounded(px(12.))
-            .overflow_hidden()
-            .child(
-                div()
-                    .h(px(34.))
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .border_b_1()
-                    .border_color(c(ui::line2()))
-                    .text_size(px(11.5))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(ui::faint()))
-                    .child(div().flex_1().min_w_0().child("Bot"))
-                    .child(div().w(px(120.)).flex_none().child("Status"))
-                    .child(div().w(px(170.)).flex_none().child("Engine"))
-                    .child(
-                        div()
-                            .w(px(50.))
-                            .flex_none()
-                            .flex()
-                            .justify_end()
-                            .child("Jobs"),
-                    )
-                    .child(
-                        div()
-                            .w(px(64.))
-                            .flex_none()
-                            .flex()
-                            .justify_end()
-                            .child("Success"),
-                    )
-                    .child(
-                        div()
-                            .w(px(64.))
-                            .flex_none()
-                            .flex()
-                            .justify_end()
-                            .child("Spend"),
-                    )
-                    .child(div().w(px(290.)).flex_none()),
-            );
+            .grid()
+            .grid_cols(if wide { 3 } else { 2 })
+            .gap(px(14.));
         for who in all {
             list = list.child(self.crew_row(who, cx));
         }
@@ -117,7 +78,7 @@ impl Shell {
                             .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(22.))
+                                    .text_size(px(24.))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child("Crew"),
                             )
@@ -132,7 +93,7 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::solid("crew-make", "Make a bot").on_click(cx.listener(|this, _, _, cx| {
+                        ui::solid_i("crew-make", IconName::Plus, "Make a bot").on_click(cx.listener(|this, _, _, cx| {
                             this.maker_open = !this.maker_open;
                             cx.notify();
                         })),
@@ -153,7 +114,7 @@ impl Shell {
 
     fn crew_row(&mut self, who: Member, cx: &mut Context<Self>) -> Stateful<Div> {
         let mood = self.mood(who);
-        let face = self.bot(who, mood, 34., Framing::Bust);
+        let face = self.bot(who, mood, 52., Framing::Bust);
         let (status, color) = self.status_of(who);
         let jobs: Vec<_> = self
             .crew
@@ -182,31 +143,16 @@ impl Shell {
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
         let mode = who.mode();
         let pinned = self.crew.store.pinned.contains(&who);
-        let num = |w: f32, v: String| {
-            div()
-                .w(px(w))
-                .flex_none()
-                .flex()
-                .justify_end()
-                .font_family(ui::MONO)
-                .text_size(px(12.))
-                .text_color(c(if v == "\u{2014}" {
-                    ui::faint()
-                } else {
-                    ui::ink()
-                }))
-                .child(v)
-        };
         let small = |id: (&'static str, usize), label: &'static str| {
             div()
                 .id(id)
-                .w(px(54.))
+                .px(px(10.))
                 .flex_none()
-                .h(px(26.))
+                .h(px(28.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(6.))
+                .rounded(px(7.))
                 .text_size(px(12.))
                 .text_color(c(ui::muted()))
                 .cursor_pointer()
@@ -214,23 +160,50 @@ impl Shell {
                 .child(label)
         };
         let key = who.key() as usize;
+        // One figure under the bot: a small label over a mono value.
+        let figure = |label: &'static str, v: String| {
+            div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(11.))
+                        .text_color(c(ui::faint()))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .font_family(ui::MONO)
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(if v == "\u{2014}" {
+                            ui::faint()
+                        } else {
+                            ui::ink()
+                        }))
+                        .child(v),
+                )
+        };
         div()
             .id(("crew-row", key))
             .on_hover(cx.listener(move |this, on: &bool, _, cx| {
                 this.hover_bot(who, *on, cx);
             }))
-            .h(px(58.))
-            .px(px(16.))
+            .relative()
+            .overflow_hidden()
             .flex()
-            .items_center()
+            .flex_col()
             .gap(px(14.))
-            .border_b_1()
-            .border_color(c(ui::line2()))
-            .hover(|s| s.bg(c(ui::hover())))
+            .p(px(16.))
+            .bg(c(ui::panel()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .rounded(px(ui::CARD_R + 2.))
+            .hover(|s| s.border_color(c(ui::line_hi())))
             .child(
                 div()
-                    .flex_1()
-                    .min_w_0()
                     .flex()
                     .items_center()
                     .gap(px(12.))
@@ -239,92 +212,107 @@ impl Shell {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .overflow_hidden()
+                            .flex()
+                            .flex_col()
+                            .gap(px(3.))
                             .child(
                                 div()
                                     .flex()
                                     .items_center()
                                     .gap(px(6.))
-                                    .text_size(px(14.))
+                                    .text_size(px(15.))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(ui::ink()))
                                     .child(who.name())
                                     .when(pinned, |d| {
                                         d.child(
-                                            div()
-                                                .text_size(px(10.5))
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .text_color(c(ui::faint()))
-                                                .child("PINNED"),
+                                            Icon::new(IconName::Pin)
+                                                .size(px(12.))
+                                                .text_color(c(ui::faint())),
                                         )
                                     }),
                             )
                             .child(
                                 div()
-                                    .text_size(px(12.))
+                                    .text_size(px(12.5))
                                     .text_color(c(ui::muted()))
                                     .truncate()
                                     .child(who.role()),
-                            ),
+                            )
+                            .child(div().mt(px(4.)).child(if color == ui::faint() {
+                                ui::status(ui::faint(), "Idle")
+                            } else {
+                                ui::status(color, status)
+                            })),
                     ),
-            )
-            .child(
-                div()
-                    .w(px(120.))
-                    .flex_none()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .child(if color == ui::faint() {
-                        ui::status(ui::faint(), "Idle")
-                    } else {
-                        ui::status(color, status)
-                    }),
             )
             .child(
                 div()
                     .id(("crew-engine", key))
-                    .w(px(170.))
-                    .flex_none()
-                    .truncate()
+                    .h(px(28.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .rounded(px(7.))
+                    .bg(c(ui::well()))
+                    .border_1()
+                    .border_color(c(ui::line2()))
                     .text_size(px(12.))
                     .text_color(c(ui::body()))
                     .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::ink())))
-                    .child(engine)
+                    .hover(|s| s.text_color(c(ui::ink())).border_color(c(ui::line_hi())))
+                    .child(
+                        Icon::new(IconName::Cpu)
+                            .size(px(13.))
+                            .text_color(c(ui::faint())),
+                    )
+                    .child(div().flex_1().min_w_0().truncate().child(engine))
+                    .child(
+                        Icon::new(IconName::ChevronRight)
+                            .size(px(12.))
+                            .text_color(c(ui::faint())),
+                    )
                     .on_click(
                         cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
                     ),
             )
-            .child(num(
-                50.,
-                if jobs.is_empty() {
-                    "\u{2014}".into()
-                } else {
-                    jobs.len().to_string()
-                },
-            ))
-            .child(num(
-                64.,
-                match (done * 100).checked_div(ended) {
-                    Some(pct) => format!("{pct}%"),
-                    None => "\u{2014}".into(),
-                },
-            ))
-            .child(num(
-                64.,
-                if spend == 0. {
-                    "\u{2014}".into()
-                } else {
-                    format!("${spend:.2}")
-                },
-            ))
             .child(
                 div()
-                    .w(px(290.))
-                    .flex_none()
+                    .flex()
+                    .px(px(4.))
+                    .child(figure(
+                        "Jobs",
+                        if jobs.is_empty() {
+                            "\u{2014}".into()
+                        } else {
+                            jobs.len().to_string()
+                        },
+                    ))
+                    .child(figure(
+                        "Success",
+                        match (done * 100).checked_div(ended) {
+                            Some(pct) => format!("{pct}%"),
+                            None => "\u{2014}".into(),
+                        },
+                    ))
+                    .child(figure(
+                        "Spend",
+                        if spend == 0. {
+                            "\u{2014}".into()
+                        } else {
+                            format!("${spend:.2}")
+                        },
+                    )),
+            )
+            .child(
+                div()
+                    .pt(px(12.))
+                    .border_t_1()
+                    .border_color(c(ui::line2()))
                     .flex()
                     .items_center()
-                    .gap(px(4.))
+                    .gap(px(6.))
                     .child(
                         small(("crew-pin", key), if pinned { "Unpin" } else { "Pin" }).on_click(
                             cx.listener(move |this, _, _, cx| {
@@ -352,20 +340,19 @@ impl Shell {
                             },
                         )))
                     })
+                    .child(div().flex_1())
                     .child(
-                        ui::ghost(("crew-chat", key), "Chat")
-                            .h(px(28.))
+                        ui::ghost_i(("crew-chat", key), IconName::MessageCircle, "Chat")
+                            .h(px(30.))
                             .text_size(px(12.5))
                             .on_click(
                                 cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx)),
                             ),
                     )
-                    // Keeps the columns lined up for bots that only answer.
-                    .when(mode == Mode::Ask, |d| d.child(div().w(px(84.)).flex_none()))
                     .when(mode != Mode::Ask, |d| {
                         d.child(
-                            ui::solid(("crew-job", key), "Give a job")
-                                .h(px(28.))
+                            ui::solid_i(("crew-job", key), IconName::Plus, "Give a job")
+                                .h(px(30.))
                                 .text_size(px(12.5))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.target = Some(who);
@@ -499,7 +486,6 @@ impl Shell {
                     .rounded_full()
                     .border_2()
                     .border_color(c(if on { ui::ink() } else { ui::panel() }))
-                    .shadow(ui::lift())
                     .bg(linear_gradient(
                         135.,
                         linear_color_stop(c(l.0), 0.0),
@@ -626,7 +612,7 @@ impl Shell {
                                     .text_color(c(ui::muted()))
                                     .child("Dress a Fin, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
                             )
-                            .child(ui::ghost("surprise", "Surprise me").on_click(cx.listener(|this, _, _, cx| {
+                            .child(ui::ghost_i("surprise", IconName::Sparkles, "Surprise me").on_click(cx.listener(|this, _, _, cx| {
                                 this.maker = surprise(this.clock.elapsed().as_nanos() as u64);
                                 cx.notify();
                             }))),

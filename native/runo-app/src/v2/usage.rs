@@ -1,6 +1,7 @@
 //! Usage: what the crew cost and did over the last 30 days, from the jobs kept
 //! on this computer.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::*;
 
 use super::data::Member;
@@ -88,49 +89,23 @@ impl Shell {
             .fold(0., f64::max)
             .max(f64::EPSILON);
 
-        let kpi = |k: &'static str, v: String, sub: String| {
-            div()
-                .flex_1()
-                .px(px(18.))
-                .py(px(14.))
-                .child(div().text_size(px(12.)).text_color(c(ui::muted())).child(k))
-                .child(
-                    div()
-                        .mt(px(4.))
-                        .flex()
-                        .items_end()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .text_size(px(24.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(v),
-                        )
-                        .child(
-                            div()
-                                .pb(px(4.))
-                                .text_size(px(11.5))
-                                .text_color(c(ui::faint()))
-                                .child(sub),
-                        ),
-                )
-        };
-        let line = || div().w(px(1.)).bg(c(ui::line()));
-        let kpis = ui::card()
+        let kpis = div()
             .flex()
-            .child(kpi(
+            .gap(px(12.))
+            .child(ui::stat(
+                (IconName::Wallet, ui::t_violet()),
                 "Spend",
                 format!("${spend:.2}"),
                 "reported by engines".into(),
             ))
-            .child(line())
-            .child(kpi(
+            .child(ui::stat(
+                (IconName::LayoutDashboard, ui::t_blue()),
                 "Jobs",
                 recent.len().to_string(),
                 format!("{} running", self.crew.store.running().count()),
             ))
-            .child(line())
-            .child(kpi(
+            .child(ui::stat(
+                (IconName::CircleCheck, ui::t_green()),
                 "Success rate",
                 if ended == 0 {
                     "—".into()
@@ -139,8 +114,12 @@ impl Shell {
                 },
                 format!("{ok} of {ended} finished"),
             ))
-            .child(line())
-            .child(kpi("Time at work", hours(busy), "across the crew".into()));
+            .child(ui::stat(
+                (IconName::Timer, ui::t_amber()),
+                "Time at work",
+                hours(busy),
+                "across the crew".into(),
+            ));
 
         let mut bars = div().h(px(220.)).flex().items_end().gap(px(4.));
         for d in &days {
@@ -158,7 +137,7 @@ impl Shell {
                     div()
                         .w_full()
                         .h(px((v / top * 210.) as f32))
-                        .rounded(px(2.))
+                        .rounded(px(4.))
                         .bg(c(m.accent())),
                 );
             }

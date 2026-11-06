@@ -91,8 +91,7 @@ fn switch(on: bool) -> Div {
                 .left(px(if on { 16. } else { 2. }))
                 .size(px(14.))
                 .rounded_full()
-                .bg(c(0xFFFFFF))
-                .shadow(ui::lift()),
+                .bg(c(0xFFFFFF)),
         )
 }
 
@@ -183,7 +182,6 @@ fn segment(id: impl Into<ElementId>, label: impl Into<SharedString>, on: bool) -
                     .border_1()
                     .border_color(c(ui::line_hi()))
                     .text_color(c(ui::ink()))
-                    .shadow(ui::lift())
             } else {
                 d.text_color(c(ui::muted()))
                     .hover(|s| s.text_color(c(ui::ink())))
@@ -344,83 +342,44 @@ fn swatch(t: &'static Theme) -> Div {
 
 impl Shell {
     pub(super) fn settings(&mut self, pane: Pane, cx: &mut Context<Self>) -> AnyElement {
-        let mut nav = div()
-            .id("settings-nav")
-            .w(px(232.))
-            .h_full()
-            .flex_none()
-            .flex()
-            .flex_col()
-            .gap(px(2.))
-            .px(px(12.))
-            .pt(px(24.))
-            .pb(px(16.))
-            .border_r_1()
-            .border_color(c(ui::line()))
-            .bg(c(ui::bg()))
-            .child(
-                div()
-                    .px(px(10.))
-                    .pb(px(14.))
-                    .text_size(px(20.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Settings"),
-            );
+        // The panes as a row of tabs across the top, the one you're on
+        // underlined.
+        let mut tabs = div().flex().items_end().gap(px(22.));
         for p in Pane::ALL {
             let on = p == pane;
-            nav = nav.child(
+            tabs = tabs.child(
                 div()
                     .id(("settings-pane", p as usize))
-                    .px(px(10.))
-                    .py(px(8.))
+                    .relative()
+                    .h(px(40.))
                     .flex()
                     .items_center()
-                    .gap(px(10.))
-                    .rounded(px(9.))
+                    .gap(px(7.))
+                    .text_size(px(13.))
+                    .font_weight(FontWeight::MEDIUM)
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::panel())).border_1().border_color(c(ui::line()))
+                            d.text_color(c(ui::ink())).child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .right_0()
+                                    .bottom(px(-1.))
+                                    .h(px(2.))
+                                    .rounded_t(px(2.))
+                                    .bg(c(ui::ink())),
+                            )
                         } else {
-                            d.hover(|s| s.bg(c(ui::hover())))
+                            d.text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
                         }
                     })
-                    .child(
-                        div()
-                            .size(px(28.))
-                            .flex_none()
-                            .rounded(px(8.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .bg(if on {
-                                ca(ui::RUNO, 0.22)
-                            } else {
-                                c(ui::raised())
-                            })
-                            .text_color(c(if on { ui::t_violet() } else { ui::muted() }))
-                            .child(Icon::new(p.icon()).size(px(15.))),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c(if on { ui::ink() } else { ui::body() }))
-                                    .child(p.name()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.5))
-                                    .text_color(c(ui::faint()))
-                                    .truncate()
-                                    .child(p.line()),
-                            ),
-                    )
+                    .child(Icon::new(p.icon()).size(px(14.)))
+                    .child(p.name())
+                    .tooltip(move |window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(p.line()).build(window, cx)
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         // Switching panes stays inside Settings: no page fade, no
                         // extra step on the back trail.
@@ -430,6 +389,13 @@ impl Shell {
                     })),
             );
         }
+        let nav = div()
+            .flex_none()
+            .px(px(28.))
+            .pt(px(6.))
+            .border_b_1()
+            .border_color(c(ui::line2()))
+            .child(tabs);
         let body = match pane {
             Pane::General => self.settings_general(cx),
             Pane::Appearance => self.settings_appearance(cx),
@@ -439,8 +405,9 @@ impl Shell {
         div()
             .size_full()
             .flex()
+            .flex_col()
             .child(nav)
-            .child(div().flex_1().min_w_0().h_full().child(body))
+            .child(div().flex_1().min_h_0().w_full().child(body))
             .into_any_element()
     }
 
@@ -463,7 +430,7 @@ impl Shell {
                         div()
                             .child(
                                 div()
-                                    .text_size(px(22.))
+                                    .text_size(px(24.))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(title),
                             )

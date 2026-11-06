@@ -431,8 +431,6 @@ pub struct Shell {
     maker_like: Member,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
-    /// Groups folded shut on Jobs, one bit each: needs you, in progress, done.
-    home_tab: u8,
     /// The bot maker is open on Crew.
     maker_open: bool,
     /// The engines popover over the status bar is open.
@@ -451,6 +449,8 @@ pub struct Shell {
     home_pick: Option<u64>,
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
+    /// Which jobs the list beside a job shows: all, needing you, running or done.
+    list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
     /// waiting for the person to add the bot Fin suggests.
@@ -480,9 +480,9 @@ pub struct Shell {
     nav_at: Instant,
     /// Progress bars' shown values, by job, so they glide.
     bars: HashMap<u64, f32>,
-    /// Today's mode tabs: the highlight glides from one to the next.
-    mode_from: f32,
-    mode_at: Instant,
+    /// The job box's kind of work was set on purpose (Give a job, a hand-off),
+    /// so it isn't guessed from the text until that job is sent.
+    mode_pinned: bool,
     /// The Inbox count last frame, and when it last went up, for the badge's pop.
     inbox_seen: usize,
     inbox_at: Instant,
@@ -563,9 +563,6 @@ fn doze_after() -> Duration {
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
 
-/// Width of one of Today's mode tabs plus the gap after it.
-const MODE_STEP: f32 = 78.;
-
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
@@ -584,7 +581,7 @@ impl Shell {
         // A long job wraps and the box grows with it; Shift+Enter starts a new line.
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .placeholder(Mode::Build.placeholder())
+                .placeholder(Mode::ANY_PLACEHOLDER)
                 .submit_on_enter(true)
                 .auto_grow(1, 6)
         });
@@ -599,8 +596,9 @@ impl Shell {
         let maker_name = cx.new(|cx| InputState::new(window, cx).placeholder("Scout"));
         let maker_role =
             cx.new(|cx| InputState::new(window, cx).placeholder("Checks the docs match the code"));
-        let history_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search jobs, bots, folders…"));
+        let history_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
+        });
         let subs = vec![
             cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -621,6 +619,7 @@ impl Shell {
                     let text = input.read(cx).value().trim().to_string();
                     input.update(cx, |i, cx| i.set_value("", window, cx));
                     this.hand_over(text, cx);
+                    this.unpin_mode(window, cx);
                 }
             }),
             cx.subscribe_in(&chat_input, window, |this, input, event, window, cx| {
@@ -764,7 +763,6 @@ impl Shell {
             hovered: None,
             target: None,
             setup_step: 0,
-            home_tab: 0,
             maker_open: false,
             usage_open: false,
             engine_sel: None,
@@ -775,6 +773,7 @@ impl Shell {
             engine_open: None,
             home_pick: None,
             inbox_pick: None,
+            list_filter: 0,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -796,8 +795,7 @@ impl Shell {
             nav_to: nav_slot(start).unwrap_or(0.),
             nav_at: Instant::now(),
             bars: HashMap::new(),
-            mode_from: MODE_STEP,
-            mode_at: Instant::now(),
+            mode_pinned: false,
             inbox_seen: usize::MAX,
             inbox_at: Instant::now(),
             chat_at: Instant::now(),
@@ -871,17 +869,6 @@ impl Shell {
         }
     }
 
-    /// Where Today's mode highlight is now, in pixels from the first tab.
-    fn mode_x(&self) -> f32 {
-        let to = Mode::ALL
-            .into_iter()
-            .position(|m| m == self.mode)
-            .unwrap_or(0) as f32
-            * MODE_STEP;
-        let k = runo_holo::anim::spring(self.mode_at.elapsed().as_secs_f64(), 0.3) as f32;
-        self.mode_from + (to - self.mode_from) * k
-    }
-
     /// How far item `i` of the current place has eased in, 0 → 1; each item
     /// starts a beat after the one before.
     fn stagger(&self, i: usize) -> f32 {
@@ -922,15 +909,25 @@ impl Shell {
     }
 
     fn set_mode(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        if mode != self.mode {
-            self.mode_from = self.mode_x();
-            self.mode_at = Instant::now();
-        }
         self.mode = mode;
+        self.mode_pinned = true;
         self.composer.update(cx, |i, cx| {
             i.set_placeholder(mode.placeholder(), window, cx)
         });
         cx.notify();
+    }
+
+    /// Once a job is sent (and not held for Fin's offer), the next one's kind
+    /// of work is read from its text again.
+    fn unpin_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.offer.is_some() || !self.mode_pinned {
+            return;
+        }
+        self.mode_pinned = false;
+        self.target = None;
+        self.composer.update(cx, |i, cx| {
+            i.set_placeholder(Mode::ANY_PLACEHOLDER, window, cx)
+        });
     }
 
     fn say(&mut self, text: impl Into<SharedString>) {
@@ -972,6 +969,9 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        if !self.mode_pinned {
+            self.mode = Mode::guess(&text);
+        }
         let text = match (text.is_empty(), self.mode.default_job()) {
             (false, _) => text,
             (true, Some(d)) => d.to_string(),
@@ -1094,6 +1094,7 @@ impl Shell {
         self.set_mode(o.mode, window, cx);
         let added = self.toast.clone();
         self.hand_over(o.text, cx);
+        self.unpin_mode(window, cx);
         // Keep "Added Fixer" showing unless starting the job had more to say.
         if self.toast.is_none() {
             self.toast = added;
@@ -1567,20 +1568,6 @@ impl Shell {
         (who.role().to_lowercase(), ui::faint())
     }
 
-    /// What a bot in the sidebar shows: its real state when it has one (answering,
-    /// working, waiting on you, just done), else an idle of its own that changes
-    /// now and then, so the crew doesn't move in lockstep. Hovered, it waves.
-    fn side_mood(&self, who: Member) -> Mood {
-        let mood = self.mood(who);
-        if mood != Mood::Signature {
-            return mood;
-        }
-        if self.hovered == Some(who) {
-            return Mood::Signature;
-        }
-        idle_mood(who.key(), self.now(), self.touched.elapsed().as_secs())
-    }
-
     /// Where `who`'s eyes look: towards the pointer when it's near, else ahead.
     fn gaze(&self, who: Member) -> (i8, i8) {
         let Some(b) = self.faces.borrow().get(&who).copied() else {
@@ -1600,15 +1587,6 @@ impl Shell {
         if who.iter().map(|w| self.gaze(*w)).ne(before) {
             cx.notify();
         }
-    }
-
-    /// A sidebar bot: its own mood, clock and gaze.
-    fn side_bot(&mut self, who: Member, size: f32) -> Img {
-        let mood = self.side_mood(who);
-        let gaze = if self.motion { self.gaze(who) } else { (0, 0) };
-        let pose = mascot::figure_with(who, mood, gaze, (who.key() * 5 % 17) as u8)
-            .shine(self.hovered == Some(who));
-        self.pose_img(pose, size, Framing::Bust)
     }
 
     /// A bot drawn at `size` logical pixels, in `mood`.
@@ -1707,7 +1685,6 @@ impl Render for Shell {
         // What the last frame needed sets the clock for the next one.
         let busy = self.entered.elapsed() < Duration::from_millis(1000)
             || (self.palette && self.palette_at.elapsed() < Duration::from_millis(600))
-            || self.mode_at.elapsed() < Duration::from_millis(500)
             || self.inbox_at.elapsed() < Duration::from_millis(700)
             || self.chat_at.elapsed() < Duration::from_millis(500)
             || self.nav_at.elapsed() < Duration::from_millis(600)
@@ -1770,7 +1747,10 @@ impl Render for Shell {
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
             Place::Today => self.today(cx),
-            Place::Live(id) => self.live(id, cx),
+            Place::Live(id) => {
+                let detail = self.live(id, cx);
+                self.split(Some(id), detail, cx)
+            }
             Place::Race(id) => self.race(id, cx),
             Place::Goal(id) => self.goal_page(id, cx),
             Place::Crew => self.crew(cx),
@@ -1816,7 +1796,6 @@ impl Render for Shell {
                         .bg(c(ui::fill()))
                         .text_color(c(ui::on_fill()))
                         .text_size(px(13.))
-                        .shadow(ui::lift())
                         .child(text),
                 )
         });
@@ -1903,17 +1882,19 @@ impl Render for Shell {
             }))
             .font_family("Geist")
             .text_color(c(ui::ink()))
-            .bg(c(ui::bg()))
+            // The ground the sidebar sits on; the page floats over it as a canvas.
+            .bg(c(if setup { ui::bg() } else { ui::ground() }))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
                 div()
                     .flex_1()
-                    .h_full()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .when(!setup, |d| d.child(self.topbar(cx)))
+                    // Full height on its own; as a canvas, it stretches between its margins.
+                    .when(setup, |d| d.h_full())
+                    .when(!setup, |d| d.bg(c(ui::bg())).child(self.topbar(cx)))
                     .child(
                         div()
                             .flex_1()
@@ -2016,24 +1997,6 @@ pub fn open_window(cx: &mut App) {
     cx.activate(true);
 }
 
-/// An idle bot's mood for the moment: mostly hovering, now and then a wave,
-/// and dozing off once the person has been away a while. Each bot keeps its own
-/// rhythm, picked from `seed`.
-fn idle_mood(seed: u64, now: f64, away_secs: u64) -> Mood {
-    if away_secs > 120 {
-        return Mood::Asleep;
-    }
-    let span = 6.0 + (seed % 5) as f64;
-    let slot = ((now + seed as f64 * 1.9) / span) as u64;
-    let mut h =
-        (seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ slot).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    h ^= h >> 29;
-    match h % 10 {
-        0..=6 => Mood::Idle,
-        _ => Mood::Signature,
-    }
-}
-
 /// Which way eyes at `eye` look to find the pointer at `at` (window pixels):
 /// straight ahead when it's far off, else up to two steps each way.
 fn gaze_towards(eye: (f32, f32), at: (f32, f32)) -> (i8, i8) {
@@ -2063,25 +2026,13 @@ pub fn to_front(cx: &mut App) {
 
 #[cfg(test)]
 mod side_tests {
-    use super::{gaze_towards, idle_mood};
-    use runo_holo::Mood;
+    use super::gaze_towards;
 
     #[test]
     fn eyes_find_a_nearby_pointer_and_ignore_a_far_one() {
         assert_eq!(gaze_towards((100., 100.), (180., 100.)), (2, 0));
         assert_eq!(gaze_towards((100., 100.), (100., 72.)), (0, -1));
         assert_eq!(gaze_towards((100., 100.), (900., 100.)), (0, 0));
-    }
-
-    #[test]
-    fn idle_bots_do_not_all_do_the_same_thing() {
-        let at = |t: f64| (1..=7).map(|k| idle_mood(k, t, 0)).collect::<Vec<_>>();
-        let varied = (0..60).any(|i| {
-            let m = at(i as f64 * 3.0);
-            m.iter().any(|x| *x != m[0])
-        });
-        assert!(varied);
-        assert_eq!(idle_mood(3, 10.0, 600), Mood::Asleep);
     }
 }
 

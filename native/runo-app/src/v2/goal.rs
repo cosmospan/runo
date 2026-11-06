@@ -175,7 +175,7 @@ pub fn context(goal: &Goal, step: usize) -> String {
 
 impl Shell {
     /// Goals still going, as a row of small cards over the jobs.
-    pub(super) fn goals_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+    pub(super) fn goals_strip(&mut self, cx: &mut Context<Self>) -> Option<(usize, Div)> {
         let open: Vec<Goal> = self
             .crew
             .store
@@ -188,6 +188,7 @@ impl Shell {
             return None;
         }
         let jobs = self.crew.store.jobs.clone();
+        let count = open.len();
         let mut row = div().flex().flex_wrap().gap(px(12.));
         for g in open {
             let id = g.id;
@@ -210,29 +211,28 @@ impl Shell {
                     .id(("goal-card", id as usize))
                     .flex_1()
                     .min_w(px(240.))
-                    .max_w(px(420.))
-                    .p(px(14.))
+                    .p(px(16.))
                     .flex()
                     .flex_col()
-                    .gap(px(8.))
+                    .gap(px(12.))
                     .cursor_pointer()
                     .hover(|s| s.border_color(c(ui::line_hi())))
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.))
-                            .child(ui::caption("GOAL"))
-                            .child(div().flex_1())
+                            .gap(px(10.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_size(px(13.5))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::ink()))
+                                    .truncate()
+                                    .child(g.text.clone()),
+                            )
                             .child(ui::status(color, word)),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c(ui::ink()))
-                            .truncate()
-                            .child(g.text.clone()),
                     )
                     .child(
                         div()
@@ -254,7 +254,7 @@ impl Shell {
                     .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Goal(id), cx))),
             );
         }
-        Some(row)
+        Some((count, row))
     }
 
     pub(super) fn goal_page(&mut self, id: u64, cx: &mut Context<Self>) -> AnyElement {
@@ -296,7 +296,7 @@ impl Shell {
                 )))
                 .child(
                     div()
-                        .text_size(px(22.))
+                        .text_size(px(24.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::ink()))
                         .child(goal.text.clone()),
@@ -352,7 +352,7 @@ impl Shell {
             .bg(c(ui::panel()))
             .border_1()
             .border_color(c(ui::line()))
-            .rounded(px(12.))
+            .rounded(px(ui::CARD_R))
             .overflow_hidden();
         if goal.state == State::Planning {
             list = list.child(div().p(px(18.)).child(ui::sweep(ui::RUNO, 0.)));
