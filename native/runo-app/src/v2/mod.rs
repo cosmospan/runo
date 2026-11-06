@@ -36,6 +36,7 @@ mod store;
 mod term;
 mod theme;
 mod today;
+mod channel;
 mod trouble;
 mod ui;
 mod usage;
@@ -450,6 +451,8 @@ pub struct Shell {
     /// The Inbox item open on the right.
     inbox_pick: Option<u64>,
     /// Which jobs the list beside a job shows: all, needing you, running or done.
+    /// The Jobs panel shows the thread you're in (false) or every job (true).
+    list_all: bool,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -774,6 +777,7 @@ impl Shell {
             home_pick: None,
             inbox_pick: None,
             list_filter: 0,
+            list_all: false,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -969,9 +973,66 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        // Slash commands from the composer.
+        let mut text = text;
+        let mut plan = false;
+        let mut race = 0;
+        if let Some(rest) = text.strip_prefix('/') {
+            let (cmd, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+            let arg = arg.trim().to_string();
+            match cmd {
+                "thread" => {
+                    if arg.is_empty() {
+                        self.say("Give the thread a name, like /thread gift cards.");
+                        return;
+                    }
+                    if self.crew.store.folder().is_none() {
+                        self.say("Pick a project folder first, then make threads in it.");
+                        self.pick_folder(cx);
+                        return;
+                    }
+                    let bots: Vec<Member> = Member::all()
+                        .into_iter()
+                        .filter(|m| *m != Member::Fin && arg.to_lowercase().contains(&format!("@{}", m.name().to_lowercase())))
+                        .collect();
+                    let name: String = arg
+                        .split_whitespace()
+                        .filter(|w| !w.starts_with('@'))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if self.crew.store.add_thread(&name, bots).is_some() {
+                        self.crew.store.save();
+                        let label = self.crew.store.thread_label(self.crew.store.thread_now);
+                        self.say(format!("#{label} is ready. Peek joins every thread."));
+                    }
+                    self.go(Place::Today, cx);
+                    return;
+                }
+                "plan" => plan = true,
+                "race" => race = 2,
+                "ask" => {
+                    self.mode = Mode::Ask;
+                    self.mode_pinned = true;
+                }
+                _ => {
+                    self.say(format!(
+                        "There's no /{cmd}. Try /plan, /race, /ask or /thread."
+                    ));
+                    return;
+                }
+            }
+            text = arg;
+        }
         if !self.mode_pinned {
             self.mode = Mode::guess(&text);
         }
+        if plan && !self.mode.writes() {
+            self.mode = Mode::Build;
+        }
+        let plan = plan
+            || self.splitting
+            || cx.global::<crate::settings::AppSettings>().v2_plan_first;
+        let racing = if race > 0 { race } else { self.racing };
         let text = match (text.is_empty(), self.mode.default_job()) {
             (false, _) => text,
             (true, Some(d)) => d.to_string(),
@@ -988,8 +1049,8 @@ impl Shell {
                 who: Member::for_mode(self.mode),
                 mode: self.mode,
                 text,
-                goal: self.splitting && self.mode.writes(),
-                race: if self.mode.writes() { self.racing } else { 0 },
+                goal: plan && self.mode.writes(),
+                race: if self.mode.writes() { racing } else { 0 },
             });
             cx.notify();
             return;
@@ -1005,12 +1066,12 @@ impl Shell {
             return;
         };
         let mode = self.mode;
-        if self.splitting && mode.writes() {
-            self.begin_goal(text, folder, cx);
+        if racing > 1 && mode.writes() {
+            self.start_race(doer, mode, text, folder, racing, cx);
             return;
         }
-        if self.racing > 1 && mode.writes() {
-            self.start_race(doer, mode, text, folder, self.racing, cx);
+        if plan && mode.writes() {
+            self.begin_goal(text, folder, cx);
             return;
         }
         self.start_job_in(doer, mode, text, folder, cx);
@@ -1760,7 +1821,7 @@ impl Render for Shell {
         self.motion = cx.global::<crate::settings::AppSettings>().animations;
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
-            Place::Today => self.today(cx),
+            Place::Today => self.channel(cx),
             Place::Live(id) => {
                 let detail = self.live(id, cx);
                 self.split(Some(id), detail, cx)

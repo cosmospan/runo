@@ -39,9 +39,44 @@ pub struct Store {
     /// Bot ideas Fin already offered (`brain::ideas`), so each is offered once.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub offered: Vec<String>,
+    /// The # threads in each project: group chats with a few bots around one
+    /// piece of work. Every project also has #general, which isn't stored.
+    pub threads: Vec<Thread>,
+    /// The thread new work goes to, by id; 0 is the project's #general.
+    pub thread_now: u64,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+}
+
+/// A # thread inside a project: a group chat with some bots, around one piece
+/// of work. Jobs and plans started in it stay in it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Thread {
+    pub id: u64,
+    pub name: String,
+    /// The project's folder path.
+    pub folder: String,
+    /// The bots in it besides Peek, who is in every thread.
+    pub bots: Vec<Member>,
+    pub archived: bool,
+    pub made: u64,
+}
+
+/// A thread name as it reads after the #: lower case, words joined by dashes.
+pub fn thread_name(raw: &str) -> String {
+    let mut out = String::new();
+    for w in raw
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        if !out.is_empty() {
+            out.push('-');
+        }
+        out.push_str(&w.to_lowercase());
+    }
+    out.chars().take(40).collect()
 }
 
 /// The getting-started list, in the order it's shown.
@@ -145,6 +180,8 @@ pub enum Item {
 #[serde(default)]
 pub struct Job {
     pub id: u64,
+    /// The # thread it was started in; 0 is the project's #general.
+    pub thread: u64,
     pub bot: Member,
     pub mode: Mode,
     pub title: String,
@@ -226,6 +263,7 @@ impl Default for Job {
     fn default() -> Self {
         Job {
             id: 0,
+            thread: 0,
             bot: Member::Builder,
             mode: Mode::Build,
             title: String::new(),
@@ -515,6 +553,88 @@ impl Store {
 
     pub fn folder(&self) -> Option<&Folder> {
         self.folders.get(self.current)
+    }
+
+    /// The live threads in a project, oldest first.
+    pub fn threads_in(&self, folder: &str) -> Vec<&Thread> {
+        self.threads
+            .iter()
+            .filter(|t| t.folder == folder && !t.archived)
+            .collect()
+    }
+
+    /// The thread a job or plan belongs to: its own, or #general (0) when that
+    /// thread is gone or archived.
+    pub fn thread_for(&self, folder: &str, thread: u64) -> u64 {
+        if self
+            .threads
+            .iter()
+            .any(|t| t.id == thread && t.folder == folder && !t.archived)
+        {
+            thread
+        } else {
+            0
+        }
+    }
+
+    /// The thread new work goes to, if it belongs to the current project;
+    /// else #general.
+    pub fn thread_here(&self) -> u64 {
+        match self.folder() {
+            Some(f) => self.thread_for(&f.path, self.thread_now),
+            None => 0,
+        }
+    }
+
+    /// The name of a thread, without the #.
+    pub fn thread_label(&self, id: u64) -> String {
+        self.threads
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|| "general".into())
+    }
+
+    /// Makes a thread in the current project and moves to it. A name already
+    /// used there picks that thread instead.
+    pub fn add_thread(&mut self, raw: &str, bots: Vec<Member>) -> Option<u64> {
+        let folder = self.folder()?.path.clone();
+        let name = thread_name(raw);
+        if name.is_empty() || name == "general" {
+            self.thread_now = 0;
+            return Some(0);
+        }
+        if let Some(t) = self
+            .threads
+            .iter_mut()
+            .find(|t| t.folder == folder && t.name == name)
+        {
+            t.archived = false;
+            self.thread_now = t.id;
+            return Some(t.id);
+        }
+        let id = self.threads.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.threads.push(Thread {
+            id,
+            name,
+            folder,
+            bots,
+            archived: false,
+            made: now(),
+        });
+        self.thread_now = id;
+        Some(id)
+    }
+
+    /// Jobs in one thread of a project, oldest first.
+    pub fn jobs_in(&self, folder: &str, thread: u64) -> Vec<&Job> {
+        let mut out: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.folder.path == folder && self.thread_for(folder, j.thread) == thread)
+            .collect();
+        out.sort_by_key(|j| j.started);
+        out
     }
 
     /// Adds a folder (or picks it if it's there already) and makes it current.

@@ -167,7 +167,11 @@ impl Runtime {
             seen: false,
             ..Default::default()
         };
+        job.thread = self.store.thread_here();
         if let Some((goal, context)) = part {
+            if let Some(g) = self.store.goals.iter().find(|g| g.id == goal) {
+                job.thread = g.thread;
+            }
             job.goal = goal;
             job.context = context;
         }
@@ -393,6 +397,7 @@ impl Runtime {
         let id = self.store.next_id;
         let mut g = goal::Goal {
             id,
+            thread: self.store.thread_here(),
             text: text.clone(),
             folder: folder.clone(),
             started: store::now(),

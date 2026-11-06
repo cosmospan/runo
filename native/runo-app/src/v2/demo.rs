@@ -341,9 +341,37 @@ pub fn seed() -> Store {
     );
     for j in jobs.iter_mut().filter(|j| j.id == 1 || j.id == 3) {
         j.goal = 21;
+        j.thread = 2;
     }
+    // The rest of the work is on checkout, apart from a couple of loose asks.
+    for j in jobs.iter_mut().filter(|j| j.thread == 0 && j.id % 4 != 0) {
+        j.thread = 1;
+    }
+    let thread = |id: u64, name: &str, bots: Vec<Member>| super::store::Thread {
+        id,
+        name: name.into(),
+        folder: folder.path.clone(),
+        bots,
+        archived: false,
+        made: t - 100_000,
+    };
+    let other = |name: &str| Folder {
+        name: name.into(),
+        path: format!("/demo/{name}"),
+        ship: String::new(),
+    };
     Store {
-        folders: vec![folder.clone()],
+        threads: vec![
+            thread(
+                1,
+                "checkout",
+                vec![Member::Builder, Member::Guard, Member::Fixer, Member::Shipper],
+            ),
+            thread(2, "order-history", vec![Member::Builder, Member::Checker]),
+            thread(3, "flaky-tests", vec![Member::Fixer]),
+        ],
+        thread_now: 1,
+        folders: vec![folder.clone(), other("api"), other("docs-site")],
         current: 0,
         jobs,
         chats,
@@ -358,6 +386,7 @@ pub fn seed() -> Store {
         goals: vec![
             Goal {
                 id: 20,
+                thread: 1,
                 text: "Let customers save their cart and come back to it".into(),
                 folder: folder.clone(),
                 state: State::Ready,
@@ -388,6 +417,7 @@ pub fn seed() -> Store {
             },
             Goal {
                 id: 21,
+                thread: 2,
                 text: "Order history for customers".into(),
                 folder: folder.clone(),
                 state: State::Running,

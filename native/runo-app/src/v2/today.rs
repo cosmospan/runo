@@ -338,7 +338,7 @@ impl Shell {
 
     /// Fin's question when a job needs a bot nobody on the crew is: add it and
     /// start, make your own, or not now.
-    fn fin_offer(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+    pub(super) fn fin_offer(&mut self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let (who, mode, text) = {
             let o = self.offer.as_ref()?;
             (o.who, o.mode, o.text.clone())
