@@ -111,7 +111,7 @@ impl Shell {
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::INK))
                         .truncate()
-                        .child(first.title.clone()),
+                        .child(first.label().to_string()),
                 )
                 .child(
                     div()

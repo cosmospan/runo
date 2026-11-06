@@ -57,6 +57,8 @@ pub struct Runtime {
     planning: Vec<(u64, Receiver<crate::agent::Event>)>,
     /// Where jobs can run besides here, for the intelligence layer to choose.
     pub sites: brain::Sites,
+    /// Titles and recaps Peek is writing, by job.
+    peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
 }
 
 impl Runtime {
@@ -76,6 +78,7 @@ impl Runtime {
             queue_at: Instant::now(),
             planning: Vec::new(),
             sites: brain::Sites::default(),
+            peeking: Vec::new(),
         }
     }
 
@@ -91,6 +94,7 @@ impl Runtime {
             || !self.shipping.is_empty()
             || !self.landing.is_empty()
             || !self.planning.is_empty()
+            || !self.peeking.is_empty()
     }
 
     /// Whether `who` is answering a question right now.
@@ -170,6 +174,10 @@ impl Runtime {
         if let Some((goal, context)) = part {
             job.goal = goal;
             job.context = context;
+        }
+        // Peek's short title for the card, when Smart Peek is on.
+        if let Some(rx) = brain::tasks::ask(st, &job, false) {
+            self.peeking.push((job.id, rx));
         }
         if let Some((i, race)) = pick {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
@@ -1175,13 +1183,52 @@ impl Runtime {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
                 self.begin_review(*id);
+                self.peek(st, *id, true);
             }
             self.offer_idea();
             self.store.save();
         }
+        self.poll_peek();
         self.poll_goals(st);
         self.poll_queue(st);
         finished
+    }
+
+    /// Asks Peek for a job's title, or its recap once it ended, when Smart
+    /// Peek is on.
+    fn peek(&mut self, st: &AppSettings, id: u64, recap: bool) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if let Some(rx) = brain::tasks::ask(st, job, recap) {
+            self.peeking.push((id, rx));
+        }
+    }
+
+    /// Titles and recaps coming back from Peek.
+    fn poll_peek(&mut self) {
+        let mut back = Vec::new();
+        self.peeking.retain(|(id, rx)| match rx.try_recv() {
+            Ok(said) => {
+                back.push((*id, said));
+                false
+            }
+            Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        for (id, said) in back {
+            let Some(job) = self.store.job_mut(id) else {
+                continue;
+            };
+            match said {
+                brain::tasks::Said::Title(t) => job.short = t,
+                brain::tasks::Said::Recap(r, _) => {
+                    job.feed.push(store::Item::Note(r.clone()));
+                    job.recap = r;
+                }
+            }
+            self.store.save();
+        }
     }
 }
 

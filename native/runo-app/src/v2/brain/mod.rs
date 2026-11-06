@@ -7,6 +7,8 @@
 //! - [`ideas`]: a bot worth making, when the same kind of job keeps coming up
 //!   and no bot on the crew is for it. The person decides; nothing is made for them.
 //! - [`voice`]: what Peek says when something happens.
+//! - [`tasks`]: with Smart Peek on, a short title for each job's card and a
+//!   recap when it ends.
 //!
 //! Every decision has two tiers. The rules here always work, need no download
 //! and are the answer when anything else fails. When the person turns on Smart
@@ -24,6 +26,7 @@ pub mod ideas;
 pub mod model;
 pub mod place;
 pub mod route;
+pub mod tasks;
 pub mod teach;
 pub mod tiny;
 pub mod voice;

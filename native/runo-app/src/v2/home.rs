@@ -349,7 +349,7 @@ impl Shell {
                                 div()
                                     .font_weight(FontWeight::MEDIUM)
                                     .truncate()
-                                    .child(j.title.clone()),
+                                    .child(j.label().to_string()),
                             )
                             .child(
                                 div()
@@ -691,7 +691,7 @@ impl Shell {
                                         .text_size(px(15.))
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .line_height(px(20.))
-                                        .child(j.title.clone()),
+                                        .child(j.label().to_string()),
                                 )
                                 .child(
                                     div()

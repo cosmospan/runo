@@ -22,6 +22,24 @@ Scores (`SquadCode v2 brain eval` and `eval hard`):
 | Peek 0.8B (seeds only) | 53 | 117 |
 | Peek 0.8B (seeds + teacher, Smart Peek) | 53 | 120 |
 
+## Peek's other jobs
+
+The same model also does three small jobs when Smart Peek is on, each with its
+own instructions (`tasks.py`, matched word for word by the app's
+`brain/tasks.rs`) and its own test set:
+
+- **title**: a 2 to 6 word title for a job's card, from what the person typed.
+- **recap**: a sentence or two on what a bot did when its job ends, and
+  whether the person needs to act.
+- **clarify**: whether a job is too vague to start, and the one question to
+  ask back.
+
+`make_tasks.py tests` writes the held-out test sets (`eval/route_wild.jsonl`,
+300 messy routing sentences; `eval/title.jsonl`, `eval/clarify.jsonl`,
+`eval/recap.jsonl`) and `make_tasks.py train` the teacher's training examples
+into `data/`. `score.py` scores a model on all of them, served
+(`--url http://127.0.0.1:8088/v1`) or straight after training (`--hf`).
+
 ## The pieces
 
 | File | What it does |

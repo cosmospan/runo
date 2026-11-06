@@ -68,7 +68,11 @@ def load(path: str) -> list[tuple[str, str]]:
             continue
         r = json.loads(line)
         if "messages" in r:
-            rows.append((r["messages"][1]["content"], json.loads(r["messages"][2]["content"])["mode"]))
+            # Peek's other jobs (titles, recaps) share the data folder; only
+            # routing examples have a mode.
+            a = json.loads(r["messages"][2]["content"])
+            if "mode" in a:
+                rows.append((r["messages"][1]["content"], a["mode"]))
         else:
             rows.append((r["text"], r["mode"]))
     return rows
@@ -122,7 +126,9 @@ def main() -> None:
         z = [sum(kept[x][k] for x in f if x in kept) for k in range(len(KINDS))]
         return KINDS[max(range(len(KINDS)), key=lambda k: z[k])]
 
-    for name in ("route.jsonl", "route_hard.jsonl"):
+    for name in ("route.jsonl", "route_hard.jsonl", "route_wild.jsonl"):
+        if not (HERE / "eval" / name).exists():
+            continue
         cases = load(str(HERE / "eval" / name))
         right = sum(pick(t) == m for t, m in cases)
         print(f"  {name}: {right}/{len(cases)}")

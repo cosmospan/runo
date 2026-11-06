@@ -147,7 +147,12 @@ pub struct Job {
     pub id: u64,
     pub bot: Member,
     pub mode: Mode,
+    /// What the person typed: the bot's instructions.
     pub title: String,
+    /// Peek's short title for the card, when Smart Peek is on; empty before.
+    pub short: String,
+    /// Peek's sentence or two on how it went, once it ended.
+    pub recap: String,
     pub folder: Folder,
     /// "Claude Code · Sonnet 4.5": what ran it.
     pub engine: String,
@@ -220,6 +225,18 @@ pub struct Changed {
     pub removed: usize,
 }
 
+impl Job {
+    /// The name lists and notices show: Peek's short title when there is one,
+    /// else the first line of what the person typed.
+    pub fn label(&self) -> &str {
+        if self.short.is_empty() {
+            self.title.lines().next().unwrap_or("").trim()
+        } else {
+            &self.short
+        }
+    }
+}
+
 impl Default for Job {
     fn default() -> Self {
         Job {
@@ -227,6 +244,8 @@ impl Default for Job {
             bot: Member::Builder,
             mode: Mode::Build,
             title: String::new(),
+            short: String::new(),
+            recap: String::new(),
             folder: Folder::default(),
             engine: String::new(),
             agent: String::new(),

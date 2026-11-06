@@ -4,7 +4,7 @@
 #   ./training/mac.sh
 #
 # 1. builds about 1,900 labelled job sentences from the hand-written seeds
-#    (with ANTHROPIC_API_KEY set, a teacher model adds 3,600 more for about $5)
+#    and adds the teacher's examples for every job from data/ (make_tasks.py)
 # 2. adds your own finished jobs, if Squad Code is installed (they stay here)
 # 3. fine-tunes Qwen3.5-0.8B with LoRA using MLX (free, about 1 to 2 hours)
 # 4. shrinks it to one ~0.5 GB GGUF file and serves it with llama-server
@@ -38,10 +38,8 @@ if [ ! -s "$WORK/data/synth.jsonl" ]; then
   # From the hand-written seeds, no key needed. With ANTHROPIC_API_KEY set,
   # a teacher model writes 3,600 more varied ones too (about $5).
   python build_data.py --out "$WORK/data/synth.jsonl"
-  if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-    python make_data.py --out "$WORK/data/teacher.jsonl" --per-kind 600
-    cat "$WORK/data/teacher.jsonl" >> "$WORK/data/synth.jsonl"
-  fi
+  # The teacher's examples for every job are already in data/ (see
+  # make_tasks.py); they join in the split below.
 fi
 
 step "Your own finished jobs"
@@ -56,8 +54,7 @@ python - "$WORK/data" <<'PY'
 import json, pathlib, random, sys
 d = pathlib.Path(sys.argv[1])
 rows = []
-for name in ("synth.jsonl", "mine.jsonl"):
-    p = d / name
+for p in [d / "synth.jsonl", d / "mine.jsonl"] + sorted(pathlib.Path("data").glob("*.jsonl")):
     if p.exists():
         rows += [l for l in p.read_text().splitlines() if l.strip()]
 random.Random(7).shuffle(rows)

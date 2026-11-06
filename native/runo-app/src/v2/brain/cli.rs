@@ -2,7 +2,7 @@
 
 use super::super::data::{Member, Mode};
 use super::super::store::{self, Store};
-use super::{helper, ideas, model, route, teach, voice};
+use super::{helper, ideas, model, route, tasks, teach, voice};
 
 /// Where `squad do <words>` sends a job: the bot, the kind of job, and a line
 /// saying why, for the terminal.
@@ -70,7 +70,15 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 super::super::engine::label_of(p.engine.0, &p.engine.1),
                 p.why
             );
-            Ok(out.trim_end().to_string())
+            let mut out = out.trim_end().to_string();
+            // Smart Peek's other jobs, when it's on.
+            if let Some(t) = tasks::title(&st, &rest) {
+                out.push_str(&format!("\nCard title: {t}"));
+            }
+            if let Some(q) = tasks::clarify(&st, &rest) {
+                out.push_str(&format!("\nPeek would ask first: {q}"));
+            }
+            Ok(out)
         }
         "ideas" => Ok(match ideas::next(&store, &crew, &[], store::now()) {
             Some(i) => format!(

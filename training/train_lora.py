@@ -62,7 +62,7 @@ def main() -> None:
     ap.add_argument("--data", nargs="+", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=float, default=2)
-    ap.add_argument("--rank", type=int, default=16)
+    ap.add_argument("--rank", type=int, default=32)
     args = ap.parse_args()
 
     # is_bf16_supported() says yes on a T4 too (it counts emulation), so ask
@@ -107,7 +107,10 @@ def main() -> None:
             lr_scheduler_type="cosine",
             warmup_steps=10,
             logging_steps=20,
-            save_strategy="epoch",
+            # Saved often, so a run that stops carries on from where it was.
+            save_strategy="steps",
+            save_steps=200,
+            save_total_limit=2,
             completion_only_loss=True,
             max_length=1024,
             bf16=bf16,
@@ -115,7 +118,12 @@ def main() -> None:
             report_to="none",
         ),
     )
-    trainer.train()
+    import glob
+
+    resume = bool(glob.glob(f"{args.out}/checkpoint-*"))
+    if resume:
+        print("Carrying on from the last checkpoint in", args.out)
+    trainer.train(resume_from_checkpoint=resume or None)
     merged = trainer.model.merge_and_unload()
     merged.save_pretrained(f"{args.out}/merged")
     tok.save_pretrained(f"{args.out}/merged")
