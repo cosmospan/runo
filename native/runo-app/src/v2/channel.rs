@@ -342,6 +342,7 @@ impl Shell {
                             .child(answer)
                             .when(!t.choices.is_empty(), |d| {
                                 let mut row = div().pt(px(4.)).flex().flex_wrap().gap(px(6.));
+                                let talk = t.id;
                                 for (k, choice) in t.choices.iter().enumerate() {
                                     let said = choice.clone();
                                     row = row.child(
@@ -352,7 +353,7 @@ impl Shell {
                                         .h(px(28.))
                                         .on_click(
                                             cx.listener(move |this, _, _, cx| {
-                                                this.hand_over(said.clone(), cx)
+                                                this.pick_choice(talk, said.clone(), cx)
                                             }),
                                         ),
                                     );

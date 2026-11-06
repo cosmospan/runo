@@ -461,6 +461,9 @@ pub struct Shell {
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
+    /// A risky ask Peek wants you to OK first: its message in the thread, the
+    /// words, and where it would go.
+    confirming: Option<(u64, String, brain::route::Route)>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -795,6 +798,7 @@ impl Shell {
             list_all: false,
             jobs_open: false,
             deleting: None,
+            confirming: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1104,18 +1108,47 @@ impl Shell {
                 }
                 cx.notify();
             }
-            brain::front::Front::Hand(route) => {
-                let crew = Member::all();
-                let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
-                self.target = crew.contains(&route.bot).then_some(route.bot);
-                self.mode = route.mode;
-                self.mode_pinned = true;
-                self.hand_over_inner(text, cx);
-                self.target = target;
-                self.mode = mode;
-                self.mode_pinned = pinned;
+            brain::front::Front::Confirm { why, route } => {
+                self.crew
+                    .peek_says(text.clone(), why, vec!["Go ahead".into(), "Cancel".into()]);
+                let id = self.crew.store.talks.last().map(|t| t.id).unwrap_or(0);
+                self.confirming = Some((id, text, route));
+                cx.notify();
+            }
+            brain::front::Front::Hand(route) => self.hand_to(route, text, cx),
+        }
+    }
+
+    /// A choice under one of Peek's messages: the answer to a risky ask it
+    /// held, or else a reply in its own right.
+    pub(super) fn pick_choice(&mut self, talk: u64, choice: String, cx: &mut Context<Self>) {
+        match self.confirming.take() {
+            Some((id, text, route)) if id == talk => {
+                if choice == "Go ahead" {
+                    self.hand_to(route, text, cx);
+                } else {
+                    self.say("Okay, nothing started.");
+                    cx.notify();
+                }
+            }
+            held => {
+                self.confirming = held;
+                self.hand_over(choice, cx);
             }
         }
+    }
+
+    /// Starts an ask the way Peek routed it, without reading it again.
+    fn hand_to(&mut self, route: brain::route::Route, text: String, cx: &mut Context<Self>) {
+        let crew = Member::all();
+        let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
+        self.target = crew.contains(&route.bot).then_some(route.bot);
+        self.mode = route.mode;
+        self.mode_pinned = true;
+        self.hand_over_inner(text, cx);
+        self.target = target;
+        self.mode = mode;
+        self.mode_pinned = pinned;
     }
 
     fn hand_over_inner(&mut self, text: String, cx: &mut Context<Self>) {
