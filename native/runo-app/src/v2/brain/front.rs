@@ -37,6 +37,9 @@ pub enum Front {
     /// Real work that can't easily be undone (production, deleting, secrets,
     /// sending): show `why` and start it as `Hand` only on the person's yes.
     Confirm { why: String, route: Route },
+    /// "stop app", "cancel that", "kill the server": stop what's running
+    /// here, with no new job.
+    Stop,
 }
 
 /// Reads `text` and decides. `recent` is the conversation so far, oldest
@@ -44,6 +47,9 @@ pub enum Front {
 /// something is read as an answer to it, not as small talk.
 pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front {
     let t = text.trim();
+    if wants_stop(t) {
+        return Front::Stop;
+    }
     let follow_up = recent.last().is_some_and(|(who, said)| {
         who.eq_ignore_ascii_case("peek") && said.trim_end().ends_with('?')
     });
@@ -66,6 +72,92 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
         Some(why) => Front::Confirm { why, route: r },
         None => Front::Hand(r),
     }
+}
+
+/// Verbs that stop what's running.
+const STOP: &[&str] = &[
+    "stop",
+    "kill",
+    "cancel",
+    "halt",
+    "abort",
+    "end",
+    "quit",
+    "terminate",
+    "shut",
+    "close",
+];
+
+/// Words that may follow a stop verb in a control command: what to stop,
+/// and fillers.
+const STOP_WHAT: &[&str] = &[
+    "the",
+    "app",
+    "apps",
+    "server",
+    "servers",
+    "it",
+    "that",
+    "this",
+    "these",
+    "those",
+    "job",
+    "jobs",
+    "run",
+    "running",
+    "everything",
+    "all",
+    "now",
+    "please",
+    "pls",
+    "dev",
+    "process",
+    "processes",
+    "down",
+    "bot",
+    "bots",
+    "work",
+    "working",
+    "task",
+    "tasks",
+    "build",
+    "test",
+    "tests",
+    "them",
+    "for",
+    "right",
+    "away",
+    "asap",
+    "already",
+    "just",
+    "website",
+    "site",
+    "preview",
+    "peek",
+    "hey",
+    "ok",
+    "okay",
+    "thanks",
+    "thx",
+];
+
+/// Whether `text` is a short command to stop what's running ("stop app",
+/// "pls kill the server", "cancel that"), not work about stopping ("stop
+/// the app from crashing", "add a stop button").
+pub fn wants_stop(text: &str) -> bool {
+    let ws = words(text);
+    if ws.is_empty() || ws.len() > 6 {
+        return false;
+    }
+    let lead = ["please", "pls", "hey", "peek", "ok", "okay", "just", "now"];
+    let start = ws.iter().position(|w| !lead.contains(&w.as_str()));
+    let Some(i) = start else {
+        return false;
+    };
+    STOP.contains(&ws.get(i).map(String::as_str).unwrap_or(""))
+        && ws.iter().skip(i + 1).all(|w| STOP_WHAT.contains(&w.as_str()))
+        // "end" and "close" alone are too open: "close" needs a thing to close.
+        && !(matches!(ws.get(i).map(String::as_str), Some("close") | Some("end")) && ws.len() == i + 1)
 }
 
 fn all_in(ws: &[String], set: &[&str]) -> bool {
@@ -703,6 +795,7 @@ pub fn outcome(f: &Front) -> &'static str {
         Front::AskBack { .. } => "ask_back",
         Front::Confirm { .. } => "confirm",
         Front::Hand(_) => "hand",
+        Front::Stop => "stop",
     }
 }
 
@@ -832,6 +925,30 @@ mod tests {
         match read0("what's a good laptop for video editing under $1000?") {
             Front::Answer { code, .. } => assert!(!code),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn stop_app_stops_what_is_running() {
+        for t in [
+            "stop app",
+            "stop",
+            "Stop the server",
+            "pls kill the app now",
+            "cancel that",
+            "stop everything",
+            "shut it down",
+        ] {
+            assert_eq!(read0(t), Front::Stop, "{t}");
+        }
+        for t in [
+            "stop the app from crashing on login",
+            "add a stop button to the player",
+            "the stop button does nothing",
+            "why did the server stop?",
+            "close the modal when you click outside",
+        ] {
+            assert_ne!(read0(t), Front::Stop, "{t}");
         }
     }
 
