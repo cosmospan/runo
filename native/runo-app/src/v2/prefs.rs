@@ -1475,7 +1475,28 @@ impl Shell {
                 ),
         )
         .when(!on, |d| d.opacity(0.6));
-        group("WINDOW", vec![switch_row, slider_row])
+        // Popovers follow the window: only meaningful while the desktop shows through.
+        let clear_window = theme::window_clear();
+        let pops = theme::glass_popovers();
+        let pop_row = row(
+            "See-through popovers",
+            if clear_window {
+                "Menus, popovers, the command palette and dialogs go see-through with the window. They stay a little more opaque, so their text reads."
+            } else {
+                "Menus, popovers, the command palette and dialogs follow the window once it's see-through."
+            },
+            div()
+                .id("glass-popovers")
+                .cursor_pointer()
+                .child(switch(pops))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    theme::set_glass_popovers(!pops);
+                    save(cx, |st| st.v2_glass_popovers = !pops);
+                    cx.notify();
+                })),
+        )
+        .when(!clear_window, |d| d.opacity(0.6));
+        group("WINDOW", vec![switch_row, slider_row, pop_row])
     }
 
     /// A background pattern behind the page, and the sidebar if you like: a fine
