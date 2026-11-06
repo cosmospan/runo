@@ -101,9 +101,22 @@ pub fn main(args: &[String]) -> Result<String, String> {
             }
             Ok(out)
         }
+        "ideas" if rest.trim() == "make" => {
+            let Some(i) = ideas::next(&store, &crew, &[], store::now()) else {
+                return Err("No idea to make yet.".into());
+            };
+            let mut rt = super::super::runtime::Runtime::new(store);
+            rt.make_idea(&st, i.key)
+                .ok_or("That idea no longer fits.")?;
+            Ok(format!(
+                "{} joined the crew. It knows {}, with the standard rules for its kind of work.",
+                i.name,
+                i.words.join(", ")
+            ))
+        }
         "ideas" => Ok(match ideas::next(&store, &crew, &[], store::now()) {
             Some(i) => format!(
-                "{}\n{}: {} (works like {}). Make it on Crew \u{2192} New bot.",
+                "{}\n{}: {} (works like {}). Make it with: squad brain ideas make",
                 voice::line(&voice::Moment::Idea {
                     name: i.name.to_string(),
                     why: i.why.clone(),

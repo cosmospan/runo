@@ -244,7 +244,7 @@ fn made_bot_for(text: &str, crew: &[Member]) -> Option<(Member, String)> {
         .collect();
     let mut best: Option<(Member, usize, String)> = None;
     for m in crew.iter().copied().filter(|m| m.is_made()) {
-        let theirs: Vec<String> = words(&format!("{} {}", m.name(), m.role()))
+        let theirs: Vec<String> = words(&format!("{} {} {}", m.name(), m.role(), m.skills()))
             .into_iter()
             .filter(|w| w.len() > 2 && !COMMON.contains(&w.as_str()))
             .collect();
@@ -278,7 +278,6 @@ pub fn by_rules(text: &str, crew: &[Member]) -> Route {
     let mut why = because(mode, &hit);
     let bot = match made_bot_for(text, crew) {
         Some((m, word)) => {
-            mode = m.mode();
             why = format!("{} is your bot for \u{201c}{word}\u{201d}. {why}", m.name());
             m
         }
@@ -309,16 +308,21 @@ pub fn doer(mode: Mode, crew: &[Member]) -> Member {
 /// The built-in tiny classifier's pick, as a route. Made bots still win:
 /// the rules match those by name.
 pub fn by_tiny(text: &str, crew: &[Member]) -> Route {
-    let rules = by_rules(text, crew);
-    if made_bot_for(text, crew).is_some() {
-        return rules;
-    }
     let (mode, sure) = super::tiny::classify(text);
+    let why = format!("It reads like a {} job.", mode.label().to_lowercase());
+    // A bot the person made for the subject takes it, whatever the kind.
+    let (bot, why) = match made_bot_for(text, crew) {
+        Some((m, word)) => (
+            m,
+            format!("{} is your bot for \u{201c}{word}\u{201d}. {why}", m.name()),
+        ),
+        None => (doer(mode, crew), why),
+    };
     Route {
         mode,
-        bot: doer(mode, crew),
+        bot,
         sure,
-        why: format!("It reads like a {} job.", mode.label().to_lowercase()),
+        why,
         by: "peek-tiny".into(),
     }
 }
@@ -354,7 +358,17 @@ pub fn route(st: &crate::settings::AppSettings, text: &str) -> Route {
         if super::helper::applies(st) && !super::helper::ensure(st, std::time::Duration::ZERO) {
             return mine;
         }
-        if let Some(r) = m.route(text, &crew) {
+        if let Some(mut r) = m.route(text, &crew) {
+            // The model knows only the built-in crew; a bot the person made
+            // for the subject still takes it.
+            if let Some((made, word)) = made_bot_for(text, &crew) {
+                r.why = format!(
+                    "{} is your bot for \u{201c}{word}\u{201d}. {}",
+                    made.name(),
+                    r.why
+                );
+                r.bot = made;
+            }
             return r;
         }
     }

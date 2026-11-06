@@ -26,6 +26,7 @@ pub mod cli;
 pub mod front;
 pub mod helper;
 pub mod ideas;
+pub mod maker;
 pub mod model;
 pub mod place;
 pub mod route;

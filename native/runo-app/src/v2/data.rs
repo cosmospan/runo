@@ -21,6 +21,14 @@ pub struct Made {
     /// Its Fin outfit, as [`Fin::outfit_code`] has it; bare when missing.
     #[serde(default)]
     pub outfit: String,
+    /// What it knows best, as words a job may use ("stripe", "billing"): a job
+    /// that uses them goes to it.
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// How it works, told to its engine on every job ("Run vitest before you
+    /// stop").
+    #[serde(default)]
+    pub rules: Vec<String>,
 }
 
 /// Made bots with their words kept for the life of the app, so `Member` stays a
@@ -30,6 +38,7 @@ struct Kept {
     name: &'static str,
     role: &'static str,
     persona: &'static str,
+    skills: &'static str,
     like: Member,
     tint: Tint,
     outfit: Outfit,
@@ -64,17 +73,31 @@ pub fn set_made(made: &[Made]) {
     let next: Vec<Kept> = made
         .iter()
         .map(|m| {
-            let persona = format!(
-                "You are {}, a bot the person made for Squad Code's crew. Your job: {}. {}",
+            let mut persona = format!(
+                "You are {}, a bot the person made for Squad Code's crew. Your job: {}.",
                 m.name,
-                m.role,
-                m.like.persona()
+                m.role.trim_end_matches('.'),
             );
+            if !m.skills.is_empty() {
+                persona.push_str(&format!(" You know {} best.", m.skills.join(", ")));
+            }
+            if !m.rules.is_empty() {
+                persona.push_str(" Your rules:");
+                for r in &m.rules {
+                    persona.push_str(&format!("\n- {}", r.trim()));
+                }
+                persona.push('\n');
+            } else {
+                persona.push(' ');
+            }
+            persona.push_str(m.like.persona());
+            let skills = m.skills.join(" ");
             Kept {
                 id: m.id,
                 name: keep(&kept, &m.name, |k| k.name),
                 role: keep(&kept, &m.role, |k| k.role),
                 persona: keep(&kept, &persona, |k| k.persona),
+                skills: keep(&kept, &skills, |k| k.skills),
                 like: m.like,
                 tint: super::mascot::colour_at(m.look[0]),
                 outfit: Fin::outfit_from_code(&m.outfit),
@@ -213,6 +236,15 @@ impl Member {
             Member::Explainer => "Explainer",
             Member::Keeper => "Keeper",
             Member::Shipper => "Shipper",
+        }
+    }
+
+    /// What a made bot knows best, as space-separated words; empty for the
+    /// built-in crew, whose kind of work is their skill.
+    pub fn skills(self) -> &'static str {
+        match self {
+            Member::Made(id) => made(id, |k| k.skills).unwrap_or(""),
+            _ => "",
         }
     }
 
@@ -545,6 +577,8 @@ mod tests {
             like: Member::Checker,
             look: [4, 2, 1, 0],
             outfit: String::new(),
+            skills: Vec::new(),
+            rules: Vec::new(),
         }]);
         let all = Member::all();
         assert_eq!(all.len(), Member::CREW.len() + 2);
@@ -562,6 +596,8 @@ mod tests {
             like: Member::Checker,
             look: [4, 2, 1, 0],
             outfit: String::new(),
+            skills: Vec::new(),
+            rules: Vec::new(),
         }]);
         assert_eq!(Member::Made(1).name(), "Scout 2");
         // Removing Checker: Scout takes its Test jobs.

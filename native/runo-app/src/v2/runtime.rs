@@ -59,6 +59,9 @@ pub struct Runtime {
     pub sites: brain::Sites,
     /// Titles and recaps Peek is writing, by job.
     peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
+    /// New bots the crew's engine is setting up for the project, by made id,
+    /// with whether the person set its skills and its rules (kept as they are).
+    designing: Vec<(u16, (bool, bool), Receiver<crate::agent::Event>)>,
 }
 
 impl Runtime {
@@ -79,6 +82,7 @@ impl Runtime {
             planning: Vec::new(),
             sites: brain::Sites::default(),
             peeking: Vec::new(),
+            designing: Vec::new(),
         }
     }
 
@@ -95,6 +99,7 @@ impl Runtime {
             || !self.landing.is_empty()
             || !self.planning.is_empty()
             || !self.peeking.is_empty()
+            || !self.designing.is_empty()
     }
 
     /// Whether `who` is answering a question right now.
@@ -577,6 +582,29 @@ impl Runtime {
             name: idea.name.to_string(),
             why: idea.why,
         }));
+    }
+
+    /// Makes the bot Peek suggested, set up the way a bot made by hand is,
+    /// with the words that led to it as its skills. None when no idea fits.
+    pub fn make_idea(&mut self, st: &AppSettings, key: &str) -> Option<u16> {
+        let crew = Member::all();
+        let idea =
+            brain::ideas::next(&self.store, &crew, &[], store::now()).filter(|i| i.key == key)?;
+        let skills = idea.words.iter().map(|w| w.to_string()).collect();
+        let id = self.make_bot(
+            st,
+            idea.name,
+            idea.role,
+            Some(idea.like),
+            (skills, Vec::new()),
+            [0, 0, 0, 0],
+            String::new(),
+        );
+        self.say(format!(
+            "{} joined the crew. It takes jobs about {} from now on.",
+            idea.name, idea.key
+        ));
+        Some(id)
     }
 
     /// Does one thing asked from the command line (or any other client).
@@ -1194,6 +1222,7 @@ impl Runtime {
             self.store.save();
         }
         self.poll_peek();
+        self.poll_designs();
         self.poll_goals(st);
         self.poll_queue(st);
         finished
@@ -1207,6 +1236,89 @@ impl Runtime {
         };
         if let Some(rx) = brain::tasks::ask(st, job, recap) {
             self.peeking.push((id, rx));
+        }
+    }
+
+    /// Adds a bot to the crew. What the person left out (the kind of work, its
+    /// skills, its rules) is filled in at once from what it's for, and then the
+    /// crew's engine reads the project and writes rules and skills that fit it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn make_bot(
+        &mut self,
+        st: &AppSettings,
+        name: &str,
+        role: &str,
+        like: Option<Member>,
+        (skills, rules): (Vec<String>, Vec<String>),
+        look: [u8; 4],
+        outfit: String,
+    ) -> u16 {
+        let id = self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+        let mut d = brain::maker::draft(name, role, like);
+        let set = (!skills.is_empty(), !rules.is_empty());
+        if set.0 {
+            d.skills = skills;
+        }
+        if set.1 {
+            d.rules = rules;
+        }
+        self.store.made.push(super::data::Made {
+            id,
+            name: name.to_string(),
+            role: d.role.clone(),
+            like: d.like,
+            look,
+            outfit,
+            skills: d.skills.clone(),
+            rules: d.rules.clone(),
+        });
+        super::data::set_made(&self.store.made);
+        self.store.save();
+        if let Some(folder) = self.store.folder().cloned() {
+            if set != (true, true) {
+                if let Ok(rx) = brain::maker::design(st, &folder, name, &d) {
+                    self.designing.push((id, set, rx));
+                }
+            }
+        }
+        id
+    }
+
+    /// Bot setups coming back from the engine.
+    fn poll_designs(&mut self) {
+        let mut back = Vec::new();
+        self.designing.retain(|(id, set, rx)| match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => {
+                back.push((*id, *set, r.ok()));
+                false
+            }
+            Ok(_) | Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => false,
+        });
+        for (id, set, reply) in back {
+            let parsed = reply
+                .as_deref()
+                .map(crate::agent::strip_ansi)
+                .and_then(|t| brain::maker::parse_design(&t));
+            let Some((role, skills, rules)) = parsed else {
+                continue;
+            };
+            let Some(m) = self.store.made.iter_mut().find(|m| m.id == id) else {
+                continue;
+            };
+            m.role = role;
+            if !set.0 {
+                m.skills = skills;
+            }
+            if !set.1 {
+                m.rules = rules;
+            }
+            let name = m.name.clone();
+            super::data::set_made(&self.store.made);
+            self.store.save();
+            self.say(format!(
+                "{name} is set up for this project: its rules and what it knows best are on Crew."
+            ));
         }
     }
 
