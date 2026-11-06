@@ -272,7 +272,7 @@ impl Shell {
         let line = match goal.state {
             State::Planning => "Squad Code is reading the code and splitting this into jobs\u{2026}".to_string(),
             State::Ready if !needs.is_empty() => format!(
-                "Look over the jobs, then start. Fin: this plan needs {}, who {} on your crew yet. Starting adds {}.",
+                "Look over the jobs, then start. Peek: this plan needs {}, who {} on your crew yet. Starting adds {}.",
                 super::and_list(&needs.iter().map(|m| m.name()).collect::<Vec<_>>()),
                 if needs.len() == 1 { "isn't" } else { "aren't" },
                 if needs.len() == 1 { "it" } else { "them" },

@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use runo_holo::fin::{Badge, Fin, Hat, Held, Material, Outfit, Tool, ROLES};
+use runo_holo::fin::{Fin, Material, Outfit, Tool, ROLES};
 use runo_holo::{Figure, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -51,47 +51,21 @@ pub fn colour_at(i: u8) -> Tint {
     COLOURS.get(i as usize).map_or(Tint::VIOLET, |c| c.2)
 }
 
-/// What a bot wears when the person hasn't changed it: a kit that fits its job.
+/// What a bot carries when the person hasn't changed it: a prop that fits its job.
 pub fn default_look(who: Member) -> (Tint, Outfit) {
-    let kit = |hat, left, right, badge| Outfit {
-        hat,
-        left,
+    let carry = |right| Outfit {
         right,
-        badge,
+        ..Outfit::PLAIN
     };
     match who {
-        Member::Builder => (
-            Tint::ORANGE,
-            kit(Hat::HardHat, Held::None, Tool::Wrench, Badge::Id),
-        ),
-        Member::Checker => (
-            Tint::GREEN,
-            kit(Hat::Grad, Held::Clipboard, Tool::Magnifier, Badge::Id),
-        ),
-        Member::Guard => (
-            Tint::AMBER,
-            kit(Hat::Security, Held::Shield, Tool::Baton, Badge::Star),
-        ),
-        Member::Fixer => (
-            Tint::RED,
-            kit(Hat::Bandana, Held::None, Tool::Magnifier, Badge::Gear),
-        ),
-        Member::Explainer => (
-            Tint::BLUE,
-            kit(Hat::Headset, Held::Coffee, Tool::None, Badge::NameTag),
-        ),
-        Member::Keeper => (
-            Tint::VIOLET,
-            kit(Hat::None, Held::None, Tool::Broom, Badge::Gear),
-        ),
-        Member::Shipper => (
-            Tint::TEAL,
-            kit(Hat::Cap, Held::Parcel, Tool::None, Badge::NameTag),
-        ),
-        Member::Fin => (
-            Tint::VIOLET,
-            kit(Hat::Crown, Held::Clipboard, Tool::None, Badge::Star),
-        ),
+        Member::Builder => (Tint::ORANGE, carry(Tool::Wrench)),
+        Member::Checker => (Tint::GREEN, carry(Tool::TestTube)),
+        Member::Guard => (Tint::AMBER, carry(Tool::Shield)),
+        Member::Fixer => (Tint::RED, carry(Tool::Bandage)),
+        Member::Explainer => (Tint::BLUE, carry(Tool::Pencil)),
+        Member::Keeper => (Tint::VIOLET, carry(Tool::Key)),
+        Member::Shipper => (Tint::TEAL, carry(Tool::Branch)),
+        Member::Fin => (Tint::VIOLET, carry(Tool::Compass)),
         Member::Made(_) => who.made_look().unwrap_or((Tint::VIOLET, Outfit::PLAIN)),
     }
 }

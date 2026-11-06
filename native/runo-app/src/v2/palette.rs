@@ -181,7 +181,7 @@ impl Shell {
                     (
                         who,
                         format!(
-                            "{}: a job for {} (Fin asks to add it)",
+                            "{}: a job for {} (Peek asks to add it)",
                             mode.label(),
                             who.name()
                         ),
