@@ -382,6 +382,14 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
+/// A message Peek's engine is reading (see `Shell::reading`).
+type Reading = (
+    u64,
+    String,
+    Vec<(String, String)>,
+    std::sync::mpsc::Receiver<crate::agent::Event>,
+);
+
 /// Hears back once a pull request is merged or closed on GitHub.
 /// The v2 window's root.
 pub struct Shell {
@@ -476,6 +484,9 @@ pub struct Shell {
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
+    /// A message Peek's engine is reading: Peek's message showing it, the
+    /// words, the conversation before them, and the decision to come.
+    reading: Option<Reading>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -883,6 +894,7 @@ impl Shell {
             deleting: None,
             raw_open: Default::default(),
             confirming: None,
+            reading: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1186,16 +1198,108 @@ impl Shell {
             recent.extend(self.crew.store.recent(&folder, *other));
         }
         recent.extend(self.crew.store.recent(&folder, here));
-        match brain::front::read(&st, &text, &recent) {
+        // Peek reads it with the person's own engine when one is signed in;
+        // the rules decide while none is, or when its reply makes no sense.
+        if brain::think::on(&st) && !self.sampling {
+            let project = self
+                .crew
+                .store
+                .folder()
+                .map(|f| f.name.clone())
+                .unwrap_or_default();
+            let crew = Member::all();
+            let running: Vec<String> = self
+                .crew
+                .store
+                .jobs
+                .iter()
+                .filter(|j| j.status == Status::Running && j.folder.path == folder)
+                .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
+                .collect();
+            let seen = brain::think::Seen {
+                project: &project,
+                recent: &recent,
+                crew: &crew,
+                running: &running,
+            };
+            if let Ok(rx) = brain::think::ask(&st, &folder, &text, &seen) {
+                // Peek's message shows as reading until the decision lands.
+                let talk = self.crew.peek_reading(text.clone());
+                self.reading = Some((talk, text, recent, rx));
+                cx.notify();
+                return;
+            }
+        }
+        let front = brain::front::read(&st, &text, &recent);
+        self.act_on(front, text, None, None, cx);
+    }
+
+    /// What Peek's engine decided, once it has: acted on, or the rules'
+    /// decision when it failed or made no sense.
+    fn poll_reading(&mut self, cx: &mut Context<Self>) {
+        let Some((_, _, _, rx)) = &self.reading else {
+            return;
+        };
+        let reply = match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        let Some((talk, text, recent, _)) = self.reading.take() else {
+            return;
+        };
+        let crew = Member::all();
+        let decided = reply
+            .as_deref()
+            .map(crate::agent::strip_ansi)
+            .and_then(|r| brain::think::parse(&r, &text, &crew));
+        let (front, line) = match decided {
+            Some((f, say)) => (f, Some(say).filter(|s| !s.is_empty())),
+            None => {
+                let st = Self::app_settings(cx);
+                (brain::front::read(&st, &text, &recent), None)
+            }
+        };
+        self.act_on(front, text, line, Some(talk), cx);
+    }
+
+    /// Does what Peek decided about `text`. `line` is Peek's own words for a
+    /// hand-off; `pending` its message that showed it reading, which the
+    /// reply fills or which goes once a bot takes over.
+    fn act_on(
+        &mut self,
+        front: brain::front::Front,
+        text: String,
+        line: Option<String>,
+        pending: Option<u64>,
+        cx: &mut Context<Self>,
+    ) {
+        let st = Self::app_settings(cx);
+        let says = |this: &mut Self, reply: String, choices: Vec<String>| -> u64 {
+            match pending {
+                Some(id) if this.crew.fill_talk(id, reply.clone(), choices.clone()) => id,
+                _ => {
+                    this.crew.peek_says(text.clone(), reply, choices);
+                    this.crew.store.talks.last().map(|t| t.id).unwrap_or(0)
+                }
+            }
+        };
+        let drop_pending = |this: &mut Self| {
+            if let Some(id) = pending {
+                this.crew.store.talks.retain(|t| t.id != id);
+            }
+        };
+        match front {
             brain::front::Front::Chat { reply } => {
-                self.crew.peek_says(text, reply, Vec::new());
+                says(self, reply, Vec::new());
                 cx.notify();
             }
             brain::front::Front::AskBack { question, choices } => {
-                self.crew.peek_says(text, question, choices);
+                says(self, question, choices);
                 cx.notify();
             }
             brain::front::Front::Answer { question, .. } => {
+                drop_pending(self);
                 if !self.sample_guard(cx) {
                     let who = self.ask_who();
                     self.crew.ask_in_thread(&st, who, question);
@@ -1203,16 +1307,18 @@ impl Shell {
                 cx.notify();
             }
             brain::front::Front::Confirm { why, route } => {
-                self.crew
-                    .peek_says(text.clone(), why, vec!["Go ahead".into(), "Cancel".into()]);
-                let id = self.crew.store.talks.last().map(|t| t.id).unwrap_or(0);
+                let id = says(self, why, vec!["Go ahead".into(), "Cancel".into()]);
                 self.confirming = Some((id, text, route));
                 cx.notify();
             }
-            brain::front::Front::Stop => self.stop_here(text, cx),
+            brain::front::Front::Stop => {
+                drop_pending(self);
+                self.stop_here(text, cx)
+            }
             brain::front::Front::Hand(route) => {
+                drop_pending(self);
                 // Peek says who it brought in, on the job's card.
-                let line = route.handoff();
+                let line = line.unwrap_or_else(|| route.handoff());
                 let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
                 self.hand_to(route, text, cx);
                 for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
@@ -1983,6 +2089,7 @@ impl Shell {
             _ => None,
         };
         let finished = self.crew.poll(&st, viewing);
+        self.poll_reading(cx);
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);
         }
