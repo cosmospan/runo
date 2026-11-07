@@ -4,6 +4,10 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- The menu bar panel is rebuilt for the Squad Code window. It used to say the window was closed even while it was open, and showed nothing else. Now it lists what needs you (a bot waiting on your yes, with Allow and Deny right there; changes ready for review; jobs that stopped with a problem), what the crew is working on, with Stop and a progress bar, and the last few jobs that ended. A box at the top hands the crew a new job without opening the window. With the window closed it reads your saved jobs, and any row opens the window on that job. The panel is as tall as what it shows, Quit asks first while jobs are running, Escape closes it, and the count beside the menu bar glyph now works too.
+
 ## [2.0.0-alpha.6] - 2026-11-07
 
 ### Added

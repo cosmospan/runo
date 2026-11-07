@@ -113,7 +113,7 @@ fn first_line(text: &str, max: usize) -> String {
 }
 
 /// "run `cargo test`" as ("run", Some("cargo test")); text without a code span stays whole.
-fn split_code(what: &str) -> (String, Option<String>) {
+pub(crate) fn split_code(what: &str) -> (String, Option<String>) {
     match what.split_once('`') {
         Some((verb, rest)) => (
             verb.trim().to_string(),
@@ -337,10 +337,34 @@ pub(crate) fn quit(cx: &mut App) {
 
 /// What the menu bar shows now.
 pub(crate) fn snapshot(cx: &App) -> Snapshot {
-    match cx.try_global::<MainApp>().and_then(|m| m.0.upgrade()) {
-        Some(app) => app.read(cx).menubar_snapshot(),
+    if let Some(app) = cx.try_global::<MainApp>().and_then(|m| m.0.upgrade()) {
+        return app.read(cx).menubar_snapshot();
+    }
+    // The Squad Code window: its crew's count and dot beside the glyph.
+    match crate::v2::tray::glyph(cx) {
+        Some((count, attention, summary)) => Snapshot {
+            count,
+            attention,
+            summary,
+            ..Default::default()
+        },
         None => Snapshot::closed(),
     }
+}
+
+/// Close the panel, if it is open.
+pub(crate) fn close_panel(cx: &mut App) {
+    panel::close(cx);
+}
+
+/// The panel lost focus: it closes, as a menu would.
+pub(crate) fn panel_dismissed(window: &mut Window) {
+    panel::dismissed(window);
+}
+
+/// Size the panel to `width` by `height`, still hanging under the glyph.
+pub(crate) fn fit_panel(window: &Window, width: f32, height: f32) {
+    platform::place(window, width, height);
 }
 
 /// Show, refresh or hide the menu bar item, and open or close the panel when the glyph
@@ -617,6 +641,8 @@ mod mac {
         let x = (frame.origin.x + frame.size.width / 2. - w / 2.)
             .min(visible.origin.x + visible.size.width - w - 8.)
             .max(visible.origin.x + 8.);
+        // Sized first, so a panel that fits its content stays hung from the top.
+        panel.setContentSize(NSSize::new(w, h));
         let top = frame.origin.y - 6.;
         panel.setFrameTopLeftPoint(NSPoint::new(x, top.max(visible.origin.y + h)));
         panel.makeKeyAndOrderFront(None);

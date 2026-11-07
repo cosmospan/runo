@@ -26,6 +26,14 @@ pub(super) fn close(cx: &mut App) {
     }
 }
 
+/// The panel lost focus: close it, and keep the click on the glyph that took its
+/// focus from opening it again straight away.
+pub(super) fn dismissed(window: &mut Window) {
+    CLOSED_AT.set(Some(Instant::now()));
+    OPEN.take();
+    window.remove_window();
+}
+
 pub(super) fn toggle(anchor: Option<Anchor>, cx: &mut App) {
     if OPEN.with_borrow(Option::is_some) {
         close(cx);
@@ -37,13 +45,23 @@ pub(super) fn toggle(anchor: Option<Anchor>, cx: &mut App) {
     {
         return;
     }
+    // The Squad Code window has its own panel; RUNO_V1 keeps the old one.
+    let v2 = !cx.has_global::<MainApp>() && std::env::var_os("RUNO_V1").is_none();
+    let (width, height) = if v2 {
+        (
+            crate::v2::tray::WIDTH,
+            crate::v2::tray::Tray::first_height(cx),
+        )
+    } else {
+        (WIDTH, HEIGHT)
+    };
     let origin = anchor
-        .map(|a| point(px(a.x - WIDTH / 2.), px(a.y + 6.)))
+        .map(|a| point(px(a.x - width / 2.), px(a.y + 6.)))
         .unwrap_or_default();
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::new(
             origin,
-            size(px(WIDTH), px(HEIGHT)),
+            size(px(width), px(height)),
         ))),
         titlebar: None,
         kind: WindowKind::PopUp,
@@ -59,9 +77,18 @@ pub(super) fn toggle(anchor: Option<Anchor>, cx: &mut App) {
         ..Default::default()
     };
     let app = cx.try_global::<MainApp>().map(|m| m.0.clone());
-    let Ok((handle, _)) = open_window(options, cx, |window, cx| {
-        cx.new(|cx| Panel::new(app, window, cx))
-    }) else {
+    let opened = if v2 {
+        open_window(options, cx, |window, cx| {
+            cx.new(|cx| crate::v2::tray::Tray::new(window, cx))
+        })
+        .map(|(h, _)| h)
+    } else {
+        open_window(options, cx, |window, cx| {
+            cx.new(|cx| Panel::new(app, window, cx))
+        })
+        .map(|(h, _)| h)
+    };
+    let Ok(handle) = opened else {
         return;
     };
     let _ = handle.update(cx, |_, window, cx| {
@@ -71,7 +98,7 @@ pub(super) fn toggle(anchor: Option<Anchor>, cx: &mut App) {
             root.style().background = Some(gpui_kit::transparent_black().into());
             cx.notify();
         });
-        super::platform::place(window, WIDTH, HEIGHT);
+        super::platform::place(window, width, height);
     });
     OPEN.set(Some(handle));
 }
@@ -107,9 +134,7 @@ impl Panel {
             // Clicking anywhere else closes it, as a menu would.
             cx.observe_window_activation(window, |_, window, _| {
                 if !window.is_window_active() {
-                    CLOSED_AT.set(Some(Instant::now()));
-                    OPEN.take();
-                    window.remove_window();
+                    dismissed(window);
                 }
             }),
         ];

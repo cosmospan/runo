@@ -43,6 +43,7 @@ mod store;
 mod term;
 mod theme;
 mod today;
+pub(crate) mod tray;
 mod trouble;
 mod ui;
 mod usage;
@@ -2897,7 +2898,10 @@ pub fn open_window(cx: &mut App) {
     };
     let opened = gpui_kit::open_window(options, cx, |window, cx| {
         apply_theme(window, cx);
-        cx.new(|cx| Shell::new(window, cx))
+        let shell = cx.new(|cx| Shell::new(window, cx));
+        // The menu bar panel reads and acts on the crew through this.
+        cx.set_global(tray::Here(shell.downgrade()));
+        shell
     });
     // Come to the front when opened, not behind whatever had focus (the first
     // frame asks again, once the window is showing).
