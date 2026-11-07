@@ -473,6 +473,9 @@ pub struct Shell {
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
+    /// A bot with a chat or know-how of its own, waiting for you to confirm
+    /// taking it off the crew.
+    removing: Option<Member>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
@@ -885,6 +888,7 @@ impl Shell {
             list_all: false,
             jobs_open: false,
             deleting: None,
+            removing: None,
             raw_open: Default::default(),
             confirming: None,
             setup_crew: data::STARTER_CREW.to_vec(),
@@ -2356,8 +2360,9 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if this.deleting.is_some() && key == "escape" {
+                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
                     this.deleting = None;
+                    this.removing = None;
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -2464,6 +2469,7 @@ impl Render for Shell {
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx))
+            .children(self.remove_dialog(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())

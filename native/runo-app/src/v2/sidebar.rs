@@ -218,12 +218,6 @@ impl Shell {
                     .child(Icon::new(IconName::Users).size(px(16.)))
                     .child("Your crew")
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
-            )
-            .child(
-                row("side-usage", place == Place::Usage)
-                    .child(Icon::new(IconName::ChartColumn).size(px(16.)))
-                    .child("Usage")
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
         // The project's # threads: group chats with a few bots each. #general

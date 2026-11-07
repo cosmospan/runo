@@ -178,7 +178,7 @@ impl Shell {
                 }
             })
             .collect();
-        let tip = names.join(" \u{b7} ");
+        let tip = format!("{}\nClick for usage details", names.join(" \u{b7} "));
         let single = (days.len() == 1).then(|| crate::agent::PROVIDERS[days[0].i].name);
         let engines = div()
             .flex()
@@ -495,7 +495,7 @@ impl Shell {
                 })),
             )
             .child(
-                link("usage-page", "Usage history").on_click(cx.listener(|this, _, _, cx| {
+                link("usage-page", "Usage details").on_click(cx.listener(|this, _, _, cx| {
                     this.usage_open = false;
                     this.go(Place::Usage, cx)
                 })),
