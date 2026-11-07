@@ -144,7 +144,7 @@ impl Shell {
         cx.notify();
     }
 
-    fn server_note(&mut self, head: String, body: String, failed: bool) {
+    fn server_said(&mut self, head: String, body: String, failed: bool) {
         self.server_out.insert(0, (head, body, failed));
         self.server_out.truncate(KEEP);
     }
@@ -217,15 +217,15 @@ impl Shell {
                         .lines()
                         .last()
                         .is_some_and(|l| l.starts_with("(stopped with exit code"));
-                    self.server_note(head, out, failed)
+                    self.server_said(head, out, failed)
                 }
                 (Ok(said), _) => {
-                    self.server_note(said.clone(), String::new(), false);
+                    self.server_said(said.clone(), String::new(), false);
                     if act == Act::Reboot {
                         self.say(said);
                     }
                 }
-                (Err(why), _) => self.server_note(head, format!("Didn't work: {why}"), true),
+                (Err(why), _) => self.server_said(head, format!("Didn't work: {why}"), true),
             }
         }
         if changed {
