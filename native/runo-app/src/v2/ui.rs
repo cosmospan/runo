@@ -9,9 +9,10 @@ use gpui_kit::*;
 // Named, not globbed: names like `fill` would clash with the kit's prelude.
 #[allow(unused_imports)]
 pub use super::theme::{
-    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, float, grey_tone,
-    hover, ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel, press, raised, run_tone,
-    set_theme, t_amber, t_blue, t_green, t_red, t_violet, theme, well, Tone, RUNO, THEMES,
+    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, float,
+    float_shadow, grey_tone, hover, ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel,
+    press, raised, run_tone, set_theme, t_amber, t_blue, t_green, t_red, t_violet, theme, well,
+    Tone, RUNO, THEMES,
 };
 
 // Status and member colours: the same in every theme, as dots, bars and fills.
