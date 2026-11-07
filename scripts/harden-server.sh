@@ -15,14 +15,21 @@ say() { printf '%s\n' "$*"; }
 
 chmod 700 "$HOME/.squadcode" 2>/dev/null && say "did: kept Squad's folder private to you"
 
+# Root, sudo without a password, or sudo with the password the app passed in
+# SQUAD_SUDO_PW (read from stdin, never on a command line).
+sudo_pw() { printf '%s\n' "$SQUAD_SUDO_PW" | sudo -S -p '' "$@"; }
 if [ "$(id -u)" = 0 ]; then
   R=""
 elif sudo -n true 2>/dev/null; then
   R="sudo -n"
+elif [ -n "${SQUAD_SUDO_PW:-}" ] && sudo_pw true 2>/dev/null; then
+  R="sudo_pw"
 else
-  say "skipped: the rest needs root or sudo without a password"
+  say "skipped: the rest needs root or sudo"
   exit 0
 fi
+# Commands below never read stdin, since sudo_pw uses it for the password.
+as_root_write() { $R sh -c "printf '%b' \"\$1\" > \"\$2\"" sh "$1" "$2"; }
 
 # The ports sshd listens on, so the firewall never shuts us out.
 ports=$($R sshd -T 2>/dev/null | awk '/^port /{print $2}')
@@ -32,8 +39,8 @@ ports=$($R sshd -T 2>/dev/null | awk '/^port /{print $2}')
 # lock the app out; a config that fails `sshd -t` is taken back.
 if [ -d /etc/ssh ]; then
   $R mkdir -p /etc/ssh/sshd_config.d
-  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' \
-    | $R tee /etc/ssh/sshd_config.d/10-squad.conf >/dev/null
+  as_root_write 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' \
+    /etc/ssh/sshd_config.d/10-squad.conf
   if grep -qE '^\s*Include\s+/etc/ssh/sshd_config.d' /etc/ssh/sshd_config 2>/dev/null && $R sshd -t 2>/dev/null; then
     ($R systemctl reload ssh 2>/dev/null || $R systemctl reload sshd 2>/dev/null || $R service ssh reload 2>/dev/null) \
       && say "did: turned off password logins for SSH"
@@ -45,8 +52,8 @@ fi
 
 if command -v apt-get >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
-  $R apt-get update -qq >/dev/null 2>&1
-  $R apt-get install -y -qq ufw fail2ban unattended-upgrades >/dev/null 2>&1
+  $R apt-get update -qq </dev/null >/dev/null 2>&1
+  $R apt-get install -y -qq ufw fail2ban unattended-upgrades </dev/null >/dev/null 2>&1
 fi
 
 if command -v ufw >/dev/null 2>&1; then
@@ -61,7 +68,7 @@ if command -v fail2ban-client >/dev/null 2>&1; then
 fi
 
 if [ -d /etc/apt/apt.conf.d ] && command -v unattended-upgrade >/dev/null 2>&1; then
-  printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
-    | $R tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null && say "did: set security updates to install themselves"
+  as_root_write 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
+    /etc/apt/apt.conf.d/20auto-upgrades && say "did: set security updates to install themselves"
 fi
 exit 0

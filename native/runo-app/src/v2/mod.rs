@@ -542,6 +542,8 @@ pub struct Shell {
     server_setup: Option<std::sync::mpsc::Receiver<remote::Step>>,
     server_log: Vec<String>,
     server_failed: bool,
+    /// The server showed a different host key from the one Squad trusted.
+    server_key_changed: bool,
     /// The server's password (first connection only), Claude's sign-in code,
     /// an API key and which company it's for.
     server_pass: Entity<InputState>,
@@ -1095,6 +1097,7 @@ impl Shell {
             server_setup: None,
             server_log: Vec::new(),
             server_failed: false,
+            server_key_changed: false,
             server_pass,
             server_code,
             server_key,

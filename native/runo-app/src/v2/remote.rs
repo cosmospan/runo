@@ -109,21 +109,146 @@ pub fn valid_host(host: &str) -> bool {
 
 // ---------- ssh ----------
 
-fn ssh_base(host: &str, key: &str) -> Command {
+/// The servers' host keys Squad trusts, kept apart from ~/.ssh/known_hosts:
+/// a key the person's own SSH saved long ago for a reused address can't get
+/// in the way, and a server's key is trusted the first time Squad meets it
+/// and only that key after.
+fn known_hosts() -> PathBuf {
+    let dir = crate::store::data_dir().join("ssh");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("known_hosts")
+}
+
+/// `user@host` without the user, as known_hosts names it.
+fn host_name(host: &str) -> String {
+    label_of(host)
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_string()
+}
+
+/// ssh with Squad's own known_hosts and trust on first use.
+fn ssh_command() -> Command {
     let mut cmd = Command::new("ssh");
+    cmd.arg("-o")
+        .arg(format!("UserKnownHostsFile={}", known_hosts().display()))
+        .args(["-o", "StrictHostKeyChecking=accept-new"]);
+    cmd
+}
+
+fn ssh_base(host: &str, key: &str) -> Command {
+    let mut cmd = ssh_command();
     if !key.is_empty() {
         cmd.args(["-i", key, "-o", "IdentitiesOnly=yes"]);
     }
-    cmd.args([
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=10",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-    ]);
+    cmd.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]);
     cmd.arg(host);
     cmd
+}
+
+/// Whether ssh refused because the server's key isn't the one Squad trusts.
+fn key_refused(stderr: &str) -> bool {
+    stderr.contains("Host key verification failed") || stderr.contains("IDENTIFICATION HAS CHANGED")
+}
+
+/// The server's key Squad trusts, as `SHA256:…`, once it has met it.
+pub fn trusted_fingerprint(host: &str) -> Option<String> {
+    let out = Command::new("ssh-keygen")
+        .args(["-l", "-F", &host_name(host), "-f"])
+        .arg(known_hosts())
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    fingerprint_in(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// The key the server shows now, as `SHA256:…`.
+fn offered_fingerprint(host: &str) -> Option<String> {
+    let scan = Command::new("ssh-keyscan")
+        .args(["-T", "10", "-t", "ed25519,ecdsa,rsa", &host_name(host)])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    let mut lines = String::from_utf8_lossy(&scan.stdout).to_string();
+    // The strongest key first, the one ssh itself prefers.
+    let mut keys: Vec<&str> = lines.lines().filter(|l| !l.starts_with('#')).collect();
+    keys.sort_by_key(|l| !l.contains("ed25519"));
+    lines = keys.first()?.to_string();
+    let mut child = Command::new("ssh-keygen")
+        .args(["-l", "-f", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    child.stdin.take()?.write_all(lines.as_bytes()).ok()?;
+    let out = child.wait_with_output().ok()?;
+    fingerprint_in(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn fingerprint_in(text: &str) -> Option<String> {
+    text.split_whitespace()
+        .find(|w| w.starts_with("SHA256:"))
+        .map(str::to_string)
+}
+
+/// Forgets the key Squad trusted for `host`, after you said the server was
+/// rebuilt; the next connection trusts the key it shows then.
+pub fn trust_new_key(host: &str) {
+    let _ = Command::new("ssh-keygen")
+        .args(["-R", &host_name(host), "-f"])
+        .arg(known_hosts())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Meets the server before logging in: trusts its key the first time, and
+/// says so when it isn't the key trusted before.
+fn meet(host: &str) -> Result<(), Fail> {
+    let out = ssh_command()
+        .args([
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=15",
+            "-o",
+            "PreferredAuthentications=none",
+            host,
+            "true",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => {
+                Fail::from("ssh isn't installed on this computer".to_string())
+            }
+            _ => Fail::from(e.to_string()),
+        })?;
+    let err = String::from_utf8_lossy(&out.stderr);
+    if key_refused(&err) {
+        return Err(Fail::KeyChanged(
+            offered_fingerprint(host).unwrap_or_default(),
+        ));
+    }
+    if err.contains("Could not resolve")
+        || err.contains("timed out")
+        || err.contains("refused")
+        || err.contains("No route")
+    {
+        return Err(Fail::from(format!(
+            "Couldn't reach {host}: {}",
+            err.lines()
+                .rev()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
+                .unwrap_or("no answer")
+        )));
+    }
+    Ok(())
 }
 
 /// Runs `command` on the server, with `input` on its stdin, and gives back
@@ -202,12 +327,10 @@ fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
     let public = std::fs::read_to_string(format!("{key}.pub"))
         .map_err(|e| format!("Couldn't read the new key: {e}"))?;
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut cmd = Command::new("ssh");
+    let mut cmd = ssh_command();
     cmd.args([
         "-o",
         "ConnectTimeout=15",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
         "-o",
         "PubkeyAuthentication=no",
         "-o",
@@ -237,7 +360,7 @@ fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
     }
     let err = String::from_utf8_lossy(&out.stderr);
     if err.contains("Permission denied") {
-        return Err(format!("{host} didn't take that password. Check it, and the user name before the @ (often root)."));
+        return Err(format!("{host} didn't take that password. Check it, and the user name before the @ (root, or ubuntu on many Ubuntu servers)."));
     }
     Err(format!(
         "Couldn't log in to {host}: {}",
@@ -387,6 +510,28 @@ pub enum Step {
     Say(String),
     Done(Config),
     Failed(String),
+    /// The server shows a different key from the one Squad trusted: rebuilt,
+    /// or not the same server. Its key now, as `SHA256:…` ("" if unknown).
+    KeyChanged(String),
+}
+
+/// Why connecting stopped.
+#[derive(Debug)]
+enum Fail {
+    KeyChanged(String),
+    Other(String),
+}
+
+impl From<String> for Fail {
+    fn from(s: String) -> Self {
+        Fail::Other(s)
+    }
+}
+
+impl From<&str> for Fail {
+    fn from(s: &str) -> Self {
+        Fail::Other(s.to_string())
+    }
 }
 
 /// Sets the server up and pairs this computer with it, on a thread of its own.
@@ -397,14 +542,15 @@ pub fn connect(host: String, password: String, device: String) -> Receiver<Step>
     std::thread::spawn(move || {
         let step = match setup(&host, &password, &device, &tx) {
             Ok(c) => Step::Done(c),
-            Err(why) => Step::Failed(why),
+            Err(Fail::Other(why)) => Step::Failed(why),
+            Err(Fail::KeyChanged(fp)) => Step::KeyChanged(fp),
         };
         let _ = tx.send(step);
     });
     rx
 }
 
-fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> {
+fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<Config, Fail> {
     let say = |t: String| {
         let _ = tx.send(Step::Say(t));
     };
@@ -413,6 +559,15 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
         return Err("Type it the way you'd type it after ssh, like you@203.0.113.7.".into());
     }
     say(format!("Reaching {host}…"));
+    let first = trusted_fingerprint(host).is_none();
+    meet(host)?;
+    if let Some(fp) = trusted_fingerprint(host) {
+        say(if first {
+            format!("Trusting {}'s key from now on: {fp}.", host_name(host))
+        } else {
+            format!("It's the same server as before ({fp}).")
+        });
+    }
     let key = if password.is_empty() {
         String::new()
     } else {
@@ -421,18 +576,16 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
         add_key(host, password, &key)?;
         key
     };
-    let os = ssh(host, &key, "uname -sm", None).map_err(|why| {
+    let os = ssh(host, &key, "uname -sm", None).map_err(|why| -> Fail {
         if password.is_empty() {
             format!("Couldn't reach {host}: {why}. If you don't use SSH keys, type the server's password too; your VPS provider emailed it to you.")
         } else {
             format!("Couldn't reach {host} with the new key: {why}")
         }
+        .into()
     })?;
     if !os.trim_start().starts_with("Linux") {
-        return Err(format!(
-            "{host} runs {}; a Squad server needs Linux.",
-            os.trim()
-        ));
+        return Err(format!("{host} runs {}; a Squad server needs Linux.", os.trim()).into());
     }
     say("Installing Squad Code there and keeping it running…".into());
     let out = ssh(host, &key, "sh -s", Some(SETUP))
@@ -444,7 +597,19 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
         .map(|b| b.trim().to_string())
         .ok_or_else(|| format!("Setting up {host} didn't finish."))?;
     say("Locking the server down…".into());
-    match ssh(host, &key, "sh -s", Some(HARDEN)) {
+    // A user whose sudo asks for a password (ubuntu on many VPSes) gets it
+    // from the first line of stdin, so it never shows on a command line.
+    let harden = if password.is_empty() {
+        ssh(host, &key, "sh -s", Some(HARDEN))
+    } else {
+        ssh(
+            host,
+            &key,
+            "IFS= read -r SQUAD_SUDO_PW; export SQUAD_SUDO_PW; sh -s",
+            Some(&format!("{password}\n{HARDEN}")),
+        )
+    };
+    match harden {
         Ok(out) => {
             for line in out.lines().filter_map(|l| l.strip_prefix("did: ")) {
                 say(format!("Done: {line}."));
@@ -480,7 +645,7 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
         std::thread::sleep(Duration::from_millis(500));
     }
     if !last.is_empty() {
-        return Err(format!("Squad Code isn't answering on {host}: {last}"));
+        return Err(format!("Squad Code isn't answering on {host}: {last}").into());
     }
     let (status, v) = http(
         tunnel.port,
@@ -491,7 +656,7 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
     )
     .map_err(|e| format!("Pairing failed: {e}"))?;
     if status != 200 {
-        return Err(format!("Pairing failed: {}", error_of(&v)));
+        return Err(format!("Pairing failed: {}", error_of(&v)).into());
     }
     let cfg = Config {
         host: host.to_string(),
@@ -725,7 +890,11 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                 Err(why) => {
                     let mut s = lock();
                     s.up = false;
-                    s.line = format!("Can't reach {label}: {why}");
+                    s.line = if key_refused(&why) {
+                        format!("{label} isn't showing the key Squad trusted for it. If you rebuilt it, disconnect and connect again.")
+                    } else {
+                        format!("Can't reach {label}: {why}")
+                    };
                 }
             }
         }
