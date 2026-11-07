@@ -32,8 +32,10 @@ mod prefs;
 mod race;
 mod remote;
 mod review;
+mod rfb;
 mod rich;
 mod runtime;
+mod screenview;
 pub mod server;
 mod serverpage;
 mod setup;
@@ -89,6 +91,8 @@ pub enum Place {
     Usage,
     /// Your server: how it's doing, and its controls.
     Server,
+    /// Your server's screen, live.
+    Screen,
     /// The first-run walkthrough.
     Welcome,
 }
@@ -581,6 +585,16 @@ pub struct Shell {
     /// that keeps it reachable.
     server_screen_rx: Option<std::sync::mpsc::Receiver<Result<machine::Screen, String>>>,
     server_screen: Option<machine::Screen>,
+    /// Watching that screen in Squad: the connection, the picture and the
+    /// frame it was made from, pictures to let go of, where it's drawn and
+    /// the focus that sends keys to it.
+    screen_view: Option<rfb::Viewer>,
+    screen_img: Option<Arc<RenderImage>>,
+    screen_seen: u64,
+    screen_built: Instant,
+    screen_retired: Vec<Arc<RenderImage>>,
+    screen_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    screen_focus: FocusHandle,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -691,7 +705,9 @@ fn nav_slot(place: Place) -> Option<f32> {
         Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Settings(_) | Place::Usage | Place::Server | Place::Welcome => return None,
+        Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
+            return None
+        }
     };
     Some(i as f32 * 46.)
 }
@@ -1158,6 +1174,13 @@ impl Shell {
             server_cmd,
             server_screen_rx: None,
             server_screen: None,
+            screen_view: None,
+            screen_img: None,
+            screen_seen: u64::MAX,
+            screen_built: Instant::now(),
+            screen_retired: Vec::new(),
+            screen_bounds: Default::default(),
+            screen_focus: cx.focus_handle(),
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -2656,6 +2679,7 @@ impl Render for Shell {
             Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
             Place::Server => self.server_page(cx),
+            Place::Screen => self.screen_page(window, cx),
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
