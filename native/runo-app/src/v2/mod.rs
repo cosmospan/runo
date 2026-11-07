@@ -544,6 +544,10 @@ pub struct Shell {
     server_failed: bool,
     /// The server showed a different host key from the one Squad trusted.
     server_key_changed: bool,
+    /// The server wants a new password before anyone logs in, and the one
+    /// the person picks for it.
+    server_wants_new_pass: bool,
+    server_new_pass: Entity<InputState>,
     /// The server's password (first connection only), Claude's sign-in code,
     /// an API key and which company it's for.
     server_pass: Entity<InputState>,
@@ -743,6 +747,11 @@ impl Shell {
         let server_pass = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Password (first time only)")
+                .masked(true)
+        });
+        let server_new_pass = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("New password for the server")
                 .masked(true)
         });
         let server_code =
@@ -1098,6 +1107,8 @@ impl Shell {
             server_log: Vec::new(),
             server_failed: false,
             server_key_changed: false,
+            server_wants_new_pass: false,
+            server_new_pass,
             server_pass,
             server_code,
             server_key,
