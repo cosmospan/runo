@@ -269,7 +269,7 @@ impl Shell {
             .children(panel)
     }
 
-    /// The icon rail: Peek on top, the places, the crew's faces, and
+    /// The icon rail: Peek on top, the places, your projects as tiles, and
     /// Settings at the foot.
     fn rail(&mut self, inbox: usize, cx: &mut Context<Self>) -> Stateful<Div> {
         let place = self.place;
@@ -320,13 +320,19 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             );
 
-        // The crew as faces: a ring while a bot works, a dot when it asks you.
-        let members: Vec<Member> = Member::everyone()
-            .into_iter()
-            .filter(|m| m.on_crew() && *m != Member::Fin)
+        // Your projects as tiles, the one you're in ringed: a dot when
+        // something in it needs you, blue while the crew works there.
+        let current = self.crew.store.current;
+        let folders: Vec<(usize, String, String)> = self
+            .crew
+            .store
+            .folders
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (i, f.name.clone(), f.path.clone()))
             .collect();
-        let mut crew = div()
-            .id("rail-crew-list")
+        let mut list = div()
+            .id("rail-projects")
             .flex_1()
             .min_h_0()
             .w_full()
@@ -334,41 +340,63 @@ impl Shell {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(4.))
+            .gap(px(6.))
             .pt(px(2.));
-        for who in members {
-            let (word, _) = self.status_of(who);
-            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
-            let asks = !busy
-                && self
-                    .crew
-                    .store
-                    .jobs
-                    .iter()
-                    .any(|j| j.bot == who && j.needs_you());
-            let mood = self.side_mood(who);
-            let face = self.bot(who, mood, 28., runo_holo::Framing::Bust);
-            let on = place == Place::Chat(who);
-            let say = if asks {
-                format!("{}: asks you", who.name())
-            } else if busy {
-                format!("{}: {word}", who.name())
-            } else {
-                who.name().to_string()
-            };
-            crew = crew.child(
-                rail_btn(("rail-bot", who.key() as usize), on)
-                    .rounded_full()
-                    .when(busy, |d| d.border_2().border_color(c(ui::t_blue())))
-                    .child(face)
-                    .when(asks, |d| d.child(badge(ui::AMBER)))
+        for (i, name, path) in folders {
+            let rows = self.thread_rows_in(&path);
+            let busy: usize = rows.iter().map(|r| r.2).sum();
+            let asks: usize = rows.iter().map(|r| r.3).sum();
+            let on = i == current;
+            let mut say = format!("{name}\n{}", short_path(&path));
+            if asks > 0 {
+                say.push_str(&format!("\n{asks} waiting on you"));
+            } else if busy > 0 {
+                say.push_str(&format!("\n{busy} running"));
+            }
+            list = list.child(
+                div()
+                    .id(("rail-project", i))
+                    .size(px(40.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .relative()
+                    .rounded(px(12.))
+                    .border_2()
+                    .cursor_pointer()
+                    .map(|d| {
+                        if on {
+                            d.border_color(c(ui::ink()))
+                        } else {
+                            d.border_color(transparent_black())
+                                .opacity(0.85)
+                                .hover(|s| s.opacity(1.).border_color(c(ui::line_hi())))
+                        }
+                    })
+                    .child(tile(&name, project_tint(i), 32.))
+                    .when(asks > 0, |d| d.child(badge(ui::AMBER)))
+                    .when(asks == 0 && busy > 0, |d| d.child(badge(ui::BLUE)))
                     .tooltip(tip(say))
-                    .on_hover(
-                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.crew.store.current != i {
+                            this.crew.store.current = i;
+                            this.crew.store.save();
+                        }
+                        this.go(Place::Today, cx);
+                    })),
             );
         }
+        list = list.child(
+            rail_btn("rail-add-project", false)
+                .size(px(32.))
+                .rounded(px(9.))
+                .border_dashed()
+                .border_color(c(ui::line_hi()))
+                .child(Icon::new(IconName::Plus).size(px(15.)))
+                .tooltip(tip("Add a project folder"))
+                .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+        );
 
         let slim = self.side_slim;
         let foot = div()
@@ -415,18 +443,27 @@ impl Shell {
             .child(logo)
             .child(places)
             .child(div().w(px(22.)).h(px(1.)).my(px(6.)).bg(c(ui::line())))
-            .child(crew)
+            .child(list)
             .child(foot)
     }
 
-    /// The labelled panel: New job, the places with their counts, every
-    /// project with its threads under it, a few things to try, and how the
-    /// crew is doing.
+    /// The labelled panel for the project you're in: New job, the places with
+    /// their counts, its # threads, the crew, a few things to try, and how
+    /// the crew is doing.
     fn panel(&mut self, inbox: usize, cx: &mut Context<Self>) -> Div {
         let place = self.place;
 
+        let folder = self.crew.store.folder().cloned();
+        let project = folder
+            .as_ref()
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "Squad Code".into());
+        let where_ = folder
+            .as_ref()
+            .map(|f| short_path(&f.path))
+            .unwrap_or_else(|| "No project yet".into());
         let head = div()
-            .h(px(30.))
+            .h(px(34.))
             .px(px(6.))
             .mb(px(10.))
             .flex()
@@ -435,10 +472,24 @@ impl Shell {
             .child(
                 div()
                     .flex_1()
-                    .text_size(px(14.))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(c(ui::ink()))
-                    .child("Squad Code"),
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(c(ui::ink()))
+                            .child(project),
+                    )
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(11.))
+                            .text_color(c(ui::faint()))
+                            .child(where_),
+                    ),
             )
             .child(
                 small_btn("side-search", IconName::Search)
@@ -515,7 +566,8 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
-        let projects = self.project_tree(cx);
+        let threads = self.thread_list(cx);
+        let crew = self.crew_list(cx);
         let tries = self.try_list(cx);
         let status = self.crew_card(inbox, cx);
 
@@ -539,186 +591,192 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .child(nav)
-                    .child(projects)
+                    .child(threads)
+                    .child(crew)
                     .children(tries),
             )
             .child(status)
     }
 
-    /// Every project folder, the current one open with its # threads nested
-    /// under it. A click on a project moves to it; its chevron folds it.
-    fn project_tree(&mut self, cx: &mut Context<Self>) -> Div {
-        let in_thread = matches!(self.place, Place::Today);
-        let current = self.crew.store.current;
-        let here = self.crew.store.thread_here();
-        let mut tree = div().flex().flex_col().gap(px(1.)).child(
-            label("Projects").child(div().flex_1()).child(
-                small_btn("side-add-folder", IconName::Plus)
-                    .size(px(20.))
-                    .tooltip(tip("Add a project folder"))
-                    .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
-            ),
-        );
-        if self.crew.store.folders.is_empty() {
-            return tree.child(
+    /// A section's label that folds it open or shut, with an optional
+    /// action on its right.
+    fn fold_label(
+        &mut self,
+        key: &'static str,
+        text: &'static str,
+        cx: &mut Context<Self>,
+    ) -> (bool, Stateful<Div>) {
+        let open = self.side_folds.get(key).copied().unwrap_or(true);
+        let head = label(text)
+            .id(key)
+            .rounded(px(6.))
+            .cursor_pointer()
+            .hover(|s| s.text_color(c(ui::muted())))
+            .child(div().flex_1())
+            .child(
+                div()
+                    .size(px(18.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.))
+                    .bg(c(ui::hover()))
+                    .text_color(c(ui::muted()))
+                    .child(
+                        Icon::new(if open {
+                            IconName::ChevronDown
+                        } else {
+                            IconName::ChevronRight
+                        })
+                        .size(px(12.)),
+                    ),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.side_folds.insert(key.to_string(), !open);
+                cx.notify();
+            }));
+        (open, head)
+    }
+
+    /// The project's # threads: group chats with a few bots each. #general
+    /// is always there; the one you're in is lit while you're on it.
+    fn thread_list(&mut self, cx: &mut Context<Self>) -> Div {
+        let (open, head) = self.fold_label("threads", "Threads", cx);
+        let mut list = div().flex().flex_col().gap(px(1.)).child(head);
+        if !open {
+            return list;
+        }
+        let Some(path) = self.crew.store.folder().map(|f| f.path.clone()) else {
+            return list.child(
                 row("side-pick-folder", false)
                     .child(Icon::new(IconName::FolderOpen).size(px(16.)))
                     .child("Pick a project folder")
                     .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
             );
-        }
-        let folders: Vec<(usize, String, String)> = self
-            .crew
-            .store
-            .folders
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (i, f.name.clone(), f.path.clone()))
-            .collect();
-        for (i, name, path) in folders {
-            let is_current = i == current;
-            let open = self.side_folds.get(&path).copied().unwrap_or(is_current);
-            let rows = self.thread_rows_in(&path);
-            let busy: usize = rows.iter().map(|r| r.2).sum();
-            let asks: usize = rows.iter().map(|r| r.3).sum();
-            let fold_path = path.clone();
-            let click_path = path.clone();
-            tree = tree.child(
-                row(("side-project", i), false)
-                    .pl(px(4.))
-                    .gap(px(6.))
-                    .when(is_current, |d| {
-                        d.text_color(c(ui::ink())).font_weight(FontWeight::SEMIBOLD)
-                    })
+        };
+        let in_thread = matches!(self.place, Place::Today);
+        let here = self.crew.store.thread_here();
+        for (id, name, busy, asks) in self.thread_rows_in(&path) {
+            let on = in_thread && id == here;
+            // Something new since you last looked, in a thread you're not in.
+            let unread = !on && self.crew.store.unread(&path, id);
+            list = list.child(
+                row(("side-thread", id as usize), on)
+                    .child(hash(thread_tint(id)))
                     .child(
                         div()
-                            .id(("side-fold", i))
-                            .size(px(16.))
-                            .flex()
-                            .flex_none()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(4.))
-                            .text_color(c(ui::faint()))
-                            .hover(|s| s.bg(c(ui::press())).text_color(c(ui::ink())))
-                            .child(
-                                Icon::new(if open {
-                                    IconName::ChevronDown
-                                } else {
-                                    IconName::ChevronRight
-                                })
-                                .size(px(12.)),
-                            )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.side_folds.insert(fold_path.clone(), !open);
-                                cx.notify();
-                            })),
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .when(unread, |d| {
+                                d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
+                            })
+                            .child(name),
                     )
-                    .child(tile(&name, project_tint(i), 18.))
-                    .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .when(!open && asks > 0, |d| {
-                        d.child(count(asks, Some(ui::ask_tone())))
+                    .when(unread && asks == 0 && busy == 0, |d| {
+                        d.child(div().size(px(7.)).rounded_full().bg(c(ui::VIOLET)))
                     })
-                    .when(!open && busy > 0, |d| d.child(running(busy)))
-                    .tooltip(tip(short_path(&path)))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if this.crew.store.current == i {
-                            let open = this.side_folds.get(&click_path).copied().unwrap_or(true);
-                            this.side_folds.insert(click_path.clone(), !open);
-                            cx.notify();
-                        } else {
-                            this.crew.store.current = i;
-                            this.crew.store.save();
-                            this.side_folds.insert(click_path.clone(), true);
-                            this.go(Place::Today, cx);
-                        }
-                    })),
-            );
-            if !open {
-                continue;
-            }
-            let mut threads = div()
-                .ml(px(11.))
-                .pl(px(6.))
-                .border_l_1()
-                .border_color(c(ui::line()))
-                .flex()
-                .flex_col()
-                .gap(px(1.));
-            for (id, tname, busy, asks) in rows {
-                let on = in_thread && is_current && id == here;
-                // Something new since you last looked, in a thread you're not in.
-                let unread = !on && self.crew.store.unread(&path, id);
-                threads = threads.child(
-                    row(("side-thread", (i << 32) | id as usize), on)
-                        .child(hash(thread_tint(id)))
-                        .child(
+                    .when(asks > 0, |d| d.child(count(asks, Some(ui::ask_tone()))))
+                    .when(busy > 0, |d| d.child(running(busy)))
+                    // The thread you're in can be deleted from its row.
+                    .when(on && id != 0, |d| {
+                        d.child(
                             div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .when(unread, |d| {
-                                    d.font_weight(FontWeight::SEMIBOLD).text_color(c(ui::ink()))
-                                })
-                                .child(tname),
+                                .id(("thread-trash", id as usize))
+                                .size(px(20.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(5.))
+                                .text_color(c(ui::faint()))
+                                .hover(|s| s.text_color(c(ui::t_red())).bg(c(ui::hover())))
+                                .child(Icon::new(IconName::Trash).size(px(13.)))
+                                .tooltip(tip("Delete thread"))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.deleting = Some(id);
+                                    cx.notify();
+                                })),
                         )
-                        .when(unread && asks == 0 && busy == 0, |d| {
-                            d.child(div().size(px(7.)).rounded_full().bg(c(ui::VIOLET)))
-                        })
-                        .when(asks > 0, |d| d.child(count(asks, Some(ui::ask_tone()))))
-                        .when(busy > 0, |d| d.child(running(busy)))
-                        // The thread you're in can be deleted from its row.
-                        .when(on && id != 0, |d| {
-                            d.child(
-                                div()
-                                    .id(("thread-trash", id as usize))
-                                    .size(px(20.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(px(5.))
-                                    .text_color(c(ui::faint()))
-                                    .hover(|s| s.text_color(c(ui::t_red())).bg(c(ui::hover())))
-                                    .child(Icon::new(IconName::Trash).size(px(13.)))
-                                    .tooltip(tip("Delete thread"))
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        cx.stop_propagation();
-                                        this.deleting = Some(id);
-                                        cx.notify();
-                                    })),
-                            )
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.crew.store.current = i;
-                            this.crew.store.thread_now = id;
-                            this.crew.store.save();
-                            this.go(Place::Today, cx);
-                        })),
-                );
-            }
-            threads = threads.child(
-                row(("side-new-thread", i), false)
-                    .text_color(c(ui::faint()))
-                    .child(
-                        div()
-                            .w(px(18.))
-                            .flex()
-                            .justify_center()
-                            .child(Icon::new(IconName::Plus).size(px(13.))),
-                    )
-                    .child("New thread")
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        if this.crew.store.current != i {
-                            this.crew.store.current = i;
-                            this.crew.store.save();
-                        }
-                        this.new_thread(window, cx);
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.crew.store.thread_now = id;
+                        this.crew.store.save();
+                        this.go(Place::Today, cx);
                     })),
             );
-            tree = tree.child(threads);
         }
-        tree
+        list.child(
+            row("side-new-thread", false)
+                .text_color(c(ui::faint()))
+                .child(
+                    div()
+                        .w(px(18.))
+                        .flex()
+                        .justify_center()
+                        .child(Icon::new(IconName::Plus).size(px(13.))),
+                )
+                .child("New thread")
+                .on_click(cx.listener(|this, _, window, cx| this.new_thread(window, cx))),
+        )
+    }
+
+    /// The crew, as people you can message: face, name, and what each is up to.
+    fn crew_list(&mut self, cx: &mut Context<Self>) -> Div {
+        let (open, head) = self.fold_label("crew", "Crew", cx);
+        let mut list = div().flex().flex_col().gap(px(1.)).child(head);
+        if !open {
+            return list;
+        }
+        let place = self.place;
+        let members: Vec<Member> = Member::everyone()
+            .into_iter()
+            .filter(|m| m.on_crew())
+            .collect();
+        for who in members {
+            let (word, _) = self.status_of(who);
+            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
+            let asks = !busy
+                && self
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == who && j.needs_you());
+            let mood = self.side_mood(who);
+            let face = self.bot(who, mood, 24., runo_holo::Framing::Bust);
+            let on = place == Place::Chat(who);
+            let (word, tint) = if asks {
+                ("asks you".to_string(), ui::t_amber())
+            } else if busy {
+                (word, ui::t_blue())
+            } else if who == Member::Fin {
+                ("lead".to_string(), ui::faint())
+            } else {
+                (String::new(), ui::faint())
+            };
+            list = list.child(
+                row(("side-bot", who.key() as usize), on)
+                    .when(busy || asks, |d| d.text_color(c(ui::ink())))
+                    .child(face)
+                    .child(div().flex_1().min_w_0().truncate().child(who.name()))
+                    .when(!word.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tint))
+                                .child(word),
+                        )
+                    })
+                    .on_hover(
+                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+            );
+        }
+        list
     }
 
     /// A few things worth trying that the person hasn't done yet: another

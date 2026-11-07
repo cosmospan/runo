@@ -430,8 +430,7 @@ pub struct Shell {
     folder_menu: bool,
     /// The sidebar shows only its icon rail.
     side_slim: bool,
-    /// Projects in the sidebar folded open or shut, by path; unset, only the
-    /// current one is open.
+    /// The sidebar's sections folded open or shut, by name; unset, open.
     side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
     /// Motion is on (Settings → Animations); off, the crew holds still.
