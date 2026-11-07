@@ -59,6 +59,8 @@ pub struct Runtime {
     planning: Vec<(u64, Receiver<crate::agent::Event>)>,
     /// Where jobs can run besides here, for the intelligence layer to choose.
     pub sites: brain::Sites,
+    /// Your own server, when this app is connected to one.
+    pub link: Option<super::remote::Link>,
     /// Titles and recaps Peek is writing, by job.
     peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
     /// New bots the crew's engine is setting up for the project, by made id,
@@ -97,6 +99,7 @@ impl Runtime {
             queue_at: Instant::now(),
             planning: Vec::new(),
             sites: brain::Sites::default(),
+            link: None,
             peeking: Vec::new(),
             designing: Vec::new(),
             drafting: None,
@@ -160,6 +163,11 @@ impl Runtime {
             || !self.designing.is_empty()
             || self.drafting.is_some()
             || self.skilling.is_some()
+            || self
+                .store
+                .jobs
+                .iter()
+                .any(|j| !j.remote_on.is_empty() && j.status == Status::Running)
     }
 
     /// Whether `who` is answering a question right now.
@@ -280,7 +288,10 @@ impl Runtime {
             job.pick = crate::agent::PROVIDERS[i].id.to_string();
             job.race = if race == 0 { job.id } else { race };
         }
-        // Where it runs, and why, when there's a choice to make.
+        // Where it runs, and why, when there's a choice to make. Races and
+        // goals stay here for now: their tries and steps are tracked here.
+        let whole = pick.is_none() && job.goal == 0;
+        let none = brain::Sites::default();
         let placed = brain::place(
             st,
             &brain::JobAsk {
@@ -291,11 +302,37 @@ impl Runtime {
                 race: usize::from(pick.is_some()) * 2,
                 goal: job.goal != 0,
             },
-            &self.sites,
+            if whole { &self.sites } else { &none },
         );
         if !placed.why.is_empty() {
             job.feed.push(store::Item::Note(placed.why.clone()));
         }
+        if let (brain::place::Site::Server(name), Some(link)) = (&placed.site, &self.link) {
+            let remote = ship::remote_url(&job.folder.path).unwrap_or_default();
+            if let Some(path) = link.path_for(&job.folder, &remote) {
+                job.remote_on = name.clone();
+                job.status = Status::Running;
+                job.engine = format!("on {name}");
+                link.send(
+                    job.id,
+                    serde_json::json!({
+                        "text": text,
+                        "mode": format!("{mode:?}"),
+                        "bot": bot.name(),
+                        "folder": path,
+                    }),
+                );
+                return (job, placed);
+            }
+        }
+        self.launch(st, &mut job, text);
+        (job, placed)
+    }
+
+    /// Starts a job here: its own branch when it may change files, then its
+    /// engine.
+    fn launch(&mut self, st: &AppSettings, job: &mut store::Job, text: &str) {
+        let mode = job.mode;
         // A job that may change files gets its own branch and worktree, so your
         // checkout stays as it is and its changes wait for your approval.
         if mode.writes() {
@@ -316,17 +353,121 @@ impl Runtime {
                 ))),
             }
         }
-        match jobs::start(st, &mut job, text, false) {
+        match jobs::start(st, job, text, false) {
             Ok(r) => self.runners.push(r),
             Err(why) => {
                 job.status = Status::Failed;
                 job.ended = Some(job.started);
-                let (i, model) = engine::for_job(st, &job);
+                let (i, model) = engine::for_job(st, job);
                 job.engine = engine::label_of(i, &model);
                 job.feed.push(store::Item::Error(why));
             }
         }
-        (job, placed)
+    }
+
+    /// Sends what you did to a job that runs on your server there, and says
+    /// so. False when the job runs here.
+    fn on_server(&mut self, id: u64, action: &str, body: serde_json::Value) -> bool {
+        let Some(job) = self.store.job(id) else {
+            return false;
+        };
+        if job.remote_on.is_empty() {
+            return false;
+        }
+        let (name, remote) = (job.remote_on.clone(), job.remote);
+        match &self.link {
+            Some(link) if remote != 0 && link.cfg.label() == name => link.act(remote, action, body),
+            Some(_) if remote == 0 => {
+                self.say(format!("#{id} is still on its way to {name}. Try again in a moment."))
+            }
+            _ => self.say(format!(
+                "#{id} runs on {name}, and this app isn't connected to it. Connect in Settings, My server."
+            )),
+        }
+        true
+    }
+
+    /// Your server's side of things: where it can take jobs, the jobs sent
+    /// there that started or couldn't, and the latest of the ones running
+    /// there. Gives back the jobs that finished there since last time.
+    fn poll_remote(&mut self, st: &AppSettings) -> Vec<u64> {
+        let Some(link) = &self.link else {
+            self.sites.server = None;
+            return Vec::new();
+        };
+        self.sites.server = Some(link.server());
+        let label = link.cfg.label();
+        let sent = link.sent();
+        let fresh = link.take_jobs();
+        let notes = link.take_notes();
+        let watch: Vec<u64> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.remote != 0 && j.remote_on == label)
+            .filter(|j| {
+                j.status == Status::Running
+                    || j.status == Status::Shipping
+                    || j.status == Status::Review
+                    || j.checking
+                    || j.shipping
+                    || j.pr_state == "OPEN"
+            })
+            .map(|j| j.remote)
+            .collect();
+        link.watch(watch);
+        for n in notes {
+            self.say(n);
+        }
+        let mut changed = !sent.is_empty();
+        for (id, result) in sent {
+            let Some(job) = self.store.job_mut(id) else {
+                continue;
+            };
+            match result {
+                Ok(remote) => {
+                    job.remote = remote;
+                    job.feed.push(store::Item::Note(format!(
+                        "Running on {label} as #{remote}. It carries on there with this computer closed."
+                    )));
+                }
+                Err(why) => {
+                    // The fallback: run it here instead.
+                    job.remote_on.clear();
+                    job.engine.clear();
+                    job.feed.push(store::Item::Note(format!(
+                        "Couldn't send it to {label} ({why}), so it runs here."
+                    )));
+                    let mut job = job.clone();
+                    let text = job.title.clone();
+                    self.launch(st, &mut job, &text);
+                    if let Some(j) = self.store.job_mut(id) {
+                        *j = job;
+                    }
+                }
+            }
+        }
+        let mut finished = Vec::new();
+        for (remote, there) in fresh {
+            let Some(job) = self
+                .store
+                .jobs
+                .iter_mut()
+                .find(|j| j.remote == remote && j.remote_on == label)
+            else {
+                continue;
+            };
+            let was = job.status;
+            mirror(job, there);
+            changed = true;
+            if was == Status::Running && job.status != Status::Running {
+                finished.push(job.id);
+            }
+        }
+        if changed {
+            self.store.save();
+        }
+        finished
     }
 
     /// Races one job on up to `n` engines at once, each try on its own branch.
@@ -358,6 +499,9 @@ impl Runtime {
     /// Starts the same job again on other engines, so it races the first try.
     /// The race's id, or None when there was nothing to race it on.
     pub fn race_it(&mut self, st: &AppSettings, id: u64) -> Option<u64> {
+        if self.on_server(id, "race", serde_json::Value::Null) {
+            return None;
+        }
         let first = self.store.job(id).cloned()?;
         if !first.mode.writes() {
             return None;
@@ -408,6 +552,9 @@ impl Runtime {
     /// Runs a job again from the start, in the same branch, on its own engine or
     /// on `pick` (an agent index) when its own can't run it now.
     pub fn rerun(&mut self, st: &AppSettings, id: u64, pick: Option<usize>) -> bool {
+        if self.on_server(id, "rerun", serde_json::Value::Null) {
+            return true;
+        }
         let Some(job) = self.store.job_mut(id) else {
             return false;
         };
@@ -453,6 +600,9 @@ impl Runtime {
     /// person wrote it; Squad Code's own asks (a fix turn, carrying on) show
     /// as that note instead, so they're never taken for the person's words.
     fn send_on(&mut self, st: &AppSettings, id: u64, text: String, note: Option<String>) {
+        if self.on_server(id, "follow-up", serde_json::json!({ "text": text })) {
+            return;
+        }
         let refs = brain::digest::context_for(&text, &self.store.jobs);
         let Some(job) = self.store.job_mut(id) else {
             return;
@@ -494,6 +644,9 @@ impl Runtime {
     /// Hands a branch that clashes with its base back to its bot to bring up to
     /// date; it comes back for review when it's done.
     pub fn resolve(&mut self, st: &AppSettings, id: u64) {
+        if self.on_server(id, "resolve", serde_json::Value::Null) {
+            return;
+        }
         let Some(job) = self.store.job(id) else {
             return;
         };
@@ -510,6 +663,9 @@ impl Runtime {
     }
 
     pub fn stop(&mut self, id: u64) {
+        if self.on_server(id, "stop", serde_json::Value::Null) {
+            return;
+        }
         if let Some(r) = self.runners.iter_mut().find(|r| r.id == id) {
             r.stop();
         }
@@ -866,6 +1022,9 @@ impl Runtime {
 
     /// Runs the checks on a job's changes again.
     pub fn recheck(&mut self, id: u64) {
+        if self.on_server(id, "recheck", serde_json::Value::Null) {
+            return;
+        }
         let Some(job) = self.store.job_mut(id) else {
             return;
         };
@@ -924,6 +1083,9 @@ impl Runtime {
     /// otherwise merged into the branch it started from. Approving one try of a
     /// race keeps it and throws the others away.
     pub fn approve(&mut self, id: u64) {
+        if self.on_server(id, "approve", serde_json::Value::Null) {
+            return;
+        }
         let race = self.store.job(id).map(|j| j.race).unwrap_or(0);
         if race != 0 && self.tries(race).len() > 1 {
             self.keep_try(id);
@@ -988,6 +1150,9 @@ impl Runtime {
 
     /// Throws a job's changes away, with its branch and worktree.
     pub fn discard(&mut self, id: u64) {
+        if self.on_server(id, "discard", serde_json::Value::Null) {
+            return;
+        }
         let Some(job) = self.store.job(id).cloned() else {
             return;
         };
@@ -1005,6 +1170,10 @@ impl Runtime {
 
     /// Merges (or closes) a job's pull request on GitHub now.
     pub fn land_pr(&mut self, id: u64, merge: bool) {
+        let action = if merge { "merge-pr" } else { "close-pr" };
+        if self.on_server(id, action, serde_json::Value::Null) {
+            return;
+        }
         let Some(job) = self.store.job(id) else {
             return;
         };
@@ -1545,6 +1714,7 @@ impl Runtime {
         self.poll_draft();
         self.poll_goals(st);
         self.poll_queue(st);
+        finished.extend(self.poll_remote(st));
         finished
     }
 
@@ -1891,6 +2061,53 @@ fn fix_turn(job: &mut store::Job) -> Option<String> {
     Some(prompt)
 }
 
+/// A job's copy here takes the server's latest, keeping what only makes sense
+/// here: its id, thread, folder and whether you've seen it.
+fn mirror(job: &mut store::Job, there: store::Job) {
+    let keep = (
+        job.id,
+        job.thread,
+        job.folder.clone(),
+        job.seen,
+        job.goal,
+        std::mem::take(&mut job.remote_on),
+        job.remote,
+        job.short.clone(),
+    );
+    let ended_now = job.status == Status::Running && there.status != Status::Running;
+    // The notes this side wrote before sending it (where it runs and why) stay
+    // on top of the server's feed.
+    let ours: Vec<store::Item> = job
+        .feed
+        .iter()
+        .take_while(|i| matches!(i, store::Item::Note(_)) && !there.feed.contains(i))
+        .cloned()
+        .collect();
+    *job = there;
+    job.feed.splice(0..0, ours);
+    job.id = keep.0;
+    job.thread = keep.1;
+    job.folder = keep.2;
+    job.seen = keep.3 && !ended_now;
+    job.goal = keep.4;
+    job.race = 0;
+    job.pick.clear();
+    // Its worktree is on the server, not here.
+    job.worktree.clear();
+    if !job.engine.contains(&keep.5) {
+        job.engine = if job.engine.is_empty() {
+            format!("on {}", keep.5)
+        } else {
+            format!("{} on {}", job.engine, keep.5)
+        };
+    }
+    job.remote_on = keep.5;
+    job.remote = keep.6;
+    if job.short.is_empty() {
+        job.short = keep.7;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2006,5 +2223,41 @@ mod tests {
         });
         rt.drop_goal(3);
         assert!(rt.store.goals.is_empty());
+    }
+
+    #[test]
+    fn a_job_on_the_server_mirrors_here_and_keeps_its_own_notes() {
+        let mut here = store::Job {
+            id: 7,
+            thread: 3,
+            remote_on: "vps".into(),
+            remote: 41,
+            status: Status::Running,
+            seen: true,
+            feed: vec![store::Item::Note("Running on vps: long work.".into())],
+            ..Default::default()
+        };
+        here.folder.name = "app".into();
+        let mut there = store::Job {
+            id: 41,
+            status: Status::Review,
+            engine: "Claude Code".into(),
+            worktree: "/home/me/.squadcode/worktrees/x".into(),
+            feed: vec![store::Item::Note("Working on its own branch.".into())],
+            ..Default::default()
+        };
+        there.folder.name = "srv".into();
+        mirror(&mut here, there.clone());
+        assert_eq!((here.id, here.thread, here.remote), (7, 3, 41));
+        assert_eq!(here.folder.name, "app");
+        assert_eq!(here.status, Status::Review);
+        assert!(here.worktree.is_empty());
+        assert_eq!(here.engine, "Claude Code on vps");
+        assert!(!here.seen, "it just ended, so it's new to you");
+        assert_eq!(here.feed.len(), 2);
+        // Reading it again doesn't pile the notes up.
+        mirror(&mut here, there);
+        assert_eq!(here.feed.len(), 2);
+        assert_eq!(here.engine, "Claude Code on vps");
     }
 }

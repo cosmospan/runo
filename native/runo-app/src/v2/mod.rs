@@ -25,9 +25,11 @@ mod home;
 mod jobs;
 mod live;
 mod mascot;
+mod myserver;
 mod palette;
 mod prefs;
 mod race;
+mod remote;
 mod review;
 mod rich;
 mod runtime;
@@ -533,6 +535,25 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// Settings, My server: the `you@host` box, the connecting in progress and
+    /// what it has said so far.
+    server_input: Entity<InputState>,
+    server_setup: Option<std::sync::mpsc::Receiver<remote::Step>>,
+    server_log: Vec<String>,
+    server_failed: bool,
+    /// The server's password (first connection only), Claude's sign-in code,
+    /// an API key and which company it's for.
+    server_pass: Entity<InputState>,
+    server_code: Entity<InputState>,
+    server_key: Entity<InputState>,
+    server_key_pick: usize,
+    /// Giving the server an agent: a key being saved, or a Claude sign-in
+    /// and the link it opened.
+    server_brain: Option<std::sync::mpsc::Receiver<remote::Brain>>,
+    server_sign_in: Option<remote::SignIn>,
+    server_brain_log: Vec<String>,
+    server_brain_failed: bool,
+    server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
     /// Where the person has been, newest last, for Back (⌘[).
@@ -714,6 +735,19 @@ impl Shell {
         let maker_skill = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Describe a skill to write, or paste a path to a SKILL.md")
+        });
+        let server_input = cx.new(|cx| InputState::new(window, cx).placeholder("root@203.0.113.7"));
+        let server_pass = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Password (first time only)")
+                .masked(true)
+        });
+        let server_code =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Paste the code from Claude"));
+        let server_key = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Paste the API key")
+                .masked(true)
         });
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
@@ -935,6 +969,7 @@ impl Shell {
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
+            Ok("server") => Place::Settings(Pane::Server),
             Ok("settings") => Place::Settings(Pane::Work),
             Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
@@ -981,7 +1016,11 @@ impl Shell {
             holos: Holos::new(),
             scale: 1.0,
             mode: Mode::Build,
-            crew: runtime::Runtime::new(store),
+            crew: {
+                let mut rt = runtime::Runtime::new(store);
+                rt.link = remote::load().map(remote::Link::start);
+                rt
+            },
             composer,
             chat_input,
             deny_input,
@@ -1051,6 +1090,19 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            server_input,
+            server_setup: None,
+            server_log: Vec::new(),
+            server_failed: false,
+            server_pass,
+            server_code,
+            server_key,
+            server_key_pick: 0,
+            server_brain: None,
+            server_sign_in: None,
+            server_brain_log: Vec::new(),
+            server_brain_failed: false,
+            server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
             trail: Vec::new(),
@@ -2217,6 +2269,7 @@ impl Shell {
             Place::Live(id) => Some(id),
             _ => None,
         };
+        self.poll_server_setup(cx);
         let finished = self.crew.poll(&st, viewing);
         self.poll_reading(cx);
         for note in std::mem::take(&mut self.crew.notes) {

@@ -9768,6 +9768,12 @@ const EVENT_BATCH: Duration = Duration::from_millis(50);
 const CHAT_MIN: f32 = 600.;
 
 fn main() {
+    // ssh asking for a server's password while the app sets that server up
+    // (see v2::remote): answer with the password it was given, and nothing else.
+    if let Ok(password) = std::env::var("SQUAD_ASKPASS") {
+        println!("{password}");
+        return;
+    }
     startup::begin();
     // `runo --mcp-memory <folder> [--thread <id>]`: serve the memory tools to an agent,
     // without a window; a Crew thread also gets the tools it reports through.

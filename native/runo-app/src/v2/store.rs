@@ -298,6 +298,10 @@ pub struct Job {
     /// The goal this job is one part of, and what the bot is told about it.
     pub goal: u64,
     pub context: String,
+    /// The server running it, when it was sent to one ("" when it runs here),
+    /// and its id there (0 while it's on its way).
+    pub remote_on: String,
+    pub remote: u64,
 }
 
 /// One file a job changed.
@@ -369,6 +373,8 @@ impl Default for Job {
             conflict: Vec::new(),
             goal: 0,
             context: String::new(),
+            remote_on: String::new(),
+            remote: 0,
         }
     }
 }

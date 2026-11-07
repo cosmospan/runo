@@ -35,6 +35,8 @@ pub enum Pane {
     Appearance,
     Mascot,
     Engines,
+    /// Your own server, for jobs that carry on with this computer closed.
+    Server,
 }
 
 impl Pane {
@@ -45,6 +47,7 @@ impl Pane {
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
+            Pane::Server => "My server",
         }
     }
 
@@ -55,6 +58,7 @@ impl Pane {
             Pane::Appearance => "Themes, glass and background",
             Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
+            Pane::Server => "Jobs that run with the lid closed",
         }
     }
 
@@ -65,6 +69,7 @@ impl Pane {
             Pane::Appearance => IconName::Palette,
             Pane::Mascot => IconName::Bot,
             Pane::Engines => IconName::Cpu,
+            Pane::Server => IconName::Server,
         }
     }
 }
@@ -417,6 +422,7 @@ impl Shell {
             Pane::Appearance => self.settings_appearance(cx),
             Pane::Mascot => self.settings_mascot(cx),
             Pane::Engines => self.engines(cx),
+            Pane::Server => self.settings_server(cx),
         };
         div()
             .size_full()
@@ -429,7 +435,10 @@ impl Shell {
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
         let groups: [(&'static str, &[Pane]); 2] = [
-            ("CREW", &[Pane::Work, Pane::Engines, Pane::Mascot]),
+            (
+                "CREW",
+                &[Pane::Work, Pane::Engines, Pane::Server, Pane::Mascot],
+            ),
             ("YOU", &[Pane::General, Pane::Appearance]),
         ];
         let mut col = div()
@@ -503,7 +512,12 @@ impl Shell {
         col
     }
 
-    fn page(id: &'static str, title: &'static str, line: &'static str, body: Div) -> AnyElement {
+    pub(super) fn page(
+        id: &'static str,
+        title: &'static str,
+        line: &'static str,
+        body: Div,
+    ) -> AnyElement {
         div()
             .id(id)
             .size_full()
