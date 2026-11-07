@@ -89,13 +89,14 @@ fn label(text: &'static str) -> Div {
     div()
         .h(px(28.))
         .mt(px(14.))
-        .px(px(10.))
+        .pl(px(28.))
+        .pr(px(6.))
         .flex()
         .items_center()
-        .text_size(px(11.))
+        .text_size(px(12.5))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(ui::faint()))
-        .child(text.to_uppercase())
+        .text_color(c(ui::muted()))
+        .child(text)
 }
 
 /// A square button on the rail, lit like a row when you're on its place.
@@ -223,6 +224,22 @@ fn tile(name: &str, tint: u32, size: f32) -> Div {
                 .to_uppercase()
                 .to_string(),
         )
+}
+
+/// What a section's + does.
+type AddFn = fn(&mut Shell, &mut Window, &mut Context<Shell>);
+
+/// The + in front of an "Add a …" row, on a quiet tile.
+fn add_mark() -> Div {
+    div()
+        .size(px(18.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.))
+        .bg(c(ui::hover()))
+        .child(Icon::new(IconName::Plus).size(px(12.)))
 }
 
 /// A thread's # on a coloured tile.
@@ -447,9 +464,9 @@ impl Shell {
             .child(foot)
     }
 
-    /// The labelled panel for the project you're in, ordered by what's
-    /// happening: New job and the places, then what waits on you, who's
-    /// working, the # threads, a few things to try, and the crew at the foot.
+    /// The labelled panel for the project you're in, laid out like a chat
+    /// app: the places with their counts, the # threads as channels, the
+    /// bots as direct messages, and a few things to try.
     fn panel(&mut self, inbox: usize, cx: &mut Context<Self>) -> Div {
         let place = self.place;
 
@@ -501,6 +518,14 @@ impl Shell {
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
             )
             .child(
+                small_btn("side-compose", IconName::SquarePen)
+                    .tooltip(tip("New job"))
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.go(Place::Today, cx);
+                        this.composer.update(cx, |i, cx| i.focus(window, cx));
+                    })),
+            )
+            .child(
                 small_btn("side-slim", IconName::PanelLeftClose)
                     .tooltip(tip("Hide the sidebar"))
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -508,37 +533,6 @@ impl Shell {
                         cx.notify();
                     })),
             );
-
-        let new_job = div()
-            .id("side-new")
-            .h(px(34.))
-            .px(px(10.))
-            .mb(px(10.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .rounded(px(9.))
-            .bg(c(ui::raised()))
-            .border_1()
-            .border_color(c(ui::line()))
-            .shadow(vec![BoxShadow {
-                color: hsla(0., 0., 0., 0.05),
-                offset: point(px(0.), px(1.)),
-                blur_radius: px(2.),
-                spread_radius: px(0.),
-                inset: false,
-            }])
-            .text_size(px(13.5))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(c(ui::ink()))
-            .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::line_hi())))
-            .child(Icon::new(IconName::Plus).size(px(16.)))
-            .child("New job")
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.go(Place::Today, cx);
-                this.composer.update(cx, |i, cx| i.focus(window, cx));
-            }));
 
         let all_jobs = self.crew.store.listed().len();
         let nav = div()
@@ -566,11 +560,9 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
-        let waiting = self.waiting_list(cx);
-        let working = self.working_list(cx);
         let threads = self.thread_list(cx);
+        let crew = self.crew_list(cx);
         let tries = self.try_list(cx);
-        let status = self.crew_strip(cx);
 
         div()
             .w(px(PANEL))
@@ -582,7 +574,6 @@ impl Shell {
             .pb(px(12.))
             .px(px(10.))
             .child(head)
-            .child(new_job)
             .child(
                 div()
                     .id("side-scroll")
@@ -592,47 +583,58 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .child(nav)
-                    .children(waiting)
-                    .children(working)
                     .child(threads)
+                    .child(crew)
                     .children(tries),
             )
-            .child(status)
     }
 
-    /// A section's label that folds it open or shut, with an optional
-    /// action on its right.
+    /// A section's heading that folds it open or shut: a caret, its name,
+    /// and, when it has one, a + on the right that adds to it.
     fn fold_label(
         &mut self,
         key: &'static str,
         text: &'static str,
+        add: Option<(&'static str, AddFn)>,
         cx: &mut Context<Self>,
     ) -> (bool, Stateful<Div>) {
         let open = self.side_folds.get(key).copied().unwrap_or(true);
-        let head = label(text)
+        let head = div()
             .id(key)
+            .h(px(28.))
+            .mt(px(14.))
+            .px(px(6.))
+            .flex()
+            .items_center()
+            .gap(px(6.))
             .rounded(px(6.))
+            .text_size(px(12.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(ui::muted()))
             .cursor_pointer()
-            .hover(|s| s.text_color(c(ui::muted())))
-            .child(div().flex_1())
+            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
             .child(
-                div()
-                    .size(px(18.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(5.))
-                    .bg(c(ui::hover()))
-                    .text_color(c(ui::muted()))
-                    .child(
-                        Icon::new(if open {
-                            IconName::ChevronDown
-                        } else {
-                            IconName::ChevronRight
-                        })
-                        .size(px(12.)),
-                    ),
+                div().w(px(16.)).flex().justify_center().child(
+                    Icon::new(if open {
+                        IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
+                    })
+                    .size(px(13.)),
+                ),
             )
+            .child(div().flex_1().child(text))
+            .when_some(add, |d, (say, act)| {
+                d.child(
+                    small_btn(("side-add", key.len()), IconName::Plus)
+                        .size(px(20.))
+                        .tooltip(tip(say))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            act(this, window, cx);
+                        })),
+                )
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.side_folds.insert(key.to_string(), !open);
                 cx.notify();
@@ -643,7 +645,12 @@ impl Shell {
     /// The project's # threads: group chats with a few bots each. #general
     /// is always there; the one you're in is lit while you're on it.
     fn thread_list(&mut self, cx: &mut Context<Self>) -> Div {
-        let (open, head) = self.fold_label("threads", "Threads", cx);
+        let (open, head) = self.fold_label(
+            "threads",
+            "Threads",
+            Some(("New thread", |this, window, cx| this.new_thread(window, cx))),
+            cx,
+        );
         let mut list = div().flex().flex_col().gap(px(1.)).child(head);
         if !open {
             return list;
@@ -711,15 +718,95 @@ impl Shell {
         list.child(
             row("side-new-thread", false)
                 .text_color(c(ui::faint()))
-                .child(
-                    div()
-                        .w(px(18.))
-                        .flex()
-                        .justify_center()
-                        .child(Icon::new(IconName::Plus).size(px(13.))),
-                )
-                .child("New thread")
+                .child(add_mark())
+                .child("Add a thread")
                 .on_click(cx.listener(|this, _, window, cx| this.new_thread(window, cx))),
+        )
+    }
+
+    /// The crew as direct messages: each bot's face with a dot for what it's
+    /// doing (blue working, amber asking you), its name, and a word on it.
+    fn crew_list(&mut self, cx: &mut Context<Self>) -> Div {
+        let (open, head) = self.fold_label("crew", "Direct messages", None, cx);
+        let mut list = div().flex().flex_col().gap(px(1.)).child(head);
+        if !open {
+            return list;
+        }
+        let place = self.place;
+        let members: Vec<Member> = Member::everyone()
+            .into_iter()
+            .filter(|m| m.on_crew())
+            .collect();
+        for who in members {
+            let (word, _) = self.status_of(who);
+            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
+            let asks = !busy
+                && self
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .any(|j| j.bot == who && j.needs_you());
+            let mood = self.side_mood(who);
+            let face = self.bot(who, mood, 24., runo_holo::Framing::Bust);
+            let on = place == Place::Chat(who);
+            let (word, tint) = if asks {
+                ("asks you".to_string(), ui::t_amber())
+            } else if busy {
+                (word, ui::t_blue())
+            } else if who == Member::Fin {
+                ("lead".to_string(), ui::faint())
+            } else {
+                (String::new(), ui::faint())
+            };
+            list = list.child(
+                row(("side-bot", who.key() as usize), on)
+                    .when(busy || asks, |d| d.text_color(c(ui::ink())))
+                    .child(
+                        div()
+                            .relative()
+                            .flex_none()
+                            .child(face)
+                            .when(busy || asks, |d| {
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .right(px(-2.))
+                                        .bottom(px(-2.))
+                                        .size(px(9.))
+                                        .rounded_full()
+                                        .bg(c(if asks { ui::AMBER } else { ui::BLUE }))
+                                        .border_2()
+                                        .border_color(c(ground())),
+                                )
+                            }),
+                    )
+                    .child(div().flex_1().min_w_0().truncate().child(who.name()))
+                    .when(!word.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tint))
+                                .child(word),
+                        )
+                    })
+                    .on_hover(
+                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+            );
+        }
+        list.child(
+            row("side-add-bot", false)
+                .text_color(c(ui::faint()))
+                .child(add_mark())
+                .child("Add a bot")
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.go(Place::Crew, cx);
+                    this.open_maker(None, None, window, cx);
+                })),
         )
     }
 
@@ -786,235 +873,6 @@ impl Shell {
             );
         }
         any.then_some(list)
-    }
-
-    /// One job as a small card: the bot's face, what it's doing, a chip for
-    /// where it's at, and a line under it.
-    fn side_job(
-        &mut self,
-        id: u64,
-        who: Member,
-        title: String,
-        chip: (String, ui::Tone),
-        under: AnyElement,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
-        let face = self.avatar(who, 22.);
-        let (word, (text, fill, _)) = chip;
-        div()
-            .id(("side-job", id as usize))
-            .mb(px(6.))
-            .px(px(10.))
-            .py(px(8.))
-            .flex()
-            .flex_col()
-            .gap(px(6.))
-            .rounded(px(10.))
-            .bg(c(ui::raised()))
-            .border_1()
-            .border_color(c(ui::line()))
-            .cursor_pointer()
-            .hover(|s| s.border_color(c(ui::line_hi())))
-            .child(
-                div().flex().items_center().gap(px(8.)).child(face).child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_size(px(12.5))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::ink()))
-                        .child(title),
-                ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(div().flex_1().min_w_0().child(under))
-                    .child(
-                        div()
-                            .flex_none()
-                            .px(px(6.))
-                            .py(px(1.))
-                            .rounded(px(6.))
-                            .bg(c(fill))
-                            .text_color(c(text))
-                            .text_size(px(11.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(word),
-                    ),
-            )
-            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
-    }
-
-    /// What in this project waits on you, newest first, as cards you can
-    /// open; the rest are a click away in Needs you.
-    fn waiting_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
-        let path = self.crew.store.folder()?.path.clone();
-        let here: Vec<_> = self
-            .crew
-            .store
-            .listed()
-            .into_iter()
-            .filter(|j| j.folder.path == path && j.needs_you())
-            .map(|j| {
-                let chip = match j.status {
-                    Status::Review => ("Review".to_string(), ui::ask_tone()),
-                    Status::Failed => ("Failed".to_string(), ui::bad_tone()),
-                    Status::Interrupted => ("Stopped".to_string(), ui::grey_tone()),
-                    _ => ("Done".to_string(), ui::ok_tone()),
-                };
-                let thread = self.crew.store.thread_for(&path, j.thread);
-                let line = format!(
-                    "{} \u{b7} #{} \u{b7} {}",
-                    j.bot.name(),
-                    self.crew.store.thread_label(thread),
-                    super::store::ago(j.started)
-                );
-                (j.id, j.bot, j.label().to_string(), chip, line, j.started)
-            })
-            .collect();
-        if here.is_empty() {
-            return None;
-        }
-        let mut here = here;
-        here.sort_by_key(|r| std::cmp::Reverse(r.5));
-        let total = here.len();
-        let mut list = div().flex().flex_col().child(
-            label("Waiting on you")
-                .child(div().flex_1())
-                .child(count(total, Some(ui::ask_tone()))),
-        );
-        for (id, who, title, chip, line, _) in here.into_iter().take(3) {
-            let under = div()
-                .truncate()
-                .text_size(px(11.))
-                .text_color(c(ui::faint()))
-                .child(line)
-                .into_any_element();
-            list = list.child(self.side_job(id, who, title, chip, under, cx));
-        }
-        if total > 3 {
-            list = list.child(
-                row("side-more-waiting", false)
-                    .h(px(24.))
-                    .text_size(px(12.))
-                    .text_color(c(ui::faint()))
-                    .child(format!("+ {} more in Needs you", total - 3))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
-            );
-        }
-        Some(list)
-    }
-
-    /// The jobs running in this project, each with how far it has got.
-    fn working_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
-        let path = self.crew.store.folder()?.path.clone();
-        let here: Vec<_> = self
-            .crew
-            .store
-            .running()
-            .filter(|j| j.folder.path == path)
-            .map(|j| (j.id, j.bot, j.label().to_string(), j.progress()))
-            .collect();
-        if here.is_empty() {
-            return None;
-        }
-        let mut list = div().flex().flex_col().child(label("Working now"));
-        for (id, who, title, progress) in here {
-            let (word, frac) = match progress {
-                Some((d, n)) if n > 0 => (format!("{d}/{n}"), d as f32 / n as f32),
-                _ => ("Working".to_string(), 0.),
-            };
-            let frac = self.glide_bar(id, frac);
-            let under = div()
-                .h(px(4.))
-                .rounded(px(2.))
-                .bg(c(ui::line()))
-                .child(
-                    div()
-                        .h_full()
-                        .w(relative(frac.clamp(0.04, 1.)))
-                        .rounded(px(2.))
-                        .bg(c(ui::BLUE)),
-                )
-                .into_any_element();
-            list = list.child(self.side_job(id, who, title, (word, ui::run_tone()), under, cx));
-        }
-        Some(list)
-    }
-
-    /// The crew at the foot of the panel: a row of faces, the busy ones
-    /// first. A click on a face opens that bot's chat; on the rest, Crew.
-    fn crew_strip(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let mut members: Vec<Member> = Member::everyone()
-            .into_iter()
-            .filter(|m| m.on_crew())
-            .collect();
-        let busy_of = |s: &Self, m: Member| s.crew.store.busy(m).is_some() || s.thinking(m);
-        members.sort_by_key(|m| (!busy_of(self, *m), *m != Member::Fin));
-        let working = members.iter().filter(|m| busy_of(self, **m)).count();
-        let shown = 5;
-        let mut faces = div().flex().items_center();
-        for (k, who) in members.iter().copied().take(shown).enumerate() {
-            let face = self.avatar(who, 20.);
-            let busy = busy_of(self, who);
-            faces = faces.child(
-                div()
-                    .id(("strip-bot", who.key() as usize))
-                    .when(k > 0, |d| d.ml(px(-4.)))
-                    .size(px(24.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded_full()
-                    .bg(c(ground()))
-                    .border_2()
-                    .border_color(c(if busy { ui::t_blue() } else { ground() }))
-                    .child(face)
-                    .tooltip(tip(who.name()))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.go(Place::Chat(who), cx)
-                    })),
-            );
-        }
-        let more = members.len().saturating_sub(shown);
-        div()
-            .id("side-crew-strip")
-            .mt(px(8.))
-            .pt(px(10.))
-            .px(px(6.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .border_t_1()
-            .border_color(c(ui::line()))
-            .cursor_pointer()
-            .text_size(px(12.))
-            .text_color(c(ui::faint()))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::ink()))
-                            .child("Crew"),
-                    )
-                    .child(div().text_size(px(11.)).child(if working == 0 {
-                        "all free".to_string()
-                    } else {
-                        format!("{working} working")
-                    })),
-            )
-            .child(div().flex_1())
-            .child(faces)
-            .when(more > 0, |d| d.child(format!("+{more}")))
-            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx)))
     }
 
     /// Each live thread in the current project, #general first: its id, name,
