@@ -123,6 +123,12 @@ impl Shell {
                 "Settings: Engines",
                 "",
             ),
+            (
+                Place::Settings(Pane::Server),
+                IconName::Server,
+                "Settings: My server",
+                "",
+            ),
             (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
         ];
         for (p, icon, label, key) in places {

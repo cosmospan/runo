@@ -24,9 +24,11 @@ mod home;
 mod jobs;
 mod live;
 mod mascot;
+mod myserver;
 mod palette;
 mod prefs;
 mod race;
+mod remote;
 mod review;
 mod rich;
 mod runtime;
@@ -496,6 +498,11 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// Settings, My server: the `you@host` box, the connecting in progress and
+    /// what it has said so far.
+    server_input: Entity<InputState>,
+    server_setup: Option<std::sync::mpsc::Receiver<remote::Step>>,
+    server_log: Vec<String>,
     palette_sel: usize,
     palette_at: Instant,
     /// Where the person has been, newest last, for Back (⌘[).
@@ -634,6 +641,7 @@ impl Shell {
             InputState::new(window, cx)
                 .placeholder("Optional, split with ; Run the docs build; never edit code")
         });
+        let server_input = cx.new(|cx| InputState::new(window, cx).placeholder("you@your-server"));
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
@@ -798,6 +806,7 @@ impl Shell {
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("engines") => Place::Settings(Pane::Engines),
+            Ok("server") => Place::Settings(Pane::Server),
             Ok("settings") => Place::Settings(Pane::Work),
             Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
@@ -843,7 +852,11 @@ impl Shell {
             holos: Holos::new(),
             scale: 1.0,
             mode: Mode::Build,
-            crew: runtime::Runtime::new(store),
+            crew: {
+                let mut rt = runtime::Runtime::new(store);
+                rt.link = remote::load().map(remote::Link::start);
+                rt
+            },
             composer,
             chat_input,
             deny_input,
@@ -899,6 +912,9 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            server_input,
+            server_setup: None,
+            server_log: Vec::new(),
             palette_sel: 0,
             palette_at: Instant::now(),
             trail: Vec::new(),
@@ -1982,6 +1998,7 @@ impl Shell {
             Place::Live(id) => Some(id),
             _ => None,
         };
+        self.poll_server_setup();
         let finished = self.crew.poll(&st, viewing);
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);

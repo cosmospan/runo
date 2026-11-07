@@ -732,15 +732,20 @@ fn listen_address(given: Option<&str>) -> String {
 /// `squad serve [--listen <address>]`: run the crew here until stopped.
 pub fn serve(args: &[String]) -> i32 {
     let mut listen = None;
+    let mut install_it = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--listen" => listen = it.next().cloned(),
+            "--install" => install_it = true,
             other => {
-                eprintln!("squad serve doesn't know {other}. Usage: squad serve [--listen <address>|tailscale]");
+                eprintln!("squad serve doesn't know {other}. Usage: squad serve [--listen <address>|tailscale] [--install]");
                 return 2;
             }
         }
+    }
+    if install_it {
+        return install(listen.as_deref());
     }
     let base = crate::store::data_dir();
     let address = listen_address(listen.as_deref());
@@ -799,11 +804,119 @@ pub fn serve(args: &[String]) -> i32 {
     0
 }
 
-/// `squad pair [name]`: a one-time code for a device to pair with.
+/// `squad serve --install`: keep the server running after you log out and
+/// after the machine restarts, as a systemd user service. Where there's no
+/// systemd it starts in the background instead, which lasts until a restart.
+fn install(listen: Option<&str>) -> i32 {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("squad: can't tell where this program is: {e}");
+            return 1;
+        }
+    };
+    let mut cmd = format!("{} v2 serve", shell_quote(&exe.to_string_lossy()));
+    if let Some(l) = listen {
+        cmd.push_str(&format!(" --listen {}", shell_quote(l)));
+    }
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let systemd = std::process::Command::new("systemctl")
+        .args(["--user", "show-environment"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if systemd {
+        let dir = home.join(".config/systemd/user");
+        let unit = format!(
+            "[Unit]\nDescription=Squad Code crew server\nAfter=network-online.target\n\n[Service]\nExecStart={cmd}\nRestart=on-failure\nRestartSec=5\nEnvironment=PATH={}\n\n[Install]\nWantedBy=default.target\n",
+            std::env::var("PATH").unwrap_or_default()
+        );
+        if let Err(e) = std::fs::create_dir_all(&dir)
+            .and_then(|_| std::fs::write(dir.join("squad.service"), unit))
+        {
+            eprintln!("squad: couldn't write the service: {e}");
+            return 1;
+        }
+        let ctl = |args: &[&str]| {
+            std::process::Command::new("systemctl")
+                .arg("--user")
+                .args(args)
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        if !(ctl(&["daemon-reload"])
+            && ctl(&["enable", "squad.service"])
+            && ctl(&["restart", "squad.service"]))
+        {
+            eprintln!(
+                "squad: systemd wouldn't start the service. `journalctl --user -u squad` says why."
+            );
+            return 1;
+        }
+        // Without lingering, user services stop when you log out.
+        let user = std::env::var("USER").unwrap_or_default();
+        let linger = std::process::Command::new("loginctl")
+            .args(["enable-linger", &user])
+            .status()
+            .is_ok_and(|s| s.success())
+            || std::process::Command::new("sudo")
+                .args(["-n", "loginctl", "enable-linger", &user])
+                .status()
+                .is_ok_and(|s| s.success());
+        println!("Squad Code is running as a service and starts again after a restart.");
+        if !linger {
+            println!(
+                "It stops when you log out until someone runs: sudo loginctl enable-linger {user}"
+            );
+        }
+        return 0;
+    }
+    // No systemd (a container, say): start it in the background, once.
+    if TcpStream::connect(("127.0.0.1", PORT)).is_ok() {
+        println!("Squad Code is already serving here.");
+        return 0;
+    }
+    let log = crate::store::data_dir().join("serve.log");
+    let started = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "nohup {cmd} >> {} 2>&1 &",
+            shell_quote(&log.to_string_lossy())
+        ))
+        .status()
+        .is_ok_and(|s| s.success());
+    if started {
+        println!("Squad Code is running in the background. There's no systemd here, so start it again after a restart: squad serve --install");
+        0
+    } else {
+        eprintln!("squad: couldn't start the server in the background.");
+        1
+    }
+}
+
+fn shell_quote(s: &str) -> String {
+    if !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/._-:@".contains(c))
+    {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
+/// `squad pair [--bare] [name]`: a one-time code for a device to pair with.
+/// `--bare` prints only the code, for the desktop app pairing over SSH.
 pub fn pair_command(args: &[String]) -> i32 {
     let base = crate::store::data_dir();
-    let name = args.join(" ");
+    let bare = args.first().map(String::as_str) == Some("--bare");
+    let name = args[usize::from(bare)..].join(" ");
     let code = new_code(&base, &name);
+    if bare {
+        println!("{code}");
+        return 0;
+    }
     println!("Pair a device with this code. It works once, for 10 minutes:");
     println!();
     println!("    {code}");
