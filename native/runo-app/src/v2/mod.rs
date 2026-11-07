@@ -407,6 +407,8 @@ pub struct Shell {
     live_len: usize,
     chat_scroll: ScrollHandle,
     chat_len: usize,
+    thread_scroll: ScrollHandle,
+    thread_key: u64,
     /// The Fin in the "make your own" playground on Crew: its colour and outfit.
     maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
@@ -853,6 +855,8 @@ impl Shell {
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
             chat_len: 0,
+            thread_scroll: ScrollHandle::new(),
+            thread_key: 0,
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,

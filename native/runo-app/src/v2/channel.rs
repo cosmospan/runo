@@ -210,36 +210,65 @@ impl Shell {
         // The last 30 things, newest at the bottom beside the composer.
         let shown: Vec<Entry> = entries.into_iter().skip(total.saturating_sub(30)).collect();
 
-        // Newest first, in a list laid out bottom up: it opens scrolled to the end.
+        // Jump to the newest when the thread, or what's in it, changes. A plain
+        // top-down list with its own scroll: a bottom-up one let the wheel run
+        // past the last message into empty space.
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            folder.path.hash(&mut h);
+            name.hash(&mut h);
+            total.hash(&mut h);
+            for e in &shown {
+                e.at().hash(&mut h);
+                if let Entry::Job(j) = e {
+                    j.feed.len().hash(&mut h);
+                    (j.status as u8).hash(&mut h);
+                }
+            }
+            h.finish()
+        };
+        if key != self.thread_key {
+            self.thread_key = key;
+            self.thread_scroll.scroll_to_bottom();
+        }
+        let empty = shown.is_empty();
         let mut feed = div()
             .w_full()
             .max_w(px(COLUMN))
             .flex()
-            .flex_col_reverse()
-            .gap(px(6.));
-        let empty = shown.is_empty();
-        for e in shown.into_iter().rev() {
+            .flex_col()
+            .gap(px(6.))
+            .child(self.thread_intro(thread, &name, empty, total));
+        for e in shown {
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
                 Entry::Talk(t) => self.talk_entry(&t, cx).into_any_element(),
             });
         }
-        feed = feed.child(self.thread_intro(thread, &name, empty, total));
 
+        // Short threads sit at the bottom, next to the composer.
         let chat = div()
             .id("thread-feed")
             .flex_1()
             .min_h_0()
             .w_full()
             .overflow_y_scroll()
-            .flex()
-            .flex_col_reverse()
-            .items_center()
-            .px(px(28.))
-            .pt(px(20.))
-            .pb(px(12.))
-            .child(feed);
+            .track_scroll(&self.thread_scroll)
+            .child(
+                div()
+                    .min_h_full()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .justify_end()
+                    .items_center()
+                    .px(px(28.))
+                    .pt(px(20.))
+                    .pb(px(12.))
+                    .child(feed),
+            );
 
         let offer = self.fin_offer(cx);
         let page = div()
