@@ -447,9 +447,9 @@ impl Shell {
             .child(foot)
     }
 
-    /// The labelled panel for the project you're in: New job, the places with
-    /// their counts, its # threads, the crew, a few things to try, and how
-    /// the crew is doing.
+    /// The labelled panel for the project you're in, ordered by what's
+    /// happening: New job and the places, then what waits on you, who's
+    /// working, the # threads, a few things to try, and the crew at the foot.
     fn panel(&mut self, inbox: usize, cx: &mut Context<Self>) -> Div {
         let place = self.place;
 
@@ -566,10 +566,11 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
             );
 
+        let waiting = self.waiting_list(cx);
+        let working = self.working_list(cx);
         let threads = self.thread_list(cx);
-        let crew = self.crew_list(cx);
         let tries = self.try_list(cx);
-        let status = self.crew_card(inbox, cx);
+        let status = self.crew_strip(cx);
 
         div()
             .w(px(PANEL))
@@ -591,8 +592,9 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .child(nav)
+                    .children(waiting)
+                    .children(working)
                     .child(threads)
-                    .child(crew)
                     .children(tries),
             )
             .child(status)
@@ -721,64 +723,6 @@ impl Shell {
         )
     }
 
-    /// The crew, as people you can message: face, name, and what each is up to.
-    fn crew_list(&mut self, cx: &mut Context<Self>) -> Div {
-        let (open, head) = self.fold_label("crew", "Crew", cx);
-        let mut list = div().flex().flex_col().gap(px(1.)).child(head);
-        if !open {
-            return list;
-        }
-        let place = self.place;
-        let members: Vec<Member> = Member::everyone()
-            .into_iter()
-            .filter(|m| m.on_crew())
-            .collect();
-        for who in members {
-            let (word, _) = self.status_of(who);
-            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
-            let asks = !busy
-                && self
-                    .crew
-                    .store
-                    .jobs
-                    .iter()
-                    .any(|j| j.bot == who && j.needs_you());
-            let mood = self.side_mood(who);
-            let face = self.bot(who, mood, 24., runo_holo::Framing::Bust);
-            let on = place == Place::Chat(who);
-            let (word, tint) = if asks {
-                ("asks you".to_string(), ui::t_amber())
-            } else if busy {
-                (word, ui::t_blue())
-            } else if who == Member::Fin {
-                ("lead".to_string(), ui::faint())
-            } else {
-                (String::new(), ui::faint())
-            };
-            list = list.child(
-                row(("side-bot", who.key() as usize), on)
-                    .when(busy || asks, |d| d.text_color(c(ui::ink())))
-                    .child(face)
-                    .child(div().flex_1().min_w_0().truncate().child(who.name()))
-                    .when(!word.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .flex_none()
-                                .text_size(px(11.5))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(c(tint))
-                                .child(word),
-                        )
-                    })
-                    .on_hover(
-                        cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
-            );
-        }
-        list
-    }
-
     /// A few things worth trying that the person hasn't done yet: another
     /// engine, a bot of their own, a server that keeps jobs going.
     fn try_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
@@ -844,118 +788,233 @@ impl Shell {
         any.then_some(list)
     }
 
-    /// The card at the foot of the panel: how many bots are at work, how far
-    /// their jobs have got, and how much is waiting on you.
-    fn crew_card(&mut self, inbox: usize, cx: &mut Context<Self>) -> Stateful<Div> {
-        let store = &self.crew.store;
-        let mut bots: Vec<Member> = store.running().map(|j| j.bot).collect();
-        bots.sort_by_key(|m| m.key());
-        bots.dedup();
-        let (done, steps) = store
-            .running()
-            .filter_map(|j| j.progress())
-            .fold((0, 0), |(d, n), (jd, jn)| (d + jd, n + jn));
-        let working = bots.len();
-        let title = match working {
-            0 => "Crew is free".to_string(),
-            1 => "1 bot working".to_string(),
-            n => format!("{n} bots working"),
-        };
-        let foot = if working > 0 && steps > 0 {
-            format!("{done} of {steps} steps done")
-        } else if inbox > 0 {
-            format!("{inbox} waiting on you")
-        } else if working > 0 {
-            "Under way".to_string()
-        } else {
-            "Ready for the next job".to_string()
-        };
-        let frac = if steps > 0 {
-            done as f32 / steps as f32
-        } else {
-            0.
-        };
-        let frac = self.glide_bar(u64::MAX, frac);
+    /// One job as a small card: the bot's face, what it's doing, a chip for
+    /// where it's at, and a line under it.
+    fn side_job(
+        &mut self,
+        id: u64,
+        who: Member,
+        title: String,
+        chip: (String, ui::Tone),
+        under: AnyElement,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let face = self.avatar(who, 22.);
+        let (word, (text, fill, _)) = chip;
         div()
-            .id("side-crew-card")
-            .mt(px(10.))
-            .p(px(11.))
+            .id(("side-job", id as usize))
+            .mb(px(6.))
+            .px(px(10.))
+            .py(px(8.))
             .flex()
             .flex_col()
-            .gap(px(8.))
-            .rounded(px(11.))
+            .gap(px(6.))
+            .rounded(px(10.))
             .bg(c(ui::raised()))
             .border_1()
             .border_color(c(ui::line()))
             .cursor_pointer()
             .hover(|s| s.border_color(c(ui::line_hi())))
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .size(px(22.))
-                            .flex()
-                            .flex_none()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(6.))
-                            .bg(c(if working > 0 {
-                                ui::run_tone().1
-                            } else {
-                                ui::grey_tone().1
-                            }))
-                            .text_color(c(if working > 0 {
-                                ui::run_tone().0
-                            } else {
-                                ui::grey_tone().0
-                            }))
-                            .child(Icon::new(IconName::Zap).size(px(13.))),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::ink()))
-                            .child(title),
-                    ),
-            )
-            .child(
-                div().h(px(4.)).rounded(px(2.)).bg(c(ui::line())).child(
+                div().flex().items_center().gap(px(8.)).child(face).child(
                     div()
-                        .h_full()
-                        .w(relative(frac.clamp(0., 1.)))
-                        .rounded(px(2.))
-                        .bg(c(ui::BLUE)),
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(title),
                 ),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .text_size(px(11.5))
-                    .text_color(c(ui::faint()))
-                    .child(div().flex_1().min_w_0().truncate().child(foot))
+                    .gap(px(8.))
+                    .child(div().flex_1().min_w_0().child(under))
                     .child(
                         div()
                             .flex_none()
+                            .px(px(6.))
+                            .py(px(1.))
+                            .rounded(px(6.))
+                            .bg(c(fill))
+                            .text_color(c(text))
+                            .text_size(px(11.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::t_violet()))
-                            .child("Jobs"),
+                            .child(word),
                     ),
             )
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.jobs_open = true;
-                if !matches!(this.place, Place::Today | Place::Live(_)) {
-                    this.go(Place::Today, cx);
-                }
-                cx.notify();
-            }))
+            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
+    }
+
+    /// What in this project waits on you, newest first, as cards you can
+    /// open; the rest are a click away in Needs you.
+    fn waiting_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let path = self.crew.store.folder()?.path.clone();
+        let here: Vec<_> = self
+            .crew
+            .store
+            .listed()
+            .into_iter()
+            .filter(|j| j.folder.path == path && j.needs_you())
+            .map(|j| {
+                let chip = match j.status {
+                    Status::Review => ("Review".to_string(), ui::ask_tone()),
+                    Status::Failed => ("Failed".to_string(), ui::bad_tone()),
+                    Status::Interrupted => ("Stopped".to_string(), ui::grey_tone()),
+                    _ => ("Done".to_string(), ui::ok_tone()),
+                };
+                let thread = self.crew.store.thread_for(&path, j.thread);
+                let line = format!(
+                    "{} \u{b7} #{} \u{b7} {}",
+                    j.bot.name(),
+                    self.crew.store.thread_label(thread),
+                    super::store::ago(j.started)
+                );
+                (j.id, j.bot, j.label().to_string(), chip, line, j.started)
+            })
+            .collect();
+        if here.is_empty() {
+            return None;
+        }
+        let mut here = here;
+        here.sort_by_key(|r| std::cmp::Reverse(r.5));
+        let total = here.len();
+        let mut list = div().flex().flex_col().child(
+            label("Waiting on you")
+                .child(div().flex_1())
+                .child(count(total, Some(ui::ask_tone()))),
+        );
+        for (id, who, title, chip, line, _) in here.into_iter().take(3) {
+            let under = div()
+                .truncate()
+                .text_size(px(11.))
+                .text_color(c(ui::faint()))
+                .child(line)
+                .into_any_element();
+            list = list.child(self.side_job(id, who, title, chip, under, cx));
+        }
+        if total > 3 {
+            list = list.child(
+                row("side-more-waiting", false)
+                    .h(px(24.))
+                    .text_size(px(12.))
+                    .text_color(c(ui::faint()))
+                    .child(format!("+ {} more in Needs you", total - 3))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
+            );
+        }
+        Some(list)
+    }
+
+    /// The jobs running in this project, each with how far it has got.
+    fn working_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let path = self.crew.store.folder()?.path.clone();
+        let here: Vec<_> = self
+            .crew
+            .store
+            .running()
+            .filter(|j| j.folder.path == path)
+            .map(|j| (j.id, j.bot, j.label().to_string(), j.progress()))
+            .collect();
+        if here.is_empty() {
+            return None;
+        }
+        let mut list = div().flex().flex_col().child(label("Working now"));
+        for (id, who, title, progress) in here {
+            let (word, frac) = match progress {
+                Some((d, n)) if n > 0 => (format!("{d}/{n}"), d as f32 / n as f32),
+                _ => ("Working".to_string(), 0.),
+            };
+            let frac = self.glide_bar(id, frac);
+            let under = div()
+                .h(px(4.))
+                .rounded(px(2.))
+                .bg(c(ui::line()))
+                .child(
+                    div()
+                        .h_full()
+                        .w(relative(frac.clamp(0.04, 1.)))
+                        .rounded(px(2.))
+                        .bg(c(ui::BLUE)),
+                )
+                .into_any_element();
+            list = list.child(self.side_job(id, who, title, (word, ui::run_tone()), under, cx));
+        }
+        Some(list)
+    }
+
+    /// The crew at the foot of the panel: a row of faces, the busy ones
+    /// first. A click on a face opens that bot's chat; on the rest, Crew.
+    fn crew_strip(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let mut members: Vec<Member> = Member::everyone()
+            .into_iter()
+            .filter(|m| m.on_crew())
+            .collect();
+        let busy_of = |s: &Self, m: Member| s.crew.store.busy(m).is_some() || s.thinking(m);
+        members.sort_by_key(|m| (!busy_of(self, *m), *m != Member::Fin));
+        let working = members.iter().filter(|m| busy_of(self, **m)).count();
+        let shown = 5;
+        let mut faces = div().flex().items_center();
+        for (k, who) in members.iter().copied().take(shown).enumerate() {
+            let face = self.avatar(who, 20.);
+            let busy = busy_of(self, who);
+            faces = faces.child(
+                div()
+                    .id(("strip-bot", who.key() as usize))
+                    .when(k > 0, |d| d.ml(px(-4.)))
+                    .size(px(24.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_full()
+                    .bg(c(ground()))
+                    .border_2()
+                    .border_color(c(if busy { ui::t_blue() } else { ground() }))
+                    .child(face)
+                    .tooltip(tip(who.name()))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.go(Place::Chat(who), cx)
+                    })),
+            );
+        }
+        let more = members.len().saturating_sub(shown);
+        div()
+            .id("side-crew-strip")
+            .mt(px(8.))
+            .pt(px(10.))
+            .px(px(6.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .border_t_1()
+            .border_color(c(ui::line()))
+            .cursor_pointer()
+            .text_size(px(12.))
+            .text_color(c(ui::faint()))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Crew"),
+                    )
+                    .child(div().text_size(px(11.)).child(if working == 0 {
+                        "all free".to_string()
+                    } else {
+                        format!("{working} working")
+                    })),
+            )
+            .child(div().flex_1())
+            .child(faces)
+            .when(more > 0, |d| d.child(format!("+{more}")))
+            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx)))
     }
 
     /// Each live thread in the current project, #general first: its id, name,
