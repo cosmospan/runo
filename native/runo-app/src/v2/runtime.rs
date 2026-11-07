@@ -292,6 +292,36 @@ impl Runtime {
         // goals stay here for now: their tries and steps are tracked here.
         let whole = pick.is_none() && job.goal == 0;
         let none = brain::Sites::default();
+        // The person's own choice of where jobs run, when they made one.
+        let chose = self
+            .link
+            .as_ref()
+            .map(|l| l.cfg.run.clone())
+            .unwrap_or_default();
+        if chose == "here" {
+            job.feed.push(store::Item::Note(
+                "Running here on this computer, as you chose.".into(),
+            ));
+            let placed = brain::place(
+                st,
+                &brain::JobAsk {
+                    bot,
+                    mode,
+                    text: text.to_string(),
+                    folder: job.folder.clone(),
+                    race: usize::from(pick.is_some()) * 2,
+                    goal: job.goal != 0,
+                },
+                &none,
+            );
+            self.launch(st, &mut job, text);
+            return (job, placed);
+        }
+        if chose == "server" {
+            if let Some(placed) = self.send_to_server(&mut job, text, whole) {
+                return (job, placed);
+            }
+        }
         let placed = brain::place(
             st,
             &brain::JobAsk {
@@ -327,6 +357,70 @@ impl Runtime {
         }
         self.launch(st, &mut job, text);
         (job, placed)
+    }
+
+    /// Sends a job to the server because the person chose to run jobs there,
+    /// copying its project over first when the server doesn't have it. `None`
+    /// when it can't go there, with a note on the job saying why it runs here.
+    fn send_to_server(
+        &mut self,
+        job: &mut store::Job,
+        text: &str,
+        whole: bool,
+    ) -> Option<brain::place::Placement> {
+        let link = self.link.as_ref()?;
+        let name = link.cfg.label();
+        let server = link.server();
+        let why = if !whole {
+            Some(
+                "Races and goal steps run here for now, even with jobs set to run on your server."
+                    .to_string(),
+            )
+        } else if !server.reachable {
+            Some(format!("{name} isn't answering, so this runs here."))
+        } else if server.engines.is_empty() {
+            Some(format!(
+                "Nothing is signed in on {name} yet, so this runs here. Sign it in under Settings > My server."
+            ))
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            job.feed.push(store::Item::Note(why));
+            return None;
+        }
+        let body = serde_json::json!({
+            "text": text,
+            "mode": format!("{:?}", job.mode),
+            "bot": job.bot.name(),
+        });
+        let remote = ship::remote_url(&job.folder.path).unwrap_or_default();
+        match link.path_for(&job.folder, &remote) {
+            Some(path) => {
+                let mut body = body;
+                body["folder"] = serde_json::json!(path);
+                job.feed.push(store::Item::Note(format!(
+                    "Running on your server, {name}, as you chose."
+                )));
+                link.send(job.id, body);
+            }
+            None => {
+                job.feed.push(store::Item::Note(format!(
+                    "Copying {} to your server, {name}, first. Then it runs there.",
+                    job.folder.name
+                )));
+                link.copy_then_send(job.id, &job.folder, body);
+            }
+        }
+        job.remote_on = name.clone();
+        job.status = Status::Running;
+        job.engine = format!("on {name}");
+        Some(brain::place::Placement {
+            site: brain::place::Site::Server(name),
+            engine: (0, String::new()),
+            why: String::new(),
+            fallback: Some(brain::place::Site::Here),
+        })
     }
 
     /// Starts a job here: its own branch when it may change files, then its
