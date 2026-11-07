@@ -51,6 +51,47 @@ impl Entry {
     }
 }
 
+/// "Today", "Yesterday", or the day's name or date, for the line between days.
+fn day_label(at: u64) -> String {
+    use chrono::{Local, TimeZone};
+    let Some(then) = Local.timestamp_opt(at as i64, 0).single() else {
+        return String::new();
+    };
+    let days = (Local::now().date_naive() - then.date_naive()).num_days();
+    match days {
+        0 => "Today".into(),
+        1 => "Yesterday".into(),
+        2..=6 => then.format("%A").to_string(),
+        _ => then.format("%a %-d %b").to_string(),
+    }
+}
+
+/// A line across the feed with a word in the middle: a day, or "New" in red
+/// where what you haven't seen starts.
+fn divider(text: &str, tint: Option<u32>) -> Div {
+    let line = tint.unwrap_or(ui::line());
+    div()
+        .w_full()
+        .my(px(6.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .child(div().flex_1().h(px(1.)).bg(c(line)))
+        .child(
+            div()
+                .px(px(10.))
+                .py(px(2.))
+                .rounded_full()
+                .border_1()
+                .border_color(c(line))
+                .text_size(px(11.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tint.unwrap_or(ui::muted())))
+                .child(text.to_string()),
+        )
+        .child(div().flex_1().h(px(1.)).bg(c(line)))
+}
+
 fn when(at: u64) -> String {
     match store::ago(at).as_str() {
         "just now" => "now".to_string(),
@@ -171,6 +212,14 @@ impl Shell {
         };
         let thread = self.crew.store.thread_here();
         let name = self.crew.store.thread_label(thread);
+        // When you last looked, held while you stay in the thread, so the
+        // New line stays put instead of moving with every redraw.
+        let seen_key = format!("{}#{thread}", folder.path);
+        if self.new_mark.0 != seen_key {
+            let before = self.crew.store.seen_at.get(&seen_key).copied().unwrap_or(0);
+            self.new_mark = (seen_key, before);
+        }
+        let since = self.new_mark.1;
         self.crew.store.mark_seen(&folder.path, thread);
         let mut entries: Vec<Entry> = self
             .crew
@@ -240,7 +289,19 @@ impl Shell {
             .flex_col()
             .gap(px(6.))
             .child(self.thread_intro(thread, &name, empty, total));
+        let mut day = String::new();
+        let mut marked = since == 0;
         for e in shown {
+            let at = e.at();
+            let today = day_label(at);
+            if today != day {
+                feed = feed.child(divider(&today, None));
+                day = today;
+            }
+            if !marked && at > since {
+                marked = true;
+                feed = feed.child(divider("New", Some(ui::RED)));
+            }
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
@@ -271,11 +332,13 @@ impl Shell {
             );
 
         let offer = self.fin_offer(cx);
+        let head = self.channel_head(thread, &name, cx);
         let page = div()
             .id("thread")
             .size_full()
             .flex()
             .flex_col()
+            .child(head)
             .child(chat)
             .child(
                 div()
@@ -301,6 +364,109 @@ impl Shell {
             .into_any_element();
         let pick = None;
         self.split(pick, page, cx)
+    }
+
+    /// The bar over a thread, like a channel's: its name, who's in it as a
+    /// row of faces, and Add a bot, which starts an @ in the box.
+    fn channel_head(&mut self, thread: u64, name: &str, cx: &mut Context<Self>) -> Div {
+        let here = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let bots = self.crew.store.members(&here, thread);
+        let busy = bots
+            .iter()
+            .filter(|b| self.crew.store.busy(**b).is_some())
+            .count();
+        let mut faces = div().flex().items_center();
+        for (i, b) in bots.iter().take(5).enumerate() {
+            let f = self.avatar(*b, 20.);
+            faces = faces.child(
+                div()
+                    .when(i > 0, |d| d.ml(px(-5.)))
+                    .size(px(24.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_full()
+                    .bg(c(ui::bg()))
+                    .child(f),
+            );
+        }
+        let names: Vec<&str> = bots.iter().map(|b| b.name()).collect();
+        let about = if busy > 0 {
+            format!("{} \u{b7} {busy} working", bots.len())
+        } else {
+            bots.len().to_string()
+        };
+        div()
+            .h(px(46.))
+            .flex_none()
+            .w_full()
+            .px(px(20.))
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .border_b_1()
+            .border_color(c(ui::line2()))
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::ink()))
+                    .child(format!("#{name}")),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
+                    .child(super::and_list(&names)),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .id("channel-members")
+                    .h(px(30.))
+                    .pl(px(4.))
+                    .pr(px(10.))
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(8.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .text_size(px(12.))
+                    .text_color(c(ui::muted()))
+                    .cursor_pointer()
+                    .hover(|s| s.border_color(c(ui::line_hi())).text_color(c(ui::ink())))
+                    .child(faces)
+                    .child(about)
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+            )
+            .child(
+                ui::ghost_i("channel-add-bot", IconName::Plus, "Add a bot")
+                    .h(px(30.))
+                    .flex_none()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.composer.update(cx, |i, cx| {
+                            let text = i.value().to_string();
+                            let text = if text.is_empty() || text.ends_with(' ') {
+                                format!("{text}@")
+                            } else {
+                                format!("{text} @")
+                            };
+                            ui::put_text(i, text, window, cx);
+                            i.focus(window, cx);
+                        });
+                        cx.notify();
+                    })),
+            )
     }
 
     /// A question asked in the thread, and the bot's answer under it.

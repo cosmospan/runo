@@ -430,6 +430,9 @@ pub struct Shell {
     folder_menu: bool,
     /// The sidebar shows only its icon rail.
     side_slim: bool,
+    /// The thread on screen and when you last looked at it before opening it,
+    /// for the feed's New line.
+    new_mark: (String, u64),
     /// The sidebar's sections folded open or shut, by name; unset, open.
     side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
@@ -1050,6 +1053,7 @@ impl Shell {
             history_filter: 0,
             folder_menu: false,
             side_slim: false,
+            new_mark: (String::new(), 0),
             side_folds: HashMap::new(),
             toast: None,
             entered: Instant::now(),
