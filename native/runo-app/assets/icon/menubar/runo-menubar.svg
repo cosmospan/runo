@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
-<!-- Peek in outline: a pill with two ring eyes. -->
-<rect x="1.6" y="5.6" width="14.8" height="8.4" rx="4.2" fill="none" stroke="#000" stroke-width="1.6"/><circle cx="6.3" cy="9.8" r="1.55" fill="none" stroke="#000" stroke-width="1.4"/><circle cx="11.7" cy="9.8" r="1.55" fill="none" stroke="#000" stroke-width="1.4"/>
+<!-- Peek in outline: ears up, a pill with two ring eyes. -->
+<path d="M4.6 6.6C5 3.6 7.2 3.6 7.6 6.6M10.4 6.6C10.8 3.6 13 3.6 13.4 6.6" fill="none" stroke="#000" stroke-width="1.5" stroke-linecap="round"/><rect x="1.6" y="6.6" width="14.8" height="8.4" rx="4.2" fill="none" stroke="#000" stroke-width="1.6"/><circle cx="6.3" cy="10.8" r="1.55" fill="none" stroke="#000" stroke-width="1.4"/><circle cx="11.7" cy="10.8" r="1.55" fill="none" stroke="#000" stroke-width="1.4"/>
 </svg>
