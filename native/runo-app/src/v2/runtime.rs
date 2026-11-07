@@ -1373,6 +1373,41 @@ impl Runtime {
 
     /// Peek says something in the thread you're in without an engine: a reply
     /// to small talk, or a question back with quick answers.
+    /// Peek's message for `text` while its engine reads it: no answer yet.
+    /// Returns its id, for `fill_talk`.
+    pub fn peek_reading(&mut self, text: String) -> u64 {
+        let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
+            return 0;
+        };
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let thread = self.store.thread_here();
+        self.store.talks.push(Talk {
+            id,
+            folder: folder.path,
+            thread,
+            bot: Member::Fin,
+            question: text,
+            answer: None,
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        id
+    }
+
+    /// Puts Peek's reply into its message `id`; false when it's gone.
+    pub fn fill_talk(&mut self, id: u64, reply: String, choices: Vec<String>) -> bool {
+        let Some(t) = self.store.talks.iter_mut().find(|t| t.id == id) else {
+            return false;
+        };
+        t.answer = Some(Said {
+            text: reply,
+            ..Default::default()
+        });
+        t.choices = choices;
+        self.store.save();
+        true
+    }
+
     pub fn peek_says(&mut self, text: String, reply: String, choices: Vec<String>) {
         let Some(folder) = self.store.folders.get(self.store.current).cloned() else {
             return;

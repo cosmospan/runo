@@ -9,9 +9,10 @@ use gpui_kit::*;
 // Named, not globbed: names like `fill` would clash with the kit's prelude.
 #[allow(unused_imports)]
 pub use super::theme::{
-    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, float, grey_tone,
-    hover, ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel, press, raised, run_tone,
-    set_theme, t_amber, t_blue, t_green, t_red, t_violet, theme, well, Tone, RUNO, THEMES,
+    add, ask_tone, bad_tone, bg, body, del, faint, fill, fill_hover, fill_press, float,
+    float_shadow, grey_tone, hover, ink, line, line2, line_hi, muted, off, ok_tone, on_fill, panel,
+    press, raised, run_tone, set_theme, t_amber, t_blue, t_green, t_red, t_violet, theme, well,
+    Tone, RUNO, THEMES,
 };
 
 // Status and member colours: the same in every theme, as dots, bars and fills.
@@ -94,7 +95,30 @@ pub fn pattern(area: crate::pattern::Area) -> Option<AnyElement> {
     if p == Pattern::Off || !shows(area) {
         return None;
     }
-    Some(pattern_of(p, 1.))
+    let t = theme();
+    let colors = (t.ink, VIOLET, !t.light);
+    Some(
+        canvas(
+            |_, _, _| (),
+            move |b, _, window, _| {
+                use crate::pattern::Area;
+                // The page's grid starts with a whole cell at its top-left corner;
+                // the sidebar's lines up with it, so they meet as one grid.
+                let anchor = if area == Area::Content {
+                    crate::pattern::set_page_origin(b.origin);
+                    b.origin
+                } else {
+                    crate::pattern::page_origin().unwrap_or(point(b.right(), b.top()))
+                };
+                crate::pattern::paint_in(p, b, None, Some(anchor), 1., colors, window)
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element(),
+    )
 }
 
 /// `p` painted over the element it's laid in, `gain` times its usual strength.
@@ -103,13 +127,28 @@ pub fn pattern_of(p: crate::pattern::Pattern, gain: f32) -> AnyElement {
     let colors = (t.ink, VIOLET, !t.light);
     canvas(
         |_, _, _| (),
-        move |b, _, window, _| crate::pattern::paint_in(p, b, None, gain, colors, window),
+        move |b, _, window, _| {
+            crate::pattern::paint_in(p, b, None, Some(b.origin), gain, colors, window)
+        },
     )
     .absolute()
     .top_0()
     .left_0()
     .size_full()
     .into_any_element()
+}
+
+/// Marks `el` as a bar or header over the page: the background pattern stays out
+/// from under it, and when it runs across the page's top, starts again on a whole
+/// cell right below it.
+pub fn chrome(el: Div) -> Div {
+    el.relative().child(
+        canvas(|b, _, _| crate::pattern::add_chrome(b), |_, _, _, _| ())
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+    )
 }
 
 /// A card's corner radius.

@@ -8,7 +8,7 @@
 use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{Fin, Material, Outfit};
+use runo_holo::fin::{Fin, Line, Outfit};
 use runo_holo::{Framing, Mood, Tint};
 
 use crate::agent;
@@ -741,12 +741,13 @@ impl Shell {
         let face = if e.who.is_some() && !who.is_made() {
             self.bot(who, Mood::Idle, 60., Framing::Bust)
         } else {
-            let material = Material::from_id(&st.fin_material);
+            let line = Line::from_code(&st.fin_line);
             self.pose_img(
                 runo_holo::Figure::Fin(
                     Fin {
                         tint: e.tint,
-                        material,
+                        line,
+                        ears: false,
                         outfit: Outfit::PLAIN,
                     }
                     .pose(Mood::Signature),

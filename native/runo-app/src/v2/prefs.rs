@@ -3,7 +3,7 @@
 //!
 //! - **General**: how the app behaves while the crew works, and the limits.
 //! - **Appearance**: the theme, solid or frosted glass, with a preview of each.
-//! - **Mascot**: the crew's look. Fin's material, and each bot's colour and
+//! - **Mascot**: the crew's look. Peek's outline, and each bot's colour and
 //!   props, with a live preview.
 //! - **Engines**: which coding agent and model each bot runs on.
 //!
@@ -14,7 +14,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{FinPose, Material, Outfit, State, Tool, ROLES};
+use runo_holo::fin::{Eyes, FinPose, Ink, Line, Outfit, State, Tool, Weight, ROLES};
 use runo_holo::{Figure, Framing, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -52,7 +52,7 @@ impl Pane {
         match self {
             Pane::Work => "When the crew checks with you",
             Pane::General => "Alerts, motion and limits",
-            Pane::Appearance => "Themes and frosted glass",
+            Pane::Appearance => "Themes, glass and background",
             Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
         }
@@ -1367,6 +1367,7 @@ impl Shell {
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
         let window = self.transparency_card(cx);
+        let picture = self.image_card(cx);
         let backdrop = self.pattern_card(cx);
         Self::page(
             "settings-appearance",
@@ -1377,6 +1378,7 @@ impl Shell {
                 .flex_col()
                 .gap(px(space::L))
                 .child(window)
+                .child(picture)
                 .child(backdrop)
                 .child(
                     div()
@@ -1411,11 +1413,15 @@ impl Shell {
     /// through. It works with every theme; a frosted one just starts see-through.
     fn transparency_card(&mut self, cx: &mut Context<Self>) -> Div {
         let on = theme::see_through();
-        let clear = (theme::amount() * 100.).round() as u8;
+        let clear = (theme::clear_amount() * 100.).round() as u8;
         let frosted = ui::theme().frosted;
+        // A background image covers the desktop while it's set.
+        let covered = theme::image_on();
         let switch_row = row(
             "See-through window",
-            if frosted {
+            if covered {
+                "Your background image covers the desktop while it's set, so this waits until it's gone."
+            } else if frosted {
                 "This theme is frosted glass already. Turn this on to clear it further."
             } else {
                 "Let your desktop show through the window, blurred, in any theme."
@@ -1474,15 +1480,18 @@ impl Shell {
                         }),
                 ),
         )
-        .when(!on, |d| d.opacity(0.6));
-        // Popovers follow the window: only meaningful while the desktop shows through.
-        let clear_window = theme::window_clear();
+        .when(!on || covered, |d| d.opacity(0.6));
+        let switch_row = switch_row.when(covered, |d| d.opacity(0.6));
+        // Popovers follow the window: only meaningful while something shows through.
+        let clear_window = theme::layered();
         let pops = theme::glass_popovers();
         let pop_clear = (theme::pop_amount() * 100.).round() as u8;
         let pop_live = clear_window && pops;
         let pop_row = row(
             "See-through popovers",
-            if clear_window {
+            if covered {
+                "Menus, popovers, the command palette and dialogs go see-through over your background image."
+            } else if clear_window {
                 "Menus, popovers, the command palette and dialogs go see-through with the window."
             } else {
                 "Menus, popovers, the command palette and dialogs follow the window once it's see-through."
@@ -1540,6 +1549,309 @@ impl Shell {
             "WINDOW",
             vec![switch_row, slider_row, pop_row, pop_slider_row],
         )
+    }
+
+    /// A background image under the whole window: one of a few that ship with the
+    /// app, or a picture of your own, with how it fits, how blurred and dimmed it is,
+    /// and how far it shows through. The window itself is the preview: every choice
+    /// shows the moment it's made, and the sliders as you drag them.
+    fn image_card(&mut self, cx: &mut Context<Self>) -> Div {
+        use super::wallpaper::{self as wp, Fit, Source};
+        wp::make_previews(cx);
+        let st = cx.global::<AppSettings>().clone();
+        let current = Source::parse(&st.v2_bg_image);
+        let on = current.is_some() && theme::image_on();
+        let tile_box = |selected: bool| {
+            div()
+                .h(px(64.))
+                .w_full()
+                .relative()
+                .overflow_hidden()
+                .rounded(px(8.))
+                .bg(c(ui::bg()))
+                .border_1()
+                .border_color(c(if selected { ui::VIOLET } else { ui::line() }))
+                .when(selected, |d| d.border_2())
+        };
+        let caption = |text: SharedString, selected: bool| {
+            div()
+                .text_size(px(12.))
+                .truncate()
+                .font_weight(if selected {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(c(if selected { ui::ink() } else { ui::muted() }))
+                .child(text)
+        };
+        let shot = |path: Option<std::path::PathBuf>| {
+            path.map(|p| {
+                img(p)
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .object_fit(ObjectFit::Cover)
+            })
+        };
+        let mut tiles = div().flex().flex_wrap().gap(px(10.));
+        // None: the theme's own ground.
+        tiles = tiles.child(
+            div()
+                .id("bg-image-none")
+                .w(px(104.))
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .cursor_pointer()
+                .child(
+                    tile_box(current.is_none())
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(c(ui::faint()))
+                                .child("Plain"),
+                        ),
+                )
+                .child(caption("None".into(), current.is_none()))
+                .on_click(cx.listener(|_, _, _, cx| {
+                    save(cx, |st| st.v2_bg_image.clear());
+                    wp::refresh(cx);
+                })),
+        );
+        let sources: Vec<(Source, SharedString)> = wp::BUILTINS
+            .iter()
+            .map(|b| (Source::Builtin(b), SharedString::from(b.label)))
+            .chain(
+                wp::mine()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, p)| (Source::Own(p), format!("Yours {}", i + 1).into())),
+            )
+            .collect();
+        for (i, (source, label)) in sources.into_iter().enumerate() {
+            let selected = current.as_ref() == Some(&source);
+            let own = match &source {
+                Source::Own(p) => Some(p.clone()),
+                Source::Builtin(_) => None,
+            };
+            let group = SharedString::from(format!("bg-tile-{i}"));
+            let setting = source.setting();
+            let mut frame = tile_box(selected).children(shot(wp::preview(&source)));
+            if let Some(path) = own {
+                frame = frame.child(
+                    div()
+                        .id(("bg-image-remove", i))
+                        .absolute()
+                        .top(px(4.))
+                        .right(px(4.))
+                        .size(px(18.))
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(ca(0x000000, 0.55))
+                        .text_color(c(0xFFFFFF))
+                        .invisible()
+                        .group_hover(group.clone(), |d| d.visible())
+                        .cursor_pointer()
+                        .child(Icon::new(IconName::X).size(px(11.)))
+                        .tooltip(|window, cx| Tooltip::new("Remove this picture").build(window, cx))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.stop_propagation();
+                            let gone = path.to_string_lossy().into_owned();
+                            if cx.global::<AppSettings>().v2_bg_image == gone {
+                                save(cx, |st| st.v2_bg_image.clear());
+                                wp::refresh(cx);
+                            }
+                            wp::remove(&path);
+                            cx.notify();
+                        })),
+                );
+            }
+            tiles = tiles.child(
+                div()
+                    .id(("bg-image", i))
+                    .group(group)
+                    .w(px(104.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .child(frame)
+                    .child(caption(label, selected))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        let setting = setting.clone();
+                        save(cx, |st| st.v2_bg_image = setting);
+                        wp::refresh(cx);
+                    })),
+            );
+        }
+        // Your own: a picture from disk.
+        tiles = tiles.child(
+            div()
+                .id("bg-image-add")
+                .w(px(104.))
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .cursor_pointer()
+                .child(
+                    tile_box(false)
+                        .bg(c(ui::panel()))
+                        .hover(|d| d.bg(c(ui::hover())))
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(4.))
+                        .text_color(c(ui::muted()))
+                        .child(Icon::new(IconName::Plus).size(px(16.)))
+                        .child(div().text_size(px(11.5)).child("Choose…")),
+                )
+                .child(caption("Your own".into(), false))
+                .on_click(cx.listener(|this, _, _, cx| this.pick_background(cx))),
+        );
+
+        let fit = Fit::parse(&st.v2_bg_fit);
+        let mut fits = div().flex_none().flex().gap(px(6.));
+        for (i, f) in Fit::ALL.into_iter().enumerate() {
+            fits = fits.child(
+                ui::pill(("bg-fit", i), f.label(), f == fit).on_click(cx.listener(
+                    move |_, _, _, cx| {
+                        save(cx, |st| st.v2_bg_fit = f.id().to_string());
+                        let dim = cx.global::<AppSettings>().v2_bg_dim;
+                        wp::set_look(f, dim);
+                        cx.notify();
+                    },
+                )),
+            );
+        }
+        let fit_row = row(
+            "Fit",
+            match fit {
+                Fit::Fill => "Covers the window, cropping the edges that don't fit.",
+                Fit::Contain => "Shows all of the picture, with the theme's colour beside it.",
+                Fit::Stretch => "Stretches the picture to the window's shape.",
+                Fit::Centre => "Shows the picture at its own size, in the middle.",
+            },
+            fits,
+        );
+        let label = |text: &'static str| {
+            div()
+                .flex_none()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child(text)
+        };
+        let slider_row = |title: &'static str,
+                          line: &'static str,
+                          slider: &Entity<gpui_kit::component::slider::SliderState>,
+                          ends: (&'static str, &'static str),
+                          cx: &mut Context<Self>| {
+            let value = slider.read(cx).value().end().round() as u8;
+            row(
+                title,
+                line,
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(label(ends.0))
+                    .child(
+                        div().w(px(180.)).child(
+                            gpui_kit::component::slider::Slider::new(slider)
+                                .disabled(!on)
+                                .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
+                                .text_color(c(0xFFFFFF)),
+                        ),
+                    )
+                    .child(label(ends.1))
+                    .child(
+                        div()
+                            .w(px(38.))
+                            .flex_none()
+                            .text_right()
+                            .font_family(ui::MONO)
+                            .text_size(px(12.))
+                            .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                            .child(if on {
+                                format!("{value}%")
+                            } else {
+                                "Off".to_string()
+                            }),
+                    ),
+            )
+        };
+        let blur_row = slider_row(
+            "Blur",
+            "Softens a busy picture. The blurred copy is made when you let go.",
+            &self.bg_blur_slider.clone(),
+            ("Sharp", "Soft"),
+            cx,
+        );
+        let dim_row = slider_row(
+            "Dim",
+            "Fades the picture into the theme's own colour.",
+            &self.bg_dim_slider.clone(),
+            ("Vivid", "Faint"),
+            cx,
+        );
+        let show_row = slider_row(
+            "Show through",
+            "How far the page and the sidebar clear over the picture. Text brightens as they do, so it stays readable.",
+            &self.bg_show_slider.clone(),
+            ("Less", "More"),
+            cx,
+        );
+        let rows = [fit_row, blur_row, dim_row, show_row]
+            .into_iter()
+            .map(|r| r.when(!on, |d| d.opacity(0.6)));
+        group(
+            "BACKGROUND IMAGE",
+            std::iter::once(div().px(px(18.)).pb(px(14.)).child(tiles))
+                .chain(rows)
+                .collect(),
+        )
+    }
+
+    /// Asks for a picture and makes it the background, copying it into the data
+    /// folder first so it stays if the original moves.
+    fn pick_background(&mut self, cx: &mut Context<Self>) {
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Choose a background image".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = rx.await else {
+                return;
+            };
+            let Some(path) = paths.first().cloned() else {
+                return;
+            };
+            let added = cx
+                .background_executor()
+                .spawn(async move { super::wallpaper::add(&path) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                match added {
+                    Ok(to) => {
+                        save(cx, |st| st.v2_bg_image = to.to_string_lossy().into_owned());
+                        super::wallpaper::refresh(cx);
+                    }
+                    Err(why) => this.say(format!("That picture couldn't be used. {why}")),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// A background pattern behind the page, and the sidebar if you like: a fine
@@ -1652,7 +1964,10 @@ impl Shell {
             shine: false,
             gaze: (0, 0),
             offset: 0,
+            from: None,
         });
+        // Glide from one state's face to the next, as the bots do in the app.
+        let figure = self.eased(figure, (who, u32::MAX, false));
         let preview = self.pose_img(figure, 240., Framing::Full);
         let accent = who.accent();
         let mut states = div().flex().flex_wrap().gap(px(6.));
@@ -1811,18 +2126,53 @@ impl Shell {
         let is_default = (tint, outfit) == mascot::default_look(who);
         let (dt, dout) = mascot::default_look(who);
 
-        let material = Material::from_id(&st.fin_material);
-        let mut mats = Vec::new();
-        for m in Material::ALL {
-            mats.push(
-                segment(("fin-mat", m as usize), m.name(), material == m).on_click(cx.listener(
-                    move |_, _, _, cx| {
-                        save(cx, |st| st.fin_material = m.id().into());
-                        cx.notify();
-                    },
-                )),
-            );
-        }
+        // Peek is only ever an outline; these tune its lines for every bot.
+        let line = Line::from_code(&st.fin_line);
+        let set_line = |id: &'static str, i: usize, label: &'static str, on: bool, to: Line| {
+            segment((id, i), label, on).on_click(cx.listener(move |_, _, _, cx| {
+                save(cx, |st| st.fin_line = to.code());
+                cx.notify();
+            }))
+        };
+        let weights: Vec<_> = Weight::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &weight)| {
+                set_line(
+                    "fin-weight",
+                    i,
+                    weight.name(),
+                    line.weight == weight,
+                    Line { weight, ..line },
+                )
+            })
+            .collect();
+        let inks: Vec<_> = Ink::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &ink)| {
+                set_line(
+                    "fin-ink",
+                    i,
+                    ink.name(),
+                    line.ink == ink,
+                    Line { ink, ..line },
+                )
+            })
+            .collect();
+        let eyes: Vec<_> = Eyes::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &eyes)| {
+                set_line(
+                    "fin-eyes",
+                    i,
+                    eyes.name(),
+                    line.eyes == eyes,
+                    Line { eyes, ..line },
+                )
+            })
+            .collect();
         let looks = ui::card()
             .overflow_hidden()
             .flex()
@@ -1832,9 +2182,19 @@ impl Shell {
                 "How Peek looks, for every bot, everywhere in the app.",
             )))
             .child(row(
-                "Finish",
-                "Glowing eyes in a dark pill, the same with a turning rainbow rim, a solid colour pill, or just the outlines.",
-                segmented(mats),
+                "Line weight",
+                "How heavy every line is, from fine to bold.",
+                segmented(weights),
+            ))
+            .child(row(
+                "Line colour",
+                "Each bot's own colour, a softer pastel, two-tone with lighter eyes, or a slowly turning rainbow.",
+                segmented(inks),
+            ))
+            .child(row(
+                "Eyes",
+                "Open eyes as rings, like the pill, or as solid dots.",
+                segmented(eyes),
             ));
 
         let wardrobe = ui::card()
@@ -1910,7 +2270,7 @@ impl Shell {
         Self::page(
             "settings-mascot",
             "Mascot",
-            "Meet Peek: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
+            "Meet Peek: two eyes in a pill, drawn as a clean outline. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
             div()
                 .flex()
                 .flex_col()

@@ -44,6 +44,7 @@ mod today;
 mod trouble;
 mod ui;
 mod usage;
+mod wallpaper;
 mod welcome;
 mod work;
 
@@ -129,13 +130,13 @@ const FPS: f64 = 60.0;
 /// How often a bot of this size needs a new frame. A calm bot drifts slowly,
 /// so it needs far fewer than one that is busy, celebrating or asking.
 fn fps_for(size: f32, pose: &Figure) -> u32 {
-    let lively = pose.lively();
-    match (lively, size >= 90.0, size >= 40.0) {
-        (true, _, true) => 60,
-        (true, false, false) => 30,
-        (false, true, _) => 60,
-        (false, false, true) => 30,
-        _ => 20,
+    // Anything moving quickly gets every frame, even in a small avatar, so
+    // hops, wiggles and mood changes never step. Calm bots drift so slowly
+    // that fewer frames look the same.
+    if pose.lively() || size >= 90.0 {
+        60
+    } else {
+        30
     }
 }
 
@@ -384,6 +385,14 @@ fn to_image(premul: &[u8], device: u16) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(vec![image::Frame::new(buf)]))
 }
 
+/// A message Peek's engine is reading (see `Shell::reading`).
+type Reading = (
+    u64,
+    String,
+    Vec<(String, String)>,
+    std::sync::mpsc::Receiver<crate::agent::Event>,
+);
+
 /// Hears back once a pull request is merged or closed on GitHub.
 /// The v2 window's root.
 pub struct Shell {
@@ -409,6 +418,8 @@ pub struct Shell {
     live_len: usize,
     chat_scroll: ScrollHandle,
     chat_len: usize,
+    thread_scroll: ScrollHandle,
+    thread_key: u64,
     /// The Fin in the "make your own" playground on Crew: its colour and outfit.
     maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
@@ -432,6 +443,9 @@ pub struct Shell {
     touched: Instant,
     /// The bot under the pointer: it gets the light sweep.
     hovered: Option<Member>,
+    /// Each bot's face per place it's drawn (bot, size, framing): the state
+    /// it shows, the one before, and when it changed, so moods ease.
+    moods: HashMap<(Member, u32, bool), (runo_holo::fin::State, runo_holo::fin::State, f64)>,
     /// Where the pointer is in the window, for the sidebar bots' eyes.
     mouse: Point<Pixels>,
     /// Where each sidebar bot was painted last frame, so its eyes can find the pointer.
@@ -488,11 +502,17 @@ pub struct Shell {
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
+    /// A bot with a chat or know-how of its own, waiting for you to confirm
+    /// taking it off the crew.
+    removing: Option<Member>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
+    /// A message Peek's engine is reading: Peek's message showing it, the
+    /// words, the conversation before them, and the decision to come.
+    reading: Option<Reading>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -552,6 +572,10 @@ pub struct Shell {
     clear_slider: Entity<SliderState>,
     /// How see-through popovers, menus and dialogs go.
     pop_slider: Entity<SliderState>,
+    /// The background image's blur, dim, and how far it shows through.
+    bg_blur_slider: Entity<SliderState>,
+    bg_dim_slider: Entity<SliderState>,
+    bg_show_slider: Entity<SliderState>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -716,7 +740,63 @@ impl Shell {
                 .step(1.)
                 .default_value(pop_clear as f32)
         });
+        let bg_slider = |value: u8, cx: &mut Context<Self>| {
+            cx.new(|_| {
+                SliderState::new()
+                    .min(0.)
+                    .max(100.)
+                    .step(1.)
+                    .default_value(value.min(100) as f32)
+            })
+        };
+        let (blur, dim, show) = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            (st.v2_bg_blur, st.v2_bg_dim, st.v2_bg_show)
+        };
+        let bg_blur_slider = bg_slider(blur, cx);
+        let bg_dim_slider = bg_slider(dim, cx);
+        let bg_show_slider = bg_slider(show, cx);
+        wallpaper::refresh(cx);
+        let slid = |event: &SliderEvent| match event {
+            SliderEvent::Change(v) => (v.end().round().clamp(0., 100.) as u8, false),
+            SliderEvent::Release(v) => (v.end().round().clamp(0., 100.) as u8, true),
+        };
         let subs = vec![
+            // The background image's dim and show-through preview as you drag; its
+            // blur needs a new copy made, so that waits until you let go.
+            cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
+                let (dim, keep) = slid(event);
+                wallpaper::set_look(wallpaper::fit(), dim);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_dim = dim;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&bg_show_slider, window, move |_, _, event, _, cx| {
+                let (show, keep) = slid(event);
+                theme::set_image(theme::image_on(), show);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_show = show;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&bg_blur_slider, window, move |_, _, event, _, cx| {
+                let (blur, keep) = slid(event);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_blur = blur;
+                        st.save();
+                    });
+                    wallpaper::refresh(cx);
+                }
+                cx.notify();
+            }),
             // Popovers too: dragging previews, letting go keeps it.
             cx.subscribe_in(&pop_slider, window, |_, _, event, _, cx| {
                 let (value, keep) = match event {
@@ -911,6 +991,8 @@ impl Shell {
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
             chat_len: 0,
+            thread_scroll: ScrollHandle::new(),
+            thread_key: 0,
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
@@ -922,6 +1004,7 @@ impl Shell {
             dozing,
             touched: Instant::now(),
             hovered: None,
+            moods: HashMap::new(),
             target: None,
             setup_step: 0,
             maker_open: false,
@@ -939,8 +1022,10 @@ impl Shell {
             list_all: false,
             jobs_open: false,
             deleting: None,
+            removing: None,
             raw_open: Default::default(),
             confirming: None,
+            reading: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -990,6 +1075,9 @@ impl Shell {
             view_w: 1280.,
             clear_slider,
             pop_slider,
+            bg_blur_slider,
+            bg_dim_slider,
+            bg_show_slider,
             _subs: subs,
             _pump: pump,
         };
@@ -1270,16 +1358,129 @@ impl Shell {
             recent.extend(self.crew.store.recent(&folder, *other));
         }
         recent.extend(self.crew.store.recent(&folder, here));
-        match brain::front::read(&st, &text, &recent) {
+        // Peek reads it with the person's own engine when one is signed in;
+        // the rules decide while none is, or when its reply makes no sense.
+        if brain::think::on(&st) && !self.sampling {
+            let project = self
+                .crew
+                .store
+                .folder()
+                .map(|f| f.name.clone())
+                .unwrap_or_default();
+            let crew = Member::all();
+            let running: Vec<String> = self
+                .crew
+                .store
+                .jobs
+                .iter()
+                .filter(|j| j.status == Status::Running && j.folder.path == folder)
+                .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
+                .collect();
+            let seen = brain::think::Seen {
+                project: &project,
+                recent: &recent,
+                crew: &crew,
+                running: &running,
+            };
+            if let Ok(rx) = brain::think::ask(&st, &folder, &text, &seen) {
+                // Peek's message shows as reading until the decision lands.
+                let talk = self.crew.peek_reading(text.clone());
+                self.reading = Some((talk, text, recent, rx));
+                cx.notify();
+                return;
+            }
+        }
+        // No engine: what it decided before about words like these, else
+        // the rules.
+        let (front, line) = Self::without_engine(&st, &text, &recent);
+        self.act_on(front, text, line, None, cx);
+    }
+
+    /// Peek's decision when its engine can't help: the closest thing the
+    /// engine decided before, else the rules. Instant commands ("stop app")
+    /// and the rules' sure answers come first.
+    fn without_engine(
+        st: &crate::settings::AppSettings,
+        text: &str,
+        recent: &[(String, String)],
+    ) -> (brain::front::Front, Option<String>) {
+        if !brain::front::wants_stop(text) {
+            let learned = brain::learn::load();
+            if let Some((f, say)) = brain::learn::recall(text, &learned, &Member::all()) {
+                return (f, Some(say).filter(|s| !s.is_empty()));
+            }
+        }
+        (brain::front::read(st, text, recent), None)
+    }
+
+    /// What Peek's engine decided, once it has: acted on, or the rules'
+    /// decision when it failed or made no sense.
+    fn poll_reading(&mut self, cx: &mut Context<Self>) {
+        let Some((_, _, _, rx)) = &self.reading else {
+            return;
+        };
+        let reply = match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        let Some((talk, text, recent, _)) = self.reading.take() else {
+            return;
+        };
+        let crew = Member::all();
+        let decided = reply
+            .as_deref()
+            .map(crate::agent::strip_ansi)
+            .and_then(|r| brain::think::parse(&r, &text, &crew));
+        let st = Self::app_settings(cx);
+        let (front, line) = match decided {
+            Some((f, say)) => {
+                // Kept, small, so Peek decides alike when the engine can't.
+                brain::learn::keep(&st, &text, &f, &say);
+                (f, Some(say).filter(|s| !s.is_empty()))
+            }
+            None => Self::without_engine(&st, &text, &recent),
+        };
+        self.act_on(front, text, line, Some(talk), cx);
+    }
+
+    /// Does what Peek decided about `text`. `line` is Peek's own words for a
+    /// hand-off; `pending` its message that showed it reading, which the
+    /// reply fills or which goes once a bot takes over.
+    fn act_on(
+        &mut self,
+        front: brain::front::Front,
+        text: String,
+        line: Option<String>,
+        pending: Option<u64>,
+        cx: &mut Context<Self>,
+    ) {
+        let st = Self::app_settings(cx);
+        let says = |this: &mut Self, reply: String, choices: Vec<String>| -> u64 {
+            match pending {
+                Some(id) if this.crew.fill_talk(id, reply.clone(), choices.clone()) => id,
+                _ => {
+                    this.crew.peek_says(text.clone(), reply, choices);
+                    this.crew.store.talks.last().map(|t| t.id).unwrap_or(0)
+                }
+            }
+        };
+        let drop_pending = |this: &mut Self| {
+            if let Some(id) = pending {
+                this.crew.store.talks.retain(|t| t.id != id);
+            }
+        };
+        match front {
             brain::front::Front::Chat { reply } => {
-                self.crew.peek_says(text, reply, Vec::new());
+                says(self, reply, Vec::new());
                 cx.notify();
             }
             brain::front::Front::AskBack { question, choices } => {
-                self.crew.peek_says(text, question, choices);
+                says(self, question, choices);
                 cx.notify();
             }
             brain::front::Front::Answer { question, .. } => {
+                drop_pending(self);
                 if !self.sample_guard(cx) {
                     let who = self.ask_who();
                     self.crew.ask_in_thread(&st, who, question);
@@ -1287,16 +1488,18 @@ impl Shell {
                 cx.notify();
             }
             brain::front::Front::Confirm { why, route } => {
-                self.crew
-                    .peek_says(text.clone(), why, vec!["Go ahead".into(), "Cancel".into()]);
-                let id = self.crew.store.talks.last().map(|t| t.id).unwrap_or(0);
+                let id = says(self, why, vec!["Go ahead".into(), "Cancel".into()]);
                 self.confirming = Some((id, text, route));
                 cx.notify();
             }
-            brain::front::Front::Stop => self.stop_here(text, cx),
+            brain::front::Front::Stop => {
+                drop_pending(self);
+                self.stop_here(text, cx)
+            }
             brain::front::Front::Hand(route) => {
+                drop_pending(self);
                 // Peek says who it brought in, on the job's card.
-                let line = route.handoff();
+                let line = line.unwrap_or_else(|| route.handoff());
                 let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
                 self.hand_to(route, text, cx);
                 for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
@@ -2015,6 +2218,7 @@ impl Shell {
             _ => None,
         };
         let finished = self.crew.poll(&st, viewing);
+        self.poll_reading(cx);
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);
         }
@@ -2151,7 +2355,28 @@ impl Shell {
     /// A bot drawn at `size` logical pixels, in `mood`.
     fn bot(&mut self, who: Member, mood: Mood, size: f32, framing: Framing) -> Img {
         let pose = mascot::figure(who, mood).shine(self.hovered == Some(who));
+        let pose = self.eased(pose, (who, size.to_bits(), framing == Framing::Bust));
         self.pose_img(pose, size, framing)
+    }
+
+    /// `pose`, easing in from the last face shown at `slot` when its mood
+    /// just changed.
+    fn eased(&mut self, pose: Figure, slot: (Member, u32, bool)) -> Figure {
+        let Some(state) = pose.fin_state() else {
+            return pose;
+        };
+        let now = self.now();
+        let (shown, was, since) = self.moods.entry(slot).or_insert((state, state, -1.0));
+        if *shown != state {
+            *was = *shown;
+            *shown = state;
+            *since = now;
+        }
+        if self.motion && *since >= 0.0 && now - *since < runo_holo::fin::MOOD_EASE {
+            pose.easing_from(*was, *since)
+        } else {
+            pose
+        }
     }
 
     fn hover_bot(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {
@@ -2216,6 +2441,7 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::framestats::begin();
+        crate::pattern::clear_chrome();
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
@@ -2385,8 +2611,9 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if this.deleting.is_some() && key == "escape" {
+                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
                     this.deleting = None;
+                    this.removing = None;
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -2454,10 +2681,10 @@ impl Render for Shell {
             // When the desktop shows through, the sidebar and the page each paint
             // their own ground instead: stacked, two see-through layers would add
             // up to nearly solid.
-            .when(!theme::window_clear(), |d| {
+            .when(!theme::layered(), |d| {
                 d.bg(c(if setup { ui::bg() } else { ui::ground() }))
             })
-            .when(theme::window_clear() && setup, |d| d.bg(c(ui::bg())))
+            .when(theme::layered() && setup, |d| d.bg(c(ui::bg())))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
@@ -2470,9 +2697,6 @@ impl Render for Shell {
                     .when(setup, |d| d.h_full())
                     .when(!setup, |d| d.bg(c(ui::bg())))
                     .relative()
-                    .when(!setup, |d| {
-                        d.children(ui::pattern(crate::pattern::Area::Content))
-                    })
                     .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
@@ -2481,6 +2705,13 @@ impl Render for Shell {
                             .w_full()
                             .relative()
                             .overflow_hidden()
+                            // The pattern lies under the page only, not the top bar:
+                            // the bar is a plain strip of the page's own ground, so
+                            // the pattern never runs into the bar's edge and no grid
+                            // line lands a few pixels off it.
+                            .when(!setup, |d| {
+                                d.children(ui::pattern(crate::pattern::Area::Content))
+                            })
                             .child(div().size_full().child(body)),
                     )
                     .when(!setup, |d| d.children(project_drawer))
@@ -2493,6 +2724,7 @@ impl Render for Shell {
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx))
+            .children(self.remove_dialog(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
@@ -2502,7 +2734,8 @@ impl Render for Shell {
         crate::framestats::rendered();
         // A stand-in desktop under a see-through window, for screenshots taken where
         // the window can't really be see-through (Xvfb): RUNO_BACKDROP names an image.
-        match backdrop() {
+        // A background image, under Settings > Appearance, lies under everything.
+        match wallpaper::layer().or_else(backdrop) {
             Some(desk) => div()
                 .size_full()
                 .relative()
@@ -2529,7 +2762,7 @@ fn backdrop() -> Option<AnyElement> {
 
 /// What the window looks like: the theme, whether transparency is on, and how
 /// see-through it is.
-type Look = (&'static str, bool, u8, bool, u8);
+type Look = (&'static str, bool, u8, bool, u8, bool);
 
 fn look() -> Look {
     (
@@ -2538,6 +2771,7 @@ fn look() -> Look {
         (theme::amount() * 100.).round() as u8,
         theme::glass_popovers(),
         (theme::pop_amount() * 100.).round() as u8,
+        theme::image_on(),
     )
 }
 
@@ -2546,8 +2780,10 @@ fn look() -> Look {
 /// Frosted themes, and any theme with window transparency on, let the desktop show
 /// through, blurred (vibrancy on macOS, acrylic on Windows, the compositor's blur on
 /// Linux; without one the window stays solid).
+///
+/// A background image covers the desktop, so the window stays opaque under it.
 fn background() -> WindowBackgroundAppearance {
-    if theme::window_clear() {
+    if theme::window_clear() && !theme::image_on() {
         WindowBackgroundAppearance::Blurred
     } else {
         WindowBackgroundAppearance::Opaque
@@ -2590,6 +2826,7 @@ pub fn open_window(cx: &mut App) {
     ui::set_theme(&st.v2_theme);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
+    theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,

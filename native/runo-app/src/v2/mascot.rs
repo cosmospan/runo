@@ -4,13 +4,13 @@
 //! Builder in a hard hat with a wrench, the Guard as security with a shield and
 //! baton, and so on. Bots made on Crew wear what they were given in the maker.
 //! Settings → Mascot changes any of it. Choices live in `AppSettings`
-//! (`fin_material`, `fin_looks`); a parsed copy is kept here so drawing a bot
+//! (`fin_line`, `fin_looks`); a parsed copy is kept here so drawing a bot
 //! never has to reach for the settings.
 
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use runo_holo::fin::{Fin, Material, Outfit, Tool, ROLES};
+use runo_holo::fin::{Fin, Line, Outfit, Tool, ROLES};
 use runo_holo::{Figure, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -82,7 +82,7 @@ fn parse(code: &str) -> Option<(Tint, Outfit)> {
 
 #[derive(Default)]
 struct Looks {
-    material: Option<Material>,
+    line: Option<Line>,
     saved: HashMap<String, String>,
     parsed: HashMap<String, (Tint, Outfit)>,
 }
@@ -92,15 +92,15 @@ static LOOKS: std::sync::LazyLock<RwLock<Looks>> =
 
 /// Takes the person's choices from the settings; cheap when nothing changed.
 pub fn sync(st: &AppSettings) {
-    let material = Material::from_id(&st.fin_material);
+    let line = Line::from_code(&st.fin_line);
     {
         let l = LOOKS.read().unwrap_or_else(|e| e.into_inner());
-        if l.material == Some(material) && l.saved == st.fin_looks {
+        if l.line == Some(line) && l.saved == st.fin_looks {
             return;
         }
     }
     let mut l = LOOKS.write().unwrap_or_else(|e| e.into_inner());
-    l.material = Some(material);
+    l.line = Some(line);
     l.saved = st.fin_looks.clone();
     l.parsed = st
         .fin_looks
@@ -122,7 +122,8 @@ pub fn fin_in(st: &AppSettings, who: Member) -> Fin {
     let (tint, outfit) = look_in(st, who);
     Fin {
         tint,
-        material: Material::from_id(&st.fin_material),
+        line: Line::from_code(&st.fin_line),
+        ears: has_ears(who),
         outfit,
     }
 }
@@ -135,6 +136,11 @@ pub fn set_look(st: &mut AppSettings, who: Member, tint: Tint, outfit: Outfit) {
     } else {
         st.fin_looks.insert(key, code(tint, outfit));
     }
+}
+
+/// Only Peek, the crew's lead, wears ears.
+pub fn has_ears(who: Member) -> bool {
+    who == Member::Fin
 }
 
 /// The role kit a look matches, by outfit alone (any colour).
@@ -158,7 +164,8 @@ pub fn figure_with(who: Member, mood: Mood, gaze: (i8, i8), offset: u8) -> Figur
     Figure::Fin(
         Fin {
             tint,
-            material: l.material.unwrap_or(Material::Glass),
+            line: l.line.unwrap_or_default(),
+            ears: has_ears(who),
             outfit,
         }
         .pose(mood)

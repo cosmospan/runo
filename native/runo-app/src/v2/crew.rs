@@ -358,13 +358,9 @@ impl Shell {
                         d.child(
                             ui::icon_btn(("crew-remove", key), IconName::Trash)
                                 .size(px(28.))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    if who.is_made() {
-                                        this.remove_made(who, cx)
-                                    } else {
-                                        this.set_on_crew(who, false, cx)
-                                    }
-                                })),
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.ask_remove(who, cx)),
+                                ),
                         )
                     })
                     .child(div().flex_1())
@@ -521,4 +517,275 @@ fn can_row(label: &'static str, items: Vec<String>, empty: String, tail: Option<
         .gap(px(10.))
         .child(div().w(px(46.)).flex_none().child(ui::caption(label)))
         .child(chips)
+}
+
+/// What taking a bot off the crew throws away for good: its chat with you, in
+/// every project, and for a bot you made, what it knows and how it works.
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct Loss {
+    pub messages: usize,
+    pub skills: usize,
+    pub rules: usize,
+    /// A bot you made goes for good; one of the built-in crew can come back.
+    pub made: bool,
+    /// Its past jobs, which stay in History.
+    pub jobs: usize,
+}
+
+impl Loss {
+    pub(super) fn of(store: &super::store::Store, who: Member) -> Self {
+        let made = match who {
+            Member::Made(id) => store.made.iter().find(|m| m.id == id),
+            _ => None,
+        };
+        Loss {
+            messages: store.chats.get(&who).map_or(0, Vec::len),
+            skills: made.map_or(0, |m| m.skills.len()),
+            rules: made.map_or(0, |m| m.rules.len()),
+            made: made.is_some(),
+            jobs: store.jobs.iter().filter(|j| j.bot == who).count(),
+        }
+    }
+
+    /// Whether removing it loses anything, so it's worth asking first.
+    pub(super) fn any(&self) -> bool {
+        self.messages > 0 || self.skills > 0 || self.rules > 0
+    }
+
+    /// The lines the confirm dialog lists, one per thing that goes.
+    pub(super) fn lines(&self, name: &str) -> Vec<String> {
+        let plural = |n: usize, one: &str| {
+            if n == 1 {
+                format!("1 {one}")
+            } else {
+                format!("{n} {one}s")
+            }
+        };
+        let mut out = Vec::new();
+        if self.messages > 0 {
+            out.push(format!(
+                "Your chat with {name}: {}, in every project",
+                plural(self.messages, "message")
+            ));
+        }
+        if self.skills > 0 {
+            out.push(format!(
+                "What it knows best: {}",
+                plural(self.skills, "skill")
+            ));
+        }
+        if self.rules > 0 {
+            out.push(format!(
+                "How it works: {} it follows on every job",
+                plural(self.rules, "rule")
+            ));
+        }
+        if self.made {
+            out.push("Its name, look and role".to_string());
+        }
+        out
+    }
+}
+
+impl Shell {
+    /// Remove, from the crew page: straight away when the bot has nothing of
+    /// its own to lose, after a confirm when it has a chat or know-how.
+    pub(super) fn ask_remove(&mut self, who: Member, cx: &mut Context<Self>) {
+        if self.crew.store.busy(who).is_some() {
+            self.say(format!("{} is working. Stop the job first.", who.name()));
+            cx.notify();
+            return;
+        }
+        if Loss::of(&self.crew.store, who).any() {
+            self.removing = Some(who);
+            cx.notify();
+        } else {
+            self.remove_now(who, cx);
+        }
+    }
+
+    fn remove_now(&mut self, who: Member, cx: &mut Context<Self>) {
+        self.removing = None;
+        if who.is_made() {
+            self.remove_made(who, cx)
+        } else {
+            self.set_on_crew(who, false, cx)
+        }
+    }
+
+    /// The confirm for removing a bot that has a chat or know-how: what goes
+    /// for good, and what stays.
+    pub(super) fn remove_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let who = self.removing?;
+        let loss = Loss::of(&self.crew.store, who);
+        let name = who.name();
+        let scrim = div()
+            .id("remove-scrim")
+            .absolute()
+            .inset_0()
+            .bg(ui::ca(0x000000, 0.28))
+            .occlude()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.removing = None;
+                cx.notify();
+            }));
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .px(px(12.))
+            .py(px(10.))
+            .rounded(px(10.))
+            .bg(c(ui::bad_tone().1))
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::bad_tone().0))
+                    .child("Removed for good"),
+            );
+        for line in loss.lines(name) {
+            list = list.child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(8.))
+                    .text_size(px(13.))
+                    .text_color(c(ui::ink()))
+                    .child(
+                        div()
+                            .mt(px(7.))
+                            .size(px(5.))
+                            .flex_none()
+                            .rounded_full()
+                            .bg(c(ui::bad_tone().0)),
+                    )
+                    .child(div().flex_1().child(line)),
+            );
+        }
+        let keeps = match (loss.jobs, loss.made) {
+            (0, true) => "It can't be brought back.".to_string(),
+            (0, false) => format!("You can add {name} back later, but this can't be recovered."),
+            (n, made) => format!(
+                "{} past job{} stay{} in History.{}",
+                n,
+                if n == 1 { "" } else { "s" },
+                if n == 1 { "s" } else { "" },
+                if made {
+                    " The bot itself can't be brought back."
+                } else {
+                    " You can add it back later, but not what's above."
+                }
+            ),
+        };
+        let card = div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .justify_center()
+            .items_center()
+            .child(
+                div()
+                    .id("remove-card")
+                    .w(px(420.))
+                    .p(px(22.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.))
+                    .rounded(px(16.))
+                    .bg(c(ui::float()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .shadow(vec![BoxShadow {
+                        color: ui::ca(0x000000, 0.35),
+                        offset: point(px(0.), px(20.)),
+                        blur_radius: px(60.),
+                        spread_radius: px(-6.),
+                        inset: false,
+                    }])
+                    .occlude()
+                    .on_click(|_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(self.avatar(who, 32.))
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(format!("Remove {name} from your crew?")),
+                            ),
+                    )
+                    .child(list)
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::muted()))
+                            .child(keeps),
+                    )
+                    .child(
+                        div()
+                            .mt(px(4.))
+                            .flex()
+                            .justify_end()
+                            .gap(px(8.))
+                            .child(ui::ghost("remove-cancel", "Cancel").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    this.removing = None;
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
+                                ui::solid("remove-yes", format!("Remove {name}"))
+                                    .bg(c(ui::bad_tone().0))
+                                    .on_click(
+                                        cx.listener(move |this, _, _, cx| this.remove_now(who, cx)),
+                                    ),
+                            ),
+                    ),
+            );
+        Some(
+            div()
+                .absolute()
+                .inset_0()
+                .child(deferred(scrim).with_priority(5))
+                .child(deferred(card).with_priority(6))
+                .into_any_element(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod remove_tests {
+    use super::Loss;
+
+    #[test]
+    fn nothing_stored_needs_no_confirm() {
+        assert!(!Loss::default().any());
+        let jobs_only = Loss {
+            jobs: 4,
+            ..Loss::default()
+        };
+        assert!(!jobs_only.any());
+    }
+
+    #[test]
+    fn a_chat_or_know_how_is_listed() {
+        let l = Loss {
+            messages: 12,
+            skills: 1,
+            rules: 3,
+            made: true,
+            jobs: 2,
+        };
+        assert!(l.any());
+        let lines = l.lines("Stripey");
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("12 messages"));
+        assert!(lines[1].contains("1 skill"));
+        assert!(lines[2].contains("3 rules"));
+    }
 }

@@ -4,6 +4,9 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Added
+- Background images. Settings > Appearance has a new Background image card: pick one of six that ship with the app (Aurora, Dusk, Lagoon, Ember, Meadow and Blush) or choose a picture of your own (PNG, JPEG or WebP), and the window changes at once. Fit (Fill, Fit, Stretch or Centre), Blur, Dim and Show through adjust it, and the sliders preview as you drag. Your own pictures are copied into `~/.squadcode/backgrounds`, so moving the original doesn't lose it, and can be removed from their tile. Text stays readable: the page and sidebar never clear past the same floor that window transparency uses. While an image is set it covers the desktop, so See-through window waits until it's gone; see-through popovers work over it.
+
 ## [2.0.0-alpha.5] - 2026-11-05
 
 ### Added

@@ -387,7 +387,7 @@ static CLEAR: AtomicU8 = AtomicU8::new(0);
 
 /// How much a quieter line of text moves towards the brightest one at full
 /// transparency, so it still reads over a busy desktop.
-const LIFT: f32 = 0.4;
+const LIFT: f32 = 0.85;
 
 impl Theme {
     /// The opacity the transparency slider thins this theme's surfaces to at its
@@ -395,14 +395,14 @@ impl Theme {
     /// the tests below). A frosted theme's own opacity is thinned on top of this.
     pub fn floor(&self) -> f32 {
         match self.id {
-            "crew-chat" => 0.62,
-            "midnight" => 0.72,
-            "graphite" => 0.76,
-            "deep-sea" => 0.72,
-            "daylight" => 0.66,
-            "frost" => 0.76,
-            "mist" => 0.60,
-            "aurora" => 0.78,
+            "crew-chat" => 0.34,
+            "midnight" => 0.58,
+            "graphite" => 0.60,
+            "deep-sea" => 0.58,
+            "daylight" => 0.36,
+            "frost" => 0.62,
+            "mist" => 0.36,
+            "aurora" => 0.64,
             _ => 0.8,
         }
     }
@@ -435,13 +435,47 @@ pub fn window_clear() -> bool {
     theme().frosted || see_through()
 }
 
-/// How far transparency has gone, 0 (off, or the slider at its start) to 1.
+/// A background image is set under Settings > Appearance.
+static IMAGE: AtomicBool = AtomicBool::new(false);
+/// How far the image shows through the window's surfaces, 0 to 100.
+static IMAGE_SHOW: AtomicU8 = AtomicU8::new(0);
+
+/// Puts a background image under the window, or takes it away, and sets how far it
+/// shows through the surfaces over it (0 to 100). The image covers the desktop, so
+/// while it's set it takes the place of window transparency.
+pub fn set_image(on: bool, show: u8) {
+    IMAGE.store(on, Ordering::Relaxed);
+    IMAGE_SHOW.store(show.min(100), Ordering::Relaxed);
+}
+
+/// A background image lies under the window.
+pub fn image_on() -> bool {
+    IMAGE.load(Ordering::Relaxed)
+}
+
+/// Something shows through the window's surfaces: the desktop, or a background
+/// image. Each surface then paints its own ground, since stacked see-through
+/// layers would add up to nearly solid.
+pub fn layered() -> bool {
+    window_clear() || image_on()
+}
+
+/// How far transparency has gone, 0 (off, or the slider at its start) to 1. With
+/// a background image it's the image's own slider; the same floor keeps text
+/// readable over a busy picture as over a busy desktop.
 pub fn amount() -> f32 {
-    if see_through() {
-        CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
+    if image_on() {
+        IMAGE_SHOW.load(Ordering::Relaxed).min(100) as f32 / 100.
+    } else if see_through() {
+        clear_amount()
     } else {
         0.
     }
+}
+
+/// Where the window transparency slider sits, 0 to 1, whether or not it's in use.
+pub fn clear_amount() -> f32 {
+    CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
 }
 
 /// A surface thinned to `k` of its opacity. Faint overlays (a hover tint in a
@@ -509,11 +543,11 @@ pub fn hover() -> u32 {
 /// desktop, not the page under a popover, so even at its clearest a popover keeps
 /// `POP_FLOOR` of its opacity, enough that its text reads over the page.
 pub fn float() -> u32 {
-    float_at(theme(), pop_amount(), window_clear() && glass_popovers())
+    float_at(theme(), pop_amount(), layered() && glass_popovers())
 }
 
 /// The least opacity a see-through popover goes down to, its slider all the way up.
-const POP_FLOOR: f32 = 0.7;
+const POP_FLOOR: f32 = 0.6;
 
 /// A floating surface for theme `t`, at popover transparency `amount` (0 to 1),
 /// see-through or not.
@@ -536,6 +570,31 @@ const fn float_at(t: &Theme, amount: f32, clear: bool) -> u32 {
     };
     let k = base - amount * (base - POP_FLOOR);
     see(rgb, (k * 255. + 0.5) as u8)
+}
+
+/// How strong a floating surface's drop shadow is, as a share of its solid
+/// strength. The shadow is painted under the whole surface, not just around it,
+/// so behind a see-through popover it would darken the very page that should show
+/// through: it fades as the popover clears, to a third at its clearest.
+pub fn float_shadow() -> f32 {
+    shadow_for(float())
+}
+
+/// The shadow share for a floating surface of colour `color`.
+const fn shadow_for(color: u32) -> f32 {
+    let a = match color >> 24 {
+        0 => return 1.,
+        a => a as f32 / 255.,
+    };
+    let mut k = (a - POP_FLOOR) / (1. - POP_FLOOR);
+    if k < 0. {
+        k = 0.;
+    }
+    if k > 1. {
+        k = 1.;
+    }
+    // Squared, so it lifts quickly off the page as the slider moves.
+    0.3 + 0.7 * k * k
 }
 
 /// Popovers, menus and dialogs are see-through while the window is. On by default.
@@ -777,7 +836,9 @@ mod tests {
     /// With window transparency all the way up, every theme's text still reads.
     /// The desktop behind is blurred, and checked at its worst for the theme's own
     /// ground: a dark theme over black, grey, a saturated blue and a warm yellow;
-    /// a light one over white and the same colours.
+    /// a light one over white and the same colours. At the far end every level
+    /// of text meets 4.5:1 (WCAG AA): the brightest gives up its usual 7:1 so the
+    /// window can clear much further.
     #[test]
     fn text_reads_when_see_through() {
         for t in &THEMES {
@@ -790,7 +851,7 @@ mod tests {
                 &[0x000000, 0x808080, 0x2050D0, 0xF0C040]
             };
             let text = [
-                ("ink", t.ink, 7.0),
+                ("ink", t.ink, 4.5),
                 ("body", l(t.body), 4.5),
                 ("muted", l(t.muted), 4.5),
                 ("faint", l(t.faint), 3.0),
@@ -846,8 +907,8 @@ mod tests {
                         let page = over(g(t.bg), desk);
                         let checks = [
                             (page, "page", [7.0, 4.5, 3.0]),
-                            (over(t.ink, page), "page text", [4.5, 3.0, 2.0]),
-                            (over(l(t.body), page), "page text", [4.5, 3.0, 2.0]),
+                            (over(t.ink, page), "page text", [3.0, 2.0, 1.5]),
+                            (over(l(t.body), page), "page text", [3.0, 2.0, 1.5]),
                         ];
                         for (under, what, mins) in checks {
                             let back = over(pop, under);
@@ -868,6 +929,17 @@ mod tests {
             // slider at its start leaves it nearly so.
             assert_eq!(float_at(t, 1.0, false) >> 24, 0);
             assert!(float_at(t, 0.0, true) >> 24 >= 0xD8);
+        }
+    }
+
+    #[test]
+    fn popover_shadows_fade_as_they_clear() {
+        for t in &THEMES {
+            assert_eq!(shadow_for(float_at(t, 0.0, false)), 1.0);
+            let near = shadow_for(float_at(t, 0.0, true));
+            let clear = shadow_for(float_at(t, 1.0, true));
+            assert!(clear < near, "{}", t.id);
+            assert!((clear - 0.3).abs() < 0.01, "{}: {clear}", t.id);
         }
     }
 
