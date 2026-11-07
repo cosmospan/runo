@@ -753,6 +753,23 @@ fn install_command(program: &str) -> Option<String> {
     })
 }
 
+/// A `bash` script that installs `provider`'s CLI on a Linux server without
+/// root, for setting up your own server from the desktop app.
+pub(crate) fn install_script(provider: &str) -> Option<String> {
+    let bin = crate::agent::PROVIDERS
+        .iter()
+        .find(|p| p.id == provider)?
+        .bin;
+    let install = install_command(bin)?;
+    Some(format!(
+        r#"export PATH="$HOME/.local/bin:$HOME/.local/runo-node/bin:$HOME/.opencode/bin:$HOME/.factory/bin:$HOME/.grok/bin:$PATH"
+{INSTALL_HELPERS}
+want=""
+if command -v {bin} >/dev/null 2>&1; then exit 0; fi
+{{ {install}; }} >&2 && command -v {bin} >/dev/null 2>&1"#
+    ))
+}
+
 /// Whether the install command above can install an exact version, so the copy there
 /// can match this computer's.
 pub(crate) fn pins_version(provider: &str) -> bool {

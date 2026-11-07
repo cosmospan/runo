@@ -385,7 +385,105 @@ fn state(hub: &Hub) -> Value {
             "thinking": hub.rt.thinking(m),
         })).collect::<Vec<_>>(),
         "running": hub.rt.runners.len(),
+        // Each agent this server knows, whether it's installed and whether it
+        // has a login or a key, so a client can show what's missing.
+        "logins": logins(&hub.st),
     })
+}
+
+/// Whether each agent is installed here and signed in: an API key or token in
+/// the environment (server.env included), or its login file in the home folder.
+fn logins(st: &AppSettings) -> Vec<Value> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    crate::connections::SIGN_INS
+        .iter()
+        .filter_map(|s| {
+            let i = crate::agent::PROVIDERS
+                .iter()
+                .position(|p| p.id == s.provider)?;
+            let key = s
+                .keys
+                .iter()
+                .any(|k| std::env::var(k).is_ok_and(|v| !v.trim().is_empty()));
+            let file = s.file.is_some_and(|f| home.join(f).is_file());
+            Some(json!({
+                "agent": s.provider,
+                "name": crate::agent::PROVIDERS[i].name,
+                "installed": super::engine::ready(st, i),
+                "signed_in": key || file,
+            }))
+        })
+        .collect()
+}
+
+/// The keys and tokens the server's agents use, set from the desktop app:
+/// `KEY=value` lines in server.env, read when the server starts.
+pub fn env_path() -> PathBuf {
+    crate::store::data_dir().join("server.env")
+}
+
+fn load_env() {
+    let Ok(text) = std::fs::read_to_string(env_path()) else {
+        return;
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            let (k, v) = (k.trim(), v.trim());
+            if !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                std::env::set_var(k, v);
+            }
+        }
+    }
+}
+
+/// `squad serve --set KEY=value`: keep a key for the server's agents (an empty
+/// value removes it), then start the server again so it takes effect.
+fn set_env(pair: &str) -> i32 {
+    // `--set KEY` alone reads the value from stdin, so it never shows in `ps`.
+    let mut typed = String::new();
+    let (key, value) = match pair.split_once('=') {
+        Some(kv) => kv,
+        None => {
+            let _ = std::io::stdin().read_line(&mut typed);
+            (pair, typed.trim())
+        }
+    };
+    let key = key.trim();
+    if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        eprintln!("squad: {key} isn't a name for a key.");
+        return 2;
+    }
+    let path = env_path();
+    let old = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut lines: Vec<String> = old
+        .lines()
+        .filter(|l| l.split_once('=').map(|(k, _)| k.trim()) != Some(key))
+        .map(str::to_string)
+        .collect();
+    if !value.trim().is_empty() {
+        lines.push(format!("{key}={}", value.trim()));
+    }
+    let text = if lines.is_empty() {
+        String::new()
+    } else {
+        lines.join("\n") + "\n"
+    };
+    if let Err(e) = std::fs::write(&path, text) {
+        eprintln!("squad: couldn't keep the key: {e}");
+        return 1;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    0
 }
 
 fn mode_of(word: &str) -> Option<Mode> {
@@ -732,16 +830,30 @@ fn listen_address(given: Option<&str>) -> String {
 /// `squad serve [--listen <address>]`: run the crew here until stopped.
 pub fn serve(args: &[String]) -> i32 {
     let mut listen = None;
+    let mut install_it = false;
+    let mut set = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--listen" => listen = it.next().cloned(),
+            "--install" => install_it = true,
+            "--set" => set.extend(it.next().cloned()),
             other => {
-                eprintln!("squad serve doesn't know {other}. Usage: squad serve [--listen <address>|tailscale]");
+                eprintln!("squad serve doesn't know {other}. Usage: squad serve [--listen <address>|tailscale] [--install] [--set KEY=value]");
                 return 2;
             }
         }
     }
+    for pair in &set {
+        let code = set_env(pair);
+        if code != 0 {
+            return code;
+        }
+    }
+    if install_it || !set.is_empty() {
+        return install(listen.as_deref());
+    }
+    load_env();
     let base = crate::store::data_dir();
     let address = listen_address(listen.as_deref());
     let listener = match TcpListener::bind(&address) {
@@ -799,11 +911,156 @@ pub fn serve(args: &[String]) -> i32 {
     0
 }
 
-/// `squad pair [name]`: a one-time code for a device to pair with.
+/// `squad serve --install`: keep the server running after you log out and
+/// after the machine restarts, as a systemd user service. Where there's no
+/// systemd it starts in the background instead, which lasts until a restart.
+fn install(listen: Option<&str>) -> i32 {
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("squad: can't tell where this program is: {e}");
+            return 1;
+        }
+    };
+    let mut cmd = format!("{} v2 serve", shell_quote(&exe.to_string_lossy()));
+    if let Some(l) = listen {
+        cmd.push_str(&format!(" --listen {}", shell_quote(l)));
+    }
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let systemd = std::process::Command::new("systemctl")
+        .args(["--user", "show-environment"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if systemd {
+        let dir = home.join(".config/systemd/user");
+        let unit = format!(
+            "[Unit]\nDescription=Squad Code crew server\nAfter=network-online.target\n\n[Service]\nExecStart={cmd}\nRestart=on-failure\nRestartSec=5\nEnvironment=PATH={}\n\n[Install]\nWantedBy=default.target\n",
+            path_with_local_bin(&home)
+        );
+        if let Err(e) = std::fs::create_dir_all(&dir)
+            .and_then(|_| std::fs::write(dir.join("squad.service"), unit))
+        {
+            eprintln!("squad: couldn't write the service: {e}");
+            return 1;
+        }
+        let ctl = |args: &[&str]| {
+            std::process::Command::new("systemctl")
+                .arg("--user")
+                .args(args)
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        if !(ctl(&["daemon-reload"])
+            && ctl(&["enable", "squad.service"])
+            && ctl(&["restart", "squad.service"]))
+        {
+            eprintln!(
+                "squad: systemd wouldn't start the service. `journalctl --user -u squad` says why."
+            );
+            return 1;
+        }
+        // Without lingering, user services stop when you log out.
+        let user = std::env::var("USER").unwrap_or_default();
+        let linger = std::process::Command::new("loginctl")
+            .args(["enable-linger", &user])
+            .status()
+            .is_ok_and(|s| s.success())
+            || std::process::Command::new("sudo")
+                .args(["-n", "loginctl", "enable-linger", &user])
+                .status()
+                .is_ok_and(|s| s.success());
+        println!("Squad Code is running as a service and starts again after a restart.");
+        if !linger {
+            println!(
+                "It stops when you log out until someone runs: sudo loginctl enable-linger {user}"
+            );
+        }
+        return 0;
+    }
+    // No systemd (a container, say): start it in the background, stopping
+    // the one it started before.
+    let pid_file = crate::store::data_dir().join("serve.pid");
+    if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+        let pid = pid.trim();
+        if !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()) {
+            let _ = std::process::Command::new("kill").arg(pid).status();
+            for _ in 0..20 {
+                if TcpStream::connect(("127.0.0.1", PORT)).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+    }
+    if TcpStream::connect(("127.0.0.1", PORT)).is_ok() {
+        println!("Squad Code is already serving here, started some other way. Stop it and run this again to pick up new keys.");
+        return 0;
+    }
+    let log = crate::store::data_dir().join("serve.log");
+    let started = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "PATH={} nohup {cmd} >> {} 2>&1 & echo $! > {}",
+            shell_quote(&path_with_local_bin(&home)),
+            shell_quote(&log.to_string_lossy()),
+            shell_quote(&pid_file.to_string_lossy())
+        ))
+        .status()
+        .is_ok_and(|s| s.success());
+    if started {
+        println!("Squad Code is running in the background. There's no systemd here, so start it again after a restart: squad serve --install");
+        0
+    } else {
+        eprintln!("squad: couldn't start the server in the background.");
+        1
+    }
+}
+
+/// PATH with ~/.local/bin first, where the installer puts Squad Code and the
+/// agents, since a service doesn't get your login shell's PATH.
+fn path_with_local_bin(home: &Path) -> String {
+    let path = std::env::var("PATH").unwrap_or_default();
+    let mut dirs: Vec<String> = [
+        ".local/bin",
+        ".local/runo-node/bin",
+        ".opencode/bin",
+        ".factory/bin",
+        ".grok/bin",
+    ]
+    .iter()
+    .map(|d| home.join(d).to_string_lossy().to_string())
+    .filter(|d| !path.split(':').any(|p| p == d))
+    .collect();
+    if !path.is_empty() {
+        dirs.push(path);
+    }
+    dirs.join(":")
+}
+
+fn shell_quote(s: &str) -> String {
+    if !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/._-:@".contains(c))
+    {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
+/// `squad pair [--bare] [name]`: a one-time code for a device to pair with.
+/// `--bare` prints only the code, for the desktop app pairing over SSH.
 pub fn pair_command(args: &[String]) -> i32 {
     let base = crate::store::data_dir();
-    let name = args.join(" ");
+    let bare = args.first().map(String::as_str) == Some("--bare");
+    let name = args[usize::from(bare)..].join(" ");
     let code = new_code(&base, &name);
+    if bare {
+        println!("{code}");
+        return 0;
+    }
     println!("Pair a device with this code. It works once, for 10 minutes:");
     println!();
     println!("    {code}");

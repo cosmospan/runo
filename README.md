@@ -50,7 +50,7 @@ You approve, send it back or throw it away. <b>Shipper</b> opens the pull reques
 <br />
 
 > [!NOTE]
-> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.5`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
+> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.6`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
 
 ## How it works
 
