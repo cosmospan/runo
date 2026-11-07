@@ -52,7 +52,7 @@ impl Shell {
             .folder()
             .map(|f| f.name.clone())
             .unwrap_or_else(|| "this project".into());
-        let header = div()
+        let header = ui::chrome(div())
             .flex_none()
             .flex()
             .items_center()

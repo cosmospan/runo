@@ -11,6 +11,10 @@
 //! - [`voice`]: what Peek says when something happens.
 //! - [`permit`]: what a bot may do on its own, what it asks about first,
 //!   and what it never does.
+//! - [`think`]: Peek reading each message with the person's own engine,
+//!   with [`front`]'s rules as the instant path and the fallback.
+//! - [`learn`]: what the engine decided, kept small on this computer, so
+//!   Peek decides the same way when the engine can't run.
 //! - [`tasks`]: with Smart Peek on, a short title for each job's card and a
 //!   recap when it ends.
 //!
@@ -30,6 +34,7 @@ pub mod front;
 pub mod guard;
 pub mod helper;
 pub mod ideas;
+pub mod learn;
 pub mod maker;
 pub mod model;
 pub mod permit;
@@ -37,6 +42,7 @@ pub mod place;
 pub mod route;
 pub mod tasks;
 pub mod teach;
+pub mod think;
 pub mod tiny;
 pub mod voice;
 

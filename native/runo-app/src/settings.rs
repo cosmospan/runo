@@ -137,9 +137,9 @@ pub struct AppSettings {
     pub thread_ref_titles: bool,
     /// Places pinned out on the rail beside the main ones, by label, such as "Notes".
     pub rail_pins: Vec<String>,
-    /// What Fin is made of: "glass", "bubble" (rainbow bubble glow), "solid" or
-    /// "outline".
-    pub fin_material: String,
+    /// How Peek's outline is drawn, as `weight.ink.eyes` (see
+    /// `runo_holo::fin::Line`), such as `bold.pastel.dots`. Empty is the default.
+    pub fin_line: String,
     /// Each bot's Fin, by bot key: `colour.hat.left.right.badge`, such as
     /// `blue.security.shield.baton.star`. Bots not listed wear their default kit.
     pub fin_looks: HashMap<String, String>,
@@ -177,6 +177,19 @@ pub struct AppSettings {
     pub pattern_content: bool,
     pub pattern_panels: bool,
     pub pattern_frame: bool,
+    /// The Squad Code window's background image: empty for none, `builtin:<id>` for
+    /// one that ships with the app (see `v2::wallpaper`), or the path of a picture
+    /// of the person's own, copied into the data folder when they picked it.
+    pub v2_bg_image: String,
+    /// How the image meets the window: "fill" (cover, cropping), "fit" (all of it,
+    /// with bars), "stretch" or "centre" (actual size).
+    pub v2_bg_fit: String,
+    /// How blurred the image is, 0 to 100.
+    pub v2_bg_blur: u8,
+    /// How far the image fades into the theme's own ground, 0 to 100.
+    pub v2_bg_dim: u8,
+    /// How far the image shows through the page and the sidebar, 0 to 100.
+    pub v2_bg_show: u8,
     /// Interface font: "bundled" (Runo's own, tuned for sharp small text) or "system".
     pub font: String,
     /// The status bar's Usage popover shows every limit window, not just the closest one.
@@ -363,6 +376,11 @@ impl Default for AppSettings {
             pattern_content: true,
             pattern_panels: false,
             pattern_frame: false,
+            v2_bg_image: String::new(),
+            v2_bg_fit: "fill".into(),
+            v2_bg_blur: 0,
+            v2_bg_dim: 15,
+            v2_bg_show: 80,
             diff_colors: "default".into(),
             animations: true,
             notifications: true,
@@ -382,7 +400,7 @@ impl Default for AppSettings {
             show_deleted_threads: false,
             thread_ref_titles: true,
             rail_pins: Vec::new(),
-            fin_material: "glass".into(),
+            fin_line: String::new(),
             fin_looks: HashMap::new(),
             glass: "off".into(),
             glass_cards: true,

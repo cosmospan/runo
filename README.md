@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, with two glowing eyes" />
+<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, drawn in violet outline" />
 
 <h1>Squad Code</h1>
 

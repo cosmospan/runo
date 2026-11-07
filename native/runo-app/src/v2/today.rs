@@ -460,7 +460,7 @@ impl Shell {
                 .w(px(300.))
                 .p(px(6.))
                 .rounded(px(14.))
-                .bg(c(ui::panel()))
+                .bg(c(ui::float()))
                 .border_1()
                 .border_color(c(ui::line()))
                 .flex()

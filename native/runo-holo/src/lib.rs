@@ -55,6 +55,23 @@ impl Figure {
         }
         self
     }
+
+    /// Easing in from the face of `state`, which it left at `since` seconds
+    /// on the drawing clock. Only Peek eases; bubbles snap.
+    pub fn easing_from(self, state: fin::State, since: f64) -> Self {
+        match self {
+            Figure::Fin(p) => Figure::Fin(p.easing_from(state, since)),
+            other => other,
+        }
+    }
+
+    /// The state the figure shows, for Peek.
+    pub fn fin_state(&self) -> Option<fin::State> {
+        match self {
+            Figure::Fin(p) => Some(p.state),
+            Figure::Bubble(_) => None,
+        }
+    }
 }
 
 /// Draws either kind of figure at one size, keeping each renderer's buffers.

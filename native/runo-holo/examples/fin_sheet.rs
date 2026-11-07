@@ -1,6 +1,6 @@
 //! A contact sheet of Fin: `cargo run --release -p runo-holo --example fin_sheet out.png [t]`.
 use runo_holo::bubble::Tint;
-use runo_holo::fin::{Fin, FinPose, FinRenderer, Material, Outfit, State, ROLES};
+use runo_holo::fin::{Eyes, Fin, FinPose, FinRenderer, Ink, Line, Outfit, State, Weight, ROLES};
 use runo_holo::Framing;
 
 fn main() {
@@ -12,11 +12,38 @@ fn main() {
     let cell = 180usize;
     let cols = 8;
     let mut cells: Vec<(FinPose, usize)> = Vec::new();
-    for m in Material::ALL {
-        for s in State::ALL {
+    // Every state in the default line, then a row for each other look.
+    let mut lines = vec![Line::default()];
+    lines.extend(Weight::ALL.iter().map(|&weight| Line {
+        weight,
+        ..Line::default()
+    }));
+    lines.extend(Ink::ALL.iter().map(|&ink| Line {
+        ink,
+        ..Line::default()
+    }));
+    lines.push(Line {
+        eyes: Eyes::Dots,
+        ..Line::default()
+    });
+    let mut seen = Vec::new();
+    lines.retain(|l| {
+        let new = !seen.contains(l);
+        seen.push(*l);
+        new
+    });
+    for (i, &line) in lines.iter().enumerate() {
+        let states: &[State] = if i == 0 {
+            &State::ALL
+        } else {
+            &State::ALL[..8]
+        };
+        for &s in states {
             let fin = Fin {
                 tint: Tint::RED,
-                material: m,
+                line,
+                // Peek, with its ears, on the first row.
+                ears: i == 0,
                 outfit: Outfit::PLAIN,
             };
             cells.push((
@@ -26,6 +53,7 @@ fn main() {
                     shine: false,
                     gaze: (0, 0),
                     offset: 0,
+                    from: None,
                 },
                 cell,
             ));
@@ -34,7 +62,8 @@ fn main() {
     for r in ROLES {
         let fin = Fin {
             tint: r.tint,
-            material: Material::Glass,
+            line: Line::default(),
+            ears: false,
             outfit: r.outfit,
         };
         cells.push((
@@ -44,6 +73,7 @@ fn main() {
                 shine: false,
                 gaze: (0, 0),
                 offset: 0,
+                from: None,
             },
             cell,
         ));
@@ -65,7 +95,8 @@ fn main() {
         for tint in Tint::ALL {
             let fin = Fin {
                 tint,
-                material: Material::Glass,
+                line: Line::default(),
+                ears: false,
                 outfit: Outfit::PLAIN,
             };
             let px = r
@@ -76,6 +107,7 @@ fn main() {
                         shine: false,
                         gaze: (0, 0),
                         offset: 0,
+                        from: None,
                     },
                     t,
                     Framing::Bust,
