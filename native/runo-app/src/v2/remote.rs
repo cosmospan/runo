@@ -1398,7 +1398,12 @@ fn setup_token(
             Ok(code) if url_sent && code_sent.is_none() => {
                 code_sent = Some(Instant::now());
                 say(Brain::Say("Checking the code…".into()));
-                let _ = stdin.write_all(format!("{code}\r").as_bytes());
+                // Enter on its own: Claude reads a long code that arrives
+                // with its Enter as a paste and drops the Enter.
+                let _ = stdin.write_all(code.as_bytes());
+                let _ = stdin.flush();
+                std::thread::sleep(Duration::from_millis(500));
+                let _ = stdin.write_all(b"\r");
                 let _ = stdin.flush();
             }
             // The app let go: the person cancelled.
@@ -1410,13 +1415,7 @@ fn setup_token(
         // A good code gives a token within seconds; Claude's last words say why not.
         if code_sent.is_some_and(|at| at.elapsed() > Duration::from_secs(60)) {
             let plain = plain_text(&seen);
-            let said = plain
-                .lines()
-                .rev()
-                .map(str::trim)
-                .find(|l| !l.is_empty() && !l.contains("Checking"))
-                .unwrap_or("no answer")
-                .to_string();
+            let said = claude_said(&plain);
             break Err(format!(
                 "Claude didn't take that code ({said}). Try signing in again."
             ));
@@ -1425,6 +1424,24 @@ fn setup_token(
     let _ = child.kill();
     let _ = child.wait();
     result
+}
+
+/// Why Claude's sign-in didn't take a code: its error line, or else its last
+/// words that aren't the masked code.
+fn claude_said(plain: &str) -> String {
+    let lines: Vec<&str> = plain.lines().map(str::trim).collect();
+    lines
+        .iter()
+        .rev()
+        .find(|l| l.to_lowercase().contains("error"))
+        .or_else(|| {
+            lines
+                .iter()
+                .rev()
+                .find(|l| !l.is_empty() && !l.contains("Checking") && !l.starts_with("****"))
+        })
+        .map(|l| l.to_string())
+        .unwrap_or_else(|| "no answer".into())
 }
 
 /// Terminal output without its colour and cursor codes.
@@ -1497,6 +1514,16 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn claude_sign_in_error() {
+        let out = "Paste code here:\n*****ssss\nOAuth error: That code wasn't accepted.\nPress Enter to retry.";
+        assert_eq!(claude_said(out), "OAuth error: That code wasn't accepted.");
+        assert_eq!(
+            claude_said("Paste code here:\n**********"),
+            "Paste code here:"
+        );
+    }
 
     #[test]
     fn hosts_read_like_ssh_takes_them() {

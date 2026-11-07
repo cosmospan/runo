@@ -10,6 +10,7 @@ All notable changes to Runo are documented here.
 
 ### Fixed
 
+- Signing a server in with your Claude plan no longer rejects the code from the browser. Claude read the long code and the Enter after it as one paste and dropped the Enter, so it never checked the code. Squad now sends the Enter on its own, and if Claude turns a code down it shows Claude's reason.
 - Connecting to a server no longer fails with "Host key verification failed" when your own `~/.ssh/known_hosts` has an old key for that address. Squad keeps its own list of trusted server keys, trusts a new server on first connect and shows its fingerprint, and if a known server's key changes it stops and offers "I rebuilt it: trust the new key and connect".
 - Connecting to a server that makes you change its password on the first login (as many VPS providers do) no longer stops with "Password change required but no TTY available". Squad asks for a new password, changes it on the server and carries on.
 - Locking down a server now works when you connect as a user whose sudo needs a password, such as `ubuntu`: the password you typed is passed to sudo over SSH, never on a command line.
