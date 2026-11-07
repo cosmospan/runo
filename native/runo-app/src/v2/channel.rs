@@ -266,7 +266,6 @@ impl Shell {
                             .children(offer)
                             .children(self.slash_strip(cx))
                             .children(self.hash_strip(cx))
-                            .children(self.at_strip(cx))
                             .child(self.thread_composer(&name, cx)),
                     ),
             )
@@ -540,7 +539,13 @@ impl Shell {
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().size(px(7.)).flex_none().rounded_full().bg(c(tone.0)))
+            .child(
+                div()
+                    .size(px(7.))
+                    .flex_none()
+                    .rounded_full()
+                    .bg(c(if running { accent } else { tone.0 })),
+            )
             .child(
                 div()
                     .flex_1()
@@ -549,26 +554,48 @@ impl Shell {
                     .text_size(px(13.5))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(c(ui::ink()))
-                    .child(j.label().to_string()),
+                    .child(card_title(j)),
             )
-            .child(
+            .child(if running {
+                // Working: a pill in the bot's own colour, with how long so far.
+                let k = 0.4
+                    + 0.6
+                        * runo_holo::anim::alternate(self.now(), 0.9, runo_holo::anim::SOFT) as f32;
+                let what = match j.progress() {
+                    Some((d, n)) => format!("Step {} of {n}", (d + 1).min(n)),
+                    None => "Working".to_string(),
+                };
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .h(px(22.))
+                    .px(px(9.))
+                    .rounded_full()
+                    .bg(ca(accent, 0.12))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(super::theme::mix(accent, ui::ink(), 0.3)))
+                    .child(div().size(px(6.)).rounded_full().bg(c(accent)).opacity(k))
+                    .child(format!("{what} \u{b7} {}", store::span(j.seconds())))
+            } else {
                 div()
                     .flex_none()
                     .text_size(px(11.5))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(tone.0))
-                    .child(match j.progress() {
-                        Some((d, n)) if running => format!("{d} of {n}"),
-                        _ => word.clone(),
-                    }),
-            );
+                    .child(word.clone())
+            });
 
         let mut body = card()
-            .when(running, |d| d.border_color(c(ui::run_tone().2)))
+            .when(running, |d| {
+                d.border_color(c(super::theme::mix(ui::line(), accent, 0.45)))
+            })
             .when(review, |d| d.border_color(c(ui::ask_tone().2)))
             .child(head);
         if let Some(f) = frac.filter(|_| running) {
-            body = body.child(div().px(px(14.)).child(ui::bar(f, ui::BLUE).h(px(4.))));
+            body = body.child(div().px(px(14.)).child(ui::bar(f, accent).h(px(3.))));
         }
         if running {
             // What it's doing now, in plain words, then its last few steps.
@@ -590,7 +617,13 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
+                    .mx(px(-6.))
+                    .px(px(6.))
+                    .py(px(5.))
+                    .rounded(px(8.))
+                    .bg(ca(accent, 0.06))
                     .text_size(px(13.))
+                    .font_weight(FontWeight::MEDIUM)
                     .text_color(c(ui::ink()))
                     .child({
                         let k = 0.35
@@ -602,7 +635,7 @@ impl Shell {
                             .mx(px(3.))
                             .flex_none()
                             .rounded_full()
-                            .bg(c(ui::t_blue()))
+                            .bg(c(accent))
                             .opacity(k)
                     })
                     .child(div().min_w_0().truncate().child(now_doing)),
@@ -750,12 +783,9 @@ impl Shell {
                     )
                 } else {
                     d.child(
-                        ui::ghost(
-                            ("thread-open", id as usize),
-                            if running { "Open live" } else { "Open" },
-                        )
-                        .h(px(28.))
-                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                        ui::ghost(("thread-open", id as usize), "Open")
+                            .h(px(28.))
+                            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
                     )
                 }
             });
@@ -769,7 +799,7 @@ impl Shell {
                     .text_color(c(ui::muted()))
                     .cursor_pointer()
                     .hover(|s| s.text_color(c(ui::ink())))
-                    .child(if open { "Hide details" } else { "Show details" })
+                    .child(if open { "Hide commands" } else { "Commands" })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if !this.raw_open.remove(&id) {
                             this.raw_open.insert(id);
@@ -842,14 +872,16 @@ impl Shell {
                                 .child(j.bot.role().to_string()),
                         ),
                     )
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .line_height(px(21.))
-                            .text_color(c(ui::body()))
-                            .child(said),
-                    )
-                    .child(body),
+                    .when(!running, |d| {
+                        d.child(
+                            div()
+                                .text_size(px(14.))
+                                .line_height(px(21.))
+                                .text_color(c(ui::body()))
+                                .child(said),
+                        )
+                    })
+                    .child(div().when(running, |d| d.mt(px(4.))).child(body)),
             );
         // Peek's hand-off, when it picked the bot: a small line between your
         // ask and the bot's reply.
@@ -1157,32 +1189,42 @@ impl Shell {
     fn at_strip(&mut self, cx: &mut Context<Self>) -> Option<Div> {
         let text = self.composer.read(cx).value().to_string();
         if let Some((head, found)) = self.at_matches(&text) {
-            let mut row = div().flex().flex_wrap().items_center().gap(px(6.));
-            for (i, m) in found.into_iter().enumerate() {
-                let head = head.clone();
-                let face = self.avatar(m, 18.);
-                let accent = m.accent();
-                row = row.child(
+            let mut list = div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .pb(px(8.))
+                .border_b_1()
+                .border_color(c(ui::line()))
+                .child(
                     div()
-                        .id(("at", i))
-                        .h(px(32.))
-                        .pl(px(6.))
-                        .pr(px(10.))
+                        .px(px(4.))
+                        .pb(px(4.))
                         .flex()
                         .items_center()
-                        .gap(px(7.))
-                        .rounded(px(9.))
-                        .border_1()
-                        .map(|d| {
-                            if i == 0 {
-                                d.bg(c(super::theme::mix(ui::raised(), accent, 0.12)))
-                                    .border_color(c(super::theme::mix(ui::raised(), accent, 0.45)))
-                            } else {
-                                d.bg(c(ui::raised())).border_color(c(ui::line()))
-                            }
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(div().flex_1().child("Bring in a bot"))
+                        .child("\u{21b5} picks the first"),
+                );
+            for (i, m) in found.into_iter().enumerate() {
+                let head = head.clone();
+                let face = self.avatar(m, 22.);
+                let accent = m.accent();
+                list = list.child(
+                    div()
+                        .id(("at", i))
+                        .h(px(34.))
+                        .px(px(6.))
+                        .flex()
+                        .items_center()
+                        .gap(px(9.))
+                        .rounded(px(8.))
+                        .when(i == 0, |d| {
+                            d.bg(c(super::theme::mix(ui::raised(), accent, 0.12)))
                         })
                         .cursor_pointer()
-                        .hover(|s| s.border_color(c(ui::line_hi())))
+                        .hover(|s| s.bg(c(super::theme::mix(ui::raised(), accent, 0.08))))
                         .child(face)
                         .child(
                             div()
@@ -1207,14 +1249,7 @@ impl Shell {
                         })),
                 );
             }
-            return Some(
-                row.child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(c(ui::faint()))
-                        .child("\u{21b5} picks the first"),
-                ),
-            );
+            return Some(list);
         }
         // Bots named in full: shown as who's being brought in.
         let named: Vec<Member> = Member::all()
@@ -1510,6 +1545,7 @@ impl Shell {
                 spread_radius: px(0.),
                 inset: false,
             }])
+            .children(self.at_strip(cx))
             .child(
                 div()
                     .min_h(px(44.))
@@ -1588,5 +1624,47 @@ impl Shell {
             .update(cx, |i, cx| i.set_value("", window, cx));
         self.hand_over(text, cx);
         self.unpin_mode(window, cx);
+    }
+}
+
+/// A card's title: Peek's short one, else what you typed, unless that reads as
+/// keyboard mash, when it's named for the kind of job instead.
+fn card_title(j: &Job) -> String {
+    let t = j.label().trim().to_string();
+    if !mashed(&t) {
+        return t;
+    }
+    format!("{} job #{}", j.mode.label(), j.id)
+}
+
+/// Whether text looks like random keys: one long word, or almost no vowels.
+fn mashed(t: &str) -> bool {
+    let letters: Vec<char> = t.chars().filter(|ch| ch.is_alphabetic()).collect();
+    if letters.len() < 6 {
+        return false;
+    }
+    let vowels = letters
+        .iter()
+        .filter(|ch| "aeiouyAEIOUY".contains(**ch))
+        .count();
+    let longest = t
+        .split_whitespace()
+        .map(|w| w.chars().count())
+        .max()
+        .unwrap_or(0);
+    longest > 18 || vowels * 6 < letters.len()
+}
+
+#[cfg(test)]
+mod card_tests {
+    use super::mashed;
+
+    #[test]
+    fn keyboard_mash_gets_a_plain_title() {
+        assert!(mashed("afadfasdgasdgasdgasd"));
+        assert!(mashed("sdfgh jklqw"));
+        assert!(!mashed("Add gift cards"));
+        assert!(!mashed("can you build a simple node js app and run it"));
+        assert!(!mashed("hi"));
     }
 }

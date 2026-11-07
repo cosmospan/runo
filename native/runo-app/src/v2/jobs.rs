@@ -20,7 +20,14 @@ pub struct Runner {
     parser: Option<crate::stream::Parser>,
     errors: Vec<String>,
     stopped: bool,
+    /// When the engine reported its turn over, and whether it went well. A
+    /// run that started a server keeps its output open after that, so the
+    /// job ends on this rather than waiting for the process.
+    result: Option<(std::time::Instant, bool)>,
 }
+
+/// How long after the engine's last word a run that hasn't exited counts as done.
+const LINGER: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// What a bot that changes files may run without asking: any command, so
 /// it can install, build, test and start what it made, in its own worktree.
@@ -209,6 +216,7 @@ pub fn start(
         parser: crate::stream::Parser::for_provider(p.id, &dir),
         errors: Vec::new(),
         stopped: false,
+        result: None,
     })
 }
 
@@ -224,6 +232,17 @@ impl Runner {
         for _ in 0..400 {
             let Ok(ev) = self.rx.try_recv() else { break };
             match ev {
+                Event::Line(_, line) if self.result.is_none() && is_result(&line) => {
+                    self.result = Some((
+                        std::time::Instant::now(),
+                        !line.contains("\"is_error\":true"),
+                    ));
+                    if let Some(p) = &mut self.parser {
+                        for e in p.feed(&line) {
+                            apply(job, e);
+                        }
+                    }
+                }
                 Event::Line(_, line) => match &mut self.parser {
                     Some(p) => {
                         for e in p.feed(&line) {
@@ -233,6 +252,9 @@ impl Runner {
                     None => say(job, &agent::strip_ansi(&line), true),
                 },
                 Event::Json(_, line, v) => {
+                    if v["type"] == "result" && self.result.is_none() {
+                        self.result = Some((std::time::Instant::now(), v["is_error"] != true));
+                    }
                     if let Some(p) = &mut self.parser {
                         for e in p.feed_parsed(&line, Some(v)) {
                             apply(job, e);
@@ -249,7 +271,22 @@ impl Runner {
                 Event::Output(..) | Event::Partial(..) => {}
             }
         }
+        // The engine finished its turn but something it started (a dev
+        // server, say) still holds the output open: the job is done all the same.
+        let mut lingering = false;
+        if ended.is_none() && !self.stopped {
+            if let Some((_, ok)) = self.result.filter(|(at, _)| at.elapsed() > LINGER) {
+                ended = Some(ok);
+                lingering = true;
+            }
+        }
         let Some(ok) = ended else { return false };
+        if lingering && ok {
+            job.feed.push(Item::Note(
+                "It left something running in the background, like the app's server. It keeps going until you stop it or quit it from the terminal."
+                    .into(),
+            ));
+        }
         // Steps still marked running ended with the run.
         for it in &mut job.feed {
             if let Item::Tool { state, .. } = it {
@@ -386,9 +423,22 @@ fn apply(job: &mut Job, e: AgentEvent) {
     }
 }
 
+/// Whether a line of an engine's output is its end-of-turn result.
+fn is_result(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with('{') && (t.contains("\"type\":\"result\"") || t.contains("\"type\": \"result\""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_engines_last_word_is_spotted() {
+        assert!(is_result(r#"{"type":"result","is_error":false}"#));
+        assert!(!is_result(r#"{"type":"assistant"}"#));
+        assert!(!is_result("the result is in"));
+    }
 
     #[test]
     fn a_bot_that_changes_files_may_run_things_but_not_ship_or_wipe() {
