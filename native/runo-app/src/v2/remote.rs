@@ -1369,22 +1369,14 @@ fn setup_token(
             Ok(chunk) => seen.push_str(&chunk),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
-                let plain = plain_text(&seen);
+                let plain = screen_text(&seen);
                 break match find_token(&plain) {
                     Some(t) => Ok(t),
-                    None => Err(format!(
-                        "Claude's sign-in stopped: {}",
-                        plain
-                            .lines()
-                            .rev()
-                            .map(str::trim)
-                            .find(|l| !l.is_empty())
-                            .unwrap_or("no reason given")
-                    )),
+                    None => Err(format!("Claude's sign-in stopped: {}", claude_said(&plain))),
                 };
             }
         }
-        let plain = plain_text(&seen);
+        let plain = screen_text(&seen);
         if let Some(token) = find_token(&plain) {
             break Ok(token);
         }
@@ -1398,7 +1390,12 @@ fn setup_token(
             Ok(code) if url_sent && code_sent.is_none() => {
                 code_sent = Some(Instant::now());
                 say(Brain::Say("Checking the code…".into()));
-                let _ = stdin.write_all(format!("{code}\r").as_bytes());
+                // Enter on its own: Claude reads a long code that arrives
+                // with its Enter as a paste and drops the Enter.
+                let _ = stdin.write_all(code.as_bytes());
+                let _ = stdin.flush();
+                std::thread::sleep(Duration::from_millis(500));
+                let _ = stdin.write_all(b"\r");
                 let _ = stdin.flush();
             }
             // The app let go: the person cancelled.
@@ -1409,14 +1406,8 @@ fn setup_token(
         }
         // A good code gives a token within seconds; Claude's last words say why not.
         if code_sent.is_some_and(|at| at.elapsed() > Duration::from_secs(60)) {
-            let plain = plain_text(&seen);
-            let said = plain
-                .lines()
-                .rev()
-                .map(str::trim)
-                .find(|l| !l.is_empty() && !l.contains("Checking"))
-                .unwrap_or("no answer")
-                .to_string();
+            let plain = screen_text(&seen);
+            let said = claude_said(&plain);
             break Err(format!(
                 "Claude didn't take that code ({said}). Try signing in again."
             ));
@@ -1424,7 +1415,140 @@ fn setup_token(
     };
     let _ = child.kill();
     let _ = child.wait();
+    // Keep what Claude showed, so a failed sign-in can be looked into. It
+    // never holds a token (that would have been a success) and the code is
+    // masked on screen.
+    if result.is_err() && code_sent.is_some() {
+        let dir = crate::store::data_dir().join("logs");
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("claude-sign-in.txt"), screen_text(&seen));
+    }
     result
+}
+
+/// Why Claude's sign-in didn't take a code: its error line, or else its last
+/// words that aren't the masked code.
+fn claude_said(plain: &str) -> String {
+    let lines: Vec<&str> = plain.lines().map(str::trim).collect();
+    lines
+        .iter()
+        .rev()
+        .find(|l| l.to_lowercase().contains("error"))
+        .or_else(|| {
+            lines
+                .iter()
+                .rev()
+                .find(|l| !l.is_empty() && !l.contains("Checking") && !l.starts_with("****"))
+        })
+        .map(|l| l.to_string())
+        .unwrap_or_else(|| "no answer".into())
+}
+
+/// What a terminal would show for `raw`, one line per row. Claude's sign-in
+/// redraws only what changed, skipping over what's already on screen, so its
+/// output only reads right once the moves are played back.
+fn screen_text(raw: &str) -> String {
+    let mut rows: Vec<Vec<char>> = vec![Vec::new()];
+    let (mut r, mut col) = (0usize, 0usize);
+    let mut it = raw.chars().peekable();
+    while let Some(ch) = it.next() {
+        match ch {
+            '\u{1b}' => match it.next() {
+                Some('[') => {
+                    let mut params = String::new();
+                    let mut fin = ' ';
+                    for c in it.by_ref() {
+                        if ('@'..='~').contains(&c) {
+                            fin = c;
+                            break;
+                        }
+                        params.push(c);
+                    }
+                    let nums: Vec<usize> = params
+                        .trim_start_matches('?')
+                        .split(';')
+                        .map(|n| n.parse().unwrap_or(0))
+                        .collect();
+                    let n = nums.first().copied().unwrap_or(0).max(1);
+                    match fin {
+                        'A' => r = r.saturating_sub(n),
+                        'B' | 'E' => r += n,
+                        'C' => col += n,
+                        'D' => col = col.saturating_sub(n),
+                        'G' => col = n - 1,
+                        'H' | 'f' => {
+                            r = n - 1;
+                            col = nums.get(1).copied().unwrap_or(0).max(1) - 1;
+                        }
+                        'K' => {
+                            let row = &mut rows[r];
+                            match nums.first().copied().unwrap_or(0) {
+                                0 => row.truncate(col),
+                                1 => (0..col.min(row.len())).for_each(|i| row[i] = ' '),
+                                _ => row.clear(),
+                            }
+                        }
+                        'J' => match nums.first().copied().unwrap_or(0) {
+                            0 => {
+                                rows[r].truncate(col);
+                                rows.truncate(r + 1);
+                            }
+                            _ => {
+                                rows = vec![Vec::new()];
+                                (r, col) = (0, 0);
+                            }
+                        },
+                        _ => {}
+                    }
+                    if fin == 'E' {
+                        col = 0;
+                    }
+                }
+                // OSC: up to BEL or ESC \.
+                Some(']') => {
+                    while let Some(c) = it.next() {
+                        if c == '\u{7}' {
+                            break;
+                        }
+                        if c == '\u{1b}' {
+                            it.next();
+                            break;
+                        }
+                    }
+                }
+                // Character sets, like ESC ( B: one more character.
+                Some('(' | ')' | '*' | '+' | '#' | '%') => {
+                    it.next();
+                }
+                _ => {}
+            },
+            '\r' => col = 0,
+            '\n' => r += 1,
+            '\u{8}' => col = col.saturating_sub(1),
+            '\t' => col = (col / 8 + 1) * 8,
+            c if c.is_control() => {}
+            c => {
+                while rows.len() <= r {
+                    rows.push(Vec::new());
+                }
+                let row = &mut rows[r];
+                if row.len() <= col {
+                    row.resize(col, ' ');
+                    row.push(c);
+                } else {
+                    row[col] = c;
+                }
+                col += 1;
+            }
+        }
+        while rows.len() <= r {
+            rows.push(Vec::new());
+        }
+    }
+    rows.iter()
+        .map(|row| row.iter().collect::<String>().trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Terminal output without its colour and cursor codes.
@@ -1446,6 +1570,10 @@ fn plain_text(raw: &str) -> String {
                         break;
                     }
                 }
+            }
+            // Character sets, like ESC ( B: one more character.
+            Some('(' | ')' | '*' | '+' | '#' | '%') => {
+                it.next();
             }
             // OSC: up to BEL or ESC \.
             Some(']') => {
@@ -1499,6 +1627,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn claude_sign_in_error() {
+        let out = "Paste code here:\n*****ssss\nOAuth error: That code wasn't accepted.\nPress Enter to retry.";
+        assert_eq!(claude_said(out), "OAuth error: That code wasn't accepted.");
+        assert_eq!(
+            claude_said("Paste code here:\n**********"),
+            "Paste code here:"
+        );
+    }
+
+    #[test]
     fn hosts_read_like_ssh_takes_them() {
         assert!(valid_host("anish@203.0.113.7"));
         assert!(valid_host("my-vps"));
@@ -1532,6 +1670,24 @@ mod tests {
             find_token(&plain_text(done)).as_deref(),
             Some("sk-ant-oat01-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-zz")
         );
+    }
+
+    #[test]
+    fn claudes_redraws_are_played_back() {
+        // Only the changed letters are written; the rest is skipped over.
+        let token = "sk-ant-oat01-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-zz";
+        let before = token.replace("Ij", "xx");
+        let raw = format!("\u{1b}(B\u{f}{before}\r\n\u{1b}[1A\u{1b}[21CIj\r\n\u{1b}(B\u{1b}[m");
+        let screen = screen_text(&raw);
+        assert_eq!(find_token(&screen).as_deref(), Some(token));
+        assert!(!screen.lines().any(|l| l.trim() == "B"));
+        // A code Claude turns down: the error, not the masked code.
+        let raw = "\u{1b}(B\u{f}\u{1b}[?2004h\rPaste code here > \r\n\u{1b}[1A\u{1b}[18C*****CSKgBC\r\r\n\u{1b}[2K\u{1b}[1A\u{1b}[2K\u{1b}[G\u{1b}[95mOAuth error: That code wasn't accepted.\r\n\u{1b}[97mPress \u{1b}[1mEnter\u{1b}[22m to retry. \r\n\u{1b}[K";
+        assert_eq!(
+            claude_said(&screen_text(raw)),
+            "OAuth error: That code wasn't accepted."
+        );
+        assert_eq!(plain_text("\u{1b}(Bok\u{1b}(B"), "ok");
     }
 
     #[test]
