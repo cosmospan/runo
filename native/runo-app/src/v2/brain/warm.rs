@@ -414,6 +414,7 @@ fn real_reads() {
     prepare("claude", "haiku", &dir);
     std::thread::sleep(Duration::from_secs(4));
     for (i, text) in [
+        "make a snake and ladder game and do it on the vps",
         "runthe app",
         "the export button does nothing on safari",
         "stp the server",
@@ -432,6 +433,7 @@ fn real_reads() {
                 running: &[],
                 worked: &[],
                 in_thread: &[],
+                server: "this computer, or the person's server vps (connected, with claude signed in). It doesn't have this project yet; Squad Code copies it there first, by itself. Squad Code picks where each job runs.",
             },
         );
         let at = Instant::now();

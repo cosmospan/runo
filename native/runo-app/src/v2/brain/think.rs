@@ -34,6 +34,9 @@ pub struct Seen<'a> {
     /// The bots that have worked on this project, and those in this thread.
     pub worked: &'a [Member],
     pub in_thread: &'a [Member],
+    /// Where jobs can run besides this computer, in a sentence or two;
+    /// empty when no server is connected.
+    pub server: &'a str,
 }
 
 fn clip(s: &str, n: usize) -> String {
@@ -80,6 +83,7 @@ You read every message the person sends before anyone works on it, and decide wh
 Project: {project}\n\
 The crew:\n{crew}\n\
 Running right now: {running}\n\
+Where jobs run: {server}\n\
 The conversation so far:\n{recent}\n\n\
 The person just wrote: \"{text}\"\n\n\
 Decide, reading it the way a sharp colleague would: typos, slang and half sentences are normal (\"whoa re you\" is \"who are you\"). \
@@ -89,11 +93,18 @@ Never start work on a guess.\n\
 - \"stop\": they want what's running stopped or cancelled.\n\
 - \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
 - \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything.\n\
-- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back.\n\n\
+- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back. \
+If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
+If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
 Reply with JSON only, on one line:\n\
-{{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\"}}\n\
+{{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}}\n\
 Keep \"say\" warm, plain and short: two sentences at most, no markdown.",
         project = seen.project,
+        server = if seen.server.is_empty() {
+            "only this computer: no server is connected."
+        } else {
+            seen.server
+        },
         crew = crew.join("\n"),
         recent = if recent.is_empty() {
             "(none)".to_string()
@@ -155,6 +166,10 @@ pub fn parse(reply: &str, text: &str, crew: &[Member]) -> Option<(Front, String)
                 sure: 0.9,
                 why: say.clone(),
                 by: "engine".into(),
+                site: match v["where"].as_str().unwrap_or("").trim() {
+                    s @ ("server" | "here") => s.to_string(),
+                    _ => String::new(),
+                },
             };
             // The guard rails hold, whoever decides.
             match super::guard::risk(text) {
@@ -268,6 +283,7 @@ mod tests {
                 running: &running,
                 worked: &[Member::Builder],
                 in_thread: &[],
+                server: "vps: connected, Claude Code signed in.",
             },
         );
         for want in [
@@ -278,6 +294,7 @@ mod tests {
             "\"do\"",
             "has worked on this project",
             "never worked on this project",
+            "vps: connected",
         ] {
             assert!(p.contains(want), "{want}");
         }
@@ -327,6 +344,18 @@ mod tests {
             .0,
             Front::Confirm { .. }
         ));
+        // "do it on the VPS" runs there.
+        match parse(
+            r#"{"do":"hand","say":"A game, coming up.","bot":"Builder","kind":"build","where":"server"}"#,
+            "make a snake game on the vps",
+            &c,
+        )
+        .unwrap()
+        .0
+        {
+            Front::Hand(r) => assert_eq!(r.site, "server"),
+            other => panic!("{other:?}"),
+        }
         // Nonsense falls back to the rules.
         assert!(parse("I think you mean hello", "hi", &c).is_none());
         assert!(parse(r#"{"do":"reply","say":""}"#, "hi", &c).is_none());

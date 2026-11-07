@@ -1468,6 +1468,7 @@ impl Shell {
                 .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
                 .collect();
             let (worked, in_thread) = self.bots_here();
+            let server = self.server_note(&folder);
             let seen = brain::think::Seen {
                 project: &project,
                 recent: &recent,
@@ -1475,6 +1476,7 @@ impl Shell {
                 running: &running,
                 worked: &worked,
                 in_thread: &in_thread,
+                server: &server,
             };
             match brain::think::ask(&st, &folder, &text, &seen) {
                 Ok(rx) => {
@@ -1506,6 +1508,7 @@ impl Shell {
         ];
         let crew = Member::all();
         let (worked, in_thread) = self.bots_here();
+        let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
             recent: &recent,
@@ -1513,6 +1516,7 @@ impl Shell {
             running: &[],
             worked: &worked,
             in_thread: &in_thread,
+            server: &server,
         };
         match brain::think::ask(&st, &folder, &text, &seen) {
             Ok(rx) => {
@@ -1812,6 +1816,45 @@ impl Shell {
         }
     }
 
+    /// Where jobs on the project at `folder` can run besides here, for Peek's
+    /// engine: the server, whether it answers and is signed in, whether it
+    /// has the project, and the person's usual choice. Empty with no server.
+    fn server_note(&self, folder: &str) -> String {
+        let Some(link) = self.crew.link.as_ref() else {
+            return String::new();
+        };
+        let s = link.server();
+        let name = s.name.clone();
+        let state = if !s.reachable {
+            "not answering right now, so jobs run here until it is".to_string()
+        } else if s.engines.is_empty() {
+            "connected, but nothing is signed in there yet".to_string()
+        } else {
+            format!("connected, with {} signed in", s.engines.join(", "))
+        };
+        let f = self
+            .crew
+            .store
+            .folders
+            .iter()
+            .find(|f| f.path == folder)
+            .cloned()
+            .unwrap_or_default();
+        let remote = ship::remote_url(folder).unwrap_or_default();
+        let has = if link.path_for(&f, &remote).is_some() {
+            "It has this project.".to_string()
+        } else {
+            "It doesn't have this project yet; Squad Code copies it there first, by itself."
+                .to_string()
+        };
+        let usual = match link.cfg.run.as_str() {
+            "server" => format!("Jobs usually run on {name}."),
+            "here" => "Jobs usually run on this computer.".to_string(),
+            _ => "Squad Code picks where each job runs.".to_string(),
+        };
+        format!("this computer, or the person's server {name} ({state}). {has} {usual}")
+    }
+
     /// The bots that have worked on the open project, and those in this
     /// thread.
     fn bots_here(&self) -> (Vec<Member>, Vec<Member>) {
@@ -1853,7 +1896,12 @@ impl Shell {
                 !s.is_empty() && !s.to_lowercase().contains(&route.bot.name().to_lowercase())
             })
             .unwrap_or_else(|| route.reason());
-        format!("{reason} {}", joins.line(route.bot))
+        let place = match (route.site.as_str(), self.crew.link.as_ref()) {
+            ("server", Some(l)) => format!(" It runs on {}.", l.cfg.label()),
+            ("here", _) => " It runs on this computer.".to_string(),
+            _ => String::new(),
+        };
+        format!("{reason} {}{place}", joins.line(route.bot))
     }
 
     /// Starts an ask the way Peek routed it, without reading it again.
@@ -1868,7 +1916,10 @@ impl Shell {
         self.target = crew.contains(&route.bot).then_some(route.bot);
         self.mode = route.mode;
         self.mode_pinned = true;
+        // "do it on the VPS": this job runs there, whatever the usual choice.
+        self.crew.where_next = (!route.site.is_empty()).then(|| route.site.clone());
         self.hand_over_inner(text, cx);
+        self.crew.where_next = None;
         self.target = target;
         self.mode = mode;
         self.mode_pinned = pinned;

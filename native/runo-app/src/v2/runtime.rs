@@ -61,6 +61,9 @@ pub struct Runtime {
     pub sites: brain::Sites,
     /// Your own server, when this app is connected to one.
     pub link: Option<super::remote::Link>,
+    /// Where the next job runs, when the person said so for it ("server" or
+    /// "here"); their usual choice otherwise.
+    pub where_next: Option<String>,
     /// Titles and recaps Peek is writing, by job.
     peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
     /// New bots the crew's engine is setting up for the project, by made id,
@@ -100,6 +103,7 @@ impl Runtime {
             planning: Vec::new(),
             sites: brain::Sites::default(),
             link: None,
+            where_next: None,
             peeking: Vec::new(),
             designing: Vec::new(),
             drafting: None,
@@ -292,12 +296,20 @@ impl Runtime {
         // goals stay here for now: their tries and steps are tracked here.
         let whole = pick.is_none() && job.goal == 0;
         let none = brain::Sites::default();
-        // The person's own choice of where jobs run, when they made one.
-        let chose = self
+        // The person's own choice of where jobs run: for this job, else
+        // their usual one.
+        let usual = self
             .link
             .as_ref()
             .map(|l| l.cfg.run.clone())
             .unwrap_or_default();
+        let chose = self.where_next.take().unwrap_or(usual);
+        if chose == "server" && self.link.is_none() {
+            job.feed.push(store::Item::Note(
+                "No server is connected, so this runs here. Connect one under Settings, My server."
+                    .into(),
+            ));
+        }
         if chose == "here" {
             job.feed.push(store::Item::Note(
                 "Running here on this computer, as you chose.".into(),

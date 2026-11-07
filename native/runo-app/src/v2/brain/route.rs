@@ -13,8 +13,11 @@ pub struct Route {
     pub sure: f32,
     /// "\u{201c}crash\u{201d} and \u{201c}error\u{201d} sound like a bug", for a tooltip.
     pub why: String,
-    /// Where the answer came from: "rules" or the local model's name.
+    /// Where the answer came from: "engine", or who picked.
     pub by: String,
+    /// Where the person asked for it to run: "server", "here", or "" for
+    /// their usual choice.
+    pub site: String,
 }
 
 impl Route {
@@ -176,6 +179,7 @@ mod tests {
             sure: 0.9,
             why: String::new(),
             by: "engine".into(),
+            site: String::new(),
         };
         let h = r.handoff(Joins::New);
         assert!(h.contains("Fixer") && h.contains("bug"), "{h}");
