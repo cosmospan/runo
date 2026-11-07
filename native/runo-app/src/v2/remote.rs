@@ -888,10 +888,14 @@ struct Seen {
     sent: Vec<(u64, Result<u64, String>)>,
     /// Notes for the person.
     notes: Vec<String>,
+    /// Notes for one job's feed, by its local id.
+    job_notes: Vec<(u64, String)>,
 }
 
 enum Ask {
-    Send(u64, Value),
+    /// A job (its local id), and its project here to send the latest
+    /// commits from ("" for none).
+    Send(u64, Value, String),
     Act(u64, String, Value),
     Watch(Vec<u64>),
     /// Copies a project from this computer (name, path here), then starts
@@ -989,8 +993,9 @@ impl Link {
     }
 
     /// Starts a job there; [`Link::sent`] gives back its id there.
-    pub fn send(&self, local: u64, body: Value) {
-        let _ = self.tx.send(Ask::Send(local, body));
+    /// `here` is the project on this computer, whose latest commits go first.
+    pub fn send(&self, local: u64, body: Value, here: &str) {
+        let _ = self.tx.send(Ask::Send(local, body, here.to_string()));
     }
 
     /// `POST /v1/jobs/{id}/{action}` there.
@@ -1018,6 +1023,10 @@ impl Link {
             folder.path.clone(),
             Some((local, body)),
         ));
+    }
+
+    pub fn take_job_notes(&self) -> Vec<(u64, String)> {
+        std::mem::take(&mut self.seen().job_notes)
     }
 
     pub fn sent(&self) -> Vec<(u64, Result<u64, String>)> {
@@ -1073,7 +1082,7 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
             }
         }
         let Some(port) = tunnel.as_ref().map(|t| t.port) else {
-            if let Some(Ask::Send(local, _) | Ask::Copy(_, _, Some((local, _)))) = ask {
+            if let Some(Ask::Send(local, ..) | Ask::Copy(_, _, Some((local, _)))) = ask {
                 lock()
                     .sent
                     .push((local, Err(format!("{label} isn't reachable right now"))));
@@ -1111,7 +1120,11 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                 }
                 read_at = Instant::now() - REFRESH;
             }
-            Some(Ask::Send(local, body)) => {
+            Some(Ask::Send(local, body, here)) => {
+                if let (false, Some(there)) = (here.is_empty(), body["folder"].as_str()) {
+                    let note = push_latest(&cfg, &here, there);
+                    lock().job_notes.push((local, note));
+                }
                 let result = match call("POST", "/v1/jobs", Some(&body)) {
                     Ok((200, v)) => v["job"]
                         .as_u64()
@@ -1251,7 +1264,7 @@ fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<Stri
         .map_err(|e| format!("tar isn't available here: {e}"))?;
     let packed = pack.stdout.take().ok_or("tar gave no output")?;
     let script = format!(
-        "set -e; mkdir -p squad; tar -xzf - -C squad; cd squad/{} && pwd",
+        "set -e; mkdir -p squad; tar -xzf - -C squad; cd squad/{} && {{ git config receive.denyCurrentBranch updateInstead 2>/dev/null || true; }}; pwd",
         quote(&base)
     );
     let unpack = ssh_base(&cfg.host, &cfg.key)
@@ -1293,6 +1306,166 @@ fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<Stri
         Ok((_, v)) => Err(format!("{label} wouldn't add {name}: {}", error_of(&v))),
         Err(e) => Err(format!("Couldn't reach {label}: {e}")),
     }
+}
+
+// ---------- keeping this computer and the server in step ----------
+//
+// Like the cloud coding tools, Squad syncs through git rather than copying
+// files back and forth: before a job runs there, the server gets your latest
+// commits; when you approve it, its branch comes back here and merges like a
+// job that ran here. Git goes over the same SSH as everything else, so it
+// needs no GitHub and no login to one.
+
+/// How git reaches the server: Squad's key and Squad's trusted host keys.
+fn git_ssh(key: &str) -> String {
+    let mut cmd = format!(
+        "ssh -o UserKnownHostsFile={} -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15",
+        quote(&known_hosts().to_string_lossy())
+    );
+    if !key.is_empty() {
+        cmd.push_str(&format!(" -i {} -o IdentitiesOnly=yes", quote(key)));
+    }
+    cmd
+}
+
+/// `git` in `dir` here, able to reach the server.
+fn git_here(cfg: &Config, dir: &str, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .env("GIT_SSH_COMMAND", git_ssh(&cfg.key))
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("git isn't available: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err
+            .lines()
+            .rev()
+            .map(str::trim)
+            .find(|l| !l.is_empty() && !l.starts_with("hint:"))
+            .unwrap_or("git stopped")
+            .to_string())
+    }
+}
+
+/// The server's copy of a project as a git address.
+fn git_url(cfg: &Config, there: &str) -> String {
+    format!("{}:{there}", cfg.host)
+}
+
+/// Lets a push update the branch the server's copy has checked out, the way
+/// a pull there would, as long as nothing there is uncommitted.
+fn accept_pushes(cfg: &Config, there: &str) -> Result<String, String> {
+    ssh(
+        &cfg.host,
+        &cfg.key,
+        &format!(
+            "git -C {} config receive.denyCurrentBranch updateInstead",
+            quote(there)
+        ),
+        None,
+    )
+}
+
+/// Sends the commits of the branch you're on here to the server's copy, so a
+/// job there starts from your latest work. Says what it did, for the job.
+fn push_latest(cfg: &Config, here: &str, there: &str) -> String {
+    let label = cfg.label();
+    let branch = crate::git::current_branch(here);
+    if branch.is_empty() || branch == "HEAD" {
+        return format!(
+            "This project isn't on a branch here, so the job on {label} starts from what's there."
+        );
+    }
+    let pushed = accept_pushes(cfg, there).and_then(|_| {
+        git_here(
+            cfg,
+            here,
+            &[
+                "push",
+                "--quiet",
+                &git_url(cfg, there),
+                &format!("HEAD:refs/heads/{branch}"),
+            ],
+        )
+    });
+    let short = crate::git::head(here)
+        .map(|h| h.chars().take(7).collect::<String>())
+        .unwrap_or_default();
+    let uncommitted = if crate::git::has_uncommitted(here) == Some(true) {
+        " Changes you haven't committed stay here."
+    } else {
+        ""
+    };
+    match pushed {
+        Ok(_) => format!("Sent your latest commit on {branch} ({short}) to {label}, so it starts from there.{uncommitted}"),
+        Err(why) => format!(
+            "Couldn't send your latest commits to {label} ({why}), so it starts from what {label} has."
+        ),
+    }
+}
+
+/// Brings a job's work home from the server: commits it there on its branch,
+/// fetches that branch here, and checks it out in a worktree of its own,
+/// as if the job had run here. Gives back that worktree.
+fn bring_home(cfg: &Config, job: &store::Job, there: &str) -> Result<String, String> {
+    let here = job.folder.path.as_str();
+    let branch = job.branch.as_str();
+    if branch.is_empty() {
+        return Err("it didn't work on a branch of its own".into());
+    }
+    // Your name on the commit, as when a job here commits.
+    let who = |key: &str, or: &str| {
+        git_here(cfg, here, &["config", "--get", key])
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| or.to_string())
+    };
+    let (name, email) = (
+        who("user.name", "Squad Code"),
+        who("user.email", "squad@localhost"),
+    );
+    if !job.remote_dir.is_empty() {
+        let commit = format!(
+            "cd {dir} && git add -A && (git diff --cached --quiet || GIT_AUTHOR_NAME={n} GIT_AUTHOR_EMAIL={e} GIT_COMMITTER_NAME={n} GIT_COMMITTER_EMAIL={e} git commit -q -m {m})",
+            dir = quote(&job.remote_dir),
+            n = quote(&name),
+            e = quote(&email),
+            m = quote(&super::work::message(job)),
+        );
+        ssh(&cfg.host, &cfg.key, &commit, None)
+            .map_err(|why| format!("couldn't save its work there: {why}"))?;
+    }
+    git_here(
+        cfg,
+        here,
+        &[
+            "fetch",
+            "--quiet",
+            &git_url(cfg, there),
+            &format!("+refs/heads/{branch}:refs/heads/{branch}"),
+        ],
+    )
+    .map_err(|why| format!("couldn't fetch {branch}: {why}"))?;
+    crate::git::add_worktree(here, branch, None)
+}
+
+/// [`bring_home`] on a thread of its own.
+pub fn bring_home_later(
+    cfg: Config,
+    job: store::Job,
+    there: String,
+) -> Receiver<Result<String, String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(bring_home(&cfg, &job, &there));
+    });
+    rx
 }
 
 // ---------- the server's brain ----------
