@@ -415,6 +415,8 @@ pub struct Shell {
     live_len: usize,
     chat_scroll: ScrollHandle,
     chat_len: usize,
+    thread_scroll: ScrollHandle,
+    thread_key: u64,
     /// The Fin in the "make your own" playground on Crew: its colour and outfit.
     maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
@@ -482,6 +484,9 @@ pub struct Shell {
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
+    /// A bot with a chat or know-how of its own, waiting for you to confirm
+    /// taking it off the crew.
+    removing: Option<Member>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
@@ -867,6 +872,8 @@ impl Shell {
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
             chat_len: 0,
+            thread_scroll: ScrollHandle::new(),
+            thread_key: 0,
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
@@ -896,6 +903,7 @@ impl Shell {
             list_all: false,
             jobs_open: false,
             deleting: None,
+            removing: None,
             raw_open: Default::default(),
             confirming: None,
             reading: None,
@@ -2506,8 +2514,9 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if this.deleting.is_some() && key == "escape" {
+                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
                     this.deleting = None;
+                    this.removing = None;
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -2618,6 +2627,7 @@ impl Render for Shell {
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx))
+            .children(self.remove_dialog(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
