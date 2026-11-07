@@ -26,7 +26,7 @@ fn here() -> store::Folder {
     }
 }
 
-/// `squad brain why|may|ideas|export|eval|install|update|remove`.
+/// `squad brain why|may|learned|forget|ideas|export|eval|install|update|remove`.
 pub fn main(args: &[String]) -> Result<String, String> {
     let sub = args.first().map(String::as_str).unwrap_or("");
     let rest = args.get(1..).unwrap_or(&[]).join(" ");
@@ -58,6 +58,29 @@ pub fn main(args: &[String]) -> Result<String, String> {
             Ok(format!("{tier}\n{} {}", j.headline, j.why)
                 .trim_end()
                 .to_string())
+        }
+        // Forgets what Peek learned from the engine.
+        "forget" => {
+            let n = super::learn::load().len();
+            super::learn::forget().map_err(|e| e.to_string())?;
+            Ok(format!(
+                "Peek forgot {n} things it learned. It starts fresh."
+            ))
+        }
+        // What Peek has learned, and how much room it takes.
+        "learned" => {
+            let all = super::learn::load();
+            let bytes: usize = all
+                .iter()
+                .filter_map(|e| serde_json::to_string(e).ok())
+                .map(|l| l.len() + 1)
+                .sum();
+            Ok(format!(
+                "Peek has learned {} things from your engine ({} KB, at most {}).",
+                all.len(),
+                bytes / 1024,
+                super::learn::MAX
+            ))
         }
         "why" => {
             if rest.trim().is_empty() {
@@ -283,6 +306,9 @@ pub fn main(args: &[String]) -> Result<String, String> {
             st.save();
             Ok("Smart Peek is off and its model is deleted.".into())
         }
-        _ => Err("usage: squad brain why|may|ideas|export|eval|install|update|remove".into()),
+        _ => Err(
+            "usage: squad brain why|may|learned|forget|ideas|export|eval|install|update|remove"
+                .into(),
+        ),
     }
 }

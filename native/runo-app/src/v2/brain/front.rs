@@ -61,6 +61,13 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
             return Front::AskBack { question, choices };
         }
     }
+    // Nothing to work on: ask rather than start a job on a guess.
+    if !follow_up && no_work_in(t) {
+        return Front::AskBack {
+            question: "I'm not sure what you'd like yet. Is it a question for me, or something for the crew to work on? A few more words will do.".into(),
+            choices: Vec::new(),
+        };
+    }
     let r = route::route(st, t);
     if r.mode == Mode::Ask || (general_question(t) && !asks_for_work(t)) {
         return Front::Answer {
@@ -303,10 +310,54 @@ fn asks_what_we_do(lower: &str, ws: &[String]) -> bool {
         && (has("can") || has("could"))
         && (has("do") || has("help")))
         && ws.len() <= 12
+        || typed_who_are_you(lower)
         || lower.contains("who are you")
         || lower.contains("what are you")
         || lower.contains("how do you work")
         || ws == ["help"]
+}
+
+/// "who are you" through typos and missing spaces: "whoa re you", "who r u",
+/// "whore you", "wat are u".
+fn typed_who_are_you(lower: &str) -> bool {
+    let squashed: String = lower.chars().filter(|c| c.is_alphabetic()).collect();
+    squashed.len() <= 16
+        && [
+            "whoareyou",
+            "whoareu",
+            "whoryou",
+            "whoru",
+            "whoreyou",
+            "whoreu",
+            "whatareyou",
+            "whatareu",
+            "watareyou",
+            "watareu",
+            "whatru",
+            "whoisthis",
+            "whosthis",
+            "whoispeek",
+            "whatispeek",
+            "whatsthis",
+            "whatisthis",
+        ]
+        .iter()
+        .any(|w| squashed == *w || squashed.ends_with(w) && squashed.len() <= w.len() + 4)
+}
+
+/// Whether nothing in a short message asks for work or names a problem:
+/// no work verb, no cue any kind of job has, nothing that looks like code.
+/// "interesting", "hmm", a typo'd greeting. Those get a question back, never
+/// a job on a guess.
+fn no_work_in(text: &str) -> bool {
+    let ws = words(text);
+    !ws.is_empty()
+        && ws.len() <= 6
+        && !ws
+            .iter()
+            .any(|w| DO.contains(&w.as_str()) || WORK.contains(&w.as_str()))
+        && !text.contains(['/', '`', '(', ')', '{', '}', '=', '<', '>', '_'])
+        && route::by_rules(text, &[]).sure <= 0.3
 }
 
 /// Whether the message asks how Peek is.
@@ -925,6 +976,33 @@ mod tests {
         match read0("what's a good laptop for video editing under $1000?") {
             Front::Answer { code, .. } => assert!(!code),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn typos_and_idle_words_never_start_a_job() {
+        for t in [
+            "whoa re you",
+            "who r u",
+            "whore you?",
+            "wat are u",
+            "who is this",
+        ] {
+            match read0(t) {
+                Front::Chat { reply } => assert!(reply.contains("Peek"), "{t}: {reply}"),
+                other => panic!("{t}: {other:?}"),
+            }
+        }
+        for t in ["interesting", "hmm", "whoa", "huh", "wait what"] {
+            assert!(
+                !matches!(read0(t), Front::Hand(_) | Front::Confirm { .. }),
+                "{t}: {:?}",
+                read0(t)
+            );
+        }
+        // Real problems, however short, still go to a bot.
+        for t in ["login is broken", "npm test fails", "fix the navbar"] {
+            assert!(matches!(read0(t), Front::Hand(_)), "{t}: {:?}", read0(t));
         }
     }
 
