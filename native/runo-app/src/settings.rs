@@ -177,6 +177,19 @@ pub struct AppSettings {
     pub pattern_content: bool,
     pub pattern_panels: bool,
     pub pattern_frame: bool,
+    /// The Squad Code window's background image: empty for none, `builtin:<id>` for
+    /// one that ships with the app (see `v2::wallpaper`), or the path of a picture
+    /// of the person's own, copied into the data folder when they picked it.
+    pub v2_bg_image: String,
+    /// How the image meets the window: "fill" (cover, cropping), "fit" (all of it,
+    /// with bars), "stretch" or "centre" (actual size).
+    pub v2_bg_fit: String,
+    /// How blurred the image is, 0 to 100.
+    pub v2_bg_blur: u8,
+    /// How far the image fades into the theme's own ground, 0 to 100.
+    pub v2_bg_dim: u8,
+    /// How far the image shows through the page and the sidebar, 0 to 100.
+    pub v2_bg_show: u8,
     /// Interface font: "bundled" (Runo's own, tuned for sharp small text) or "system".
     pub font: String,
     /// The status bar's Usage popover shows every limit window, not just the closest one.
@@ -363,6 +376,11 @@ impl Default for AppSettings {
             pattern_content: true,
             pattern_panels: false,
             pattern_frame: false,
+            v2_bg_image: String::new(),
+            v2_bg_fit: "fill".into(),
+            v2_bg_blur: 0,
+            v2_bg_dim: 15,
+            v2_bg_show: 80,
             diff_colors: "default".into(),
             animations: true,
             notifications: true,

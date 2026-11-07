@@ -42,6 +42,7 @@ mod today;
 mod trouble;
 mod ui;
 mod usage;
+mod wallpaper;
 mod welcome;
 mod work;
 
@@ -554,6 +555,10 @@ pub struct Shell {
     clear_slider: Entity<SliderState>,
     /// How see-through popovers, menus and dialogs go.
     pop_slider: Entity<SliderState>,
+    /// The background image's blur, dim, and how far it shows through.
+    bg_blur_slider: Entity<SliderState>,
+    bg_dim_slider: Entity<SliderState>,
+    bg_show_slider: Entity<SliderState>,
     _subs: Vec<Subscription>,
     _pump: Task<()>,
 }
@@ -678,7 +683,63 @@ impl Shell {
                 .step(1.)
                 .default_value(pop_clear as f32)
         });
+        let bg_slider = |value: u8, cx: &mut Context<Self>| {
+            cx.new(|_| {
+                SliderState::new()
+                    .min(0.)
+                    .max(100.)
+                    .step(1.)
+                    .default_value(value.min(100) as f32)
+            })
+        };
+        let (blur, dim, show) = {
+            let st = cx.global::<crate::settings::AppSettings>();
+            (st.v2_bg_blur, st.v2_bg_dim, st.v2_bg_show)
+        };
+        let bg_blur_slider = bg_slider(blur, cx);
+        let bg_dim_slider = bg_slider(dim, cx);
+        let bg_show_slider = bg_slider(show, cx);
+        wallpaper::refresh(cx);
+        let slid = |event: &SliderEvent| match event {
+            SliderEvent::Change(v) => (v.end().round().clamp(0., 100.) as u8, false),
+            SliderEvent::Release(v) => (v.end().round().clamp(0., 100.) as u8, true),
+        };
         let subs = vec![
+            // The background image's dim and show-through preview as you drag; its
+            // blur needs a new copy made, so that waits until you let go.
+            cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
+                let (dim, keep) = slid(event);
+                wallpaper::set_look(wallpaper::fit(), dim);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_dim = dim;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&bg_show_slider, window, move |_, _, event, _, cx| {
+                let (show, keep) = slid(event);
+                theme::set_image(theme::image_on(), show);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_show = show;
+                        st.save();
+                    });
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&bg_blur_slider, window, move |_, _, event, _, cx| {
+                let (blur, keep) = slid(event);
+                if keep {
+                    cx.update_global::<crate::settings::AppSettings, _>(|st, _| {
+                        st.v2_bg_blur = blur;
+                        st.save();
+                    });
+                    wallpaper::refresh(cx);
+                }
+                cx.notify();
+            }),
             // Popovers too: dragging previews, letting go keeps it.
             cx.subscribe_in(&pop_slider, window, |_, _, event, _, cx| {
                 let (value, keep) = match event {
@@ -947,6 +1008,9 @@ impl Shell {
             view_w: 1280.,
             clear_slider,
             pop_slider,
+            bg_blur_slider,
+            bg_dim_slider,
+            bg_show_slider,
             _subs: subs,
             _pump: pump,
         }
@@ -2584,10 +2648,10 @@ impl Render for Shell {
             // When the desktop shows through, the sidebar and the page each paint
             // their own ground instead: stacked, two see-through layers would add
             // up to nearly solid.
-            .when(!theme::window_clear(), |d| {
+            .when(!theme::layered(), |d| {
                 d.bg(c(if setup { ui::bg() } else { ui::ground() }))
             })
-            .when(theme::window_clear() && setup, |d| d.bg(c(ui::bg())))
+            .when(theme::layered() && setup, |d| d.bg(c(ui::bg())))
             // The walkthrough has the whole window; the sidebar comes after it.
             .when(!setup, |d| d.child(self.sidebar(cx)))
             .child(
@@ -2637,7 +2701,8 @@ impl Render for Shell {
         crate::framestats::rendered();
         // A stand-in desktop under a see-through window, for screenshots taken where
         // the window can't really be see-through (Xvfb): RUNO_BACKDROP names an image.
-        match backdrop() {
+        // A background image, under Settings > Appearance, lies under everything.
+        match wallpaper::layer().or_else(backdrop) {
             Some(desk) => div()
                 .size_full()
                 .relative()
@@ -2664,7 +2729,7 @@ fn backdrop() -> Option<AnyElement> {
 
 /// What the window looks like: the theme, whether transparency is on, and how
 /// see-through it is.
-type Look = (&'static str, bool, u8, bool, u8);
+type Look = (&'static str, bool, u8, bool, u8, bool);
 
 fn look() -> Look {
     (
@@ -2673,6 +2738,7 @@ fn look() -> Look {
         (theme::amount() * 100.).round() as u8,
         theme::glass_popovers(),
         (theme::pop_amount() * 100.).round() as u8,
+        theme::image_on(),
     )
 }
 
@@ -2681,8 +2747,10 @@ fn look() -> Look {
 /// Frosted themes, and any theme with window transparency on, let the desktop show
 /// through, blurred (vibrancy on macOS, acrylic on Windows, the compositor's blur on
 /// Linux; without one the window stays solid).
+///
+/// A background image covers the desktop, so the window stays opaque under it.
 fn background() -> WindowBackgroundAppearance {
-    if theme::window_clear() {
+    if theme::window_clear() && !theme::image_on() {
         WindowBackgroundAppearance::Blurred
     } else {
         WindowBackgroundAppearance::Opaque
@@ -2725,6 +2793,7 @@ pub fn open_window(cx: &mut App) {
     ui::set_theme(&st.v2_theme);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
+    theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
