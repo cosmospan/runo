@@ -32,6 +32,10 @@ use super::store;
 
 /// What runs on the server to install it and keep it running.
 const SETUP: &str = include_str!("../../../../scripts/install-server.sh");
+/// What locks the server down once the app's key works: key-only SSH, a
+/// firewall that lets in nothing but SSH, fail2ban and automatic security
+/// updates. It needs root or sudo without a password, and skips what it can't do.
+const HARDEN: &str = include_str!("../../../../scripts/harden-server.sh");
 /// How often the server's state is read while connected.
 const REFRESH: Duration = Duration::from_secs(4);
 /// How long to wait before opening a tunnel again after it dropped.
@@ -48,6 +52,9 @@ pub struct Config {
     /// This computer's name there, and its token.
     pub name: String,
     pub token: String,
+    /// The SSH key the app made for this server when you connected with a
+    /// password; empty when your own SSH setup reaches it.
+    pub key: String,
 }
 
 impl Config {
@@ -102,8 +109,11 @@ pub fn valid_host(host: &str) -> bool {
 
 // ---------- ssh ----------
 
-fn ssh_base(host: &str) -> Command {
+fn ssh_base(host: &str, key: &str) -> Command {
     let mut cmd = Command::new("ssh");
+    if !key.is_empty() {
+        cmd.args(["-i", key, "-o", "IdentitiesOnly=yes"]);
+    }
     cmd.args([
         "-o",
         "BatchMode=yes",
@@ -118,8 +128,8 @@ fn ssh_base(host: &str) -> Command {
 
 /// Runs `command` on the server, with `input` on its stdin, and gives back
 /// what it printed.
-fn ssh(host: &str, command: &str, input: Option<&str>) -> Result<String, String> {
-    let mut cmd = ssh_base(host);
+fn ssh(host: &str, key: &str, command: &str, input: Option<&str>) -> Result<String, String> {
+    let mut cmd = ssh_base(host, key);
     cmd.arg(command)
         .stdin(if input.is_some() {
             Stdio::piped()
@@ -157,6 +167,88 @@ fn ssh(host: &str, command: &str, input: Option<&str>) -> Result<String, String>
     Err(why)
 }
 
+/// The key the app uses for servers you connect with a password, made once.
+fn own_key() -> Result<String, String> {
+    let dir = crate::store::data_dir().join("ssh");
+    let key = dir.join("id_ed25519");
+    if key.is_file() {
+        return Ok(key.to_string_lossy().to_string());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let made = Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-C", "squad-code", "-f"])
+        .arg(&key)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("ssh-keygen isn't available: {e}"))?;
+    if !made.status.success() {
+        return Err(format!(
+            "Couldn't make an SSH key: {}",
+            String::from_utf8_lossy(&made.stderr).trim()
+        ));
+    }
+    Ok(key.to_string_lossy().to_string())
+}
+
+/// Logs in once with the password and adds the app's key to the server.
+/// ssh asks this same program for the password (see `main`), so it's never
+/// typed into a terminal or written to disk.
+fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
+    let public = std::fs::read_to_string(format!("{key}.pub"))
+        .map_err(|e| format!("Couldn't read the new key: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut cmd = Command::new("ssh");
+    cmd.args([
+        "-o",
+        "ConnectTimeout=15",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "PubkeyAuthentication=no",
+        "-o",
+        "PreferredAuthentications=password,keyboard-interactive",
+        "-o",
+        "NumberOfPasswordPrompts=1",
+        host,
+        "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && k=$(cat) && (grep -qxF \"$k\" ~/.ssh/authorized_keys || printf '%s\\n' \"$k\" >> ~/.ssh/authorized_keys)",
+    ])
+    .env("SSH_ASKPASS", exe)
+    .env("SSH_ASKPASS_REQUIRE", "force")
+    .env("SQUAD_ASKPASS", password)
+    .env("DISPLAY", std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into()))
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => "ssh isn't installed on this computer".to_string(),
+        _ => e.to_string(),
+    })?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(public.trim().as_bytes());
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr);
+    if err.contains("Permission denied") {
+        return Err(format!("{host} didn't take that password. Check it, and the user name before the @ (often root)."));
+    }
+    Err(format!(
+        "Couldn't log in to {host}: {}",
+        err.lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("ssh stopped")
+            .trim()
+    ))
+}
+
 fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
@@ -176,9 +268,9 @@ struct Tunnel {
 }
 
 impl Tunnel {
-    fn open(host: &str) -> Result<Tunnel, String> {
+    fn open(host: &str, key: &str) -> Result<Tunnel, String> {
         let port = free_port().ok_or("no free port on this computer")?;
-        let mut cmd = ssh_base(host);
+        let mut cmd = ssh_base(host, key);
         cmd.args([
             "-N",
             "-o",
@@ -298,10 +390,12 @@ pub enum Step {
 }
 
 /// Sets the server up and pairs this computer with it, on a thread of its own.
-pub fn connect(host: String, device: String) -> Receiver<Step> {
+/// `password` is the server's, for a first connection with no SSH key: the
+/// app makes a key of its own, puts it on the server and uses it from then on.
+pub fn connect(host: String, password: String, device: String) -> Receiver<Step> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let step = match setup(&host, &device, &tx) {
+        let step = match setup(&host, &password, &device, &tx) {
             Ok(c) => Step::Done(c),
             Err(why) => Step::Failed(why),
         };
@@ -310,7 +404,7 @@ pub fn connect(host: String, device: String) -> Receiver<Step> {
     rx
 }
 
-fn setup(host: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> {
+fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> {
     let say = |t: String| {
         let _ = tx.send(Step::Say(t));
     };
@@ -318,9 +412,21 @@ fn setup(host: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> 
     if !valid_host(host) {
         return Err("Type it the way you'd type it after ssh, like you@203.0.113.7.".into());
     }
-    say(format!("Reaching {host} over SSH…"));
-    let os = ssh(host, "uname -sm", None).map_err(|why| {
-        format!("Couldn't reach {host} over SSH: {why}. Check that `ssh {host}` works in a terminal without asking for a password; Squad uses your SSH key.")
+    say(format!("Reaching {host}…"));
+    let key = if password.is_empty() {
+        String::new()
+    } else {
+        let key = own_key()?;
+        say("Putting this computer's key on the server…".into());
+        add_key(host, password, &key)?;
+        key
+    };
+    let os = ssh(host, &key, "uname -sm", None).map_err(|why| {
+        if password.is_empty() {
+            format!("Couldn't reach {host}: {why}. If you don't use SSH keys, type the server's password too; your VPS provider emailed it to you.")
+        } else {
+            format!("Couldn't reach {host} with the new key: {why}")
+        }
     })?;
     if !os.trim_start().starts_with("Linux") {
         return Err(format!(
@@ -329,7 +435,7 @@ fn setup(host: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> 
         ));
     }
     say("Installing Squad Code there and keeping it running…".into());
-    let out = ssh(host, "sh -s", Some(SETUP))
+    let out = ssh(host, &key, "sh -s", Some(SETUP))
         .map_err(|why| format!("Setting up {host} stopped: {why}"))?;
     let bin = out
         .lines()
@@ -337,16 +443,29 @@ fn setup(host: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> 
         .find_map(|l| l.strip_prefix("bin="))
         .map(|b| b.trim().to_string())
         .ok_or_else(|| format!("Setting up {host} didn't finish."))?;
+    say("Locking the server down…".into());
+    match ssh(host, &key, "sh -s", Some(HARDEN)) {
+        Ok(out) => {
+            for line in out.lines().filter_map(|l| l.strip_prefix("did: ")) {
+                say(format!("Done: {line}."));
+            }
+        }
+        Err(why) => say(format!(
+            "Couldn't lock it down ({why}). It still only listens on its own address."
+        )),
+    }
     say("Pairing this computer…".into());
     let code = ssh(
         host,
+        &key,
         &format!("{} v2 pair --bare {}", quote(&bin), quote(device)),
         None,
     )
     .map_err(|why| format!("Couldn't get a pairing code: {why}"))?
     .trim()
     .to_string();
-    let tunnel = Tunnel::open(host).map_err(|why| format!("Couldn't open a tunnel: {why}"))?;
+    let tunnel =
+        Tunnel::open(host, &key).map_err(|why| format!("Couldn't open a tunnel: {why}"))?;
     // The service may still be starting.
     let mut last = String::new();
     for _ in 0..20 {
@@ -379,6 +498,7 @@ fn setup(host: &str, device: &str, tx: &Sender<Step>) -> Result<Config, String> 
         bin,
         name: v["name"].as_str().unwrap_or(device).to_string(),
         token: v["token"].as_str().unwrap_or("").to_string(),
+        key,
     };
     if cfg.token.is_empty() {
         return Err("Pairing failed: the server sent no token.".into());
@@ -416,6 +536,15 @@ pub struct Project {
     pub remote: String,
 }
 
+/// An agent on the server.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AgentThere {
+    pub agent: String,
+    pub name: String,
+    pub installed: bool,
+    pub signed_in: bool,
+}
+
 /// What the link last saw.
 #[derive(Clone, Debug, Default)]
 struct Seen {
@@ -424,6 +553,8 @@ struct Seen {
     up: bool,
     engines: Vec<String>,
     projects: Vec<Project>,
+    /// Each agent there: installed, and signed in or given a key.
+    logins: Vec<AgentThere>,
     /// Jobs read since the app last took them, by their id on the server.
     jobs: HashMap<u64, store::Job>,
     /// Answers to [`Link::send`]: the local id, and the server's id or why not.
@@ -470,7 +601,17 @@ impl Link {
         brain::place::Server {
             name: self.cfg.label(),
             reachable: s.up,
-            engines: s.engines.clone(),
+            // Agents that can actually run there: installed and signed in. An
+            // older server doesn't say who's signed in, so its installed ones count.
+            engines: if s.logins.is_empty() {
+                s.engines.clone()
+            } else {
+                s.logins
+                    .iter()
+                    .filter(|l| l.installed && l.signed_in)
+                    .map(|l| l.agent.clone())
+                    .collect()
+            },
             projects: s
                 .projects
                 .iter()
@@ -489,13 +630,13 @@ impl Link {
         self.seen().up
     }
 
+    pub fn logins(&self) -> Vec<AgentThere> {
+        self.seen().logins.clone()
+    }
+
     /// One line on how the connection is.
     pub fn line(&self) -> String {
         self.seen().line.clone()
-    }
-
-    pub fn engines(&self) -> Vec<String> {
-        self.seen().engines.clone()
     }
 
     pub fn projects(&self) -> Vec<Project> {
@@ -576,7 +717,7 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
         }
         if tunnel.is_none() && tried.is_none_or(|t| t.elapsed() > RETRY) {
             tried = Some(Instant::now());
-            match Tunnel::open(&cfg.host) {
+            match Tunnel::open(&cfg.host, &cfg.key) {
                 Ok(t) => {
                     tunnel = Some(t);
                     read_at = Instant::now() - REFRESH;
@@ -663,6 +804,19 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                 s.line = format!("Connected to {label}.");
                 s.engines = engines;
                 s.projects = projects;
+                s.logins = v["logins"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .map(|l| AgentThere {
+                                agent: l["agent"].as_str().unwrap_or("").to_string(),
+                                name: l["name"].as_str().unwrap_or("").to_string(),
+                                installed: l["installed"].as_bool().unwrap_or(false),
+                                signed_in: l["signed_in"].as_bool().unwrap_or(false),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
             }
             Ok((401, _)) => {
                 let mut s = lock();
@@ -715,7 +869,7 @@ fn add_project(cfg: &Config, port: u16, name: &str, url: &str) -> String {
         d = quote(&dir),
         u = quote(url)
     );
-    let path = match ssh(&cfg.host, &script, None) {
+    let path = match ssh(&cfg.host, &cfg.key, &script, None) {
         Ok(out) => out.lines().last().unwrap_or("").trim().to_string(),
         Err(why) => return format!("Couldn't copy {name} to {label}: {why}"),
     };
@@ -730,6 +884,280 @@ fn add_project(cfg: &Config, port: u16, name: &str, url: &str) -> String {
         Ok((_, v)) => format!("{label} wouldn't add {name}: {}", error_of(&v)),
         Err(e) => format!("Couldn't reach {label}: {e}"),
     }
+}
+
+// ---------- the server's brain ----------
+
+/// What giving the server an agent reports as it goes.
+#[derive(Clone, Debug)]
+pub enum Brain {
+    Say(String),
+    /// Open this in the browser to sign in; then send the code it shows.
+    Url(String),
+    Done(String),
+    Failed(String),
+}
+
+/// The API keys the app can give the server: what people call the company,
+/// the agent that uses the key, and the variable it reads.
+pub const KEYS: [(&str, &str, &str); 4] = [
+    ("Anthropic", "claude", "ANTHROPIC_API_KEY"),
+    ("OpenAI", "codex", "OPENAI_API_KEY"),
+    ("Google", "gemini", "GEMINI_API_KEY"),
+    ("xAI Grok", "grok", "XAI_API_KEY"),
+];
+
+fn agent_name(agent: &str) -> &'static str {
+    crate::agent::PROVIDERS
+        .iter()
+        .find(|p| p.id == agent)
+        .map(|p| p.name)
+        .unwrap_or("the agent")
+}
+
+/// Installs `agent` on the server unless it's there already.
+fn install_agent(cfg: &Config, agent: &str, say: &dyn Fn(Brain)) -> Result<(), String> {
+    let Some(script) = crate::cove::install_script(agent) else {
+        return Ok(());
+    };
+    say(Brain::Say(format!(
+        "Making sure {} is installed there…",
+        agent_name(agent)
+    )));
+    ssh(&cfg.host, &cfg.key, "bash -s", Some(&script))
+        .map(|_| ())
+        .map_err(|why| format!("Couldn't install {} there: {why}", agent_name(agent)))
+}
+
+/// Keeps `value` as `env` for the server's agents and restarts the server so
+/// they use it. The value goes over SSH's stdin, never on a command line.
+fn set_on_server(cfg: &Config, env: &str, value: &str) -> Result<(), String> {
+    ssh(
+        &cfg.host,
+        &cfg.key,
+        &format!("{} v2 serve --set {env}", quote(&cfg.bin)),
+        Some(&format!("{value}\n")),
+    )
+    .map(|_| ())
+}
+
+/// Gives the server an API key for `agent`, installing the agent first.
+pub fn give_key(
+    cfg: Config,
+    agent: &'static str,
+    env: &'static str,
+    value: String,
+) -> Receiver<Brain> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let say = |b: Brain| {
+            let _ = tx.send(b);
+        };
+        let step = install_agent(&cfg, agent, &say)
+            .and_then(|_| {
+                say(Brain::Say("Saving the key there…".into()));
+                set_on_server(&cfg, env, value.trim())
+            })
+            .map(|_| {
+                Brain::Done(format!(
+                    "{} on {} can run jobs now.",
+                    agent_name(agent),
+                    cfg.label()
+                ))
+            });
+        say(step.unwrap_or_else(Brain::Failed));
+    });
+    rx
+}
+
+/// Signing the server's Claude Code in with your Claude plan: the server runs
+/// `claude setup-token`, you open its link here and send back the code.
+pub struct SignIn {
+    pub rx: Receiver<Brain>,
+    code: Sender<String>,
+}
+
+impl SignIn {
+    pub fn send_code(&self, code: &str) {
+        let _ = self.code.send(code.trim().to_string());
+    }
+}
+
+pub fn claude_sign_in(cfg: Config) -> SignIn {
+    let (tx, rx) = channel();
+    let (code_tx, code_rx) = channel::<String>();
+    std::thread::spawn(move || {
+        let say = |b: Brain| {
+            let _ = tx.send(b);
+        };
+        let step = install_agent(&cfg, "claude", &say)
+            .and_then(|_| setup_token(&cfg, &say, &code_rx))
+            .and_then(|token| {
+                say(Brain::Say("Saving the sign-in there…".into()));
+                set_on_server(&cfg, "CLAUDE_CODE_OAUTH_TOKEN", &token)
+            })
+            .map(|_| {
+                Brain::Done(format!(
+                    "Claude Code on {} runs on your Claude plan now.",
+                    cfg.label()
+                ))
+            });
+        say(step.unwrap_or_else(Brain::Failed));
+    });
+    SignIn { rx, code: code_tx }
+}
+
+/// Runs `claude setup-token` on the server in a terminal there and gives back
+/// the token it prints once the code from the browser is typed in.
+fn setup_token(
+    cfg: &Config,
+    say: &dyn Fn(Brain),
+    codes: &Receiver<String>,
+) -> Result<String, String> {
+    say(Brain::Say("Asking Claude for a sign-in link…".into()));
+    let mut cmd = ssh_base(&cfg.host, &cfg.key);
+    cmd.arg("-tt")
+        .arg(r#"export PATH="$HOME/.local/bin:$PATH"; stty cols 4000 rows 60 2>/dev/null; exec claude setup-token"#)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    let mut stdin = child.stdin.take().ok_or("no terminal")?;
+    let mut stdout = child.stdout.take().ok_or("no terminal")?;
+    let (out_tx, out_rx) = channel::<String>();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        while let Ok(n) = stdout.read(&mut buf) {
+            if n == 0
+                || out_tx
+                    .send(String::from_utf8_lossy(&buf[..n]).to_string())
+                    .is_err()
+            {
+                break;
+            }
+        }
+    });
+    let mut seen = String::new();
+    let mut url_sent = false;
+    let mut code_sent: Option<Instant> = None;
+    let until = Instant::now() + Duration::from_secs(15 * 60);
+    let result = loop {
+        if Instant::now() > until {
+            break Err("The sign-in took too long. Try again.".to_string());
+        }
+        match out_rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(chunk) => seen.push_str(&chunk),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                let plain = plain_text(&seen);
+                break match find_token(&plain) {
+                    Some(t) => Ok(t),
+                    None => Err(format!(
+                        "Claude's sign-in stopped: {}",
+                        plain
+                            .lines()
+                            .rev()
+                            .map(str::trim)
+                            .find(|l| !l.is_empty())
+                            .unwrap_or("no reason given")
+                    )),
+                };
+            }
+        }
+        let plain = plain_text(&seen);
+        if let Some(token) = find_token(&plain) {
+            break Ok(token);
+        }
+        if !url_sent {
+            if let Some(url) = find_url(&plain) {
+                url_sent = true;
+                say(Brain::Url(url));
+            }
+        }
+        match codes.try_recv() {
+            Ok(code) if url_sent && code_sent.is_none() => {
+                code_sent = Some(Instant::now());
+                say(Brain::Say("Checking the code…".into()));
+                let _ = stdin.write_all(format!("{code}\r").as_bytes());
+                let _ = stdin.flush();
+            }
+            // The app let go: the person cancelled.
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                break Err("Cancelled.".to_string());
+            }
+            _ => {}
+        }
+        // A good code gives a token within seconds; Claude's last words say why not.
+        if code_sent.is_some_and(|at| at.elapsed() > Duration::from_secs(60)) {
+            let plain = plain_text(&seen);
+            let said = plain
+                .lines()
+                .rev()
+                .map(str::trim)
+                .find(|l| !l.is_empty() && !l.contains("Checking"))
+                .unwrap_or("no answer")
+                .to_string();
+            break Err(format!(
+                "Claude didn't take that code ({said}). Try signing in again."
+            ));
+        }
+    };
+    let _ = child.kill();
+    let _ = child.wait();
+    result
+}
+
+/// Terminal output without its colour and cursor codes.
+fn plain_text(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut it = raw.chars();
+    while let Some(c) = it.next() {
+        if c != '\u{1b}' {
+            if c != '\r' {
+                out.push(c);
+            }
+            continue;
+        }
+        match it.next() {
+            // CSI: parameters, then one final letter.
+            Some('[') => {
+                for c in it.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // OSC: up to BEL or ESC \.
+            Some(']') => {
+                while let Some(c) = it.next() {
+                    if c == '\u{7}' {
+                        break;
+                    }
+                    if c == '\u{1b}' {
+                        it.next();
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn find_url(text: &str) -> Option<String> {
+    text.split_whitespace()
+        .find(|w| w.starts_with("https://") && w.contains("oauth"))
+        .map(str::to_string)
+}
+
+fn find_token(text: &str) -> Option<String> {
+    let at = text.find("sk-ant-oat")?;
+    let token: String = text[at..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    (token.len() > 40).then_some(token)
 }
 
 #[cfg(test)]
@@ -754,6 +1182,22 @@ mod tests {
         assert_eq!(status, 401);
         assert_eq!(error_of(&v), "no");
         assert!(parse_reply(b"HTTP/1.1 200").is_err());
+    }
+
+    #[test]
+    fn claudes_link_and_token_are_read_from_its_terminal() {
+        let screen = "\u{1b}[2K\u{1b}[1mBrowser didn't open? Use the url below to sign in\u{1b}[0m\r\nhttps://claude.com/cai/oauth/authorize?code=true&state=abc\r\nPaste code here if prompted >";
+        let plain = plain_text(screen);
+        assert_eq!(
+            find_url(&plain).as_deref(),
+            Some("https://claude.com/cai/oauth/authorize?code=true&state=abc")
+        );
+        assert_eq!(find_token(&plain), None);
+        let done = "Your OAuth token (valid for 1 year):\r\n\u{1b}[32msk-ant-oat01-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-zz\u{1b}[0m\r\n";
+        assert_eq!(
+            find_token(&plain_text(done)).as_deref(),
+            Some("sk-ant-oat01-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-zz")
+        );
     }
 
     #[test]

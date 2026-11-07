@@ -86,6 +86,8 @@ On a server:
                              devices to reach (127.0.0.1:7640 by default)
   squad serve --install       keep it running after you log out and after
                              a restart (a systemd user service)
+  squad serve --set KEY=value keep a key for the agents here (such as
+                             ANTHROPIC_API_KEY) and restart to use it
   squad pair [name]           a one-time code to pair a device with
   squad devices               paired devices
   squad unpair <name>         stop a device reaching the crew

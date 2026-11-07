@@ -52,13 +52,22 @@ fi
 # The binary links a few window-system libraries even when it serves without a
 # window. Add the missing ones when we can do it without a password.
 if command -v ldd >/dev/null 2>&1 && ldd "$bin" 2>/dev/null | grep -q "not found"; then
-  if command -v apt-get >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+  if [ "$(id -u)" = 0 ]; then as_root=""; elif sudo -n true 2>/dev/null; then as_root="sudo -n"; else as_root=none; fi
+  if command -v apt-get >/dev/null 2>&1 && [ "$as_root" != none ]; then
     say "Adding the libraries Squad Code needs…"
-    sudo -n apt-get update -qq >/dev/null 2>&1 || true
-    sudo -n apt-get install -y -qq libxcb1 libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 >/dev/null 2>&1 || true
+    $as_root apt-get update -qq >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive $as_root apt-get install -y -qq libxcb1 libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 >/dev/null 2>&1 || true
   fi
   missing=$(ldd "$bin" 2>/dev/null | grep "not found" | awk '{print $1}' | tr '\n' ' ')
   [ -z "$missing" ] || fail "Squad Code needs these libraries: $missing. Install them (for Ubuntu: sudo apt-get install libxcb1 libxkbcommon0 libxkbcommon-x11-0) and connect again."
+fi
+
+# The crew needs an agent to run on. Claude Code installs without root; the
+# others are added from the app when you give the server a key for them.
+if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
+  say "Installing Claude Code…"
+  curl -fsSL https://claude.ai/install.sh | bash >/dev/null 2>&1 \
+    || say "Couldn't install Claude Code here; the app will ask again when you sign in."
 fi
 
 "$bin" v2 serve --install
