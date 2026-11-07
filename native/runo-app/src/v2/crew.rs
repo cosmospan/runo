@@ -3,7 +3,7 @@
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{Badge, Fin, Hat, Held, Material, Outfit, Tool, ROLES};
+use runo_holo::fin::{Badge, Fin, Hat, Held, Line, Outfit, Tool, ROLES};
 use runo_holo::{Framing, Mood, Tint};
 
 use super::data::{Member, Mode};
@@ -445,12 +445,13 @@ impl Shell {
 
     fn maker_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let (tint, outfit) = self.maker;
-        let material = Material::from_id(&cx.global::<crate::settings::AppSettings>().fin_material);
+        let line = Line::from_code(&cx.global::<crate::settings::AppSettings>().fin_line);
         let preview = self.pose_img(
             runo_holo::Figure::Fin(
                 Fin {
                     tint,
-                    material,
+                    line,
+                    ears: false,
                     outfit,
                 }
                 .pose(Mood::Signature),
