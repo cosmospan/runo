@@ -81,6 +81,34 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
     }
 }
 
+/// Whether `text` is a short ask to run the app the crew made ("run the
+/// app", "start it", "serve the site"), which Squad Code does itself and
+/// keeps running, rather than a job for a bot.
+pub fn wants_run_app(text: &str) -> bool {
+    let ws = words(text);
+    if ws.is_empty() || ws.len() > 7 {
+        return false;
+    }
+    let lead = [
+        "please", "pls", "can", "you", "could", "now", "ok", "okay", "just", "hey", "peek",
+    ];
+    let Some(i) = ws.iter().position(|w| !lead.contains(&w.as_str())) else {
+        return false;
+    };
+    let verb = ["run", "start", "launch", "serve", "boot", "open"];
+    let what = [
+        "the", "app", "it", "server", "site", "website", "project", "dev", "locally", "up",
+        "again", "now", "local", "preview", "please", "pls", "for", "me", "my", "this", "that",
+        "web",
+    ];
+    let named = [
+        "app", "it", "server", "site", "website", "project", "preview",
+    ];
+    verb.contains(&ws[i].as_str())
+        && ws.iter().skip(i + 1).all(|w| what.contains(&w.as_str()))
+        && ws.iter().skip(i + 1).any(|w| named.contains(&w.as_str()))
+}
+
 /// Verbs that stop what's running.
 const STOP: &[&str] = &[
     "stop",
@@ -1003,6 +1031,29 @@ mod tests {
         // Real problems, however short, still go to a bot.
         for t in ["login is broken", "npm test fails", "fix the navbar"] {
             assert!(matches!(read0(t), Front::Hand(_)), "{t}: {:?}", read0(t));
+        }
+    }
+
+    #[test]
+    fn run_the_app_is_told_apart_from_work() {
+        for t in [
+            "run the app",
+            "start it",
+            "pls run the app again",
+            "serve the site",
+            "start the dev server",
+            "can you run it",
+        ] {
+            assert!(wants_run_app(t), "{t}");
+        }
+        for t in [
+            "run the tests",
+            "run",
+            "start a new project for invoices",
+            "open server.js",
+            "run the migration",
+        ] {
+            assert!(!wants_run_app(t), "{t}");
         }
     }
 

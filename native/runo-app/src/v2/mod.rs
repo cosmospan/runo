@@ -514,6 +514,10 @@ pub struct Shell {
     /// A message Peek's engine is reading: Peek's message showing it, the
     /// words, the conversation before them, and the decision to come.
     reading: Option<Reading>,
+    /// When Peek's engine started reading it.
+    reading_since: Option<std::time::Instant>,
+    /// Terminals running an app Squad Code started for the person.
+    serving: Vec<u64>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -899,6 +903,12 @@ impl Shell {
                     }
                     let text = input.read(cx).value().trim().to_string();
                     input.update(cx, |i, cx| i.set_value("", window, cx));
+                    if brain::front::wants_run_app(&text)
+                        && this.run_latest_app(text.clone(), window, cx)
+                    {
+                        this.unpin_mode(window, cx);
+                        return;
+                    }
                     this.hand_over(text, cx);
                     this.unpin_mode(window, cx);
                 }
@@ -917,6 +927,18 @@ impl Shell {
                     let text = input.read(cx).value().trim().to_string();
                     if let (false, Place::Live(id)) = (text.is_empty(), this.place) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
+                        // "run the app": Squad Code runs it and keeps it up.
+                        let idle = this
+                            .crew
+                            .store
+                            .job(id)
+                            .is_some_and(|j| j.status != Status::Running);
+                        if idle
+                            && brain::front::wants_run_app(&text)
+                            && this.run_app(Some(id), window, cx).is_some()
+                        {
+                            return;
+                        }
                         this.follow_up(id, text, cx);
                     }
                 }
@@ -1074,6 +1096,8 @@ impl Shell {
             raw_open: Default::default(),
             confirming: None,
             reading: None,
+            reading_since: None,
+            serving: Vec::new(),
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1450,6 +1474,7 @@ impl Shell {
                 // Peek's message shows as reading until the decision lands.
                 let talk = self.crew.peek_reading(text.clone());
                 self.reading = Some((talk, text, recent, rx));
+                self.reading_since = Some(std::time::Instant::now());
                 cx.notify();
                 return;
             }
@@ -1458,6 +1483,51 @@ impl Shell {
         // the rules.
         let (front, line) = Self::without_engine(&st, &text, &recent);
         self.act_on(front, text, line, None, cx);
+    }
+
+    /// "run the app" in a thread: runs the app of this thread's latest job
+    /// (its branch), else the project's. False when there's none to run.
+    fn run_latest_app(
+        &mut self,
+        text: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.crew.store.folder().is_none() || self.sampling {
+            return false;
+        }
+        let here = self.crew.store.thread_here();
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let job = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .find(|j| {
+                j.thread == here
+                    && j.folder.path == folder
+                    && j.status != Status::Running
+                    && j.mode.writes()
+            })
+            .map(|j| j.id);
+        match self.run_app(job, window, cx) {
+            Some(line) => {
+                self.crew.peek_says(text, line, Vec::new());
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Peek's message that shows it reading, while its engine reads.
+    pub(super) fn reading_talk(&self) -> Option<u64> {
+        self.reading.as_ref().map(|r| r.0)
     }
 
     /// Peek's decision when its engine can't help: the closest thing the
@@ -2242,7 +2312,9 @@ impl Shell {
         for id in &pick {
             self.crew.stop(*id);
         }
+        let apps = self.stop_apps();
         let reply = match names.len() {
+            0 if apps > 0 => "Stopped the app.".to_string(),
             0 => "Nothing's running here right now, so there's nothing to stop.".to_string(),
             _ => format!("Stopped {}, and anything it had running.", names.join(", ")),
         };
