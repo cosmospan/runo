@@ -64,6 +64,16 @@ pub struct Runtime {
     /// New bots the crew's engine is setting up for the project, by made id,
     /// with whether the person set its skills and its rules (kept as they are).
     designing: Vec<(u16, (bool, bool), Receiver<crate::agent::Event>)>,
+    /// The bot the maker on Crew is drafting: the engine's reply on its way, and
+    /// the sentence and name it was asked about.
+    drafting: Option<(Receiver<crate::agent::Event>, String, String)>,
+    /// The maker's draft once it's back (or the quick one when the engine failed).
+    pub drafted: Option<brain::maker::Full>,
+    /// New skill files the engine is writing for the bot in the maker: the
+    /// reply, and what the person asked for.
+    skilling: Option<(Receiver<crate::agent::Event>, String)>,
+    /// A skill file written, for the maker to add: (name, description, body).
+    pub skilled: Option<Result<(String, String, String), String>>,
     /// Tool uses running jobs wait on your yes for, oldest first.
     pub asks: Vec<crate::approvals::Request>,
     asks_at: Instant,
@@ -89,6 +99,10 @@ impl Runtime {
             sites: brain::Sites::default(),
             peeking: Vec::new(),
             designing: Vec::new(),
+            drafting: None,
+            drafted: None,
+            skilling: None,
+            skilled: None,
             asks: Vec::new(),
             asks_at: Instant::now(),
         }
@@ -144,6 +158,8 @@ impl Runtime {
             || !self.planning.is_empty()
             || !self.peeking.is_empty()
             || !self.designing.is_empty()
+            || self.drafting.is_some()
+            || self.skilling.is_some()
     }
 
     /// Whether `who` is answering a question right now.
@@ -1491,6 +1507,7 @@ impl Runtime {
         }
         self.poll_peek();
         self.poll_designs();
+        self.poll_draft();
         self.poll_goals(st);
         self.poll_queue(st);
         finished
@@ -1515,7 +1532,9 @@ impl Runtime {
 
     /// Adds a bot to the crew. What the person left out (the kind of work, its
     /// skills, its rules) is filled in at once from what it's for, and then the
-    /// crew's engine reads the project and writes rules and skills that fit it.
+    /// person's engine reads the project and drafts the rest of it: its
+    /// instructions, skill files, connected apps, permissions and memory. This
+    /// is how Peek makes the bots it suggests.
     #[allow(clippy::too_many_arguments)]
     pub fn make_bot(
         &mut self,
@@ -1527,7 +1546,7 @@ impl Runtime {
         look: [u8; 4],
         outfit: String,
     ) -> u16 {
-        let id = self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+        let id = self.next_made_id();
         let mut d = brain::maker::draft(name, role, like);
         let set = (!skills.is_empty(), !rules.is_empty());
         if set.0 {
@@ -1549,16 +1568,183 @@ impl Runtime {
         super::data::set_made(&self.store.made);
         self.store.save();
         if let Some(folder) = self.store.folder().cloned() {
-            if set != (true, true) {
-                if let Ok(rx) = brain::maker::design(st, &folder, name, &d) {
-                    self.designing.push((id, set, rx));
-                }
+            let found = crate::settings::discover(Some(&folder.path));
+            let (have, apps) = brain::maker::on_computer(&found);
+            let prompt = brain::maker::full_prompt(&d.role, name, &folder.name, &have, &apps);
+            if let Ok(rx) = brain::maker::ask_full(st, &folder, &prompt) {
+                self.designing.push((id, set, rx));
             }
         }
         id
     }
 
-    /// Bot setups coming back from the engine.
+    /// The id the next made bot gets.
+    pub fn next_made_id(&self) -> u16 {
+        self.store.made.iter().map(|m| m.id).max().unwrap_or(0) + 1
+    }
+
+    /// Adds a bot the person reviewed in the maker, as it is: no second draft.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_reviewed(
+        &mut self,
+        id: u16,
+        name: &str,
+        role: &str,
+        like: Member,
+        (skills, rules): (Vec<String>, Vec<String>),
+        look: [u8; 4],
+        setup: super::setup::Setup,
+    ) {
+        self.store.made.retain(|m| m.id != id);
+        self.store.made.push(super::data::Made {
+            id,
+            name: name.to_string(),
+            role: role.to_string(),
+            like,
+            look,
+            outfit: String::new(),
+            skills,
+            rules,
+        });
+        super::data::set_made(&self.store.made);
+        self.set_setup(Member::Made(id), setup);
+    }
+
+    /// Saves what `who` can do.
+    pub fn set_setup(&mut self, who: Member, setup: super::setup::Setup) {
+        let key = super::engine::bot_key(who);
+        if setup.is_empty() {
+            self.store.setups.remove(&key);
+        } else {
+            self.store.setups.insert(key, setup);
+        }
+        super::setup::set_all(&self.store.setups);
+        self.store.save();
+    }
+
+    /// Asks the person's engine to draft a whole bot from `about`, for the
+    /// maker. Without an open project or an engine, the quick draft is ready
+    /// at once.
+    pub fn draft_bot(&mut self, st: &AppSettings, about: &str, name: &str) {
+        self.drafted = None;
+        let asked = self.store.folder().cloned().and_then(|folder| {
+            let found = crate::settings::discover(Some(&folder.path));
+            let (have, apps) = brain::maker::on_computer(&found);
+            let prompt = brain::maker::full_prompt(about, name, &folder.name, &have, &apps);
+            brain::maker::ask_full(st, &folder, &prompt).ok()
+        });
+        match asked {
+            Some(rx) => self.drafting = Some((rx, about.to_string(), name.to_string())),
+            None => {
+                self.drafting = None;
+                self.drafted = Some(brain::maker::quick(about, name));
+            }
+        }
+    }
+
+    /// Whether the maker's draft is still on its way.
+    pub fn is_drafting(&self) -> bool {
+        self.drafting.is_some()
+    }
+
+    /// Stops waiting for the maker's draft.
+    pub fn cancel_draft(&mut self) {
+        self.drafting = None;
+        self.skilling = None;
+    }
+
+    /// Asks the person's engine to write one skill file for a bot, from what
+    /// the person wants it to do.
+    pub fn draft_skill(&mut self, st: &AppSettings, about: &str, bot: &str) -> Result<(), String> {
+        let folder = self
+            .store
+            .folder()
+            .cloned()
+            .ok_or("Open a project first, so the skill fits its code.")?;
+        let prompt = format!(
+            "Write a skill file for {bot}, a bot in Squad Code's crew for the project \"{}\" (the current folder). \
+             The skill: {about}\n\nRead the project so the steps fit it (its commands, folders and conventions). Change no files.\n\n\
+             Reply with JSON only: {{\"name\": \"short-kebab-name\", \"description\": \"when to use it, one line\", \
+             \"body\": \"Markdown: the steps, commands and checks, 10 to 40 lines\"}}",
+            folder.name
+        );
+        let rx = brain::maker::ask_full(st, &folder, &prompt)?;
+        self.skilling = Some((rx, about.to_string()));
+        self.skilled = None;
+        Ok(())
+    }
+
+    /// Whether a skill file is being written.
+    pub fn is_skilling(&self) -> bool {
+        self.skilling.is_some()
+    }
+
+    /// The maker's draft and skill coming back from the engine.
+    fn poll_draft(&mut self) {
+        if let Some((rx, about, name)) = &self.drafting {
+            let back = match rx.try_recv() {
+                Ok(crate::agent::Event::Output(_, r)) => Some(r.ok()),
+                Ok(_) | Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Disconnected) => Some(None),
+            };
+            if let Some(reply) = back {
+                let full = reply
+                    .as_deref()
+                    .map(crate::agent::strip_ansi)
+                    .and_then(|t| brain::maker::parse_full(&t))
+                    .map(|mut f| {
+                        if !name.trim().is_empty() || f.name.is_empty() {
+                            f.name = brain::maker::quick(about, name).name;
+                        }
+                        f
+                    });
+                let full = full.unwrap_or_else(|| {
+                    self.notes.push(
+                        "The engine's draft didn't come back, so this one is built from your words. Redraft any time."
+                            .into(),
+                    );
+                    brain::maker::quick(about, name)
+                });
+                self.drafted = Some(full);
+                self.drafting = None;
+            }
+        }
+        if let Some((rx, about)) = &self.skilling {
+            let back = match rx.try_recv() {
+                Ok(crate::agent::Event::Output(_, r)) => Some(r.ok()),
+                Ok(_) | Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Disconnected) => Some(None),
+            };
+            if let Some(reply) = back {
+                let parsed = reply
+                    .as_deref()
+                    .map(crate::agent::strip_ansi)
+                    .and_then(|t| {
+                        let (a, b) = (t.find('{')?, t.rfind('}')?);
+                        serde_json::from_str::<serde_json::Value>(t.get(a..=b)?).ok()
+                    })
+                    .and_then(|v| {
+                        let f = |k: &str| v[k].as_str().unwrap_or("").trim().to_string();
+                        let (n, d, b) = (f("name"), f("description"), f("body"));
+                        (!b.is_empty()).then(|| {
+                            (
+                                if n.is_empty() { about.clone() } else { n },
+                                if d.is_empty() { about.clone() } else { d },
+                                b,
+                            )
+                        })
+                    });
+                self.skilled = Some(parsed.ok_or_else(|| {
+                    "The engine didn't write the skill. Try again, or paste a path to a SKILL.md."
+                        .to_string()
+                }));
+                self.skilling = None;
+            }
+        }
+    }
+
+    /// Bot setups coming back from the engine, for bots made by Peek or
+    /// without the maker's review: what the person set stays as it is.
     fn poll_designs(&mut self) {
         let mut back = Vec::new();
         self.designing.retain(|(id, set, rx)| match rx.try_recv() {
@@ -1573,25 +1759,33 @@ impl Runtime {
             let parsed = reply
                 .as_deref()
                 .map(crate::agent::strip_ansi)
-                .and_then(|t| brain::maker::parse_design(&t));
-            let Some((role, skills, rules)) = parsed else {
+                .and_then(|t| brain::maker::parse_full(&t));
+            let Some(full) = parsed else {
                 continue;
             };
             let Some(m) = self.store.made.iter_mut().find(|m| m.id == id) else {
                 continue;
             };
-            m.role = role;
-            if !set.0 {
-                m.skills = skills;
+            m.role = full.role.clone();
+            if !set.0 && !full.skills.is_empty() {
+                m.skills = full.skills.clone();
             }
-            if !set.1 {
-                m.rules = rules;
+            if !set.1 && !full.rules.is_empty() {
+                m.rules = full.rules.clone();
             }
             let name = m.name.clone();
             super::data::set_made(&self.store.made);
+            let who = Member::Made(id);
+            // Only a bot with no setup yet gets one: never over the person's edits.
+            if !self.store.setups.contains_key(&super::engine::bot_key(who)) {
+                let dir = self.store.folder().map(|f| f.path.clone());
+                let found = crate::settings::discover(dir.as_deref());
+                let setup = brain::maker::setup_from(who, &full, &found);
+                self.set_setup(who, setup);
+            }
             self.store.save();
             self.say(format!(
-                "{name} is set up for this project: its rules and what it knows best are on Crew."
+                "{name} is set up for this project: its instructions, skills, tools and memory are in its Setup on Crew."
             ));
         }
     }

@@ -46,6 +46,13 @@ pub struct AgentOptions {
     /// like `allowed_tools`: they apply only there (see `approvals::always_rule`).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub project_tools: HashMap<String, String>,
+    /// For one run of a bot: servers found on this computer that the bot uses, by
+    /// `mcp::key`. Never saved.
+    #[serde(skip)]
+    pub bot_mcp: Vec<String>,
+    /// For one run of a bot: servers the person added to that bot alone. Never saved.
+    #[serde(skip)]
+    pub bot_servers: Vec<(String, crate::mcp::McpSpec)>,
 }
 
 impl AgentOptions {

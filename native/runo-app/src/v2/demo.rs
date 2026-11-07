@@ -325,12 +325,15 @@ pub fn seed() -> Store {
         Made {
             id: 2,
             name: "Scribe".into(),
-            role: "Writes the docs".into(),
+            role: "Keeps the docs in step with the code".into(),
             like: Member::Explainer,
             look: [4, 0, 0, 0],
             outfit: "headset.clipboard.pencil.tag".into(),
-            skills: Vec::new(),
-            rules: Vec::new(),
+            skills: vec!["docs".into(), "readme".into(), "changelog".into()],
+            rules: vec![
+                "Run the docs build before you stop.".into(),
+                "Never change code, only docs.".into(),
+            ],
         },
         Made {
             id: 3,
@@ -344,6 +347,30 @@ pub fn seed() -> Store {
         },
     ];
     super::data::set_made(&made);
+    // Scribe's setup, as the engine drafts one, for looking at Crew.
+    let mut setups = std::collections::HashMap::new();
+    setups.insert(
+        "made-2".to_string(),
+        super::setup::Setup {
+            instructions: "# Scribe\n\nYou keep README.md, docs/ and CHANGELOG.md in step with the code.\nRead the change first, then update only what it touched.".into(),
+            skill_files: vec![super::setup::SkillRef {
+                name: "docs-sync".into(),
+                description: "Find docs a change made stale and fix them".into(),
+                path: "/demo/.squadcode/bots/made-2/skills/docs-sync/SKILL.md".into(),
+            }],
+            mcp: vec!["Claude Code/github".into(), "Cursor/linear".into()],
+            servers: Vec::new(),
+            perms: super::setup::Perms {
+                install: false,
+                push: false,
+                ..Default::default()
+            },
+            reads: vec!["docs/".into(), "CONTRIBUTING.md".into()],
+            memory: vec!["The docs site builds with pnpm docs:build".into()],
+            drafted: true,
+        },
+    );
+    super::setup::set_all(&setups);
     let mut chats = std::collections::HashMap::new();
     chats.insert(
         Member::Explainer,
@@ -374,6 +401,7 @@ pub fn seed() -> Store {
         ship: String::new(),
     };
     Store {
+        setups,
         threads: vec![
             thread(
                 1,

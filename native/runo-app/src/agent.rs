@@ -286,7 +286,13 @@ pub fn takes_images(provider: &str) -> bool {
 /// server when the run is on this machine.
 fn mcp_servers(spec: &RunSpec) -> Vec<(String, crate::mcp::McpSpec)> {
     use crate::mcp::McpSpec;
-    let mut out = crate::mcp::shared_servers(spec.provider, spec.local);
+    let mut out = crate::mcp::servers_for(spec.provider, spec.local, &spec.opts.bot_mcp);
+    // A bot's own servers; a program can only start when the run is on this machine.
+    for (name, server) in &spec.opts.bot_servers {
+        if (spec.local || server.command.is_empty()) && !out.iter().any(|(n, _)| n == name) {
+            out.push((name.clone(), server.clone()));
+        }
+    }
     if let Some((exe, dir)) = spec.memory {
         if let Some(cove) = cove_server() {
             out.push((

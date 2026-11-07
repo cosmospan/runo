@@ -1,13 +1,11 @@
-//! Crew: every bot, what it is for and what it has done, plus a playground for
-//! making your own Fin.
+//! Crew: every bot, what it is for, what it can do and what it has done. Make a
+//! bot and each bot's Setup open the editor in `builder`.
 
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{Badge, Fin, Hat, Held, Material, Outfit, Tool, ROLES};
-use runo_holo::{Framing, Mood, Tint};
+use runo_holo::{Framing, Mood};
 
 use super::data::{Member, Mode};
-use super::mascot;
 use super::store::Status;
 use super::ui::{self, c, ca};
 use super::Pane;
@@ -15,34 +13,23 @@ use super::{Place, Shell};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
 
-/// A look picked by `seed`, for "Surprise me": any colour, a role kit or a
-/// mix of props.
-fn surprise(seed: u64) -> (Tint, Outfit) {
-    let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xD1B5_4A32_D192_ED03;
-    let mut next = |n: usize| {
-        s ^= s >> 31;
-        s = s.wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        s ^= s >> 29;
-        (s % n as u64) as usize
-    };
-    let tint = mascot::COLOURS[next(mascot::COLOURS.len())].2;
-    let outfit = if next(2) == 0 {
-        ROLES[next(ROLES.len())].outfit
-    } else {
-        Outfit {
-            hat: Hat::ALL[next(Hat::ALL.len())],
-            left: Held::ALL[next(Held::ALL.len())],
-            right: Tool::ALL[next(Tool::ALL.len())],
-            badge: Badge::ALL[next(Badge::ALL.len())],
-        }
-    };
-    (tint, outfit)
-}
-
-type Choice = (String, bool, Box<dyn Fn(&mut Shell)>);
-
 impl Shell {
     pub(super) fn crew(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        if self.maker_open {
+            let page = div()
+                .w_full()
+                .max_w(px(1160.))
+                .px(px(28.))
+                .pt(px(24.))
+                .pb(px(40. + super::DOCK_ROOM))
+                .child(self.maker_page(cx));
+            return div()
+                .id("crew-maker")
+                .size_full()
+                .overflow_y_scroll()
+                .child(page)
+                .into_any_element();
+        }
         let all = Member::all();
         let n = all.len();
         let busy = self.crew.store.running().count();
@@ -93,15 +80,11 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::solid_i("crew-make", IconName::Plus, "Make a bot").on_click(cx.listener(|this, _, _, cx| {
-                            this.maker_open = !this.maker_open;
-                            cx.notify();
+                        ui::solid_i("crew-make", IconName::Plus, "Make a bot").on_click(cx.listener(|this, _, window, cx| {
+                            this.open_maker(None, None, window, cx);
                         })),
                     ),
             )
-            .when(self.maker_open, |d| {
-                d.child(ui::rise(div().child(self.maker_card(cx)), self.stagger(1)))
-            })
             .child(list)
             .children(self.bench(cx));
         div()
@@ -146,7 +129,7 @@ impl Shell {
         let small = |id: (&'static str, usize), label: &'static str| {
             div()
                 .id(id)
-                .px(px(10.))
+                .px(px(8.))
                 .flex_none()
                 .h(px(28.))
                 .flex()
@@ -160,6 +143,35 @@ impl Shell {
                 .child(label)
         };
         let key = who.key() as usize;
+        // What it can do: the words jobs come to it by and its skill files, and
+        // its connected apps and permissions.
+        let setup = super::setup::of(who);
+        let mut skills: Vec<String> = who
+            .skills()
+            .split(' ')
+            .filter(|w| !w.is_empty())
+            .map(str::to_string)
+            .collect();
+        skills.extend(setup.skill_files.iter().map(|s| s.name.clone()));
+        let mut apps: Vec<String> = setup
+            .mcp
+            .iter()
+            .map(|k| k.rsplit('/').next().unwrap_or(k).to_string())
+            .collect();
+        apps.extend(setup.servers.iter().map(|s| s.name.clone()));
+        let kind = who.mode().label().to_lowercase();
+        let skills_row = can_row(
+            "SKILLS",
+            skills,
+            format!("Takes {kind} jobs \u{00b7} no skill files yet"),
+            None,
+        );
+        let tools_row = can_row(
+            "TOOLS",
+            apps,
+            "No connected apps".into(),
+            Some(format!("\u{00b7} {}", setup.perms_line())),
+        );
         // One figure under the bot: a small label over a mono value.
         let figure = |label: &'static str, v: String| {
             div()
@@ -239,18 +251,6 @@ impl Shell {
                                     .truncate()
                                     .child(who.role()),
                             )
-                            .when(!who.skills().is_empty(), |d| {
-                                d.child(
-                                    div()
-                                        .text_size(px(11.5))
-                                        .text_color(c(ui::faint()))
-                                        .truncate()
-                                        .child(format!(
-                                            "Knows {}",
-                                            who.skills().split(' ').collect::<Vec<_>>().join(", ")
-                                        )),
-                                )
-                            })
                             .child(div().mt(px(4.)).child(if color == ui::faint() {
                                 ui::status(ui::faint(), "Idle")
                             } else {
@@ -292,6 +292,14 @@ impl Shell {
             .child(
                 div()
                     .flex()
+                    .flex_col()
+                    .gap(px(7.))
+                    .child(skills_row)
+                    .child(tools_row),
+            )
+            .child(
+                div()
+                    .flex()
                     .px(px(4.))
                     .child(figure(
                         "Jobs",
@@ -325,9 +333,15 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(6.))
+                    .child(small(("crew-setup", key), "Setup").on_click(
+                        cx.listener(move |this, _, window, cx| this.open_setup(who, window, cx)),
+                    ))
                     .child(
-                        small(("crew-pin", key), if pinned { "Unpin" } else { "Pin" }).on_click(
-                            cx.listener(move |this, _, _, cx| {
+                        // A pin, not a word, so the row fits Setup and Give a job.
+                        ui::icon_btn(("crew-pin", key), IconName::Pin)
+                            .size(px(28.))
+                            .when(pinned, |d| d.text_color(c(ui::ink())))
+                            .on_click(cx.listener(move |this, _, _, cx| {
                                 if let Some(i) =
                                     this.crew.store.pinned.iter().position(|m| *m == who)
                                 {
@@ -337,20 +351,21 @@ impl Shell {
                                 }
                                 this.crew.store.save();
                                 cx.notify();
-                            }),
-                        ),
+                            })),
                     )
                     // Fin leads every crew, so it stays.
                     .when(who != Member::Fin, |d| {
-                        d.child(small(("crew-remove", key), "Remove").on_click(cx.listener(
-                            move |this, _, _, cx| {
-                                if who.is_made() {
-                                    this.remove_made(who, cx)
-                                } else {
-                                    this.set_on_crew(who, false, cx)
-                                }
-                            },
-                        )))
+                        d.child(
+                            ui::icon_btn(("crew-remove", key), IconName::Trash)
+                                .size(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if who.is_made() {
+                                        this.remove_made(who, cx)
+                                    } else {
+                                        this.set_on_crew(who, false, cx)
+                                    }
+                                })),
+                        )
                     })
                     .child(div().flex_1())
                     .child(
@@ -442,242 +457,68 @@ impl Shell {
                 .child(row),
         )
     }
-
-    fn maker_card(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (tint, outfit) = self.maker;
-        let material = Material::from_id(&cx.global::<crate::settings::AppSettings>().fin_material);
-        let preview = self.pose_img(
-            runo_holo::Figure::Fin(
-                Fin {
-                    tint,
-                    material,
-                    outfit,
-                }
-                .pose(Mood::Signature),
-            ),
-            220.,
-            Framing::Full,
-        );
-        let row = |label: &'static str,
-                   items: Vec<Choice>,
-                   key: &'static str,
-                   cx: &mut Context<Shell>| {
-            let mut opts = div().flex_1().min_w_0().flex().flex_wrap().gap(px(8.));
-            for (i, (name, on, f)) in items.into_iter().enumerate() {
-                let f = std::rc::Rc::new(f);
-                opts = opts.child(ui::pill((key, i), name, on).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        f(this);
-                        cx.notify();
-                    },
-                )));
-            }
-            div()
-                .flex()
-                .items_center()
-                .gap(px(14.))
-                .child(
-                    div()
-                        .w(px(64.))
-                        .flex_none()
-                        .font_family(ui::MONO)
-                        .text_size(px(10.))
-                        .text_color(c(ui::faint()))
-                        .child(label.to_uppercase()),
-                )
-                .child(opts)
-        };
-        let mut swatches = div().flex().gap(px(10.));
-        for (i, (_, _, t)) in mascot::COLOURS.into_iter().enumerate() {
-            let on = tint == t;
-            let [l, s, _] = t.0;
-            swatches = swatches.child(
-                div()
-                    .id(("swatch", i))
-                    .size(px(28.))
-                    .rounded_full()
-                    .border_2()
-                    .border_color(c(if on { ui::ink() } else { ui::panel() }))
-                    .bg(linear_gradient(
-                        135.,
-                        linear_color_stop(c(l.0), 0.0),
-                        linear_color_stop(c(s.0), 1.0),
-                    ))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.maker.0 = t;
-                        cx.notify();
-                    })),
-            );
-        }
-        let pick = |name: &str, on: bool, f: Box<dyn Fn(&mut Shell)>| -> Choice {
-            (name.to_string(), on, f)
-        };
-        let mut kits = vec![pick(
-            "Plain",
-            outfit == Outfit::PLAIN,
-            Box::new(|s: &mut Shell| s.maker.1 = Outfit::PLAIN),
-        )];
-        kits.extend(ROLES.iter().map(|r| {
-            let o = r.outfit;
-            pick(
-                r.name,
-                outfit == o,
-                Box::new(move |s: &mut Shell| s.maker.1 = o),
-            )
-        }));
-
-        let rights = Tool::ALL
-            .iter()
-            .copied()
-            .map(|t| {
-                pick(
-                    t.name(),
-                    outfit.right == t,
-                    Box::new(move |s: &mut Shell| s.maker.1.right = t),
-                )
-            })
-            .collect();
-
-        // Peek works the kind out from what the bot is for, unless the person picks.
-        let mut likes: Vec<Choice> = vec![(
-            "Peek decides".to_string(),
-            self.maker_like.is_none(),
-            Box::new(|s: &mut Shell| s.maker_like = None) as Box<dyn Fn(&mut Shell)>,
-        )];
-        likes.extend(Member::KINDS.into_iter().map(|m| {
-            (
-                m.name().to_string(),
-                self.maker_like == Some(m),
-                Box::new(move |s: &mut Shell| s.maker_like = Some(m)) as Box<dyn Fn(&mut Shell)>,
-            )
-        }));
-        let like = row("Works like", likes, "mk-like", cx);
-        let kits = row("Kit", kits, "mk-kit", cx);
-        let rights = row("Prop", rights, "mk-right", cx);
-        ui::card()
-            .p(px(22.))
-            .flex()
-            .gap(px(28.))
-            .items_center()
-            .child(
-                div()
-                    .w(px(280.))
-                    .h(px(280.))
-                    .flex_none()
-                    .rounded(px(20.))
-                    .bg(ca(ui::panel(), 0.6))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(preview),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(14.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(14.))
-                            .child(div().text_size(px(18.)).font_weight(FontWeight::BOLD).child("Make your own"))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_size(px(12.5))
-                                    .text_color(c(ui::muted()))
-                                    .child("Dress a Peek, give it a name and a job, and it joins the crew with its own chat, jobs and engine."),
-                            )
-                            .child(ui::ghost_i("surprise", IconName::Sparkles, "Surprise me").on_click(cx.listener(|this, _, _, cx| {
-                                this.maker = surprise(this.clock.elapsed().as_nanos() as u64);
-                                cx.notify();
-                            }))),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(14.))
-                            .child(
-                                div()
-                                    .w(px(64.))
-                                    .flex_none()
-                                    .font_family(ui::MONO)
-                                    .text_size(px(10.))
-                                    .text_color(c(ui::faint()))
-                                    .child("COLOUR"),
-                            )
-                            .child(swatches),
-                    )
-                    .child(kits)
-                    .child(rights)
-                    .child(like)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .child(field("NAME", &self.maker_name, 180.))
-                            .child(field("ITS JOB", &self.maker_role, 0.))
-                            .child(
-                                ui::solid("maker-save", "Add to crew")
-                                    .on_click(cx.listener(|this, _, window, cx| this.save_made(window, cx))),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .child(field("KNOWS", &self.maker_skills, 260.))
-                            .child(field("RULES", &self.maker_rules, 0.)),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c(ui::faint()))
-                            .child("Leave these empty and Peek writes them from its job and your project."),
-                    ),
-            )
-    }
 }
 
-/// A labelled text box in the maker.
-fn field(
-    label: &'static str,
-    input: &Entity<gpui_kit::component::input::InputState>,
-    w: f32,
-) -> Div {
-    div()
-        .when(w > 0., |d| d.w(px(w)).flex_none())
-        .when(w == 0., |d| d.flex_1().min_w_0())
-        .h(px(38.))
-        .px(px(12.))
+/// One line of what a bot can do on its card: a label, up to three chips, and
+/// a quiet tail.
+fn can_row(label: &'static str, items: Vec<String>, empty: String, tail: Option<String>) -> Div {
+    let mut chips = div()
+        .flex_1()
+        .min_w_0()
         .flex()
         .items_center()
-        .gap(px(8.))
-        .rounded(px(12.))
-        .bg(c(ui::panel()))
-        .border_1()
-        .border_color(c(ui::line()))
-        .child(
+        .gap(px(5.))
+        .overflow_hidden();
+    if items.is_empty() {
+        chips = chips.child(
+            div()
+                .text_size(px(12.))
+                .text_color(c(ui::faint()))
+                .truncate()
+                .child(empty),
+        );
+    }
+    let more = items.len().saturating_sub(3);
+    for t in items.into_iter().take(3) {
+        chips = chips.child(
             div()
                 .flex_none()
-                .font_family(ui::MONO)
-                .text_size(px(9.5))
+                .h(px(22.))
+                .px(px(8.))
+                .flex()
+                .items_center()
+                .rounded(px(6.))
+                .bg(c(ui::well()))
+                .border_1()
+                .border_color(c(ui::line2()))
+                .text_size(px(11.5))
+                .text_color(c(ui::body()))
+                .child(t),
+        );
+    }
+    if more > 0 {
+        chips = chips.child(
+            div()
+                .flex_none()
+                .text_size(px(11.5))
                 .text_color(c(ui::faint()))
-                .child(label),
-        )
-        .child(
-            div().flex_1().min_w_0().text_size(px(13.)).child(
-                gpui_kit::component::input::Input::new(input)
-                    .appearance(false)
-                    .bordered(false),
-            ),
-        )
+                .child(format!("+{more}")),
+        );
+    }
+    if let Some(t) = tail {
+        chips = chips.child(
+            div()
+                .min_w_0()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .truncate()
+                .child(t),
+        );
+    }
+    div()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .child(div().w(px(46.)).flex_none().child(ui::caption(label)))
+        .child(chips)
 }
