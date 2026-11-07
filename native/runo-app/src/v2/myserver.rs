@@ -156,6 +156,14 @@ impl Shell {
                         self.server_failed = true;
                         self.server_setup = None;
                     }
+                    Step::NewPassword => {
+                        self.server_log.push(
+                            "This server wants a new password before anyone logs in, which many VPS providers ask for the first time. Pick one below, and Squad changes it and carries on.".into(),
+                        );
+                        self.server_failed = true;
+                        self.server_wants_new_pass = true;
+                        self.server_setup = None;
+                    }
                     Step::KeyChanged(fp) => {
                         let now = if fp.is_empty() {
                             String::new()
@@ -214,9 +222,22 @@ impl Shell {
         }
         let host = self.server_input.read(cx).value().trim().to_string();
         let password = self.server_pass.read(cx).value().to_string();
+        let new_password = if self.server_wants_new_pass {
+            self.server_new_pass.read(cx).value().to_string()
+        } else {
+            String::new()
+        };
+        if self.server_wants_new_pass && new_password.chars().count() < 8 {
+            self.server_log
+                .push("Pick a new password of at least 8 characters.".into());
+            self.server_failed = true;
+            cx.notify();
+            return;
+        }
         self.server_log.clear();
         self.server_failed = false;
         self.server_key_changed = false;
+        self.server_wants_new_pass = false;
         if !remote::valid_host(&host) {
             self.server_log.push(
                 "Type the server as user@address, like root@203.0.113.7. Your VPS provider's email has both.".into(),
@@ -225,7 +246,12 @@ impl Shell {
             cx.notify();
             return;
         }
-        self.server_setup = Some(remote::connect(host, password, remote::device_name()));
+        self.server_setup = Some(remote::connect(
+            host,
+            password,
+            new_password,
+            remote::device_name(),
+        ));
         cx.notify();
     }
 
@@ -341,6 +367,25 @@ impl Shell {
                     .child(fields)
                     .when(!self.server_log.is_empty(), |d| {
                         d.child(log(&self.server_log, self.server_failed))
+                    })
+                    .when(self.server_wants_new_pass && !busy, |d| {
+                        d.child(
+                            div()
+                                .px(px(18.))
+                                .pb(px(14.))
+                                .flex()
+                                .items_center()
+                                .gap(px(space::M))
+                                .child(field(&self.server_new_pass))
+                                .child(
+                                    ui::solid_i(
+                                        "server-new-pass",
+                                        IconName::ShieldCheck,
+                                        "Change it and connect",
+                                    )
+                                    .on_click(cx.listener(|this, _, _, cx| this.connect_server(cx))),
+                                ),
+                        )
                     })
                     .when(self.server_key_changed && !busy, |d| {
                         d.child(

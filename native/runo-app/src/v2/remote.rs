@@ -320,12 +320,9 @@ fn own_key() -> Result<String, String> {
     Ok(key.to_string_lossy().to_string())
 }
 
-/// Logs in once with the password and adds the app's key to the server.
-/// ssh asks this same program for the password (see `main`), so it's never
-/// typed into a terminal or written to disk.
-fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
-    let public = std::fs::read_to_string(format!("{key}.pub"))
-        .map_err(|e| format!("Couldn't read the new key: {e}"))?;
+/// ssh that logs in with `password`: ssh asks this same program for it (see
+/// `main`), so it's never typed into a terminal or written to disk.
+fn password_ssh(password: &str) -> Result<Command, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut cmd = ssh_command();
     cmd.args([
@@ -337,13 +334,138 @@ fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
         "PreferredAuthentications=password,keyboard-interactive",
         "-o",
         "NumberOfPasswordPrompts=1",
-        host,
-        "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && k=$(cat) && (grep -qxF \"$k\" ~/.ssh/authorized_keys || printf '%s\\n' \"$k\" >> ~/.ssh/authorized_keys)",
     ])
     .env("SSH_ASKPASS", exe)
     .env("SSH_ASKPASS_REQUIRE", "force")
     .env("SQUAD_ASKPASS", password)
-    .env("DISPLAY", std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into()))
+    .env(
+        "DISPLAY",
+        std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into()),
+    );
+    Ok(cmd)
+}
+
+/// The server wants a new password before it lets anyone in (many VPS
+/// providers do this on the first login).
+fn wants_new_password(stderr: &str) -> bool {
+    let s = stderr.to_lowercase();
+    s.contains("password change required")
+        || s.contains("required to change your password")
+        || s.contains("password has expired")
+}
+
+/// What a password prompt asks for: the old password, or the new one.
+fn prompt_wants_new(prompt: &str) -> Option<bool> {
+    let p = prompt.trim().to_lowercase();
+    if !p.ends_with(':') {
+        return None;
+    }
+    if p.contains("new") {
+        Some(true)
+    } else if p.contains("current") || p.contains("old") || p.contains("password") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Logs in with the old password in a terminal, which is the only way the
+/// server takes a password change, and answers its prompts.
+fn change_password(host: &str, old: &str, new: &str) -> Result<(), String> {
+    let mut cmd = password_ssh(old)?;
+    cmd.args(["-tt", host, "true"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    let mut stdin = child.stdin.take().ok_or("no terminal")?;
+    let (out_tx, out_rx) = channel::<String>();
+    for mut pipe in [
+        Box::new(child.stdout.take().ok_or("no terminal")?) as Box<dyn Read + Send>,
+        Box::new(child.stderr.take().ok_or("no terminal")?),
+    ] {
+        let out_tx = out_tx.clone();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 1024];
+            while let Ok(n) = pipe.read(&mut buf) {
+                if n == 0
+                    || out_tx
+                        .send(String::from_utf8_lossy(&buf[..n]).to_string())
+                        .is_err()
+                {
+                    break;
+                }
+            }
+        });
+    }
+    drop(out_tx);
+    let mut seen = String::new();
+    let mut answered = 0usize;
+    let mut done_at = 0usize;
+    let until = Instant::now() + Duration::from_secs(60);
+    let result = loop {
+        if Instant::now() > until {
+            break Err("The server didn't finish changing the password.".to_string());
+        }
+        let ended = match out_rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(chunk) => {
+                seen.push_str(&chunk);
+                false
+            }
+            Err(RecvTimeoutError::Timeout) => false,
+            Err(RecvTimeoutError::Disconnected) => true,
+        };
+        let plain = plain_text(&seen);
+        let low = plain.to_lowercase();
+        if low.contains("updated successfully") || low.contains("password changed") {
+            break Ok(());
+        }
+        // Each prompt is answered once; a fourth means it turned an answer down.
+        let fresh = &plain[done_at.min(plain.len())..];
+        if let Some(wants_new) = fresh.lines().last().and_then(prompt_wants_new) {
+            if answered >= 3 {
+                break Err(last_said(&plain));
+            }
+            let answer = if wants_new { new } else { old };
+            let _ = stdin.write_all(format!("{answer}\n").as_bytes());
+            let _ = stdin.flush();
+            answered += 1;
+            done_at = plain.len();
+        }
+        if ended {
+            break Err(last_said(&plain));
+        }
+    };
+    let _ = child.kill();
+    let _ = child.wait();
+    result.map_err(|why| format!("The server didn't take the new password: {why}"))
+}
+
+/// The last thing a terminal said that isn't a prompt.
+fn last_said(plain: &str) -> String {
+    plain
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|l| {
+            !l.is_empty()
+                && prompt_wants_new(l).is_none()
+                && !l.starts_with("Connection to")
+                && !l.to_lowercase().contains("required to change")
+        })
+        .unwrap_or("no reason given")
+        .to_string()
+}
+
+/// Logs in once with the password and adds the app's key to the server.
+fn add_key(host: &str, password: &str, key: &str) -> Result<(), Fail> {
+    let public = std::fs::read_to_string(format!("{key}.pub"))
+        .map_err(|e| format!("Couldn't read the new key: {e}"))?;
+    let mut cmd = password_ssh(password)?;
+    cmd.args([
+        host,
+        "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && k=$(cat) && (grep -qxF \"$k\" ~/.ssh/authorized_keys || printf '%s\\n' \"$k\" >> ~/.ssh/authorized_keys)",
+    ])
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -359,8 +481,11 @@ fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
         return Ok(());
     }
     let err = String::from_utf8_lossy(&out.stderr);
+    if wants_new_password(&err) {
+        return Err(Fail::NewPassword);
+    }
     if err.contains("Permission denied") {
-        return Err(format!("{host} didn't take that password. Check it, and the user name before the @ (root, or ubuntu on many Ubuntu servers)."));
+        return Err(format!("{host} didn't take that password. Check it, and the user name before the @ (root, or ubuntu on many Ubuntu servers).").into());
     }
     Err(format!(
         "Couldn't log in to {host}: {}",
@@ -369,7 +494,8 @@ fn add_key(host: &str, password: &str, key: &str) -> Result<(), String> {
             .find(|l| !l.trim().is_empty())
             .unwrap_or("ssh stopped")
             .trim()
-    ))
+    )
+    .into())
 }
 
 fn quote(s: &str) -> String {
@@ -513,12 +639,15 @@ pub enum Step {
     /// The server shows a different key from the one Squad trusted: rebuilt,
     /// or not the same server. Its key now, as `SHA256:…` ("" if unknown).
     KeyChanged(String),
+    /// The server wants its password changed before anyone logs in.
+    NewPassword,
 }
 
 /// Why connecting stopped.
 #[derive(Debug)]
 enum Fail {
     KeyChanged(String),
+    NewPassword,
     Other(String),
 }
 
@@ -537,20 +666,34 @@ impl From<&str> for Fail {
 /// Sets the server up and pairs this computer with it, on a thread of its own.
 /// `password` is the server's, for a first connection with no SSH key: the
 /// app makes a key of its own, puts it on the server and uses it from then on.
-pub fn connect(host: String, password: String, device: String) -> Receiver<Step> {
+/// `new_password` is set when the server asked for its password to be changed
+/// first: it's changed to that, and that's the password from then on.
+pub fn connect(
+    host: String,
+    password: String,
+    new_password: String,
+    device: String,
+) -> Receiver<Step> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let step = match setup(&host, &password, &device, &tx) {
+        let step = match setup(&host, &password, &new_password, &device, &tx) {
             Ok(c) => Step::Done(c),
             Err(Fail::Other(why)) => Step::Failed(why),
             Err(Fail::KeyChanged(fp)) => Step::KeyChanged(fp),
+            Err(Fail::NewPassword) => Step::NewPassword,
         };
         let _ = tx.send(step);
     });
     rx
 }
 
-fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<Config, Fail> {
+fn setup(
+    host: &str,
+    password: &str,
+    new_password: &str,
+    device: &str,
+    tx: &Sender<Step>,
+) -> Result<Config, Fail> {
     let say = |t: String| {
         let _ = tx.send(Step::Say(t));
     };
@@ -568,6 +711,14 @@ fn setup(host: &str, password: &str, device: &str, tx: &Sender<Step>) -> Result<
             format!("It's the same server as before ({fp}).")
         });
     }
+    let password = if new_password.is_empty() || password.is_empty() {
+        password
+    } else {
+        say("Changing the server's password, as it asks…".into());
+        change_password(host, password, new_password)?;
+        say("Changed it. Use the new password if you ever log in yourself.".into());
+        new_password
+    };
     let key = if password.is_empty() {
         String::new()
     } else {
@@ -1331,6 +1482,20 @@ fn find_token(text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn password_change_prompts() {
+        use super::{prompt_wants_new, wants_new_password};
+        assert!(wants_new_password(
+            "Password change required but no TTY available."
+        ));
+        assert!(!wants_new_password("Permission denied (password)."));
+        assert_eq!(prompt_wants_new("Current password: "), Some(false));
+        assert_eq!(prompt_wants_new("(current) UNIX password:"), Some(false));
+        assert_eq!(prompt_wants_new("New password: "), Some(true));
+        assert_eq!(prompt_wants_new("Retype new password: "), Some(true));
+        assert_eq!(prompt_wants_new("Changing password for ubuntu."), None);
+    }
+
     use super::*;
 
     #[test]
