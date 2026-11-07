@@ -2437,9 +2437,6 @@ impl Render for Shell {
                     .when(setup, |d| d.h_full())
                     .when(!setup, |d| d.bg(c(ui::bg())))
                     .relative()
-                    .when(!setup, |d| {
-                        d.children(ui::pattern(crate::pattern::Area::Content))
-                    })
                     .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
@@ -2448,6 +2445,13 @@ impl Render for Shell {
                             .w_full()
                             .relative()
                             .overflow_hidden()
+                            // The pattern lies under the page only, not the top bar:
+                            // the bar is a plain strip of the page's own ground, so
+                            // the pattern never runs into the bar's edge and no grid
+                            // line lands a few pixels off it.
+                            .when(!setup, |d| {
+                                d.children(ui::pattern(crate::pattern::Area::Content))
+                            })
                             .child(div().size_full().child(body)),
                     )
                     .when(!setup, |d| d.children(project_drawer))
