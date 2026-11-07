@@ -1,21 +1,21 @@
-//! Peek: Squad Code's mascot. Two glowing eyes in a dark pill, and nothing
-//! else: every feeling is in the lids, the glow and how the pill moves.
+//! Peek: Squad Code's mascot. Two eyes in a pill, drawn as an outline and
+//! nothing else: every feeling is in the lids and how the pill moves.
 //!
 //! A port of the "Peek, alive" design. Like the bubble crew, a frame is a pure
 //! function of time, so the same pose plays the same everywhere: blinks and
 //! idle glances come from a steady hash of the clock, not from state.
 //!
 //! The types keep their Fin names ([`Fin`], [`FinPose`], [`Outfit`]) so saved
-//! looks and the rest of the app carry over. Peek comes in three finishes
-//! (glow, rainbow glow and solid). It can wear a hat on top and a badge on the
+//! looks and the rest of the app carry over. Peek is only ever lines; a
+//! [`Line`] sets their weight, colour and eye style. It can wear a hat on top and a badge on the
 //! pill, and the prop it carries shows in a small badge beside it.
 
 use vello_cpu::kurbo::{
-    Affine, BezPath, Cap, Circle, Ellipse, Join, Point, Rect, RoundedRect, Shape, Stroke,
+    Affine, BezPath, Cap, Circle, Join, Point, Rect, RoundedRect, Shape, Stroke,
 };
 use vello_cpu::peniko::{
     color::{AlphaColor, Srgb},
-    ColorStop, ColorStops, Fill, Gradient, LinearGradientPosition, RadialGradientPosition,
+    ColorStop, ColorStops, Gradient, LinearGradientPosition,
 };
 use vello_cpu::{Pixmap, RenderContext, Resources};
 
@@ -26,10 +26,9 @@ use crate::Framing;
 type Color = AlphaColor<Srgb>;
 
 const WHITE: Rgb = Rgb(0xFFFFFF);
-const BLACK: Rgb = Rgb(0x000000);
 const INK: Rgb = Rgb(0x141416);
 
-/// The rainbow the bubble glow material turns through.
+/// The rainbow the Rainbow ink turns through.
 const RAINBOW: [Rgb; 7] = [
     Rgb(0xFF7AD9),
     Rgb(0xA98BFF),
@@ -144,51 +143,110 @@ impl State {
     }
 }
 
-/// Peek's finish. The ids keep their old Fin names so saved settings still load.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Material {
-    /// A dark pill with glowing eyes and a rim in the crew colour.
-    Glass,
-    /// The glow finish with a slowly turning rainbow rim.
-    Bubble,
-    /// A glossy pill in the crew colour with dark eyes.
-    Solid,
-    /// Just the lines: the pill and eyes drawn as outlines in the crew
-    /// colour, with no fill and no glow.
-    Outline,
+/// A setting with a few named choices, each saved under a short id.
+macro_rules! choice {
+    ($(#[$m:meta])* $name:ident, default $def:ident, $($(#[$vm:meta])* $v:ident => $id:literal, $label:literal;)+) => {
+        $(#[$m])*
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+        pub enum $name {
+            $($(#[$vm])* $v,)+
+        }
+
+        impl $name {
+            pub const ALL: &'static [$name] = &[$($name::$v),+];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $($name::$v => $label,)+
+                }
+            }
+
+            pub fn id(self) -> &'static str {
+                match self {
+                    $($name::$v => $id,)+
+                }
+            }
+
+            /// The choice saved as `id`; anything unknown is the default.
+            pub fn from_id(id: &str) -> $name {
+                $name::ALL
+                    .iter()
+                    .copied()
+                    .find(|c| c.id() == id)
+                    .unwrap_or($name::$def)
+            }
+        }
+    };
 }
 
-impl Material {
-    pub const ALL: [Material; 4] = [
-        Material::Glass,
-        Material::Bubble,
-        Material::Solid,
-        Material::Outline,
-    ];
+choice! {
+    /// How heavy Peek's lines are.
+    Weight, default Regular,
+    Fine => "fine", "Fine";
+    #[default]
+    Regular => "regular", "Regular";
+    Bold => "bold", "Bold";
+}
 
-    pub fn name(self) -> &'static str {
+choice! {
+    /// What colour Peek's lines are drawn in.
+    Ink, default Crew,
+    /// Every line in the bot's own colour.
+    #[default]
+    Crew => "crew", "Crew colour";
+    /// Every line in a soft, light version of the bot's colour.
+    Pastel => "pastel", "Pastel";
+    /// The pill in the bot's colour, the eyes in its light version.
+    TwoTone => "two-tone", "Two-tone";
+    /// A slowly turning rainbow pill with light eyes.
+    Rainbow => "rainbow", "Rainbow";
+}
+
+choice! {
+    /// How Peek's open eyes are drawn.
+    Eyes, default Hollow,
+    /// Rings, like the pill.
+    #[default]
+    Hollow => "hollow", "Rings";
+    /// Solid ovals in the line colour.
+    Dots => "dots", "Dots";
+}
+
+impl Weight {
+    /// The line width at this weight, as a share of the regular one.
+    fn scale(self) -> f64 {
         match self {
-            Material::Glass => "Glow",
-            Material::Bubble => "Rainbow glow",
-            Material::Solid => "Solid",
-            Material::Outline => "Outline",
+            Weight::Fine => 0.7,
+            Weight::Regular => 1.0,
+            Weight::Bold => 1.45,
         }
     }
+}
 
-    pub fn id(self) -> &'static str {
-        match self {
-            Material::Glass => "glass",
-            Material::Bubble => "bubble",
-            Material::Solid => "solid",
-            Material::Outline => "outline",
-        }
+/// Peek is always drawn as an outline: just lines, no fill and no glow.
+/// This is how those lines look, the same for every bot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Line {
+    pub weight: Weight,
+    pub ink: Ink,
+    pub eyes: Eyes,
+}
+
+impl Line {
+    /// `weight.ink.eyes`, the saved form.
+    pub fn code(self) -> String {
+        format!("{}.{}.{}", self.weight.id(), self.ink.id(), self.eyes.id())
     }
 
-    pub fn from_id(id: &str) -> Material {
-        Material::ALL
-            .into_iter()
-            .find(|m| m.id() == id)
-            .unwrap_or(Material::Glass)
+    /// The line saved as `code`; missing or unknown parts take their default.
+    pub fn from_code(code: &str) -> Line {
+        let mut parts = code.split('.');
+        let mut next = || parts.next().unwrap_or("");
+        Line {
+            weight: Weight::from_id(next()),
+            ink: Ink::from_id(next()),
+            eyes: Eyes::from_id(next()),
+        }
     }
 }
 
@@ -453,11 +511,11 @@ pub const ROLES: [Role; 8] = [
     },
 ];
 
-/// One Fin: its colour, what it's made of and what it wears.
+/// One Fin: its colour, how its lines are drawn and what it wears.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Fin {
     pub tint: Tint,
-    pub material: Material,
+    pub line: Line,
     pub outfit: Outfit,
 }
 
@@ -622,13 +680,6 @@ impl Pen<'_> {
         self.ctx.stroke_path(&shape.to_path(0.05));
     }
 
-    /// A soft line, standing in for the design's blurred strokes.
-    fn glow(&mut self, shape: &impl Shape, w: f64, blur: f64, c: Rgb, a: f64) {
-        for (k, share) in [(2.2, 0.22), (1.5, 0.3), (1.0, 0.5)] {
-            self.stroke(shape, w + blur * k, c, a * share);
-        }
-    }
-
     fn stops(&self, stops: &[(f32, Rgb, f64)]) -> ColorStops {
         let v: Vec<ColorStop> = stops
             .iter()
@@ -649,35 +700,6 @@ impl Pen<'_> {
         }
     }
 
-    fn radial(&self, stops: &[(f32, Rgb, f64)], c: (f64, f64), r: f64) -> Gradient {
-        Gradient {
-            kind: RadialGradientPosition {
-                start_center: Point::new(c.0, c.1),
-                start_radius: 0.0,
-                end_center: Point::new(c.0, c.1),
-                end_radius: r as f32,
-            }
-            .into(),
-            stops: self.stops(stops),
-            ..Default::default()
-        }
-    }
-
-    /// Fills with a gradient laid out in the shape's bounding box, like SVG's
-    /// `objectBoundingBox`, turned by `spin` about the box's middle.
-    fn fill_grad(&mut self, shape: &impl Shape, g: Gradient, spin: Affine) {
-        if self.alpha <= 0.004 {
-            return;
-        }
-        let bb = shape.bounding_box();
-        self.ctx.set_transform(self.xf);
-        self.ctx
-            .set_paint_transform(bbox_xf(bb) * about((0.5, 0.5), spin));
-        self.ctx.set_paint(g);
-        self.ctx.fill_path(&shape.to_path(0.05));
-        self.ctx.reset_paint_transform();
-    }
-
     fn stroke_grad(&mut self, shape: &impl Shape, w: f64, g: Gradient, spin: Affine) {
         if self.alpha <= 0.004 {
             return;
@@ -690,17 +712,6 @@ impl Pen<'_> {
         self.ctx.set_paint(g);
         self.ctx.stroke_path(&shape.to_path(0.05));
         self.ctx.reset_paint_transform();
-    }
-
-    fn clip(&mut self, path: &BezPath, even_odd: bool, f: impl FnOnce(&mut Self)) {
-        self.ctx.set_transform(self.xf);
-        if even_odd {
-            self.ctx.set_fill_rule(Fill::EvenOdd);
-        }
-        self.ctx.push_clip_layer(path);
-        self.ctx.set_fill_rule(Fill::NonZero);
-        f(self);
-        self.ctx.pop_layer();
     }
 }
 
@@ -1015,9 +1026,8 @@ fn blink(t: f64) -> f64 {
     one(k).min(second)
 }
 
-/// One eye at `(cx, cy)`. `halo` is the glow's strength, if it glows.
-/// With `outline`, the oval and heart eyes are drawn as lines of that width
-/// instead of being filled.
+/// One eye at `(cx, cy)`, drawn with lines `w` wide. Open eyes are rings,
+/// or solid when `filled`.
 #[allow(clippy::too_many_arguments)]
 fn eye(
     p: &mut Pen,
@@ -1025,8 +1035,8 @@ fn eye(
     f: &Face,
     side: usize,
     col: Rgb,
-    halo: Option<f64>,
-    outline: Option<f64>,
+    w: f64,
+    filled: bool,
     open: f64,
 ) {
     let (cx, cy) = at;
@@ -1036,24 +1046,21 @@ fn eye(
         EyeShape::Wink => EyeShape::Dot,
         e => e,
     };
-    let line = |p: &mut Pen, path: &BezPath, w: f64, a: f64| {
-        if let Some(h) = halo {
-            p.glow(path, w, 3.5, col, 0.55 * h * a);
-        }
-        p.stroke(path, w, col, a);
-    };
+    // Expressions drawn as strokes (arcs, crosses) sit a little bolder than
+    // the pill, so a face reads at a glance.
+    let bold = w * 1.6;
     match shape {
         EyeShape::Arc => {
             let mut path = BezPath::new();
             path.move_to((cx - r, cy + 3.0));
             path.quad_to((cx, cy - r * 1.5), (cx + r, cy + 3.0));
-            line(p, &path, 5.5, 1.0);
+            p.stroke(&path, bold, col, 1.0);
         }
         EyeShape::Sleep => {
             let mut path = BezPath::new();
             path.move_to((cx - r, cy));
             path.quad_to((cx, cy + r * 0.9), (cx + r, cy));
-            p.stroke(&path, 4.5, col, 0.55);
+            p.stroke(&path, w * 1.4, col, 0.6);
         }
         EyeShape::X => {
             let mut path = BezPath::new();
@@ -1061,21 +1068,18 @@ fn eye(
             path.line_to((cx + 7.0, cy + 7.0));
             path.move_to((cx + 7.0, cy - 7.0));
             path.line_to((cx - 7.0, cy + 7.0));
-            line(p, &path, 5.0, 1.0);
+            p.stroke(&path, bold, col, 1.0);
         }
         EyeShape::Heart => {
             p.at(
                 Affine::translate((cx, cy + 1.0)) * Affine::scale(1.45),
                 |p| {
                     let h = svg(HEART);
-                    if let Some(w) = outline {
+                    if filled {
+                        p.fill(&h, PINK, 1.0);
+                    } else {
                         p.stroke(&h, w / 1.45, PINK, 1.0);
-                        return;
                     }
-                    if halo.is_some() {
-                        p.glow(&h, 1.0, 3.0, PINK, 0.4);
-                    }
-                    p.fill(&h, PINK, 1.0);
                 },
             );
         }
@@ -1085,7 +1089,7 @@ fn eye(
                 let mut path = BezPath::new();
                 path.move_to((cx - r, cy));
                 path.line_to((cx + r, cy));
-                line(p, &path, 4.5, 1.0);
+                p.stroke(&path, bold * 0.85, col, 1.0);
                 return;
             }
             let tilt = if side == 1 { -f.tilt } else { f.tilt };
@@ -1094,36 +1098,28 @@ fn eye(
             if bot - top < 1.0 {
                 return;
             }
-            if let Some(h) = halo {
-                let (t0, b0) = (top.max(cy - ry), bot.min(cy + ry));
-                let mid = (t0 + b0) / 2.0;
-                let half = (b0 - t0).max(0.0) / 2.0;
-                let e = Ellipse::new((cx, mid), (r + 7.0, half + 7.0), 0.0);
-                let g = p.radial(&[(0.35, col, 0.55 * h), (1.0, col, 0.0)], (0.5, 0.5), 0.5);
-                p.fill_grad(&e, g, Affine::IDENTITY);
+            // Trace the oval as the lids leave it and draw that one shape.
+            // Clipping a stroked oval to the lids instead would shave the
+            // outer half of the line wherever a lid rests on its edge.
+            let lid_at = |x: f64| top + tilt * 12.0 * (x - cx) / (r + 4.0);
+            let mut shape = BezPath::new();
+            const STEPS: usize = 96;
+            for i in 0..STEPS {
+                let a = i as f64 / STEPS as f64 * std::f64::consts::TAU;
+                let x = cx + r * a.cos();
+                let y = (cy + ry * a.sin()).max(lid_at(x)).min(bot);
+                if i == 0 {
+                    shape.move_to((x, y));
+                } else {
+                    shape.line_to((x, y));
+                }
             }
-            let mut lids = BezPath::new();
-            lids.move_to((cx - r - 4.0, top - tilt * 12.0));
-            lids.line_to((cx + r + 4.0, top + tilt * 12.0));
-            lids.line_to((cx + r + 4.0, bot));
-            lids.line_to((cx - r - 4.0, bot));
-            lids.close_path();
-            if let Some(w) = outline {
-                // The edge of the oval where the lids leave it open, then the
-                // lids' own edges where they cut across it.
-                let oval = Ellipse::new((cx, cy), (r, ry), 0.0);
-                p.clip(&lids, false, |p| p.stroke(&oval, w, col, 1.0));
-                p.clip(&oval.to_path(0.05), false, |p| p.stroke(&lids, w, col, 1.0));
-                return;
+            shape.close_path();
+            if filled {
+                p.fill(&shape, col, 1.0);
+            } else {
+                p.stroke(&shape, w, col, 1.0);
             }
-            p.clip(&lids, false, |p| {
-                p.fill(&Ellipse::new((cx, cy), (r, ry), 0.0), col, 1.0);
-                p.fill(
-                    &Circle::new((cx + r * 0.33, cy - ry * 0.38), r * 0.33),
-                    WHITE,
-                    1.0,
-                );
-            });
         }
     }
 }
@@ -1495,12 +1491,7 @@ fn blocked(p: &mut Pen, col: Rgb, ph: f64) {
         let a = if ph > 1.9 { (BLOCK - ph) / 0.5 } else { 1.0 };
         p.fade(a, |p| {
             p.at(Affine::translate((16.0, 62.0)) * Affine::scale(k), |p| {
-                let halo = Circle::new((0.0, 0.0), 20.0);
-                let gr = p.radial(&[(0.0, col, 0.35), (1.0, col, 0.0)], (0.5, 0.5), 0.5);
-                p.fill_grad(&halo, gr, Affine::IDENTITY);
                 let sh = svg(SHIELD);
-                p.fill(&sh, BADGE_INK, 1.0);
-                p.fill(&sh, col, 0.25);
                 p.stroke(&sh, 1.6, col, 1.0);
                 p.stroke(&svg("M-3.5 -.5l2.5 2.5 4.5-4.5"), 1.8, col, 1.0);
             });
@@ -1572,22 +1563,22 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let open = if state == State::Sleep { 1.0 } else { blink(t) };
     let strong = fin.tint.strong();
     let light = fin.tint.0[0];
-    let solid = fin.material == Material::Solid;
-    let outline = fin.material == Material::Outline;
+    let line = fin.line;
     // Lines stay readable in tiny avatars by getting thicker there.
-    let line_w = if simple { 6.0 } else { 3.0 };
-    let lit = if pose.shine { 1.3 } else { 1.0 };
-    let eye_col = if solid { INK } else { mix(strong, light, 0.35) };
+    let w = line.weight.scale() * if simple { 6.0 } else { 3.0 };
+    let (rim, eye_col) = match line.ink {
+        Ink::Crew => (strong, strong),
+        Ink::Pastel => (light, light),
+        Ink::TwoTone | Ink::Rainbow => (strong, light),
+    };
+    // Badges and the little extras around Peek.
+    let accent = if line.ink == Ink::Rainbow {
+        eye_col
+    } else {
+        rim
+    };
+    let lit = if pose.shine { 1.0 } else { 0.0 };
 
-    if !solid && !outline && !simple {
-        let e = Ellipse::new((60.0, 66.0), (70.0, 48.0), 0.0);
-        let g = p.radial(
-            &[(0.0, strong, 0.35 * f.glow * lit), (1.0, strong, 0.0)],
-            (0.5, 0.5),
-            0.5,
-        );
-        p.fill_grad(&e, g, Affine::IDENTITY);
-    }
     if state == State::Listen && full {
         for i in 0..3 {
             let k = (t * 0.7 + i as f64 / 3.0).rem_euclid(1.0);
@@ -1598,7 +1589,7 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
                 90.0 + k * 12.0,
                 28.0 + k * 12.0,
             );
-            p.stroke(&ring, 1.5, strong, (1.0 - k) * 0.5);
+            p.stroke(&ring, w * 0.5, rim, (1.0 - k) * 0.5);
         }
     }
 
@@ -1609,59 +1600,34 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         );
     p.at(body, |p| {
         let shell = pill();
-        if outline {
-            let rim = if state == State::Needs {
-                mix(strong, AMBER, 0.5 + (t * 6.0).sin() * 0.4)
-            } else {
-                strong
-            };
-            p.stroke(&shell, line_w, rim, 1.0);
-        } else if solid {
-            let g = p.linear(
-                &[
-                    (0.0, mix(light, strong, 0.3), 1.0),
-                    (1.0, mix(strong, BLACK, 0.2), 1.0),
-                ],
-                (0.5, 0.0),
-                (0.5, 1.0),
-            );
-            p.fill_grad(&shell, g, Affine::IDENTITY);
-            p.stroke(&shell, 2.0, mix(strong, BLACK, 0.35), 0.8);
+        if line.ink == Ink::Rainbow && state != State::Needs {
+            let g = p.linear(&rainbow(1.0), (0.0, 0.0), (1.0, 1.0));
+            p.stroke_grad(&shell, w, g, rot(t * 40.0));
         } else {
-            let g = p.linear(
-                &[(0.0, Rgb(0x2A2833), 1.0), (1.0, Rgb(0x0F0F14), 1.0)],
-                (0.5, 0.0),
-                (0.5, 1.0),
-            );
-            p.fill_grad(&shell, g, Affine::IDENTITY);
-            if fin.material == Material::Bubble {
-                let g = p.linear(&rainbow(0.9), (0.0, 0.0), (1.0, 1.0));
-                p.stroke_grad(&shell, 2.2, g, rot(t * 40.0));
+            let col = if state == State::Needs {
+                mix(rim, AMBER, 0.5 + (t * 6.0).sin() * 0.4)
             } else {
-                let rim = if state == State::Needs {
-                    mix(strong, AMBER, 0.5 + (t * 6.0).sin() * 0.4)
-                } else {
-                    strong
-                };
-                p.stroke(&shell, 2.0, rim, (0.6 * lit).min(1.0));
-            }
-        }
-        if !outline {
-            let shine = if solid { 0.4 } else { 0.16 };
-            p.stroke(&svg("M36 42Q48 39 62 40"), 3.0, WHITE, shine);
+                mix(rim, WHITE, 0.25 * lit)
+            };
+            p.stroke(&shell, w, col, 1.0);
         }
         let (l, r) = (42.0 + f.look.0 * 8.0, 78.0 + f.look.0 * 8.0);
         let cy = 62.0 + f.look.1 * 6.0;
-        if f.blush > 0.02 && !outline {
+        if f.blush > 0.02 && !simple {
+            // Blush as two short strokes on each cheek.
             for x in [32.0, 88.0] {
-                let at = (x + f.look.0 * 4.0, 75.0 + f.look.1 * 4.0);
-                p.fill(&Ellipse::new(at, (7.5, 3.6), 0.0), PINK, 0.5 * f.blush);
+                let (bx, by) = (x + f.look.0 * 4.0, 75.0 + f.look.1 * 4.0);
+                let mut marks = BezPath::new();
+                for dx in [-3.0, 3.0] {
+                    marks.move_to((bx + dx - 1.5, by + 2.0));
+                    marks.line_to((bx + dx + 1.5, by - 2.0));
+                }
+                p.stroke(&marks, w * 0.6, PINK, f.blush.min(1.0));
             }
         }
-        let halo = (!solid && !outline && !simple).then_some(f.glow * lit);
-        let lines = outline.then_some(line_w);
-        eye(p, (l, cy), &f, 0, eye_col, halo, lines, open);
-        eye(p, (r, cy), &f, 1, eye_col, halo, lines, open);
+        let filled = line.eyes == Eyes::Dots;
+        eye(p, (l, cy), &f, 0, eye_col, w, filled, open);
+        eye(p, (r, cy), &f, 1, eye_col, w, filled, open);
     });
 
     if simple {
@@ -1677,23 +1643,14 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
         p.at(
             Affine::translate((x, y + f.lift + bob)) * Affine::scale(k),
             |p| {
-                let disc = Circle::new((0.0, 0.0), 13.5);
-                if outline {
-                    p.stroke(&disc, 2.0, strong, 1.0);
-                } else {
-                    let halo = Circle::new((0.0, 0.0), 24.0);
-                    let g = p.radial(&[(0.0, strong, 0.35), (1.0, strong, 0.0)], (0.5, 0.5), 0.5);
-                    p.fill_grad(&halo, g, Affine::IDENTITY);
-                    p.fill(&disc, BADGE_INK, 1.0);
-                    p.stroke(&disc, 1.5, strong, 0.55);
-                }
-                let ic = if solid { strong } else { eye_col };
-                p.at(Affine::scale(0.82), |p| icon(p, prop, ic, t));
+                // The ring matches the pill's line on screen.
+                p.stroke(&Circle::new((0.0, 0.0), 13.5), w * 0.85 / k, accent, 1.0);
+                p.at(Affine::scale(0.82), |p| icon(p, prop, accent, t));
             },
         );
     }
     if full {
-        extras(&mut p, state, &f, if solid { strong } else { eye_col }, t);
+        extras(&mut p, state, &f, accent, t);
     }
 }
 
@@ -1737,18 +1694,30 @@ mod tests {
         px.chunks(4).filter(|p| p[3] > 128).count()
     }
 
-    fn fin(material: Material, outfit: Outfit) -> Fin {
+    fn fin(line: Line, outfit: Outfit) -> Fin {
         Fin {
             tint: Tint::RED,
-            material,
+            line,
             outfit,
         }
     }
 
+    fn every_line() -> Vec<Line> {
+        let mut all = Vec::new();
+        for &weight in Weight::ALL {
+            for &ink in Ink::ALL {
+                for &eyes in Eyes::ALL {
+                    all.push(Line { weight, ink, eyes });
+                }
+            }
+        }
+        all
+    }
+
     #[test]
-    fn every_state_and_material_draws_something() {
+    fn every_state_and_line_draws_something() {
         let mut r = FinRenderer::new(96);
-        for m in Material::ALL {
+        for m in every_line() {
             for s in State::ALL {
                 let pose = FinPose {
                     fin: fin(m, Outfit::PLAIN),
@@ -1758,9 +1727,7 @@ mod tests {
                     offset: 0,
                 };
                 let px = r.draw(&pose, 1.3, Framing::Full);
-                // The outline finish is only lines, so it covers far less.
-                let least = if m == Material::Outline { 250 } else { 600 };
-                assert!(coverage(px) > least, "{m:?} {s:?} drew almost nothing");
+                assert!(coverage(px) > 150, "{m:?} {s:?} drew almost nothing");
             }
         }
     }
@@ -1768,13 +1735,70 @@ mod tests {
     #[test]
     fn small_avatars_draw_too() {
         let mut r = FinRenderer::new(22);
-        let pose = fin(Material::Glass, Outfit::PLAIN).pose(Mood::Idle);
-        assert!(coverage(r.draw(&pose, 0.0, Framing::Bust)) > 60);
+        for line in every_line() {
+            let pose = fin(line, Outfit::PLAIN).pose(Mood::Idle);
+            assert!(coverage(r.draw(&pose, 0.0, Framing::Bust)) > 30, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn heavier_lines_cover_more() {
+        let mut r = FinRenderer::new(96);
+        let mut last = 0;
+        for &weight in Weight::ALL {
+            let line = Line {
+                weight,
+                ..Line::default()
+            };
+            let px = coverage(r.draw(
+                &fin(line, Outfit::PLAIN).pose(Mood::Idle),
+                0.0,
+                Framing::Full,
+            ));
+            assert!(px > last, "{weight:?}");
+            last = px;
+        }
+    }
+
+    #[test]
+    fn dot_eyes_fill_in() {
+        let mut r = FinRenderer::new(96);
+        let rings = coverage(r.draw(
+            &fin(Line::default(), Outfit::PLAIN).pose(Mood::Idle),
+            0.0,
+            Framing::Full,
+        ));
+        let dots = Line {
+            eyes: Eyes::Dots,
+            ..Line::default()
+        };
+        let filled = coverage(r.draw(
+            &fin(dots, Outfit::PLAIN).pose(Mood::Idle),
+            0.0,
+            Framing::Full,
+        ));
+        assert!(filled > rings);
+    }
+
+    #[test]
+    fn line_codes_round_trip() {
+        for line in every_line() {
+            assert_eq!(Line::from_code(&line.code()), line);
+        }
+        assert_eq!(Line::from_code(""), Line::default());
+        assert_eq!(Line::from_code("glass"), Line::default());
+        assert_eq!(
+            Line::from_code("bold"),
+            Line {
+                weight: Weight::Bold,
+                ..Line::default()
+            }
+        );
     }
 
     #[test]
     fn working_moves() {
-        let pose = fin(Material::Solid, Outfit::PLAIN).pose(Mood::Working);
+        let pose = fin(Line::default(), Outfit::PLAIN).pose(Mood::Working);
         let mut r = FinRenderer::new(64);
         let a = r.draw(&pose, 0.0, Framing::Full).to_vec();
         let b = r.draw(&pose, 0.13, Framing::Full).to_vec();
@@ -1785,13 +1809,13 @@ mod tests {
     fn props_add_to_the_drawing() {
         let mut r = FinRenderer::new(96);
         let bare = coverage(r.draw(
-            &fin(Material::Solid, Outfit::PLAIN).pose(Mood::Idle),
+            &fin(Line::default(), Outfit::PLAIN).pose(Mood::Idle),
             0.0,
             Framing::Full,
         ));
         for role in ROLES {
             let dressed = coverage(r.draw(
-                &fin(Material::Solid, role.outfit).pose(Mood::Idle),
+                &fin(Line::default(), role.outfit).pose(Mood::Idle),
                 0.0,
                 Framing::Full,
             ));
@@ -1801,7 +1825,7 @@ mod tests {
 
     #[test]
     fn same_time_same_frame() {
-        let pose = fin(Material::Glass, ROLES[0].outfit).pose(Mood::Idle);
+        let pose = fin(Line::default(), ROLES[0].outfit).pose(Mood::Idle);
         let mut r = FinRenderer::new(64);
         let a = r.draw(&pose, 7.7, Framing::Full).to_vec();
         assert_eq!(a, r.draw(&pose, 7.7, Framing::Full));
@@ -1811,7 +1835,7 @@ mod tests {
     fn eyes_turn_to_the_pointer_even_when_busy() {
         let mut r = FinRenderer::new(64);
         for mood in [Mood::Idle, Mood::Working] {
-            let pose = fin(Material::Glass, Outfit::PLAIN).pose(mood);
+            let pose = fin(Line::default(), Outfit::PLAIN).pose(mood);
             let ahead = r.draw(&pose, 1.0, Framing::Bust).to_vec();
             let left = r.draw(&pose.looking((-10, 0)), 1.0, Framing::Bust).to_vec();
             assert_ne!(ahead, left, "{mood:?}");

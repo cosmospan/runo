@@ -3,7 +3,7 @@
 //!
 //! - **General**: how the app behaves while the crew works, and the limits.
 //! - **Appearance**: the theme, solid or frosted glass, with a preview of each.
-//! - **Mascot**: the crew's look. Fin's material, and each bot's colour and
+//! - **Mascot**: the crew's look. Peek's outline, and each bot's colour and
 //!   props, with a live preview.
 //! - **Engines**: which coding agent and model each bot runs on.
 //!
@@ -14,7 +14,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
-use runo_holo::fin::{FinPose, Material, Outfit, State, Tool, ROLES};
+use runo_holo::fin::{Eyes, FinPose, Ink, Line, Outfit, State, Tool, Weight, ROLES};
 use runo_holo::{Figure, Framing, Mood, Tint};
 
 use crate::settings::AppSettings;
@@ -1811,18 +1811,53 @@ impl Shell {
         let is_default = (tint, outfit) == mascot::default_look(who);
         let (dt, dout) = mascot::default_look(who);
 
-        let material = Material::from_id(&st.fin_material);
-        let mut mats = Vec::new();
-        for m in Material::ALL {
-            mats.push(
-                segment(("fin-mat", m as usize), m.name(), material == m).on_click(cx.listener(
-                    move |_, _, _, cx| {
-                        save(cx, |st| st.fin_material = m.id().into());
-                        cx.notify();
-                    },
-                )),
-            );
-        }
+        // Peek is only ever an outline; these tune its lines for every bot.
+        let line = Line::from_code(&st.fin_line);
+        let set_line = |id: &'static str, i: usize, label: &'static str, on: bool, to: Line| {
+            segment((id, i), label, on).on_click(cx.listener(move |_, _, _, cx| {
+                save(cx, |st| st.fin_line = to.code());
+                cx.notify();
+            }))
+        };
+        let weights: Vec<_> = Weight::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &weight)| {
+                set_line(
+                    "fin-weight",
+                    i,
+                    weight.name(),
+                    line.weight == weight,
+                    Line { weight, ..line },
+                )
+            })
+            .collect();
+        let inks: Vec<_> = Ink::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &ink)| {
+                set_line(
+                    "fin-ink",
+                    i,
+                    ink.name(),
+                    line.ink == ink,
+                    Line { ink, ..line },
+                )
+            })
+            .collect();
+        let eyes: Vec<_> = Eyes::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, &eyes)| {
+                set_line(
+                    "fin-eyes",
+                    i,
+                    eyes.name(),
+                    line.eyes == eyes,
+                    Line { eyes, ..line },
+                )
+            })
+            .collect();
         let looks = ui::card()
             .overflow_hidden()
             .flex()
@@ -1832,9 +1867,19 @@ impl Shell {
                 "How Peek looks, for every bot, everywhere in the app.",
             )))
             .child(row(
-                "Finish",
-                "Glowing eyes in a dark pill, the same with a turning rainbow rim, a solid colour pill, or just the outlines.",
-                segmented(mats),
+                "Line weight",
+                "How heavy every line is, from fine to bold.",
+                segmented(weights),
+            ))
+            .child(row(
+                "Line colour",
+                "Each bot's own colour, a softer pastel, two-tone with lighter eyes, or a slowly turning rainbow.",
+                segmented(inks),
+            ))
+            .child(row(
+                "Eyes",
+                "Open eyes as rings, like the pill, or as solid dots.",
+                segmented(eyes),
             ));
 
         let wardrobe = ui::card()
@@ -1910,7 +1955,7 @@ impl Shell {
         Self::page(
             "settings-mascot",
             "Mascot",
-            "Meet Peek: two glowing eyes in a pill. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
+            "Meet Peek: two eyes in a pill, drawn as a clean outline. The lids show mood, the pill moves with effort, and the badge beside it shows what it's working with.",
             div()
                 .flex()
                 .flex_col()
