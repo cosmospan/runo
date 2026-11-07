@@ -89,6 +89,9 @@ pub fn main(args: &[String]) -> Result<String, String> {
                         route.mode.label().to_lowercase()
                     ))
                 }
+                super::front::Front::Stop => {
+                    return Ok("Stops what's running here, with no new job.".into())
+                }
                 super::front::Front::Hand(_) => {}
             }
             // From a terminal, wait for Squad's own server to load when the

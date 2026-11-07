@@ -1115,6 +1115,14 @@ impl Shell {
     /// ask gets a question back, and real work goes to the bot it's for. A
     /// slash command, a picked bot or a pinned kind of work skips the read.
     fn read_first(&mut self, text: String, cx: &mut Context<Self>) {
+        // "stop app" stops what's running here, whoever it's said to.
+        if !text.starts_with('/')
+            && self.place == Place::Today
+            && self.crew.store.folder().is_some()
+            && brain::front::wants_stop(&text)
+        {
+            return self.stop_here(text, cx);
+        }
         let skip = text.starts_with('/')
             || self.place != Place::Today
             || self.target.is_some()
@@ -1168,9 +1176,10 @@ impl Shell {
                 self.confirming = Some((id, text, route));
                 cx.notify();
             }
+            brain::front::Front::Stop => self.stop_here(text, cx),
             brain::front::Front::Hand(route) => {
                 // Peek says who it brought in, on the job's card.
-                let line = handoff_line(&route);
+                let line = route.handoff();
                 let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
                 self.hand_to(route, text, cx);
                 for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
@@ -1850,6 +1859,62 @@ impl Shell {
     /// Turns "merge when checks pass" on or off for a job's pull request.
     pub(super) fn set_auto_merge(&mut self, id: u64, on: bool, cx: &mut Context<Self>) {
         self.crew.set_auto_merge(id, on);
+        cx.notify();
+    }
+
+    /// Stops what's running where the person is: the jobs in this thread,
+    /// else the bot they're talking to, else every job in this project.
+    fn stop_here(&mut self, text: String, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let here = self.crew.store.thread_here();
+        let target = self.target;
+        let running: Vec<&store::Job> = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.status == Status::Running && j.folder.path == folder)
+            .collect();
+        let pick: Vec<u64> = {
+            let in_thread: Vec<u64> = running
+                .iter()
+                .filter(|j| j.thread == here)
+                .map(|j| j.id)
+                .collect();
+            let by_bot: Vec<u64> = running
+                .iter()
+                .filter(|j| Some(j.bot) == target)
+                .map(|j| j.id)
+                .collect();
+            if !in_thread.is_empty() {
+                in_thread
+            } else if !by_bot.is_empty() {
+                by_bot
+            } else {
+                running.iter().map(|j| j.id).collect()
+            }
+        };
+        let names: Vec<String> = pick
+            .iter()
+            .filter_map(|id| self.crew.store.job(*id))
+            .map(|j| format!("{} on #{}", j.bot.name(), j.id))
+            .collect();
+        for id in &pick {
+            self.crew.stop(*id);
+        }
+        let reply = match names.len() {
+            0 => "Nothing's running here right now, so there's nothing to stop.".to_string(),
+            _ => format!("Stopped {}, and anything it had running.", names.join(", ")),
+        };
+        self.crew.peek_says(text, reply, Vec::new());
         cx.notify();
     }
 
@@ -2595,17 +2660,4 @@ fn mentioned(text: &str) -> Option<(Member, String)> {
         }
     }
     found.map(|m| (m, rest.join(" ")))
-}
-
-/// Peek's one line on a hand-off: "This is a build job, so I'm bringing in Builder."
-fn handoff_line(route: &brain::route::Route) -> String {
-    let kind = match route.mode {
-        Mode::Build => "a build job",
-        Mode::Fix => "a bug to hunt down",
-        Mode::Test => "a job for tests",
-        Mode::Review => "a job for a careful review",
-        Mode::Ask => "a question about the code",
-        Mode::Tidy => "a tidy-up job",
-    };
-    format!("This is {kind}, so I'm bringing in {}.", route.bot.name())
 }
