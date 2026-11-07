@@ -2790,12 +2790,17 @@ impl Render for Shell {
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.
             .when(self.usage_open && !setup, |d| {
-                d.child(motion::panel(
-                    div().absolute().inset_0().child(self.usage_popover(cx)),
-                    motion::key("usage-popover"),
-                    0.,
-                    6.,
-                ))
+                // Positioned after the motion: it makes what it moves
+                // relative, and this has to stay over the window.
+                d.child(
+                    motion::panel(
+                        div().inset_0().child(self.usage_popover(cx)),
+                        motion::key("usage-popover"),
+                        0.,
+                        6.,
+                    )
+                    .absolute(),
+                )
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
@@ -3052,10 +3057,13 @@ fn mentioned(text: &str) -> Option<(Member, String)> {
 
 /// A dialog over the window, fading in with its scrim.
 fn dialog(el: AnyElement, name: &'static str) -> Div {
+    // Absolute after the motion, which makes what it moves relative: a
+    // relative dialog would be laid out beside the page, off the window.
     motion::panel(
-        div().absolute().inset_0().child(el),
+        div().inset_0().child(el),
         motion::key(("dialog", name)),
         0.,
         0.,
     )
+    .absolute()
 }
