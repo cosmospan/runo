@@ -51,6 +51,162 @@ impl Entry {
     }
 }
 
+/// The quick reactions on a message's hover bar.
+const REACTIONS: [&str; 4] = ["\u{1F44D}", "\u{2705}", "\u{1F440}", "\u{1F389}"];
+
+/// Who a reply to a message goes to: the job's own conversation, or a bot
+/// asked in the thread.
+#[derive(Clone, Copy)]
+enum Reply {
+    Job(u64),
+    Bot(Member),
+}
+
+/// A small square button on a message's hover bar.
+fn bar_btn(id: impl Into<ElementId>) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(28.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(6.))
+        .text_size(px(14.))
+        .text_color(c(ui::muted()))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+}
+
+impl Shell {
+    /// One message in a thread: the entry itself, the reactions on it, and a
+    /// bar of quick actions at its top right while the pointer is over it.
+    fn message(
+        &mut self,
+        key: String,
+        copy: String,
+        reply: Reply,
+        body: AnyElement,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let group: SharedString = format!("msg-{key}").into();
+        let n = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            key.hash(&mut h);
+            h.finish() as usize
+        };
+        let on: Vec<String> = self
+            .crew
+            .store
+            .reactions
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
+        let mut bar = div()
+            .absolute()
+            .top(px(-6.))
+            .right(px(4.))
+            .p(px(2.))
+            .flex()
+            .items_center()
+            .gap(px(1.))
+            .rounded(px(8.))
+            .bg(c(ui::float()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .shadow(vec![BoxShadow {
+                color: hsla(0., 0., 0., 0.08),
+                offset: point(px(0.), px(2.)),
+                blur_radius: px(6.),
+                spread_radius: px(0.),
+                inset: false,
+            }])
+            .invisible()
+            .group_hover(group.clone(), |s| s.visible());
+        for (k, emoji) in REACTIONS.into_iter().enumerate() {
+            let key = key.clone();
+            bar = bar.child(
+                bar_btn(("react", n.wrapping_mul(8) + k))
+                    .child(emoji)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.crew.store.toggle_reaction(&key, emoji);
+                        cx.notify();
+                    })),
+            );
+        }
+        bar = bar
+            .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(c(ui::line())))
+            .child(
+                bar_btn(("reply", n))
+                    .child(Icon::new(IconName::MessageSquareText).size(px(15.)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new("Reply").build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| match reply {
+                        Reply::Job(id) => this.open_job(id, cx),
+                        Reply::Bot(who) => {
+                            this.composer.update(cx, |i, cx| {
+                                ui::put_text(i, format!("@{} ", who.name()), window, cx);
+                                i.focus(window, cx);
+                            });
+                            cx.notify();
+                        }
+                    })),
+            )
+            .child(
+                bar_btn(("copy", n))
+                    .child(Icon::new(IconName::Copy).size(px(14.)))
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new("Copy text").build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
+                        this.say("Copied.");
+                        cx.notify();
+                    })),
+            );
+        let reactions = (!on.is_empty()).then(|| {
+            let mut row = div().pl(px(46.)).pb(px(4.)).flex().flex_wrap().gap(px(6.));
+            for (k, emoji) in on.into_iter().enumerate() {
+                let key = key.clone();
+                let emoji2 = emoji.clone();
+                row = row.child(
+                    div()
+                        .id(("reacted", n.wrapping_mul(8) + k))
+                        .h(px(24.))
+                        .px(px(8.))
+                        .flex()
+                        .items_center()
+                        .gap(px(5.))
+                        .rounded_full()
+                        .bg(ca(ui::VIOLET, 0.10))
+                        .border_1()
+                        .border_color(ca(ui::VIOLET, 0.35))
+                        .text_size(px(12.))
+                        .text_color(c(ui::ink()))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(ca(ui::VIOLET, 0.18)))
+                        .child(emoji)
+                        .child("1")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.crew.store.toggle_reaction(&key, &emoji2);
+                            cx.notify();
+                        })),
+                );
+            }
+            row
+        });
+        div()
+            .group(group)
+            .relative()
+            .rounded(px(10.))
+            .hover(|s| s.bg(ca(ui::ink(), 0.025)))
+            .child(body)
+            .children(reactions)
+            .child(bar)
+    }
+}
+
 /// "Today", "Yesterday", or the day's name or date, for the line between days.
 fn day_label(at: u64) -> String {
     use chrono::{Local, TimeZone};
@@ -302,11 +458,34 @@ impl Shell {
                 marked = true;
                 feed = feed.child(divider("New", Some(ui::RED)));
             }
-            feed = feed.child(match e {
+            // Each message can be reacted to, replied to and copied from a
+            // small bar that shows while the pointer is over it.
+            let (key, copy, reply) = match &e {
+                Entry::Job(j) => (
+                    format!("job-{}", j.id),
+                    j.label().to_string(),
+                    Reply::Job(j.id),
+                ),
+                Entry::Talk(t) => (
+                    format!("talk-{}", t.id),
+                    t.answer
+                        .as_ref()
+                        .map(|a| super::live::plain(&a.text))
+                        .unwrap_or_else(|| t.question.clone()),
+                    Reply::Bot(t.bot),
+                ),
+                Entry::Plan(g) => (
+                    format!("plan-{}", g.id),
+                    g.text.clone(),
+                    Reply::Bot(Member::Fin),
+                ),
+            };
+            let body = match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
                 Entry::Talk(t) => self.talk_entry(&t, cx).into_any_element(),
-            });
+            };
+            feed = feed.child(self.message(key, copy, reply, body, cx));
         }
 
         // Short threads sit at the bottom, next to the composer.

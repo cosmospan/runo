@@ -448,6 +448,7 @@ pub fn seed() -> Store {
         steps: Vec::new(),
         guide_hidden: true,
         try_hidden: false,
+        reactions: Default::default(),
         offered: Vec::new(),
         pinned: vec![Member::Made(2)],
         goals: vec![
