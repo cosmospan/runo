@@ -33,7 +33,9 @@ fi
 if [ ! -x "$bin" ] || [ "${SQUAD_UPDATE:-}" = 1 ]; then
   command -v curl >/dev/null 2>&1 || fail "curl isn't installed here."
   say "Finding the latest Squad Code for Linux $arch…"
-  url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+  # The newest release with a Linux build, prereleases included: Squad Code 2
+  # ships as alphas for now, and `releases/latest` skips those.
+  url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=20" 2>/dev/null \
     | grep -o "\"browser_download_url\": *\"[^\"]*linux-$arch[^\"]*\.tar\.gz\"" \
     | head -1 | sed 's/.*"\(https[^"]*\)"$/\1/') || true
   [ -n "${url:-}" ] || fail "no Linux release of Squad Code is published yet. Copy a SquadCode binary to $bin and connect again."

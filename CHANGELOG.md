@@ -4,6 +4,14 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.6] - 2026-11-07
+
+### Added
+
+- `squad serve` runs the crew on a server with no window, behind one small API that every device shares (`/v1/...`, with live events). Devices pair with one-time codes from `squad pair`. `squad serve --install` keeps it running after logout and restarts, and `squad serve --set KEY` gives its agents a key.
+- Settings has a new My server pane: connect your own Linux VPS with its address and password. Squad installs itself there, locks the server down (key-only SSH, a firewall that lets in only SSH, fail2ban, automatic security updates), pairs this computer and reaches the server through an SSH tunnel. Sign the server in with your Claude plan, or give it an Anthropic, OpenAI, Google or xAI key.
+- Jobs that suit your server run there and keep going with this computer closed. They show live in the app, and Approve, Stop and follow-ups work on them as on any job. "Put <project> there" copies the open project to the server.
+
 ## [2.0.0-alpha.5] - 2026-11-05
 
 ### Added
