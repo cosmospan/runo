@@ -491,6 +491,15 @@ impl Shell {
             feed = feed.child(self.message(key, copy, reply, body, cx));
         }
 
+        if thread == 0 {
+            if let Some(post) = self.catch_up(&folder.path, since, cx) {
+                if !marked {
+                    feed = feed.child(divider("New", Some(ui::RED)));
+                }
+                feed = feed.child(post);
+            }
+        }
+
         // Short threads sit at the bottom, next to the composer.
         let chat = div()
             .id("thread-feed")
@@ -561,6 +570,140 @@ impl Shell {
             .into_any_element();
         let pick = None;
         self.split(pick, page, cx)
+    }
+
+    /// Peek's catch-up at the bottom of #general when you come back: what
+    /// finished, failed or waits on you across the project since you last
+    /// looked, and what's still running. Worked out each time, not stored.
+    fn catch_up(&mut self, path: &str, since: u64, cx: &mut Context<Self>) -> Option<Div> {
+        if since == 0 {
+            return None;
+        }
+        let store = &self.crew.store;
+        let mine: Vec<&Job> = store
+            .listed()
+            .into_iter()
+            .filter(|j| j.folder.path == path)
+            .collect();
+        let ended_since = |j: &&Job| j.ended.is_some_and(|e| e > since);
+        let done: Vec<String> = mine
+            .iter()
+            .filter(|j| ended_since(j) && matches!(j.status, Status::Done | Status::Shipped))
+            .map(|j| format!("{} finished {}", j.bot.name(), j.label()))
+            .collect();
+        let failed = mine
+            .iter()
+            .filter(|j| ended_since(j) && j.status == Status::Failed)
+            .count();
+        let review = mine.iter().filter(|j| j.status == Status::Review).count();
+        let running = mine
+            .iter()
+            .filter(|j| matches!(j.status, Status::Running | Status::Shipping))
+            .count();
+        if done.is_empty() && failed == 0 && review == 0 {
+            return None;
+        }
+        let plural = |n: usize, one: &str, many: &str| {
+            if n == 1 {
+                format!("1 {one}")
+            } else {
+                format!("{n} {many}")
+            }
+        };
+        let mut lines: Vec<String> = done.into_iter().take(3).collect();
+        if review > 0 {
+            lines.push(format!(
+                "{} waiting for your OK",
+                plural(review, "change is", "changes are")
+            ));
+        }
+        if failed > 0 {
+            lines.push(format!("{} failed", plural(failed, "job", "jobs")));
+        }
+        if running > 0 {
+            lines.push(format!(
+                "{} still running",
+                plural(running, "job is", "jobs are")
+            ));
+        }
+        let face = self.avatar(Member::Fin, 34.);
+        let mut list = div().flex().flex_col().gap(px(3.));
+        for l in lines {
+            list = list.child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .mt(px(8.))
+                            .size(px(5.))
+                            .rounded_full()
+                            .bg(c(ui::faint())),
+                    )
+                    .child(l),
+            );
+        }
+        let needs = review + failed;
+        Some(
+            div()
+                .flex()
+                .gap(px(12.))
+                .py(px(8.))
+                .child(
+                    div()
+                        .size(px(34.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(face),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(
+                            byline("Peek", store::now()).child(
+                                div()
+                                    .px(px(6.))
+                                    .rounded(px(5.))
+                                    .bg(ca(ui::VIOLET, 0.12))
+                                    .text_size(px(11.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::t_violet()))
+                                    .child("Catch-up"),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .text_color(c(ui::body()))
+                                .child("While you were away:"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .line_height(px(21.))
+                                .text_color(c(ui::body()))
+                                .child(list),
+                        )
+                        .when(needs > 0, |d| {
+                            d.child(
+                                div().pt(px(4.)).flex().gap(px(6.)).child(
+                                    ui::ghost("catch-up-needs", "Open Needs you")
+                                        .h(px(28.))
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx)),
+                                        ),
+                                ),
+                            )
+                        }),
+                ),
+        )
     }
 
     /// A job's conversation beside its thread: what the bot did and said,
