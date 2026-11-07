@@ -797,8 +797,10 @@ impl Shell {
                                         .bg(c(ui::term().bg))
                                         .font_family(ui::MONO)
                                         .text_size(px(11.5))
+                                        // The box is the terminal's dark in every
+                                        // theme: the bright red reads on it.
                                         .text_color(c(if *failed {
-                                            ui::t_red()
+                                            ui::RED
                                         } else {
                                             ui::term().fg
                                         }))
@@ -811,9 +813,11 @@ impl Shell {
                                                     .child(format!("… {from} lines above")),
                                             )
                                         })
-                                        .children(lines[from..].iter().map(|l| {
-                                            div().whitespace_nowrap().child(l.to_string())
-                                        })),
+                                        .children(
+                                            lines[from..]
+                                                .iter()
+                                                .map(|l| div().child(l.to_string())),
+                                        ),
                                 )
                             })
                     }),
