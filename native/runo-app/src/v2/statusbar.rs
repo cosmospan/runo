@@ -221,8 +221,11 @@ impl Shell {
             .rounded_full()
             .cursor_pointer()
             .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-            .tooltip(move |window, cx| {
-                gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            // Not while the popover is open: it would cover the popover's links.
+            .when(!open, |d| {
+                d.tooltip(move |window, cx| {
+                    gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
             })
             .child(engines)
             .child(div().w(px(1.)).h(px(12.)).mx(px(2.)).bg(c(ui::line())))
