@@ -166,14 +166,16 @@ pub struct Full {
     pub perms: super::super::setup::Perms,
 }
 
-/// What the person's engine is asked, in the project's folder, to draft a bot
-/// from a sentence: `about` is what the person wrote, `name` the name they
-/// gave (may be empty). `skills` and `apps` are what this computer already
-/// has, as (name, what it's for), so the draft can reuse them.
+/// What the person's engine is asked to draft a bot from a sentence: `about`
+/// is what the person wrote, `name` the name they gave (may be empty).
+/// `project` is the project the bot is only for, read in its folder; None is a
+/// bot for every project, drafted without reading any. `skills` and `apps` are
+/// what this computer already has, as (name, what it's for), so the draft can
+/// reuse them.
 pub fn full_prompt(
     about: &str,
     name: &str,
-    project: &str,
+    project: Option<&str>,
     skills: &[(String, String)],
     apps: &[String],
 ) -> String {
@@ -197,11 +199,33 @@ pub fn full_prompt(
     } else {
         name.trim().to_string()
     };
+    // A bot for every project is drafted from the words alone; one for a single
+    // project fits that project's code.
+    let (intro, fit, scope) = match project {
+        Some(project) => (
+            format!(
+                "Squad Code's crew is getting a new bot for the project \"{project}\" (the current folder) only."
+            ),
+            "Read the project first (its package or build files, CI config, tests, docs, contributing notes), \
+             then design the bot to fit it. Change no files.",
+            "Specific to this project.",
+        ),
+        None => (
+            "Squad Code's crew is getting a new bot that works across all of the person's projects.".to_string(),
+            "Don't read any project or files: design it from the description alone, so it works in any codebase. \
+             Where a step depends on the project (its test command, its folders), say how to find it there.",
+            "General: true in any project.",
+        ),
+    };
+    let here = if project.is_some() {
+        "in this project"
+    } else {
+        "in any project"
+    };
     format!(
-        "Squad Code's crew is getting a new bot for the project \"{project}\" (the current folder). \
+        "{intro} \
          The person described it as: \"{about}\". Name: {name}.\n\n\
-         Read the project first (its package or build files, CI config, tests, docs, contributing notes), \
-         then design the bot to fit it. Change no files.\n\n\
+         {fit}\n\n\
          Skill files already on this computer:\n{skills}\n\n\
          Connected apps (MCP servers) already on this computer:\n{apps}\n\n\
          Reply with JSON only, nothing else:\n\
@@ -210,14 +234,14 @@ pub fn full_prompt(
          \"kind\": \"one of build, fix, test, review, tidy, ask: the kind of work it mostly does\",\n\
          \"skills\": [\"3 to 10 single lowercase words naming its own area, the things only it handles \
          (a payments bot: stripe, webhooks, invoices); never general words like code, app, api or tests\"],\n\
-         \"instructions\": \"Markdown, 8 to 25 lines: who it is, which folders and files it owns, how it works here, \
-         what good work looks like. Specific to this project.\",\n\
-         \"rules\": [\"3 to 6 short rules, such as the exact test command, folders to leave alone, when to ask first\"],\n\
-         \"memory\": [\"3 to 6 facts about this project it should know from day one (where config lives, conventions, commands)\"],\n\
-         \"reads\": [\"up to 5 files, folders or doc links it should read before a job\"],\n\
+         \"instructions\": \"Markdown, 8 to 25 lines: who it is, what it owns, how it works, \
+         what good work looks like. {scope}\",\n\
+         \"rules\": [\"3 to 6 short rules {here}, such as which tests to run, what to leave alone, when to ask first\"],\n\
+         \"memory\": [\"facts it should know from day one {here}; for a bot for every project, empty or only facts true everywhere\"],\n\
+         \"reads\": [\"up to 5 files, folders or doc links it should read before a job {here} (README.md, CONTRIBUTING.md, docs)\"],\n\
          \"use_skills\": [\"names from the skill files above that fit it; empty if none do\"],\n\
          \"new_skills\": [{{\"name\": \"short-kebab-name\", \"description\": \"when to use it, one line\", \
-         \"body\": \"Markdown steps for a task it will repeat in this project\"}}],\n\
+         \"body\": \"Markdown steps for a task it will repeat {here}\"}}],\n\
          \"use_apps\": [\"names from the connected apps above that it needs; empty if none\"],\n\
          \"may\": {{\"edit\": true, \"install\": true, \"web\": true, \"push\": true}}}}\n\n\
          new_skills: at most 2, only for a repeated task no existing skill covers. \
@@ -370,11 +394,13 @@ pub fn drafter(st: &AppSettings) -> (usize, String) {
     (i, st.agent(agent::PROVIDERS[i].id).model_override)
 }
 
-/// Asks the drafting engine, in `folder`, on another thread. Err when it
-/// can't run here; the caller falls back to [`quick`].
+/// Asks the drafting engine, on another thread: in the project's folder for a
+/// bot tied to it, else in Squad Code's own bots folder, so a bot for every
+/// project isn't shaped by whichever one is open. Err when it can't run here;
+/// the caller falls back to [`quick`].
 pub fn ask_full(
     st: &AppSettings,
-    folder: &super::super::store::Folder,
+    folder: Option<&super::super::store::Folder>,
     prompt: &str,
 ) -> Result<Receiver<Event>, String> {
     let (i, model) = drafter(st);
@@ -385,7 +411,15 @@ pub fn ask_full(
     }
     let command = agent::ask_command_on(p.id, &configured, prompt, &model);
     let (tx, rx) = channel();
-    agent::oneshot("v2-maker".into(), command, &folder.path, tx);
+    let dir = match folder {
+        Some(f) => f.path.clone(),
+        None => {
+            let dir = crate::store::data_dir().join("bots");
+            let _ = std::fs::create_dir_all(&dir);
+            dir.to_string_lossy().into_owned()
+        }
+    };
+    agent::oneshot("v2-maker".into(), command, &dir, tx);
     Ok(rx)
 }
 
@@ -539,12 +573,22 @@ mod tests {
         let p = full_prompt(
             "owns stripe",
             "",
-            "cove",
+            Some("cove"),
             &[("tdd".into(), "test first".into())],
             &["github".into()],
         );
         assert!(p.contains("- tdd: test first"));
         assert!(p.contains("- github"));
         assert!(p.contains("pick a short"));
+        assert!(p.contains("\"cove\"") && p.contains("Read the project first"));
+    }
+
+    #[test]
+    fn a_bot_for_every_project_reads_none() {
+        let p = full_prompt("finds what's slow", "Pace", None, &[], &[]);
+        assert!(p.contains("all of the person's projects"));
+        assert!(p.contains("Don't read any project"));
+        assert!(!p.contains("Read the project first"));
+        assert!(p.contains("in any project"));
     }
 }

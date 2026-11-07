@@ -321,6 +321,7 @@ pub fn seed() -> Store {
             outfit: "beret.none.pencil.heart".into(),
             skills: Vec::new(),
             rules: Vec::new(),
+            project: String::new(),
         },
         Made {
             id: 2,
@@ -334,6 +335,7 @@ pub fn seed() -> Store {
                 "Run the docs build before you stop.".into(),
                 "Never change code, only docs.".into(),
             ],
+            project: String::new(),
         },
         Made {
             id: 3,
@@ -344,6 +346,8 @@ pub fn seed() -> Store {
             outfit: "bandana.none.broom.gear".into(),
             skills: Vec::new(),
             rules: Vec::new(),
+            // Only for this project, to show a bot tied to one.
+            project: folder.path.clone(),
         },
     ];
     super::data::set_made(&made);

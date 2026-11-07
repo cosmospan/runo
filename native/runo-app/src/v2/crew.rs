@@ -242,6 +242,15 @@ impl Shell {
                                                 .size(px(12.))
                                                 .text_color(c(ui::faint())),
                                         )
+                                    })
+                                    .when(!super::data::project_of(who).is_empty(), |d| {
+                                        d.child(
+                                            div()
+                                                .text_size(px(11.))
+                                                .font_weight(FontWeight::NORMAL)
+                                                .text_color(c(ui::faint()))
+                                                .child("This project only"),
+                                        )
                                     }),
                             )
                             .child(

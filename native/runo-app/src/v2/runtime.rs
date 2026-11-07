@@ -1769,16 +1769,16 @@ impl Runtime {
             outfit,
             skills: d.skills.clone(),
             rules: d.rules.clone(),
+            project: String::new(),
         });
         super::data::set_made(&self.store.made);
         self.store.save();
-        if let Some(folder) = self.store.folder().cloned() {
-            let found = crate::settings::discover(Some(&folder.path));
-            let (have, apps) = brain::maker::on_computer(&found);
-            let prompt = brain::maker::full_prompt(&d.role, name, &folder.name, &have, &apps);
-            if let Ok(rx) = brain::maker::ask_full(st, &folder, &prompt) {
-                self.designing.push((id, set, rx));
-            }
+        // A bot for every project: drafted from what it's for, not the open project.
+        let found = crate::settings::discover(None);
+        let (have, apps) = brain::maker::on_computer(&found);
+        let prompt = brain::maker::full_prompt(&d.role, name, None, &have, &apps);
+        if let Ok(rx) = brain::maker::ask_full(st, None, &prompt) {
+            self.designing.push((id, set, rx));
         }
         id
     }
@@ -1799,6 +1799,7 @@ impl Runtime {
         (skills, rules): (Vec<String>, Vec<String>),
         look: [u8; 4],
         setup: super::setup::Setup,
+        project: String,
     ) {
         self.store.made.retain(|m| m.id != id);
         self.store.made.push(super::data::Made {
@@ -1810,6 +1811,7 @@ impl Runtime {
             outfit: String::new(),
             skills,
             rules,
+            project,
         });
         super::data::set_made(&self.store.made);
         self.set_setup(Member::Made(id), setup);
@@ -1830,17 +1832,21 @@ impl Runtime {
     /// Asks the person's engine to draft a whole bot from `about`, for the
     /// maker. Without an open project or an engine, the quick draft is ready
     /// at once.
-    pub fn draft_bot(&mut self, st: &AppSettings, about: &str, name: &str) {
+    pub fn draft_bot(
+        &mut self,
+        st: &AppSettings,
+        about: &str,
+        name: &str,
+        project: Option<&store::Folder>,
+    ) {
         self.drafted = None;
-        let asked = self.store.folder().cloned().and_then(|folder| {
-            let found = crate::settings::discover(Some(&folder.path));
-            let (have, apps) = brain::maker::on_computer(&found);
-            let prompt = brain::maker::full_prompt(about, name, &folder.name, &have, &apps);
-            brain::maker::ask_full(st, &folder, &prompt).ok()
-        });
-        match asked {
-            Some(rx) => self.drafting = Some((rx, about.to_string(), name.to_string())),
-            None => {
+        let found = crate::settings::discover(project.map(|f| f.path.as_str()));
+        let (have, apps) = brain::maker::on_computer(&found);
+        let prompt =
+            brain::maker::full_prompt(about, name, project.map(|f| f.name.as_str()), &have, &apps);
+        match brain::maker::ask_full(st, project, &prompt) {
+            Ok(rx) => self.drafting = Some((rx, about.to_string(), name.to_string())),
+            Err(_) => {
                 self.drafting = None;
                 self.drafted = Some(brain::maker::quick(about, name));
             }
@@ -1860,20 +1866,32 @@ impl Runtime {
 
     /// Asks the person's engine to write one skill file for a bot, from what
     /// the person wants it to do.
-    pub fn draft_skill(&mut self, st: &AppSettings, about: &str, bot: &str) -> Result<(), String> {
-        let folder = self
-            .store
-            .folder()
-            .cloned()
-            .ok_or("Open a project first, so the skill fits its code.")?;
+    /// `project` is the one the bot is only for, read so the steps fit it;
+    /// None writes a skill that works in any project.
+    pub fn draft_skill(
+        &mut self,
+        st: &AppSettings,
+        about: &str,
+        bot: &str,
+        project: Option<&store::Folder>,
+    ) -> Result<(), String> {
+        let (whose, fit) = match project {
+            Some(f) => (
+                format!("for the project \"{}\" (the current folder)", f.name),
+                "Read the project so the steps fit it (its commands, folders and conventions). Change no files.",
+            ),
+            None => (
+                "that works across all of the person's projects".to_string(),
+                "Don't read any project: write steps that work in any codebase, saying how to find project-specific commands.",
+            ),
+        };
         let prompt = format!(
-            "Write a skill file for {bot}, a bot in Squad Code's crew for the project \"{}\" (the current folder). \
-             The skill: {about}\n\nRead the project so the steps fit it (its commands, folders and conventions). Change no files.\n\n\
+            "Write a skill file for {bot}, a bot in Squad Code's crew {whose}. \
+             The skill: {about}\n\n{fit}\n\n\
              Reply with JSON only: {{\"name\": \"short-kebab-name\", \"description\": \"when to use it, one line\", \
-             \"body\": \"Markdown: the steps, commands and checks, 10 to 40 lines\"}}",
-            folder.name
+             \"body\": \"Markdown: the steps, commands and checks, 10 to 40 lines\"}}"
         );
-        let rx = brain::maker::ask_full(st, &folder, &prompt)?;
+        let rx = brain::maker::ask_full(st, project, &prompt)?;
         self.skilling = Some((rx, about.to_string()));
         self.skilled = None;
         Ok(())
@@ -1983,8 +2001,7 @@ impl Runtime {
             let who = Member::Made(id);
             // Only a bot with no setup yet gets one: never over the person's edits.
             if !self.store.setups.contains_key(&super::engine::bot_key(who)) {
-                let dir = self.store.folder().map(|f| f.path.clone());
-                let found = crate::settings::discover(dir.as_deref());
+                let found = crate::settings::discover(None);
                 let setup = brain::maker::setup_from(who, &full, &found);
                 self.set_setup(who, setup);
             }
