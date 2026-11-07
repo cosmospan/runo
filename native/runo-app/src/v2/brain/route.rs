@@ -26,20 +26,73 @@ pub struct Route {
 impl Route {
     pub const SURE: f32 = 0.6;
 
-    /// Peek's line as it hands the job on: "Sounds like a bug, so I'm
-    /// bringing in Fixer to hunt it down."
-    pub fn handoff(&self) -> String {
-        let name = self.bot.name();
+    /// Why this bot, in a few words: "Sounds like a bug to hunt down."
+    pub fn reason(&self) -> String {
         if self.bot.is_made() {
-            return format!("This one's right up {name}'s street, so I'm handing it over.");
+            return format!("This one's right up {}'s street.", self.bot.name());
         }
         match self.mode {
-            Mode::Build => format!("This is a build job, so I'm bringing in {name}."),
-            Mode::Fix => format!("Sounds like a bug, so I'm bringing in {name} to hunt it down."),
-            Mode::Test => format!("Let's try it for real. {name}, you're up."),
-            Mode::Review => format!("This wants a careful second look, so I'm bringing in {name}."),
-            Mode::Tidy => format!("Cleanup time. {name} is taking this one."),
-            Mode::Ask => format!("Good question. {name} will dig into the code and answer."),
+            Mode::Build => "This is a build job.",
+            Mode::Fix => "Sounds like a bug to hunt down.",
+            Mode::Test => "Let's try it for real.",
+            Mode::Review => "This wants a careful second look.",
+            Mode::Tidy => "Cleanup time.",
+            Mode::Ask => "Good question, and the answer is in the code.",
+        }
+        .to_string()
+    }
+
+    /// Peek's line as it hands the job on: why, then whether the bot is
+    /// new to the project, invited in, or already here.
+    pub fn handoff(&self, joins: Joins) -> String {
+        format!("{} {}", self.reason(), joins.line(self.bot))
+    }
+}
+
+/// Where a bot stands when Peek brings it in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Joins {
+    /// It has never worked on this project: Peek onboards it.
+    New,
+    /// It has worked on this project, not in this thread: Peek invites it.
+    Back,
+    /// It's already working in this thread.
+    Here,
+}
+
+impl Joins {
+    /// Where `bot` stands, from the bots that have worked on this project
+    /// and those in this thread.
+    pub fn of(bot: Member, project: &[Member], thread: &[Member]) -> Joins {
+        if thread.contains(&bot) {
+            Joins::Here
+        } else if project.contains(&bot) {
+            Joins::Back
+        } else {
+            Joins::New
+        }
+    }
+
+    /// Peek's words for it.
+    pub fn line(self, bot: Member) -> String {
+        let name = bot.name();
+        match self {
+            Joins::New => format!(
+                "Onboarding {name}: it's new to this project, so it'll look around the code first."
+            ),
+            Joins::Back => {
+                format!("Inviting {name} into this thread; it's worked on this project before.")
+            }
+            Joins::Here => format!("{name} is already in this thread, so it's picking this up."),
+        }
+    }
+
+    /// How the engine is told where a bot stands.
+    pub fn note(self) -> &'static str {
+        match self {
+            Joins::New => "never worked on this project",
+            Joins::Back => "has worked on this project, not in this thread",
+            Joins::Here => "already in this thread",
         }
     }
 }
@@ -532,8 +585,19 @@ mod tests {
     #[test]
     fn the_handoff_names_the_bot_and_why() {
         let r = by_rules("the export button crashes on safari", &crew());
-        let h = r.handoff();
+        let h = r.handoff(Joins::New);
         assert!(h.contains(r.bot.name()) && h.contains("bug"), "{h}");
+        assert!(h.contains("Onboarding"), "{h}");
+        assert!(r.handoff(Joins::Back).contains("Inviting"));
+        assert!(r.handoff(Joins::Here).contains("already in this thread"));
+    }
+
+    #[test]
+    fn where_a_bot_stands() {
+        let (b, f) = (Member::Builder, Member::Fixer);
+        assert_eq!(Joins::of(b, &[], &[]), Joins::New);
+        assert_eq!(Joins::of(b, &[b], &[]), Joins::Back);
+        assert_eq!(Joins::of(b, &[b, f], &[b]), Joins::Here);
     }
 
     #[test]

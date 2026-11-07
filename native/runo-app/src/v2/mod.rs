@@ -520,6 +520,9 @@ pub struct Shell {
     serving: Vec<u64>,
     /// When Peek's engine was last made sure of being warm.
     warmed_at: Option<std::time::Instant>,
+    /// "run the app", read by Peek: started on the next draw, which has the
+    /// window the terminal needs. The words, and Peek's reading message.
+    run_wanted: Option<(String, Option<u64>)>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -1101,6 +1104,7 @@ impl Shell {
             reading_since: None,
             serving: Vec::new(),
             warmed_at: None,
+            run_wanted: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1467,11 +1471,14 @@ impl Shell {
                 .filter(|j| j.status == Status::Running && j.folder.path == folder)
                 .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
                 .collect();
+            let (worked, in_thread) = self.bots_here();
             let seen = brain::think::Seen {
                 project: &project,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
+                worked: &worked,
+                in_thread: &in_thread,
             };
             if let Ok(rx) = brain::think::ask(&st, &folder, &text, &seen) {
                 // Peek's message shows as reading until the decision lands.
@@ -1679,10 +1686,15 @@ impl Shell {
                 drop_pending(self);
                 self.stop_here(text, cx)
             }
+            brain::front::Front::RunApp => {
+                self.run_wanted = Some((text, pending));
+                cx.notify();
+            }
             brain::front::Front::Hand(route) => {
                 drop_pending(self);
-                // Peek says who it brought in, on the job's card.
-                let line = line.unwrap_or_else(|| route.handoff());
+                // Peek says why, and whether it's onboarding the bot or
+                // inviting it back, on the job's card.
+                let line = self.handoff_line(&route, line);
                 let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
                 self.hand_to(route, text, cx);
                 for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
@@ -1699,7 +1711,15 @@ impl Shell {
         match self.confirming.take() {
             Some((id, text, route)) if id == talk => {
                 if choice == "Go ahead" {
+                    let said = matches!(route.by.as_str(), "engine" | "learned")
+                        .then(|| route.why.clone());
+                    let line = self.handoff_line(&route, said);
+                    let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
                     self.hand_to(route, text, cx);
+                    for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
+                        j.handoff = line.clone();
+                    }
+                    self.crew.store.save();
                 } else {
                     self.say("Okay, nothing started.");
                     cx.notify();
@@ -1710,6 +1730,50 @@ impl Shell {
                 self.hand_over(choice, cx);
             }
         }
+    }
+
+    /// The bots that have worked on the open project, and those in this
+    /// thread.
+    fn bots_here(&self) -> (Vec<Member>, Vec<Member>) {
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let here = self.crew.store.thread_here();
+        let mut worked = Vec::new();
+        let mut in_thread = Vec::new();
+        for j in self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.folder.path == folder)
+        {
+            if !worked.contains(&j.bot) {
+                worked.push(j.bot);
+            }
+            if j.thread == here && !in_thread.contains(&j.bot) {
+                in_thread.push(j.bot);
+            }
+        }
+        (worked, in_thread)
+    }
+
+    /// Peek's line on a hand-off: its reason (the engine's, unless that
+    /// already names who's coming in), then whether it's onboarding the bot,
+    /// inviting it, or it's already here.
+    fn handoff_line(&self, route: &brain::route::Route, said: Option<String>) -> String {
+        let (worked, in_thread) = self.bots_here();
+        let joins = brain::route::Joins::of(route.bot, &worked, &in_thread);
+        let reason = said
+            .map(|s| s.trim().to_string())
+            .filter(|s| {
+                !s.is_empty() && !s.to_lowercase().contains(&route.bot.name().to_lowercase())
+            })
+            .unwrap_or_else(|| route.reason());
+        format!("{reason} {}", joins.line(route.bot))
     }
 
     /// Starts an ask the way Peek routed it, without reading it again.
@@ -2632,6 +2696,18 @@ impl Render for Shell {
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
+        if let Some((text, pending)) = self.run_wanted.take() {
+            if let Some(id) = pending {
+                self.crew.store.talks.retain(|t| t.id != id);
+            }
+            if !self.run_latest_app(text.clone(), window, cx) {
+                self.crew.peek_says(
+                    text,
+                    "There's nothing here I know how to start yet. Want me to have Builder make it runnable?".into(),
+                    vec!["Yes, make it runnable".into(), "Not now".into()],
+                );
+            }
+        }
         if self.term_open.is_some() && window.is_window_active() {
             // The shell's output arrives on its own thread: keep drawing it.
             window.request_animation_frame();

@@ -154,6 +154,7 @@ pub fn example(text: &str, front: &Front, say: &str) -> Option<Example> {
         Front::Chat { .. } => ("reply", String::new(), String::new()),
         Front::AskBack { .. } => ("ask", String::new(), String::new()),
         Front::Stop => ("stop", String::new(), String::new()),
+        Front::RunApp => ("run", String::new(), String::new()),
         Front::Answer { .. } => ("answer", String::new(), String::new()),
         Front::Hand(r) | Front::Confirm { route: r, .. } => (
             "hand",
@@ -206,6 +207,7 @@ pub fn recall(text: &str, all: &[Example], crew: &[Member]) -> Option<(Front, St
             choices: Vec::new(),
         },
         "stop" => Front::Stop,
+        "run" => Front::RunApp,
         "answer" => Front::Answer {
             question: text.to_string(),
             code: true,

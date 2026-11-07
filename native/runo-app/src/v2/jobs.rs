@@ -53,7 +53,7 @@ fn asks_first(provider: &str, prompt_tool: bool) -> bool {
 fn run_rule(checks: &[String]) -> String {
     let mut out = String::from(
         " You can run commands here: install, build, run the tests, and start what you made to see it work. \
-         To check a server, start it in the background, try it (for example with curl on localhost), then stop it, so the job can finish. If the person asks you to run or start the app for them, don't keep it running yourself: say the exact start command and its address, and Squad Code runs it and keeps it up. \
+         To check a server, start it in the background, try it (for example with curl on localhost), then stop it, so the job can finish. If the person asks you to run or start the app, end with the exact start command and the address to open, so it can be started for them; don't say you won't keep it running or who runs it. \
          Don't push, deploy, publish or delete outside this folder; Squad Code does those after the person says yes.",
     );
     if !checks.is_empty() {

@@ -40,6 +40,9 @@ pub enum Front {
     /// "stop app", "cancel that", "kill the server": stop what's running
     /// here, with no new job.
     Stop,
+    /// "run the app": Squad Code starts it in the terminal and keeps it up,
+    /// with no job.
+    RunApp,
 }
 
 /// Reads `text` and decides. `recent` is the conversation so far, oldest
@@ -49,6 +52,9 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
     let t = text.trim();
     if wants_stop(t) {
         return Front::Stop;
+    }
+    if wants_run_app(t) {
+        return Front::RunApp;
     }
     let follow_up = recent.last().is_some_and(|(who, said)| {
         who.eq_ignore_ascii_case("peek") && said.trim_end().ends_with('?')
@@ -97,7 +103,10 @@ pub fn wants_run_app(text: &str) -> bool {
     let Some(i) = ws.iter().position(|w| !lead.contains(&w.as_str())) else {
         return false;
     };
-    let verb = ["run", "start", "launch", "serve", "boot", "open"];
+    let verb = [
+        "run", "start", "launch", "serve", "boot", "open", // and their usual slips
+        "rnu", "urn", "strat", "satrt", "statr", "lauch", "lanuch",
+    ];
     let what = [
         "the", "app", "it", "server", "site", "website", "project", "dev", "locally", "up",
         "again", "now", "local", "preview", "please", "pls", "for", "me", "my", "this", "that",
@@ -106,8 +115,21 @@ pub fn wants_run_app(text: &str) -> bool {
     let named = [
         "app", "it", "server", "site", "website", "project", "preview",
     ];
-    verb.contains(&ws[i].as_str())
-        && ws.iter().skip(i + 1).all(|w| what.contains(&w.as_str()))
+    // "runthe app": a verb run into the next word.
+    let mut ws = ws;
+    if !verb.contains(&ws[i].as_str()) {
+        let glued = verb.iter().find_map(|v| {
+            let rest = ws[i].strip_prefix(v)?;
+            (what.contains(&rest) || named.contains(&rest))
+                .then(|| (v.to_string(), rest.to_string()))
+        });
+        let Some((v, rest)) = glued else {
+            return false;
+        };
+        ws[i] = v;
+        ws.insert(i + 1, rest);
+    }
+    ws.iter().skip(i + 1).all(|w| what.contains(&w.as_str()))
         && ws.iter().skip(i + 1).any(|w| named.contains(&w.as_str()))
 }
 
@@ -877,6 +899,7 @@ pub fn outcome(f: &Front) -> &'static str {
         Front::Confirm { .. } => "confirm",
         Front::Hand(_) => "hand",
         Front::Stop => "stop",
+        Front::RunApp => "run",
     }
 }
 
@@ -1048,6 +1071,9 @@ mod tests {
             "lets start the app",
             "let's run the app",
             "i want to start the app",
+            "runthe app",
+            "rnu the app",
+            "startthe server",
         ] {
             assert!(wants_run_app(t), "{t}");
         }

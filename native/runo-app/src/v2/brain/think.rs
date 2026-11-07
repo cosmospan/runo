@@ -17,7 +17,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::front::Front;
-use super::route::{self, Route};
+use super::route::{self, Joins, Route};
 use crate::agent::{self, Event};
 use crate::settings::AppSettings;
 use crate::v2::data::{Member, Mode};
@@ -35,6 +35,9 @@ pub struct Seen<'a> {
     pub crew: &'a [Member],
     /// Jobs running here, as "#4 Builder: add a login page".
     pub running: &'a [String],
+    /// The bots that have worked on this project, and those in this thread.
+    pub worked: &'a [Member],
+    pub in_thread: &'a [Member],
 }
 
 fn clip(s: &str, n: usize) -> String {
@@ -54,10 +57,11 @@ pub fn prompt(text: &str, seen: &Seen) -> String {
         .filter(|m| **m != Member::Fin)
         .map(|m| {
             format!(
-                "- {} ({} work): {}",
+                "- {} ({} work): {} [{}]",
                 m.name(),
                 m.mode().label().to_lowercase(),
-                m.role()
+                m.role(),
+                Joins::of(*m, seen.worked, seen.in_thread).note()
             )
         })
         .collect();
@@ -87,10 +91,11 @@ Never start work on a guess.\n\
 - \"reply\": chat, greetings, thanks, questions about you or the crew, and general questions you can answer well yourself. Write the reply.\n\
 - \"ask\": you can't tell what they want, or real work is too vague to start. Write one short question, with up to 3 choices if they help.\n\
 - \"stop\": they want what's running stopped or cancelled.\n\
+- \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
 - \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything.\n\
-- \"hand\": real work on the project. Pick the bot whose role fits best, the kind of work, and say why in one short, friendly line in your own voice, like \"Sounds like a bug, so I'm bringing in Fixer to hunt it down.\"\n\n\
+- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back.\n\n\
 Reply with JSON only, on one line:\n\
-{{\"do\": \"reply|ask|stop|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\"}}\n\
+{{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\"}}\n\
 Keep \"say\" warm, plain and short: two sentences at most, no markdown.",
         project = seen.project,
         crew = crew.join("\n"),
@@ -128,6 +133,7 @@ pub fn parse(reply: &str, text: &str, crew: &[Member]) -> Option<(Front, String)
                 .unwrap_or_default(),
         },
         "stop" => Front::Stop,
+        "run" => Front::RunApp,
         "answer" => Front::Answer {
             question: text.to_string(),
             code: true,
@@ -275,9 +281,19 @@ mod tests {
                 recent: &recent,
                 crew: &c,
                 running: &running,
+                worked: &[Member::Builder],
+                in_thread: &[],
             },
         );
-        for want in ["Builder", "Fixer", "#4 Builder", "whoa re you", "\"do\""] {
+        for want in [
+            "Builder",
+            "Fixer",
+            "#4 Builder",
+            "whoa re you",
+            "\"do\"",
+            "has worked on this project",
+            "never worked on this project",
+        ] {
             assert!(p.contains(want), "{want}");
         }
     }

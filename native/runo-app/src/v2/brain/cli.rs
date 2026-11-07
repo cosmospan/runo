@@ -115,6 +115,11 @@ pub fn main(args: &[String]) -> Result<String, String> {
                 super::front::Front::Stop => {
                     return Ok("Stops what's running here, with no new job.".into())
                 }
+                super::front::Front::RunApp => {
+                    return Ok(
+                        "Starts the app in the terminal and keeps it up, with no job.".into(),
+                    )
+                }
                 super::front::Front::Hand(_) => {}
             }
             // From a terminal, wait for Squad's own server to load when the
@@ -141,7 +146,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
             };
             let out = format!(
                 "Peek: {}\n{} \u{b7} {} job \u{b7} {:.0}% sure (by {})\n{}\nRuns on {site}, on {}. {}",
-                r.handoff(),
+                r.handoff(super::route::Joins::New),
                 r.bot.name(),
                 r.mode.label(),
                 r.sure * 100.0,

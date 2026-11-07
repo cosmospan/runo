@@ -400,6 +400,8 @@ fn real_reads() {
                 recent: &[],
                 crew: &crew,
                 running: &[],
+                worked: &[],
+                in_thread: &[],
             },
         );
         let at = Instant::now();
