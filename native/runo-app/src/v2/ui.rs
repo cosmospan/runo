@@ -138,6 +138,19 @@ pub fn pattern_of(p: crate::pattern::Pattern, gain: f32) -> AnyElement {
     .into_any_element()
 }
 
+/// Marks `el` as a bar or header over the page: the background pattern stays out
+/// from under it, and when it runs across the page's top, starts again on a whole
+/// cell right below it.
+pub fn chrome(el: Div) -> Div {
+    el.relative().child(
+        canvas(|b, _, _| crate::pattern::add_chrome(b), |_, _, _, _| ())
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+    )
+}
+
 /// A card's corner radius.
 pub const CARD_R: f32 = 10.;
 

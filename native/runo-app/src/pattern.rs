@@ -156,6 +156,26 @@ const STEP: f32 = 16.;
 static PAGE_X: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static PAGE_Y: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+std::thread_local! {
+    /// The bars and headers laid over the page this frame, in window pixels: the
+    /// pattern stays out from under them and starts again on a whole cell below.
+    static CHROME: std::cell::RefCell<Vec<Bounds<Pixels>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Forgets last frame's bars and headers; called as each frame starts.
+pub fn clear_chrome() {
+    CHROME.with(|c| c.borrow_mut().clear());
+}
+
+/// Notes a bar or header over the page, as it's laid out.
+pub fn add_chrome(b: Bounds<Pixels>) {
+    CHROME.with(|c| c.borrow_mut().push(b));
+}
+
+fn bars_over_page() -> Vec<Bounds<Pixels>> {
+    CHROME.with(|c| c.borrow().clone())
+}
+
 /// Notes where the page area's pattern starts.
 pub fn set_page_origin(at: Point<Pixels>) {
     PAGE_X.store(f32::from(at.x).to_bits(), Ordering::Relaxed);
@@ -205,21 +225,40 @@ pub fn paint_in(
     let strength = gain * if dark { 0.16 } else { 0.12 };
     let (left, top) = (f32::from(area.origin.x), f32::from(area.origin.y));
     let (right, bottom) = (f32::from(area.right()), f32::from(area.bottom()));
+    let rect =
+        |x: f32, y: f32, w: f32, h: f32| Bounds::new(point(px(x), px(y)), size(px(w), px(h)));
+    // Where a cell's corner falls: on the window's own grid, or on `anchor`, so the
+    // pattern starts with a whole cell at an area's edge and areas that share an
+    // anchor line up across their boundary.
+    let (ox, mut oy) = match anchor {
+        Some(a) => (f32::from(a.x), f32::from(a.y)),
+        None => (0., 0.),
+    };
+    // Bars and headers over the page: nothing under them, and a header across the
+    // page's top moves the grid's first row to just below it.
+    let bars: Vec<Bounds<Pixels>> = if anchor.is_some() {
+        bars_over_page()
+            .into_iter()
+            .filter(|b| b.intersects(&area))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut top = top;
+    for b in &bars {
+        let (bt, bb) = (f32::from(b.top()), f32::from(b.bottom()));
+        if (bt - top).abs() < 2. && f32::from(b.size.width) >= 0.6 * (right - left) {
+            top = bb;
+            oy = bb;
+        }
+    }
     let inside = |b: &Bounds<Pixels>| {
         f32::from(b.left()) >= left
             && f32::from(b.right()) <= right
             && f32::from(b.top()) >= top
             && f32::from(b.bottom()) <= bottom
             && !skip.is_some_and(|s| s.intersects(b))
-    };
-    let rect =
-        |x: f32, y: f32, w: f32, h: f32| Bounds::new(point(px(x), px(y)), size(px(w), px(h)));
-    // Where a cell's corner falls: on the window's own grid, or on `anchor`, so the
-    // pattern starts with a whole cell at an area's edge and areas that share an
-    // anchor line up across their boundary.
-    let (ox, oy) = match anchor {
-        Some(a) => (f32::from(a.x), f32::from(a.y)),
-        None => (0., 0.),
+            && !bars.iter().any(|bar| bar.intersects(b))
     };
     let start = |from: f32, o: f32| ((from - o) / STEP).floor() * STEP + o;
     let mut gy = start(top, oy);

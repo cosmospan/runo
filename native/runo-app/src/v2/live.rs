@@ -233,7 +233,7 @@ impl Shell {
             }
             _ => None,
         };
-        let header = div()
+        let header = ui::chrome(div())
             .flex_none()
             .flex()
             .flex_col()
