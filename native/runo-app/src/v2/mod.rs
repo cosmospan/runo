@@ -1230,8 +1230,27 @@ impl Shell {
                 return;
             }
         }
-        let front = brain::front::read(&st, &text, &recent);
-        self.act_on(front, text, None, None, cx);
+        // No engine: what it decided before about words like these, else
+        // the rules.
+        let (front, line) = Self::without_engine(&st, &text, &recent);
+        self.act_on(front, text, line, None, cx);
+    }
+
+    /// Peek's decision when its engine can't help: the closest thing the
+    /// engine decided before, else the rules. Instant commands ("stop app")
+    /// and the rules' sure answers come first.
+    fn without_engine(
+        st: &crate::settings::AppSettings,
+        text: &str,
+        recent: &[(String, String)],
+    ) -> (brain::front::Front, Option<String>) {
+        if !brain::front::wants_stop(text) {
+            let learned = brain::learn::load();
+            if let Some((f, say)) = brain::learn::recall(text, &learned, &Member::all()) {
+                return (f, Some(say).filter(|s| !s.is_empty()));
+            }
+        }
+        (brain::front::read(st, text, recent), None)
     }
 
     /// What Peek's engine decided, once it has: acted on, or the rules'
@@ -1253,12 +1272,14 @@ impl Shell {
             .as_deref()
             .map(crate::agent::strip_ansi)
             .and_then(|r| brain::think::parse(&r, &text, &crew));
+        let st = Self::app_settings(cx);
         let (front, line) = match decided {
-            Some((f, say)) => (f, Some(say).filter(|s| !s.is_empty())),
-            None => {
-                let st = Self::app_settings(cx);
-                (brain::front::read(&st, &text, &recent), None)
+            Some((f, say)) => {
+                // Kept, small, so Peek decides alike when the engine can't.
+                brain::learn::keep(&st, &text, &f, &say);
+                (f, Some(say).filter(|s| !s.is_empty()))
             }
+            None => Self::without_engine(&st, &text, &recent),
         };
         self.act_on(front, text, line, Some(talk), cx);
     }
