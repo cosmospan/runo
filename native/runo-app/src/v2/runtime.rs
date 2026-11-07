@@ -30,6 +30,17 @@ pub enum Opened {
     Busy(u64),
 }
 
+/// One bot's message to another, on its way.
+#[derive(Clone, Debug)]
+struct Relay {
+    to: Member,
+    from: Member,
+    from_job: u64,
+    folder: store::Folder,
+    thread: u64,
+    said: String,
+}
+
 pub struct Runtime {
     pub store: Store,
     /// Jobs' agent processes while they run.
@@ -64,6 +75,11 @@ pub struct Runtime {
     /// Where the next job runs, when the person said so for it ("server" or
     /// "here"); their usual choice otherwise.
     pub where_next: Option<String>,
+    /// Messages between bots in each thread (folder, thread) since the
+    /// person last spoke there.
+    pub relay_hops: HashMap<(String, u64), u32>,
+    /// Bots' messages to a bot that's busy, delivered once it's free.
+    relays: Vec<Relay>,
     /// Titles and recaps Peek is writing, by job.
     peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
     /// New bots the crew's engine is setting up for the project, by made id,
@@ -104,6 +120,8 @@ impl Runtime {
             sites: brain::Sites::default(),
             link: None,
             where_next: None,
+            relay_hops: HashMap::new(),
+            relays: Vec::new(),
             peeking: Vec::new(),
             designing: Vec::new(),
             drafting: None,
@@ -717,6 +735,13 @@ impl Runtime {
             self.say("It's still working. Add this once it finishes.");
             return;
         }
+        if note.is_none() {
+            let (f, t) = (job.folder.path.clone(), job.thread);
+            self.relay_hops.remove(&(f, t));
+        }
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
         match note {
             None => job.feed.push(store::Item::You(text.clone())),
             Some(n) if !n.is_empty() => job.feed.push(store::Item::Note(n)),
@@ -1600,12 +1625,9 @@ impl Runtime {
             ));
             history.push((false, format!("Got it, I've read #{label}.")));
         }
-        for t in self
-            .store
-            .talks
-            .iter()
-            .filter(|t| t.folder == folder.path && t.thread == thread && t.bot == who)
-        {
+        for t in self.store.talks.iter().filter(|t| {
+            t.folder == folder.path && t.thread == thread && t.bot == who && !t.question.is_empty()
+        }) {
             if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
                 history.push((true, t.question.clone()));
                 history.push((false, a.text.clone()));
@@ -1811,7 +1833,9 @@ impl Runtime {
             for id in &finished {
                 self.begin_review(*id);
                 self.peek(st, *id, true);
+                self.relay_mentions(*id);
             }
+            self.deliver_relays(st);
             self.offer_idea();
             self.store.save();
         }
@@ -1822,6 +1846,137 @@ impl Runtime {
         self.poll_queue(st);
         finished.extend(self.poll_remote(st));
         finished
+    }
+
+    /// The @mentions in a finished job's last reply, posted in its thread and
+    /// queued for the bots they name. Past [`brain::talk::HOPS`] messages
+    /// between bots with no word from the person, they stop and say so.
+    fn relay_mentions(&mut self, id: u64) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.goal != 0 || job.race != 0 {
+            return;
+        }
+        let Some(last) = job.feed.iter().rev().find_map(|i| match i {
+            store::Item::Text(t) => Some(t.clone()),
+            _ => None,
+        }) else {
+            return;
+        };
+        let said = brain::talk::mentions(&last, job.bot, &Member::all());
+        if said.is_empty() {
+            return;
+        }
+        let (from, folder, thread) = (job.bot, job.folder.clone(), job.thread);
+        let key = (folder.path.clone(), thread);
+        for (to, words) in said {
+            let hops = self.relay_hops.entry(key.clone()).or_insert(0);
+            if *hops >= brain::talk::HOPS {
+                let note = format!(
+                    "{} and {} have gone back and forth {} times, so they've stopped for you. Reply here, or @ one of them to carry on.",
+                    from.name(),
+                    to.name(),
+                    brain::talk::HOPS
+                );
+                if let Some(j) = self.store.job_mut(id) {
+                    j.feed.push(store::Item::Note(note.clone()));
+                }
+                self.crew_says(&folder, thread, Member::Fin, note, None);
+                return;
+            }
+            *hops += 1;
+            self.crew_says(
+                &folder,
+                thread,
+                from,
+                format!("@{} {words}", to.name()),
+                Some(format!("to {} \u{b7} from #{id}", to.name())),
+            );
+            self.relays.push(Relay {
+                to,
+                from,
+                from_job: id,
+                folder: folder.clone(),
+                thread,
+                said: words,
+            });
+        }
+    }
+
+    /// Hands bots the messages waiting for them, once they're free: as the
+    /// next turn of their job in that thread, or as a new job there.
+    fn deliver_relays(&mut self, st: &AppSettings) {
+        let waiting = std::mem::take(&mut self.relays);
+        for r in waiting {
+            if self.store.busy(r.to).is_some() {
+                self.relays.push(r);
+                continue;
+            }
+            let text = brain::talk::relay_text(r.from, r.from_job, &r.said);
+            let theirs = self
+                .store
+                .jobs
+                .iter()
+                .rev()
+                .find(|j| {
+                    j.bot == r.to
+                        && j.folder.path == r.folder.path
+                        && j.thread == r.thread
+                        && j.goal == 0
+                        && j.race == 0
+                })
+                .map(|j| j.id);
+            match theirs {
+                Some(tid) => {
+                    if let Some(j) = self.store.job_mut(tid) {
+                        j.feed.push(store::Item::By(r.from, r.said.clone()));
+                    }
+                    self.send_on(st, tid, text, Some(String::new()));
+                }
+                None => {
+                    let mut job =
+                        self.make_job(st, r.to, r.to.mode(), &text, r.folder.clone(), None, None);
+                    job.thread = r.thread;
+                    job.title = format!("{} asked: {}", r.from.name(), r.said);
+                    job.feed.insert(0, store::Item::By(r.from, r.said.clone()));
+                    self.store.jobs.push(job);
+                }
+            }
+        }
+        self.store.save();
+    }
+
+    /// A bot speaking in a thread, as a message of its own: `from` says
+    /// `text`, with `via` under it.
+    fn crew_says(
+        &mut self,
+        folder: &store::Folder,
+        thread: u64,
+        from: Member,
+        text: String,
+        via: Option<String>,
+    ) {
+        let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.store.talks.push(Talk {
+            id,
+            folder: folder.path.clone(),
+            thread,
+            bot: from,
+            question: String::new(),
+            answer: Some(Said {
+                text,
+                via,
+                ..Default::default()
+            }),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+    }
+
+    /// The person spoke in a thread: its bots may talk to each other again.
+    pub fn person_spoke(&mut self, folder: &str, thread: u64) {
+        self.relay_hops.remove(&(folder.to_string(), thread));
     }
 
     /// Asks Peek for a job's title, or its recap once it ended, when Smart
@@ -2256,6 +2411,65 @@ mod tests {
             demo: true,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_bot_mentioning_another_reaches_it_in_the_thread() {
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = "/nonexistent/squad-test-agent".into();
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let dir = std::env::temp_dir().join(format!("squad-talk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let folder = store::Folder {
+            name: "t".into(),
+            path: dir.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let mut rt = Runtime::new(quiet_store());
+        rt.store.jobs.push(store::Job {
+            id: 1,
+            thread: 3,
+            bot: Member::Builder,
+            mode: Mode::Build,
+            title: "Add a login page".into(),
+            folder: folder.clone(),
+            status: Status::Review,
+            feed: vec![store::Item::Text(
+                "The login page works.\n@Guard: is the session cookie safe?".into(),
+            )],
+            ..Default::default()
+        });
+        rt.relay_mentions(1);
+        // Builder's message shows in the thread, from Builder.
+        let t = rt.store.talks.last().unwrap();
+        assert_eq!((t.bot, t.thread), (Member::Builder, 3));
+        assert!(t.question.is_empty());
+        assert!(t.answer.as_ref().unwrap().text.starts_with("@Guard"));
+        // Guard has no job in the thread, so it gets one there.
+        rt.deliver_relays(&st);
+        let g = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap();
+        assert_eq!(g.thread, 3);
+        assert!(g.title.starts_with("Builder asked"));
+        assert!(matches!(&g.feed[0], store::Item::By(Member::Builder, _)));
+        // Past the limit they stop, and the person is asked to step in.
+        rt.relay_hops
+            .insert((folder.path.clone(), 3), brain::talk::HOPS);
+        rt.relay_mentions(1);
+        let last = rt.store.talks.last().unwrap();
+        assert_eq!(last.bot, Member::Fin);
+        assert!(rt.relays.is_empty());
+        // Once the person speaks, they may talk again.
+        rt.person_spoke(&folder.path, 3);
+        assert!(rt.relay_hops.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

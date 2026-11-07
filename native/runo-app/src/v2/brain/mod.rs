@@ -15,6 +15,8 @@
 //! - [`ideas`]: a bot worth making, when the same kind of job keeps coming up
 //!   and no bot on the crew is for it. The person decides; nothing is made for them.
 //! - [`voice`]: what Peek says when something happens.
+//! - [`talk`]: bots @mentioning each other in the thread, to ask, answer and
+//!   push back, until the person is needed.
 //! - [`tasks`]: with Smart Peek on, a short title for each job's card and a
 //!   recap when it ends, from a small model on this computer ([`model`]).
 
@@ -29,6 +31,7 @@ pub mod model;
 pub mod permit;
 pub mod place;
 pub mod route;
+pub mod talk;
 pub mod tasks;
 pub mod think;
 pub mod voice;

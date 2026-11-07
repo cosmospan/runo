@@ -364,7 +364,10 @@ impl Shell {
         div()
             .flex()
             .flex_col()
-            .child(mine(t.question.clone(), t.at))
+            // A bot speaking up in the thread has no question above it.
+            .when(!t.question.is_empty(), |d| {
+                d.child(mine(t.question.clone(), t.at))
+            })
             .children(refs)
             .child(
                 div()

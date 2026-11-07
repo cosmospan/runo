@@ -8,7 +8,7 @@ use crate::agent::{self, Event, Target};
 use crate::harness::AgentEvent;
 use crate::settings::AppSettings;
 
-use super::data::Mode;
+use super::data::{Member, Mode};
 use super::engine;
 use super::store::{now, Item, Job, Status};
 
@@ -99,8 +99,9 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
     } else {
         format!("{}\n\n", job.context)
     };
+    let crew = super::brain::talk::crew_rule(job.bot, &Member::all());
     format!(
-        "{}\n\n{part}{rules} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
+        "{}\n\n{part}{rules}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         super::setup::brief(job.bot)
     )
 }

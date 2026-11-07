@@ -1386,6 +1386,11 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        // The person spoke here: the bots may talk among themselves again.
+        if let Some(f) = self.crew.store.folder().map(|f| f.path.clone()) {
+            let here = self.crew.store.thread_here();
+            self.crew.person_spoke(&f, here);
+        }
         // "@Builder do this": that bot joins the thread and takes the ask,
         // whatever its words would otherwise suggest.
         let mention = (!text.starts_with('/')).then(|| mentioned(&text)).flatten();
