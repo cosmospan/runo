@@ -50,6 +50,10 @@ pub struct Store {
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<Talk>,
+    /// What each bot can do beyond its kind of work (instructions, skill files,
+    /// connected apps, permissions, memory), by `engine::bot_key`.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub setups: HashMap<String, super::setup::Setup>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
@@ -597,6 +601,7 @@ impl Store {
             s.set_up = true;
         }
         super::data::set_made(&s.made);
+        super::setup::set_all(&s.setups);
         super::data::set_removed(&s.removed);
         if s.current >= s.folders.len() {
             s.current = 0;

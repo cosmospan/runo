@@ -10,6 +10,7 @@
 
 mod asks;
 mod brain;
+mod builder;
 mod channel;
 mod chat;
 pub mod cli;
@@ -33,6 +34,7 @@ mod review;
 mod rich;
 mod runtime;
 pub mod server;
+mod setup;
 mod ship;
 mod sidebar;
 mod start;
@@ -450,14 +452,29 @@ pub struct Shell {
     mouse: Point<Pixels>,
     /// Where each sidebar bot was painted last frame, so its eyes can find the pointer.
     faces: std::rc::Rc<std::cell::RefCell<HashMap<Member, Bounds<Pixels>>>>,
-    /// The maker's name and job boxes, and the built-in bot its work is like.
+    /// The bot maker on Crew, which is also any bot's Setup: its name and job
+    /// boxes, and the built-in bot its work is like.
     maker_name: Entity<InputState>,
     maker_role: Entity<InputState>,
-    /// What it knows best and how it works, when the person sets them; left
-    /// empty, they're filled in from its job and the project.
+    /// What it knows best (words jobs are routed by) and its rules, one a line.
     maker_skills: Entity<InputState>,
-    maker_rules: Entity<InputState>,
+    maker_rules: Entity<TextareaState>,
     maker_like: Option<Member>,
+    /// What the bot is for, in the person's words: the engine drafts from it.
+    maker_about: Entity<TextareaState>,
+    /// Its instructions, memory (one a line) and what it reads first.
+    maker_instr: Entity<TextareaState>,
+    maker_memory: Entity<TextareaState>,
+    maker_reads: Entity<InputState>,
+    /// A connected app to add: a URL or a command.
+    maker_server: Entity<InputState>,
+    /// A new skill to write, or a SKILL.md to bring in.
+    maker_skill: Entity<InputState>,
+    /// Where the maker is, and the bot being set up.
+    maker_stage: builder::Stage,
+    maker_edit: Option<builder::Editing>,
+    /// The skills and connected apps on this computer, read when the maker opens.
+    maker_found: crate::settings::Discovered,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
     /// The bot maker is open on Crew.
@@ -673,11 +690,51 @@ impl Shell {
         let maker_name = cx.new(|cx| InputState::new(window, cx).placeholder("Scout"));
         let maker_role =
             cx.new(|cx| InputState::new(window, cx).placeholder("Checks the docs match the code"));
-        let maker_skills = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Optional: docs, readme, changelog"));
-        let maker_rules = cx.new(|cx| {
+        let maker_skills =
+            cx.new(|cx| InputState::new(window, cx).placeholder("stripe, webhooks, billing"));
+        let area = |hint: &'static str,
+                    rows: (usize, usize),
+                    window: &mut Window,
+                    cx: &mut Context<Self>| {
+            cx.new(|cx| {
+                TextareaState::new(window, cx)
+                    .placeholder(hint)
+                    .auto_grow(rows.0, rows.1)
+            })
+        };
+        let maker_rules = area(
+            "One rule a line: Run pnpm test before you stop",
+            (3, 10),
+            window,
+            cx,
+        );
+        let maker_about = area(
+            "Own our Stripe integration: fix webhook and billing bugs, keep the payment tests green, never touch live keys.",
+            (3, 8),
+            window,
+            cx,
+        );
+        let maker_instr = area(
+            "# Who it is and how it works, in Markdown",
+            (6, 18),
+            window,
+            cx,
+        );
+        let maker_memory = area(
+            "One fact a line: Payment tests run with pnpm vitest src/billing",
+            (3, 10),
+            window,
+            cx,
+        );
+        let maker_reads = cx
+            .new(|cx| InputState::new(window, cx).placeholder("docs/, CONTRIBUTING.md, https://…"));
+        let maker_server = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Optional, split with ; Run the docs build; never edit code")
+                .placeholder("https://mcp.linear.app/sse  or  npx -y @stripe/mcp")
+        });
+        let maker_skill = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Describe a skill to write, or paste a path to a SKILL.md")
         });
         let server_input = cx.new(|cx| InputState::new(window, cx).placeholder("root@203.0.113.7"));
         let server_pass = cx.new(|cx| {
@@ -949,10 +1006,11 @@ impl Shell {
                 .map(|j| Place::Live(j.id))
                 .unwrap_or(Place::Today),
             Ok("welcome") => Place::Welcome,
+            Ok("maker" | "maker-review" | "setup") => Place::Crew,
             _ if !store.set_up => Place::Welcome,
             _ => Place::Today,
         };
-        Shell {
+        let mut shell = Shell {
             place: start,
             clock: Instant::now(),
             holos: Holos::new(),
@@ -1015,6 +1073,15 @@ impl Shell {
             maker_skills,
             maker_rules,
             maker_like: None,
+            maker_about,
+            maker_instr,
+            maker_memory,
+            maker_reads,
+            maker_server,
+            maker_skill,
+            maker_stage: builder::Stage::Describe,
+            maker_edit: None,
+            maker_found: Default::default(),
             hover_at: Instant::now(),
             mouse: Point::default(),
             faces: Default::default(),
@@ -1065,7 +1132,24 @@ impl Shell {
             bg_show_slider,
             _subs: subs,
             _pump: pump,
+        };
+        // The maker, for looking at it: empty, with a draft, or a bot's setup.
+        match std::env::var("RUNO_V2_PLACE").as_deref() {
+            Ok("maker") => shell.open_maker(None, None, window, cx),
+            Ok("maker-review") => {
+                shell.open_maker(Some(builder::SAMPLE), None, window, cx);
+                shell.start_blank(window, cx);
+            }
+            Ok("setup") => {
+                let who = Member::all()
+                    .into_iter()
+                    .find(|m| m.is_made() && !setup::of(*m).is_empty())
+                    .unwrap_or(Member::Builder);
+                shell.open_setup(who, window, cx);
+            }
+            _ => {}
         }
+        shell
     }
 
     fn now(&self) -> f64 {
@@ -1703,57 +1787,6 @@ impl Shell {
             })
     }
 
-    /// Adds the bot in the maker to the crew.
-    fn save_made(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name = self.maker_name.read(cx).value().trim().to_string();
-        let role = self.maker_role.read(cx).value().trim().to_string();
-        let split = |text: &str, by: char| -> Vec<String> {
-            text.split(by)
-                .map(|x| x.trim().to_string())
-                .filter(|x| !x.is_empty())
-                .collect()
-        };
-        let skills: Vec<String> = split(&self.maker_skills.read(cx).value(), ',')
-            .into_iter()
-            .map(|x| x.to_lowercase())
-            .collect();
-        let rules = split(&self.maker_rules.read(cx).value(), ';');
-        if name.is_empty() {
-            self.say("Give your bot a name first.");
-            cx.notify();
-            return;
-        }
-        if Member::all()
-            .iter()
-            .any(|m| m.name().eq_ignore_ascii_case(&name))
-        {
-            self.say(format!("There's already a bot called {name}."));
-            cx.notify();
-            return;
-        }
-        let st = cx.global::<crate::settings::AppSettings>().clone();
-        self.crew.make_bot(
-            &st,
-            &name,
-            &role,
-            self.maker_like,
-            (skills, rules),
-            [mascot::colour_index(self.maker.0), 0, 0, 0],
-            runo_holo::fin::Fin::outfit_code(self.maker.1),
-        );
-        for input in [
-            &self.maker_name,
-            &self.maker_role,
-            &self.maker_skills,
-            &self.maker_rules,
-        ] {
-            input.update(cx, |i, cx| i.set_value("", window, cx));
-        }
-        self.entered = Instant::now();
-        self.say(format!("{name} joined the crew."));
-        cx.notify();
-    }
-
     /// Puts built-in bots on the crew, with one line saying so.
     fn add_to_crew(&mut self, who: &[Member]) {
         let who: Vec<Member> = who
@@ -1801,12 +1834,11 @@ impl Shell {
     /// on Crew set to the kind of work, and the job waits in the box.
     pub(super) fn make_for_offer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(o) = self.offer.take() else { return };
+        let about = format!("{}, for jobs like: {}", o.who.role(), o.text);
         self.composer
             .update(cx, |i, cx| ui::put_text(i, o.text, window, cx));
-        if Member::KINDS.contains(&o.who) {
-            self.maker_like = Some(o.who);
-        }
-        self.maker_open = true;
+        let like = Member::KINDS.contains(&o.who).then_some(o.who);
+        self.open_maker(Some(&about), like, window, cx);
         self.go(Place::Crew, cx);
         self.say("Make your bot, then send the job again from Jobs.");
         cx.notify();
@@ -2471,6 +2503,7 @@ impl Render for Shell {
             window.request_animation_frame();
         }
         self.poll(cx);
+        self.poll_maker(window, cx);
         if self.applied_theme != look() {
             self.applied_theme = look();
             apply_theme(window, cx);

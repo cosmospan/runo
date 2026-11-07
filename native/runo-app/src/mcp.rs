@@ -257,8 +257,9 @@ pub fn set_shared(keys: &[String]) {
 
 /// Shared servers to hand to `agent`, leaving out the ones that agent already loads.
 /// Servers in Runo's own list always go to every agent.
-fn shared_for(agent: &str) -> Vec<(String, McpSpec)> {
-    let keys = SHARED.lock().map(|k| k.clone()).unwrap_or_default();
+fn shared_for(agent: &str, extra: &[String]) -> Vec<(String, McpSpec)> {
+    let mut keys = SHARED.lock().map(|k| k.clone()).unwrap_or_default();
+    keys.extend(extra.iter().cloned());
     let mut all = FOUND.lock().map(|f| f.clone()).unwrap_or_default();
     // Runo's own come first, so they win a clash of names.
     all.sort_by_key(|m| m.provider != OWN);
@@ -281,10 +282,19 @@ fn shared_for(agent: &str) -> Vec<(String, McpSpec)> {
         .collect()
 }
 
-/// Shared servers for one run of `agent`. A run on a connection or in a VM can't start
-/// programs on this machine, so only servers reached by URL go along there.
+/// Shared servers for one run of `agent`, with no bot's own.
+#[cfg(test)]
 pub fn shared_servers(agent: &str, local: bool) -> Vec<(String, McpSpec)> {
-    shared_for(agent)
+    servers_for(agent, local, &[])
+}
+
+/// Servers for one run of `agent`: the shared ones, plus the ones found on this
+/// computer that the bot uses, by [`key`] (a bot can use a server from another app's
+/// config even when the person doesn't share it with every session). A run on a
+/// connection or in a VM can't start programs on this machine, so only servers
+/// reached by URL go along there.
+pub fn servers_for(agent: &str, local: bool, extra: &[String]) -> Vec<(String, McpSpec)> {
+    shared_for(agent, extra)
         .into_iter()
         .filter(|(_, spec)| local || spec.command.is_empty())
         .collect()
@@ -1051,6 +1061,17 @@ mod tests {
         );
         set_shared(&[]);
         assert!(names("claude", true).is_empty());
+        // A bot that uses a server gets it, shared or not; Claude Code still
+        // loads its own servers itself.
+        let bot: Vec<String> = servers_for(
+            "claude",
+            true,
+            &["Cursor/figma".into(), "Claude Code/files".into()],
+        )
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+        assert_eq!(bot, ["figma"]);
 
         // Runo's own servers need no switch, and win over a same-named one.
         let own = McpSpec {

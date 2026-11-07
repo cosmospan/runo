@@ -181,7 +181,7 @@ impl Ask {
         let (project, dir) = (&folder.name, &folder.path);
         let mut prompt = format!(
             "{} Read the code to be sure, and never change it.\n\nThe project is \"{project}\", in the current folder.\n",
-            who.persona()
+            super::setup::brief(who)
         );
         let recent: Vec<_> = history.iter().rev().take(6).collect();
         if !recent.is_empty() {

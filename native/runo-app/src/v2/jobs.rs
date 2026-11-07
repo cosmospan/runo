@@ -101,7 +101,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
     };
     format!(
         "{}\n\n{part}{rules} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
-        job.bot.persona()
+        super::setup::brief(job.bot)
     )
 }
 
@@ -135,7 +135,16 @@ pub fn start(
             job.bot.name()
         ));
     }
-    let mode = if job.mode.writes() {
+    // The bot's own setup: its connected apps, and what it may not do.
+    let setup = super::setup::of(job.bot);
+    opts.bot_mcp = setup.mcp.clone();
+    opts.bot_servers = setup
+        .servers
+        .iter()
+        .map(|s| (s.name.clone(), s.spec()))
+        .collect();
+    opts.disallowed_tools = add_rules(&opts.disallowed_tools, &setup.tool_rules());
+    let mode = if job.mode.writes() && setup.perms.edit {
         agent::effective_mode(p.id, "edit")
     } else {
         "plan"
