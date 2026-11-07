@@ -504,20 +504,19 @@ pub fn hover() -> u32 {
     glass(theme().hover)
 }
 /// A surface that floats over the page: the palette, menus, popovers and dialogs.
-/// While the desktop shows through the window they're see-through too, so the
-/// whole window reads as one sheet of glass, unless that's switched off under
-/// Settings > Appearance. The window only blurs the desktop, not the page under a
-/// popover, so a popover stays more opaque than the page: never below `POP_FLOOR`,
-/// enough that the page's own text under it can't fight the text on top.
+/// While the desktop shows through the window they can be see-through too, as far
+/// as their own slider under Settings > Appearance says. The window only blurs the
+/// desktop, not the page under a popover, so even at its clearest a popover keeps
+/// `POP_FLOOR` of its opacity, enough that its text reads over the page.
 pub fn float() -> u32 {
-    float_at(theme(), amount(), window_clear() && glass_popovers())
+    float_at(theme(), pop_amount(), window_clear() && glass_popovers())
 }
 
-/// The least opacity a see-through popover goes down to, at full transparency.
-const POP_FLOOR: f32 = 0.82;
+/// The least opacity a see-through popover goes down to, its slider all the way up.
+const POP_FLOOR: f32 = 0.7;
 
-/// A floating surface for theme `t`, at transparency `amount` (0 to 1), see-through
-/// or not.
+/// A floating surface for theme `t`, at popover transparency `amount` (0 to 1),
+/// see-through or not.
 const fn float_at(t: &Theme, amount: f32, clear: bool) -> u32 {
     let rgb = t.raised & 0xff_ffff;
     if !clear {
@@ -528,25 +527,39 @@ const fn float_at(t: &Theme, amount: f32, clear: bool) -> u32 {
         0 => 0.94,
         a => a as f32 / 255.,
     };
-    let mut k = base - amount * (base - POP_FLOOR);
-    if k < POP_FLOOR {
-        k = POP_FLOOR;
-    }
+    let amount = if amount < 0. {
+        0.
+    } else if amount > 1. {
+        1.
+    } else {
+        amount
+    };
+    let k = base - amount * (base - POP_FLOOR);
     see(rgb, (k * 255. + 0.5) as u8)
 }
 
 /// Popovers, menus and dialogs are see-through while the window is. On by default.
 static GLASS_POPOVERS: AtomicBool = AtomicBool::new(true);
+/// How see-through popovers are, 0 to 100, while they follow the window.
+static POP_CLEAR: AtomicU8 = AtomicU8::new(40);
 
-/// Lets popovers, menus and dialogs go see-through with the window, or keeps them solid.
-pub fn set_glass_popovers(on: bool) {
+/// Lets popovers, menus and dialogs go see-through with the window, or keeps them
+/// solid, and sets how see-through they go (0 to 100).
+pub fn set_glass_popovers(on: bool, clear: u8) {
     GLASS_POPOVERS.store(on, Ordering::Relaxed);
+    POP_CLEAR.store(clear.min(100), Ordering::Relaxed);
 }
 
 /// Popovers, menus and dialogs follow the window's transparency.
 pub fn glass_popovers() -> bool {
     GLASS_POPOVERS.load(Ordering::Relaxed)
 }
+
+/// How far popovers have cleared, 0 to 1, by their own slider.
+pub fn pop_amount() -> f32 {
+    POP_CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
+}
+
 pub fn press() -> u32 {
     glass(theme().press)
 }
@@ -812,42 +825,49 @@ mod tests {
         }
     }
 
-    /// A see-through popover keeps its text readable over whatever's under it:
-    /// the page (over the theme's worst desktops), or a line of the page's own
-    /// brightest text running right under a word on top.
+    /// A see-through popover keeps its text readable at any setting of its slider
+    /// and the window's: over the page (on the theme's worst desktops), every level
+    /// of text reads as it does elsewhere; over a line of the page's own text
+    /// running right under a word on top, the popover's text still stands out.
     #[test]
     fn text_reads_on_see_through_popovers() {
         for t in &THEMES {
-            for k in [0.0, 0.5, 1.0] {
-                let pop = float_at(t, k, true);
-                let l = |c: u32| lift_at(c, t.ink, k);
-                let g = |c: u32| glass_at(c, k, t.floor());
+            for w in [0.0, 0.5, 1.0] {
+                let l = |c: u32| lift_at(c, t.ink, w);
+                let g = |c: u32| glass_at(c, w, t.floor());
                 let desks: &[u32] = if t.light {
                     &[0xFFFFFF, 0x808080, 0x2050D0, 0xF0C040]
                 } else {
                     &[0x000000, 0x808080, 0x2050D0, 0xF0C040]
                 };
-                for &desk in desks {
-                    let page = over(g(t.bg), desk);
-                    for under in [page, t.ink, t.body] {
-                        let back = over(pop, under);
-                        for (name, color, min) in [
-                            ("ink", t.ink, 7.0),
-                            ("body", l(t.body), 4.5),
-                            ("muted", l(t.muted), 3.0),
-                        ] {
-                            let got = contrast(color, back);
-                            assert!(
-                                got >= min,
-                                "{} popover at {k}: {name} over {under:06x} on {desk:06x} is {got:.2}, needs {min}",
-                                t.id
-                            );
+                for k in [0.0, 0.5, 1.0] {
+                    let pop = float_at(t, k, true);
+                    for &desk in desks {
+                        let page = over(g(t.bg), desk);
+                        let checks = [
+                            (page, "page", [7.0, 4.5, 3.0]),
+                            (over(t.ink, page), "page text", [4.5, 3.0, 2.0]),
+                            (over(l(t.body), page), "page text", [4.5, 3.0, 2.0]),
+                        ];
+                        for (under, what, mins) in checks {
+                            let back = over(pop, under);
+                            let text = [("ink", t.ink), ("body", l(t.body)), ("muted", l(t.muted))];
+                            for ((name, color), min) in text.into_iter().zip(mins) {
+                                let got = contrast(color, back);
+                                assert!(
+                                    got >= min,
+                                    "{} popover {k} window {w}: {name} over {what} {under:06x} on {desk:06x} is {got:.2}, needs {min}",
+                                    t.id
+                                );
+                            }
                         }
                     }
                 }
             }
-            // Switched off, or with the window solid, a popover is opaque.
+            // Switched off, or with the window solid, a popover is opaque; the
+            // slider at its start leaves it nearly so.
             assert_eq!(float_at(t, 1.0, false) >> 24, 0);
+            assert!(float_at(t, 0.0, true) >> 24 >= 0xD8);
         }
     }
 

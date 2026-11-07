@@ -158,6 +158,8 @@ pub struct AppSettings {
     /// Popovers, menus, the command palette and dialogs follow the window's
     /// transparency, so the whole window reads as one sheet of glass.
     pub v2_glass_popovers: bool,
+    /// How see-through popovers go while they follow the window, 0 to 100.
+    pub v2_pop_clear: u8,
     /// The window has been switched to Crew Chat once; after that the theme is
     /// whatever the person picks.
     pub v2_crew_chat: bool,
@@ -388,6 +390,7 @@ impl Default for AppSettings {
             v2_see_through: false,
             v2_clear: 50,
             v2_glass_popovers: true,
+            v2_pop_clear: 40,
             v2_crew_chat: true,
             v2_ask: "balanced".into(),
             v2_plan_first: false,
