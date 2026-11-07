@@ -171,6 +171,24 @@ impl Shell {
                 }
             }
         }
+        if let Some(rx) = &self.server_screen_rx {
+            match rx.try_recv() {
+                Ok(Ok(screen)) => {
+                    cx.open_url(&screen.url());
+                    self.server_screen = Some(screen);
+                    self.server_screen_rx = None;
+                    self.say("Its screen is open in Screen Sharing. Jobs on the server open their windows there.".to_string());
+                    changed = true;
+                }
+                Ok(Err(why)) => {
+                    self.server_screen_rx = None;
+                    self.say(format!("Couldn't show the server's screen: {why}"));
+                    changed = true;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(_) => self.server_screen_rx = None,
+            }
+        }
         let mut done = Vec::new();
         self.server_acts.retain(|(act, rx)| match rx.try_recv() {
             Ok(got) => {
@@ -206,6 +224,49 @@ impl Shell {
         if changed {
             cx.notify();
         }
+    }
+
+    /// "See its screen": starts the server's desktop the first time and
+    /// opens it in the screen viewer; after that, opens it straight away.
+    pub(super) fn open_server_screen(&mut self, cx: &mut Context<Self>) {
+        if self.server_screen_rx.is_some() {
+            return;
+        }
+        if let Some(s) = &mut self.server_screen {
+            if s.tunnel.alive() {
+                cx.open_url(&s.url());
+                return;
+            }
+        }
+        self.server_screen = None;
+        let Some(link) = &self.crew.link else {
+            return;
+        };
+        self.server_screen_rx = Some(machine::screen(link.cfg.clone()));
+        self.say(format!(
+            "Getting {}'s screen ready. The first time, Squad installs a light desktop there, which takes a few minutes.",
+            link.cfg.label()
+        ));
+        cx.notify();
+    }
+
+    /// The button that shows the server's screen, as it stands.
+    pub(super) fn screen_button(
+        &self,
+        id: &'static str,
+        label: &'static str,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let busy = self.server_screen_rx.is_some();
+        ui::ghost_i(id, IconName::Monitor, if busy { "Getting its screen…" } else { label })
+            .when(busy, |d| d.opacity(0.6))
+            .tooltip(|window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new(
+                    "The server's own desktop, live: whatever a bot opens there (a browser, the app it's testing) shows up. It's shared only over SSH, with a password.",
+                )
+                .build(window, cx)
+            })
+            .on_click(cx.listener(|this, _, _, cx| this.open_server_screen(cx)))
     }
 
     /// Opens or closes the shell on the server, in the drawer.
@@ -329,6 +390,7 @@ impl Shell {
                             cx.listener(|this, _, window, cx| this.toggle_server_term(window, cx)),
                         ),
                     )
+                    .child(self.screen_button("server-screen", "See its screen", cx))
                     .child(
                         ui::ghost_i(
                             "server-restart-squad",

@@ -528,6 +528,11 @@ struct Tunnel {
 
 impl Tunnel {
     fn open(host: &str, key: &str) -> Result<Tunnel, String> {
+        Tunnel::to(host, key, PORT)
+    }
+
+    /// A tunnel to `there`, a port on the server's own 127.0.0.1.
+    fn to(host: &str, key: &str, there: u16) -> Result<Tunnel, String> {
         let port = free_port().ok_or("no free port on this computer")?;
         let mut cmd = ssh_base(host, key);
         cmd.args([
@@ -539,7 +544,7 @@ impl Tunnel {
             "-o",
             "ServerAliveCountMax=3",
             "-L",
-            &format!("127.0.0.1:{port}:127.0.0.1:{PORT}"),
+            &format!("127.0.0.1:{port}:127.0.0.1:{there}"),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1911,6 +1916,30 @@ pub fn shell_program(cfg: &Config, cd: Option<&str>) -> (String, Vec<String>) {
         ));
     }
     ("ssh".into(), args)
+}
+
+/// Runs a script on the server (fed to `sh -s`) and gives back what it printed.
+pub fn run_script(cfg: &Config, script: &str) -> Result<String, String> {
+    ssh(&cfg.host, &cfg.key, "sh -s", Some(script))
+}
+
+/// A port on the server's own 127.0.0.1, reached from this computer.
+pub struct Forward(Tunnel);
+
+impl Forward {
+    /// The port on this computer.
+    pub fn port(&self) -> u16 {
+        self.0.port
+    }
+
+    pub fn alive(&mut self) -> bool {
+        self.0.alive()
+    }
+}
+
+/// Opens an SSH tunnel to `there` on the server; it closes when dropped.
+pub fn forward(cfg: &Config, there: u16) -> Result<Forward, String> {
+    Tunnel::to(&cfg.host, &cfg.key, there).map(Forward)
 }
 
 /// Shell-quotes `s` for a command run on the server.

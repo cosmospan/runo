@@ -300,6 +300,71 @@ pub fn size(kib: u64) -> String {
     }
 }
 
+// ---------- its screen ----------
+
+/// What gives the server a desktop and shares it on its own 127.0.0.1.
+const DESKTOP: &str = include_str!("../../../../scripts/server-desktop.sh");
+/// The virtual screen's number there; the script's default.
+pub const DISPLAY: u32 = 77;
+
+/// The server's screen, shared and reached through a tunnel.
+pub struct Screen {
+    pub tunnel: remote::Forward,
+    pub pass: String,
+}
+
+impl Screen {
+    /// What a VNC viewer opens: `vnc://:pass@127.0.0.1:port`.
+    pub fn url(&self) -> String {
+        format!("vnc://:{}@127.0.0.1:{}", self.pass, self.tunnel.port())
+    }
+}
+
+/// Reads the port and password the desktop script printed last.
+pub fn parse_desktop(out: &str) -> Option<(u16, String)> {
+    let mut port = None;
+    let mut pass = None;
+    for line in out.lines() {
+        if let Some(p) = line.strip_prefix("port=") {
+            port = p.trim().parse().ok();
+        } else if let Some(p) = line.strip_prefix("pass=") {
+            pass = Some(p.trim().to_string());
+        }
+    }
+    Some((port?, pass.filter(|p| !p.is_empty())?))
+}
+
+/// Starts the server's desktop (installing it the first time) and opens a
+/// tunnel to it, on a thread of its own.
+pub fn screen(cfg: Config) -> Receiver<Result<Screen, String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let got = remote::run_script(&cfg, DESKTOP).and_then(|out| {
+            let (port, pass) = parse_desktop(&out)
+                .ok_or_else(|| "the server didn't say where its screen is".to_string())?;
+            let tunnel = remote::forward(&cfg, port)
+                .map_err(|why| format!("couldn't reach its screen: {why}"))?;
+            Ok(Screen { tunnel, pass })
+        });
+        let _ = tx.send(got);
+    });
+    rx
+}
+
+/// On the server: a job started while the desktop is up runs on its screen,
+/// so a browser or app the bot opens shows up where you can watch it.
+pub fn use_server_screen() {
+    if !cfg!(target_os = "linux") || std::env::var_os("DISPLAY").is_some() {
+        return;
+    }
+    let socket = format!("/tmp/.X11-unix/X{DISPLAY}");
+    if std::path::Path::new(&socket).exists() {
+        // The serve process starts jobs one at a time from its own thread,
+        // and nothing else reads DISPLAY concurrently.
+        std::env::set_var("DISPLAY", format!(":{DISPLAY}"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +407,22 @@ mod tests {
         assert_eq!(span(3 * 86400), "3 days");
         assert_eq!(size(512 * 1024), "512 MB");
         assert_eq!(size(3 * 1024 * 1024), "3.0 GB");
+    }
+
+    #[test]
+    fn reads_where_the_screen_is() {
+        let out = "say: Starting its screen…\nport=5977\npass=Ab12Cd34\n";
+        assert_eq!(parse_desktop(out), Some((5977, "Ab12Cd34".to_string())));
+        assert_eq!(parse_desktop("say: hi\nport=5977\n"), None);
+        assert_eq!(parse_desktop("pass=x\nport=nope\n"), None);
+    }
+
+    #[test]
+    fn the_desktop_stays_private() {
+        assert!(DESKTOP.contains("-localhost"));
+        assert!(DESKTOP.contains("-rfbauth"));
+        assert!(DESKTOP.contains("-nolisten tcp"));
+        assert!(DESKTOP.contains(&format!("SQUAD_DISPLAY:-{DISPLAY}")));
     }
 
     #[test]

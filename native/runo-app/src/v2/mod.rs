@@ -577,6 +577,10 @@ pub struct Shell {
     server_arm: Option<(String, Instant)>,
     server_stopped: std::collections::HashSet<u32>,
     server_cmd: Entity<InputState>,
+    /// The server's screen: being set up, and once it's shared, the tunnel
+    /// that keeps it reachable.
+    server_screen_rx: Option<std::sync::mpsc::Receiver<Result<machine::Screen, String>>>,
+    server_screen: Option<machine::Screen>,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -1152,6 +1156,8 @@ impl Shell {
             server_arm: None,
             server_stopped: Default::default(),
             server_cmd,
+            server_screen_rx: None,
+            server_screen: None,
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
