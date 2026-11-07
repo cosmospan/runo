@@ -1,4 +1,4 @@
-"""Render Squad Code's app icon (Peek, the crew lead, drawn in outline on an ink tile) from runo.svg for every platform.
+"""Render Squad Code's app icon (Peek, the crew lead, peeking up in outline with its ears up, on an ink tile) from runo.svg for every platform.
 
 Run from this folder: python3 build.py (needs cairosvg and Pillow).
 
@@ -14,7 +14,7 @@ import cairosvg
 from PIL import Image
 
 SVG = open("runo.svg").read()
-# Below 48px thin rings turn to mush, so small sizes double the line and fill the eyes in as dots.
+# Below 48px the crop gets lost and thin lines turn to mush, so small sizes show the whole face, double the line, fill the eyes in as dots and drop the inner ear lines.
 SMALL = open("runo-small.svg").read()
 # The tile spans 100..924 of the 1024 canvas (shadow aside); this crops to it for full-bleed sizes.
 FLAT = SVG.replace('viewBox="0 0 1024 1024"', 'viewBox="96 96 832 832"')
