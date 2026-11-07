@@ -11,7 +11,7 @@
 //! pill, and the prop it carries shows in a small badge beside it.
 
 use vello_cpu::kurbo::{
-    Affine, BezPath, Cap, Circle, Join, Point, Rect, RoundedRect, Shape, Stroke,
+    Affine, BezPath, Cap, Circle, Ellipse, Join, Point, Rect, RoundedRect, Shape, Stroke,
 };
 use vello_cpu::peniko::{
     color::{AlphaColor, Srgb},
@@ -778,8 +778,47 @@ struct Face {
     /// Size of each eye.
     size: [f64; 2],
     eye: EyeShape,
+    /// Brows, when the mood shows in them.
+    brow: Option<Brow>,
+    mouth: Mouth,
     /// Free to follow the pointer and look around.
     roams: bool,
+}
+
+/// A pair of short brows above the eyes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Brow {
+    /// How high each brow sits: 0 rests just above the eye, 1 is raised high,
+    /// below 0 presses down onto it.
+    raise: [f64; 2],
+    /// Inner ends down (cross, set) when positive, up (worried, pleading)
+    /// when negative.
+    knit: f64,
+}
+
+impl Brow {
+    const fn at(raise: f64, knit: f64) -> Option<Brow> {
+        Some(Brow {
+            raise: [raise, raise],
+            knit,
+        })
+    }
+}
+
+/// A small mouth under the eyes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mouth {
+    None,
+    /// A curve: smiling when positive, frowning when negative, about -1 to 1.
+    Curve(f64),
+    /// An open, happy D.
+    Grin(f64),
+    /// A round "o", this wide.
+    Oh(f64),
+    /// A wobbly line.
+    Wavy,
+    /// A lopsided, pleased smirk.
+    Smirk,
 }
 
 impl Default for Face {
@@ -799,6 +838,8 @@ impl Default for Face {
             blush: 0.0,
             size: [1.0; 2],
             eye: EyeShape::Dot,
+            brow: None,
+            mouth: Mouth::None,
             roams: false,
         }
     }
@@ -946,7 +987,71 @@ fn face(state: State, t: f64) -> Face {
             }
         }
     }
+    express(&mut f, state, t);
     f
+}
+
+/// The brows and mouth each state wears, on top of its eyes and motion.
+fn express(f: &mut Face, state: State, t: f64) {
+    let s = f64::sin;
+    let (brow, mouth) = match state {
+        // A calm, content little smile; brows only when it perks up.
+        State::Idle => (None, Mouth::Curve(0.35)),
+        // Brows up and a small "o" that breathes, as if about to answer.
+        State::Listen => (Brow::at(0.55, -0.1), Mouth::Oh(0.55 + s(t * 3.0) * 0.12)),
+        // One brow up, mouth pushed to the side: "hmm".
+        State::Think => (
+            Some(Brow {
+                raise: [0.15, 0.75],
+                knit: 0.1,
+            }),
+            Mouth::Smirk,
+        ),
+        // Set brows, a flat line now and then pressed into a tiny smile.
+        State::Work => (
+            Brow::at(-0.1, 0.25),
+            Mouth::Curve(if (t * 0.7).rem_euclid(1.0) < 0.2 {
+                0.25
+            } else {
+                0.0
+            }),
+        ),
+        State::Focused => (Brow::at(-0.3, 0.45), Mouth::Curve(-0.05)),
+        State::Done => (Brow::at(0.6, -0.2), Mouth::Grin(1.0)),
+        State::Needs => (Brow::at(0.7, -0.45), Mouth::Oh(0.7)),
+        State::Error => (Brow::at(0.1, -0.6), Mouth::Wavy),
+        State::Sorry => (Brow::at(0.2, -0.75), Mouth::Curve(-0.6)),
+        State::Sleep => (None, Mouth::Oh(0.35 + s(t * 1.2) * 0.12)),
+        State::Hello => (Brow::at(0.7, -0.15), Mouth::Grin(0.9)),
+        State::Love => (Brow::at(0.45, -0.35), Mouth::Curve(0.9)),
+        State::Proud => (Brow::at(0.35, 0.2), Mouth::Smirk),
+        State::Shy => (Brow::at(0.3, -0.5), Mouth::Wavy),
+        State::Surprised => (Brow::at(1.0, -0.1), Mouth::Oh(1.0)),
+        State::Wink => (
+            Some(Brow {
+                raise: [0.55, -0.05],
+                knit: 0.0,
+            }),
+            Mouth::Smirk,
+        ),
+        State::Curious => (
+            Some(Brow {
+                raise: [0.0, 0.85],
+                knit: 0.0,
+            }),
+            Mouth::Oh(0.45),
+        ),
+        State::Confused => (
+            Some(Brow {
+                raise: [0.75, -0.05],
+                knit: -0.3,
+            }),
+            Mouth::Wavy,
+        ),
+        State::Blocked => (Brow::at(-0.35, 0.7), Mouth::Curve(-0.25)),
+    };
+    f.brow = brow;
+    f.mouth = mouth;
 }
 
 /// A steady pseudo-random number in 0..1 for slot `n`.
@@ -1027,7 +1132,7 @@ fn blink(t: f64) -> f64 {
 }
 
 /// One eye at `(cx, cy)`, drawn with lines `w` wide. Open eyes are rings,
-/// or solid when `filled`.
+/// or solid when `filled`, with a pupil or glint when there's room for `detail`.
 #[allow(clippy::too_many_arguments)]
 fn eye(
     p: &mut Pen,
@@ -1037,6 +1142,7 @@ fn eye(
     col: Rgb,
     w: f64,
     filled: bool,
+    detail: bool,
     open: f64,
 ) {
     let (cx, cy) = at;
@@ -1120,8 +1226,85 @@ fn eye(
             } else {
                 p.stroke(&shape, w, col, 1.0);
             }
+            // A pupil in a ring, a glint on a dot: either gives the eye
+            // somewhere to look. It rides towards the gaze and stays clear of
+            // the lids.
+            let pr = r * if filled { 0.24 } else { 0.32 };
+            let room = (bot - top) - 2.0 * pr - w;
+            if detail && room > 0.5 {
+                let (gx, gy) = if filled {
+                    (r * 0.36, -ry * 0.38)
+                } else {
+                    (f.look.0 * r * 0.3, f.look.1 * ry * 0.3)
+                };
+                let x = cx + gx;
+                let lo = lid_at(x) + pr + w * 0.5;
+                let hi = bot - pr - w * 0.5;
+                let y = (cy + gy).clamp(lo.min(hi), hi.max(lo));
+                let c = if filled { WHITE } else { col };
+                p.fill(&Circle::new((x, y), pr), c, if filled { 0.85 } else { 1.0 });
+            }
         }
     }
+}
+
+/// Short brows over the eyes at `xs`, the eyes' centre line at `cy`.
+fn brows(p: &mut Pen, xs: [f64; 2], cy: f64, f: &Face, b: Brow, col: Rgb, w: f64) {
+    for (side, &x) in xs.iter().enumerate() {
+        let r = f.r * f.size[side];
+        // Over the top of the eye, rising with `raise`.
+        let y = cy - r * f.open.max(0.8) - 5.0 - b.raise[side] * 5.0;
+        // Inner end is towards the middle of the pill.
+        let inward = if side == 0 { 1.0 } else { -1.0 };
+        let half = 6.5;
+        let (ix, ox) = (x + inward * half, x - inward * half);
+        let iy = y + b.knit * 4.0;
+        let oy = y - b.knit * 1.5;
+        let mut path = BezPath::new();
+        path.move_to((ox, oy));
+        path.quad_to((x, y - 1.8), (ix, iy));
+        p.stroke(&path, w * 1.1, col, 1.0);
+    }
+}
+
+/// The mouth, centred at `at`.
+fn mouth(p: &mut Pen, at: (f64, f64), m: Mouth, col: Rgb, w: f64) {
+    let (x, y) = at;
+    let mut path = BezPath::new();
+    match m {
+        Mouth::None => return,
+        Mouth::Curve(k) => {
+            let half = 5.0 + k.abs() * 1.5;
+            path.move_to((x - half, y - k * 1.5));
+            path.quad_to((x, y + k * 5.0), (x + half, y - k * 1.5));
+        }
+        Mouth::Grin(k) => {
+            let half = 6.5 * k.max(0.5);
+            path.move_to((x - half, y - 1.5));
+            path.line_to((x + half, y - 1.5));
+            path.quad_to((x, y + 9.0 * k), (x - half, y - 1.5));
+            path.close_path();
+            p.stroke(&path, w, col, 1.0);
+            return;
+        }
+        Mouth::Oh(k) => {
+            let e = Ellipse::new((x, y + 1.0), (2.6 * k + 0.8, 3.2 * k + 0.8), 0.0);
+            p.stroke(&e, w, col, 1.0);
+            return;
+        }
+        Mouth::Wavy => {
+            path.move_to((x - 7.0, y));
+            path.quad_to((x - 5.25, y - 2.5), (x - 3.5, y));
+            path.quad_to((x - 1.75, y + 2.5), (x, y));
+            path.quad_to((x + 1.75, y - 2.5), (x + 3.5, y));
+            path.quad_to((x + 5.25, y + 2.5), (x + 7.0, y));
+        }
+        Mouth::Smirk => {
+            path.move_to((x - 5.0, y + 0.5));
+            path.quad_to((x + 1.0, y + 2.5), (x + 6.0, y - 2.5));
+        }
+    }
+    p.stroke(&path, w, col, 1.0);
 }
 
 /// A small prop shown in a badge beside the pill.
@@ -1626,8 +1809,15 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
             }
         }
         let filled = line.eyes == Eyes::Dots;
-        eye(p, (l, cy), &f, 0, eye_col, w, filled, open);
-        eye(p, (r, cy), &f, 1, eye_col, w, filled, open);
+        eye(p, (l, cy), &f, 0, eye_col, w, filled, !simple, open);
+        eye(p, (r, cy), &f, 1, eye_col, w, filled, !simple, open);
+        if !simple {
+            if let Some(b) = f.brow {
+                brows(p, [l, r], cy, &f, b, eye_col, w);
+            }
+            let at = (60.0 + f.look.0 * 6.0, cy + 15.0 + f.look.1 * 2.0);
+            mouth(p, at, f.mouth, eye_col, w);
+        }
     });
 
     if simple {
@@ -1778,6 +1968,32 @@ mod tests {
             Framing::Full,
         ));
         assert!(filled > rings);
+    }
+
+    #[test]
+    fn every_mood_has_a_mouth() {
+        for s in State::ALL {
+            assert_ne!(face(s, 0.5).mouth, Mouth::None, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn the_face_changes_with_the_mood() {
+        let mut r = FinRenderer::new(96);
+        let line = Line::default();
+        let draw = |r: &mut FinRenderer, s: State| {
+            let pose = FinPose {
+                fin: fin(line, Outfit::PLAIN),
+                state: s,
+                shine: false,
+                gaze: (0, 0),
+                offset: 0,
+            };
+            r.draw(&pose, 0.5, Framing::Bust).to_vec()
+        };
+        let a = draw(&mut r, State::Sorry);
+        let b = draw(&mut r, State::Surprised);
+        assert_ne!(a, b);
     }
 
     #[test]
