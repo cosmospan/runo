@@ -2655,6 +2655,9 @@ impl Render for Shell {
             && idle > doze_after()
             && !working
             && !self.palette
+            // The server's page and its screen keep reading the server: their
+            // news only shows on a redraw, so they keep the app awake.
+            && !matches!(self.place, Place::Server | Place::Screen)
             && self
                 .toast
                 .as_ref()
