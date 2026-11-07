@@ -1,9 +1,9 @@
 //! The status bar along the bottom of the page, and the engines popover it
 //! opens.
 //!
-//! The bar names every engine in play today, Claude Code, Codex, Gemini or any
-//! other, each with a dot for whether it's ready and a small meter for the
-//! plan window closest to its limit. On the right is what the crew cost and
+//! One item on the right sums it up: a dot for each engine in play today
+//! (Claude Code, Codex, Gemini or any other) for whether it's ready, a small
+//! meter for the plan window closest to its limit, and what the crew cost and
 //! used today. Clicking anywhere on it opens the popover: for each engine, its
 //! plan windows with what's left and when they reset, and today's cost, tokens
 //! and jobs.
@@ -146,10 +146,17 @@ impl Shell {
         let tokens: u64 = days.iter().map(|d| d.tokens).sum();
         let open = self.usage_open;
 
-        let mut left = div().flex().items_center().gap(px(2.)).min_w_0();
+        // One item on the right: a dot per engine (ready, near its limit, or
+        // missing), the plan window closest to its limit, then today's cost.
+        let mut dots = div().flex().items_center().gap(px(4.));
+        let mut tight: Option<f32> = None;
+        let mut missing = false;
         for d in days.iter().take(BAR_ENGINES) {
-            let p = &crate::agent::PROVIDERS[d.i];
             let head = d.usage.as_ref().and_then(|u| u.headline().cloned());
+            if let Some(w) = &head {
+                tight = Some(tight.map_or(w.used, |t| t.max(w.used)));
+            }
+            missing |= !d.ready;
             let dot = if !d.ready {
                 ui::RED
             } else if head.as_ref().is_some_and(|w| w.used >= 80.) {
@@ -157,49 +164,52 @@ impl Shell {
             } else {
                 ui::GREEN
             };
-            left = left.child(
-                div()
-                    .id(("status-engine", d.i))
-                    .h(px(22.))
-                    .px(px(8.))
-                    .flex()
-                    .items_center()
-                    .gap(px(7.))
-                    .rounded_full()
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                    .child(div().size(px(7.)).rounded_full().bg(c(dot)))
-                    .child(p.name)
-                    .map(|el| match &head {
-                        Some(w) => el.child(meter(w.used, 28., 4.)).child(
-                            div()
-                                .font_family(ui::MONO)
-                                .text_size(px(10.5))
-                                .text_color(c(if w.used >= 80. {
-                                    ui::t_amber()
-                                } else {
-                                    ui::faint()
-                                }))
-                                .child(format!("{:.0}%", w.used)),
-                        ),
-                        None if !d.ready => {
-                            el.child(div().text_color(c(ui::t_red())).child("not found"))
-                        }
-                        None => el,
-                    })
-                    .on_click(cx.listener(|this, e: &ClickEvent, _, cx| {
-                        this.toggle_usage(f32::from(e.position().x), cx)
-                    })),
-            );
+            dots = dots.child(div().size(px(7.)).rounded_full().bg(c(dot)));
         }
-        if days.len() > BAR_ENGINES {
-            left = left.child(
-                div()
-                    .px(px(6.))
-                    .text_color(c(ui::faint()))
-                    .child(format!("+{}", days.len() - BAR_ENGINES)),
-            );
-        }
+        let names: Vec<String> = days
+            .iter()
+            .map(|d| {
+                let p = &crate::agent::PROVIDERS[d.i];
+                let head = d.usage.as_ref().and_then(|u| u.headline().cloned());
+                match head {
+                    Some(w) => format!("{} {:.0}% used", p.name, w.used),
+                    None if !d.ready => format!("{} not found", p.name),
+                    None => p.name.to_string(),
+                }
+            })
+            .collect();
+        let tip = names.join(" \u{b7} ");
+        let single = (days.len() == 1).then(|| crate::agent::PROVIDERS[days[0].i].name);
+        let engines = div()
+            .flex()
+            .items_center()
+            .gap(px(7.))
+            .child(dots)
+            .when_some(single, |d, name| d.child(name))
+            .when(days.len() > BAR_ENGINES, |d| {
+                d.child(
+                    div()
+                        .text_color(c(ui::faint()))
+                        .child(format!("+{}", days.len() - BAR_ENGINES)),
+                )
+            })
+            .map(|el| match tight {
+                Some(used) => el.child(meter(used, 28., 4.)).child(
+                    div()
+                        .font_family(ui::MONO)
+                        .text_size(px(10.5))
+                        .text_color(c(if used >= 80. {
+                            ui::t_amber()
+                        } else {
+                            ui::faint()
+                        }))
+                        .child(format!("{used:.0}%")),
+                ),
+                None if missing && single.is_some() => {
+                    el.child(div().text_color(c(ui::t_red())).child("not found"))
+                }
+                None => el,
+            });
 
         let right = div()
             .id("status-today")
@@ -211,6 +221,11 @@ impl Shell {
             .rounded_full()
             .cursor_pointer()
             .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            .tooltip(move |window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
+            .child(engines)
+            .child(div().w(px(1.)).h(px(12.)).mx(px(2.)).bg(c(ui::line())))
             .child(div().text_color(c(ui::faint())).child("Today"))
             .child(
                 div()
@@ -281,8 +296,6 @@ impl Shell {
             .text_size(px(11.5))
             .text_color(c(ui::muted()))
             .child(term)
-            .child(div().w(px(1.)).h(px(14.)).mx(px(4.)).bg(c(ui::line())))
-            .child(left)
             .child(div().flex_1())
             .child(right)
     }
