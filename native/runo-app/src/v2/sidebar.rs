@@ -512,7 +512,7 @@ impl Shell {
             .border_1()
             .border_color(c(ui::line()))
             .shadow(vec![BoxShadow {
-                color: hsla(0., 0., 0., 0.14),
+                color: hsla(0., 0., 0., 0.14 * ui::float_shadow()),
                 offset: point(px(0.), px(12.)),
                 blur_radius: px(32.),
                 spread_radius: px(-8.),
@@ -956,7 +956,7 @@ impl Shell {
                     .border_1()
                     .border_color(c(ui::line()))
                     .shadow(vec![BoxShadow {
-                        color: ui::ca(0x000000, 0.35),
+                        color: ui::ca(0x000000, 0.35 * ui::float_shadow()),
                         offset: point(px(0.), px(20.)),
                         blur_radius: px(60.),
                         spread_radius: px(-6.),

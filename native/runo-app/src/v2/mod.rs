@@ -2337,6 +2337,7 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::framestats::begin();
+        crate::pattern::clear_chrome();
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
@@ -2590,9 +2591,6 @@ impl Render for Shell {
                     .when(setup, |d| d.h_full())
                     .when(!setup, |d| d.bg(c(ui::bg())))
                     .relative()
-                    .when(!setup, |d| {
-                        d.children(ui::pattern(crate::pattern::Area::Content))
-                    })
                     .when(!setup && !bare, |d| d.child(self.topbar(cx)))
                     .child(
                         div()
@@ -2601,6 +2599,13 @@ impl Render for Shell {
                             .w_full()
                             .relative()
                             .overflow_hidden()
+                            // The pattern lies under the page only, not the top bar:
+                            // the bar is a plain strip of the page's own ground, so
+                            // the pattern never runs into the bar's edge and no grid
+                            // line lands a few pixels off it.
+                            .when(!setup, |d| {
+                                d.children(ui::pattern(crate::pattern::Area::Content))
+                            })
                             .child(div().size_full().child(body)),
                     )
                     .when(!setup, |d| d.children(project_drawer))
