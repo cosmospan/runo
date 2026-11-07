@@ -36,6 +36,8 @@ pub struct Store {
     pub steps: Vec<Step>,
     /// The getting-started card was put away.
     pub guide_hidden: bool,
+    /// The sidebar's Try list was put away.
+    pub try_hidden: bool,
     /// Bot ideas Fin already offered (`brain::ideas`), so each is offered once.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub offered: Vec<String>,

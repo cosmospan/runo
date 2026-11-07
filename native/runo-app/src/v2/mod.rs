@@ -428,6 +428,11 @@ pub struct Shell {
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
     history_filter: usize,
     folder_menu: bool,
+    /// The sidebar shows only its icon rail.
+    side_slim: bool,
+    /// Projects in the sidebar folded open or shut, by path; unset, only the
+    /// current one is open.
+    side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
     /// Motion is on (Settings → Animations); off, the crew holds still.
     motion: bool,
@@ -1045,6 +1050,8 @@ impl Shell {
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
+            side_slim: false,
+            side_folds: HashMap::new(),
             toast: None,
             entered: Instant::now(),
             motion: true,
