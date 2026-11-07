@@ -1481,7 +1481,7 @@ impl Shell {
         }
         // No engine: what it decided before about words like these, else
         // the rules.
-        let (front, line) = Self::without_engine(&st, &text, &recent);
+        let (front, line) = Self::engine_missed(&st, &text, &recent);
         self.act_on(front, text, line, None, cx);
     }
 
@@ -1547,6 +1547,21 @@ impl Shell {
         (brain::front::read(st, text, recent), None)
     }
 
+    /// Peek's decision when its engine should have read `text` but couldn't:
+    /// as [`Self::without_engine`], with work held for a yes.
+    fn engine_missed(
+        st: &crate::settings::AppSettings,
+        text: &str,
+        recent: &[(String, String)],
+    ) -> (brain::front::Front, Option<String>) {
+        let (front, line) = Self::without_engine(st, text, recent);
+        if !brain::think::on(st) {
+            return (front, line);
+        }
+        let front = brain::think::without_engine(brain::think::engine_name(st), front);
+        (front, line)
+    }
+
     /// What Peek's engine decided, once it has: acted on, or the rules'
     /// decision when it failed or made no sense.
     fn poll_reading(&mut self, cx: &mut Context<Self>) {
@@ -1573,7 +1588,7 @@ impl Shell {
                 brain::learn::keep(&st, &text, &f, &say);
                 (f, Some(say).filter(|s| !s.is_empty()))
             }
-            None => Self::without_engine(&st, &text, &recent),
+            None => Self::engine_missed(&st, &text, &recent),
         };
         self.act_on(front, text, line, Some(talk), cx);
     }

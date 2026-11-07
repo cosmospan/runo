@@ -86,11 +86,13 @@ pub fn read(st: &AppSettings, text: &str, recent: &[(String, String)]) -> Front 
 /// keeps running, rather than a job for a bot.
 pub fn wants_run_app(text: &str) -> bool {
     let ws = words(text);
-    if ws.is_empty() || ws.len() > 7 {
+    if ws.is_empty() || ws.len() > 8 {
         return false;
     }
     let lead = [
-        "please", "pls", "can", "you", "could", "now", "ok", "okay", "just", "hey", "peek",
+        "please", "pls", "can", "you", "could", "now", "ok", "okay", "just", "hey", "peek", "lets",
+        "let's", "let", "us", "i", "want", "to", "wanna", "need", "go", "and", "so", "would",
+        "will",
     ];
     let Some(i) = ws.iter().position(|w| !lead.contains(&w.as_str())) else {
         return false;
@@ -1043,6 +1045,9 @@ mod tests {
             "serve the site",
             "start the dev server",
             "can you run it",
+            "lets start the app",
+            "let's run the app",
+            "i want to start the app",
         ] {
             assert!(wants_run_app(t), "{t}");
         }

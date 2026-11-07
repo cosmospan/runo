@@ -186,6 +186,30 @@ pub fn ask(
     Ok(rx)
 }
 
+/// What Peek does with a decision made without the engine, when the engine
+/// should have read it: chat, questions and stops go ahead, but work waits
+/// for a yes, because Peek leans on the person's engine and never starts a
+/// bot on a guess.
+pub fn without_engine(engine: &str, front: Front) -> Front {
+    match front {
+        Front::Hand(route) => Front::Confirm {
+            why: format!(
+                "I couldn't reach {engine} to read that, so I'd rather not start on a guess. \
+My best guess is {} for {} work. Go ahead?",
+                route.bot.name(),
+                route.mode.label().to_lowercase()
+            ),
+            route,
+        },
+        other => other,
+    }
+}
+
+/// The name of the engine Peek reads with, as the person knows it.
+pub fn engine_name(st: &AppSettings) -> &'static str {
+    agent::PROVIDERS[crate::assistant::assistant_provider(st)].name
+}
+
 /// Whether Peek should read with the engine: on unless the person turned it
 /// off (`peek_reads_with_engine: false` in settings).
 pub fn on(st: &AppSettings) -> bool {
@@ -270,5 +294,27 @@ mod tests {
         assert!(parse("I think you mean hello", "hi", &c).is_none());
         assert!(parse(r#"{"do":"reply","say":""}"#, "hi", &c).is_none());
         assert!(parse(r#"{"do":"dance"}"#, "hi", &c).is_none());
+    }
+
+    #[test]
+    fn without_the_engine_work_waits_for_a_yes() {
+        let r = Route {
+            mode: Mode::Test,
+            bot: Member::Checker,
+            sure: 0.6,
+            why: String::new(),
+            by: "rules".into(),
+        };
+        match without_engine("Claude Code", Front::Hand(r)) {
+            Front::Confirm { why, route } => {
+                assert!(why.contains("Claude Code") && why.contains("Checker"));
+                assert_eq!(route.bot, Member::Checker);
+            }
+            other => panic!("{other:?}"),
+        }
+        let chat = Front::Chat {
+            reply: "Hi!".into(),
+        };
+        assert_eq!(without_engine("Claude Code", chat.clone()), chat);
     }
 }
