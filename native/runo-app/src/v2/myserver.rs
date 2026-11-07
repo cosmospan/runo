@@ -156,6 +156,19 @@ impl Shell {
                         self.server_failed = true;
                         self.server_setup = None;
                     }
+                    Step::KeyChanged(fp) => {
+                        let now = if fp.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" Its key now is {fp}.")
+                        };
+                        self.server_log.push(format!(
+                            "This server isn't showing the key Squad trusted for it before.{now} That's expected if you rebuilt or reinstalled it. If you didn't, don't go on: something may be pretending to be your server."
+                        ));
+                        self.server_failed = true;
+                        self.server_key_changed = true;
+                        self.server_setup = None;
+                    }
                 }
             }
         }
@@ -203,6 +216,7 @@ impl Shell {
         let password = self.server_pass.read(cx).value().to_string();
         self.server_log.clear();
         self.server_failed = false;
+        self.server_key_changed = false;
         if !remote::valid_host(&host) {
             self.server_log.push(
                 "Type the server as user@address, like root@203.0.113.7. Your VPS provider's email has both.".into(),
@@ -327,6 +341,22 @@ impl Shell {
                     .child(fields)
                     .when(!self.server_log.is_empty(), |d| {
                         d.child(log(&self.server_log, self.server_failed))
+                    })
+                    .when(self.server_key_changed && !busy, |d| {
+                        d.child(
+                            div().px(px(18.)).pb(px(14.)).flex().child(
+                                ui::ghost_i(
+                                    "server-trust",
+                                    IconName::ShieldCheck,
+                                    "I rebuilt it: trust the new key and connect",
+                                )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    let host = this.server_input.read(cx).value().trim().to_string();
+                                    remote::trust_new_key(&host);
+                                    this.connect_server(cx);
+                                })),
+                            ),
+                        )
                     }),
             )
             .child(
@@ -345,7 +375,7 @@ impl Shell {
                     ))
                     .child(line_row(
                         "Needs",
-                        "A Linux VPS (Ubuntu is easiest) and its address and root password from your provider's email, or SSH access with your own key.",
+                        "A Linux VPS (Ubuntu is easiest) and its address and password (root, or ubuntu on many Ubuntu servers) from your provider's email, or SSH access with your own key.",
                     )),
             )
     }
