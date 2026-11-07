@@ -1629,7 +1629,7 @@ impl Shell {
 
 /// A card's title: Peek's short one, else what you typed, unless that reads as
 /// keyboard mash, when it's named for the kind of job instead.
-fn card_title(j: &Job) -> String {
+pub(super) fn card_title(j: &Job) -> String {
     let t = j.label().trim().to_string();
     if !mashed(&t) {
         return t;
