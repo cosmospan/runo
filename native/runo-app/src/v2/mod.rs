@@ -433,6 +433,8 @@ pub struct Shell {
     /// The thread on screen and when you last looked at it before opening it,
     /// for the feed's New line.
     new_mark: (String, u64),
+    /// A job's own conversation, open beside its thread like a reply pane.
+    reply_open: Option<u64>,
     /// The sidebar's sections folded open or shut, by name; unset, open.
     side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
@@ -922,7 +924,13 @@ impl Shell {
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
-                    if let (false, Place::Live(id)) = (text.is_empty(), this.place) {
+                    // The job on its own page, or open beside its thread.
+                    let job = match this.place {
+                        Place::Live(id) => Some(id),
+                        Place::Today => this.reply_open,
+                        _ => None,
+                    };
+                    if let (false, Some(id)) = (text.is_empty(), job) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
                         this.follow_up(id, text, cx);
                     }
@@ -1054,6 +1062,7 @@ impl Shell {
             folder_menu: false,
             side_slim: false,
             new_mark: (String::new(), 0),
+            reply_open: None,
             side_folds: HashMap::new(),
             toast: None,
             entered: Instant::now(),

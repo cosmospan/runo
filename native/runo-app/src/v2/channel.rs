@@ -143,7 +143,10 @@ impl Shell {
                         gpui_kit::component::tooltip::Tooltip::new("Reply").build(window, cx)
                     })
                     .on_click(cx.listener(move |this, _, window, cx| match reply {
-                        Reply::Job(id) => this.open_job(id, cx),
+                        Reply::Job(id) => {
+                            this.reply_open = Some(id);
+                            cx.notify();
+                        }
                         Reply::Bot(who) => {
                             this.composer.update(cx, |i, cx| {
                                 ui::put_text(i, format!("@{} ", who.name()), window, cx);
@@ -541,8 +544,93 @@ impl Shell {
                     ),
             )
             .into_any_element();
+        // A job's own conversation, open beside the thread like a reply pane.
+        let pane = self
+            .reply_open
+            .and_then(|id| self.crew.store.job(id).cloned())
+            .filter(|j| {
+                j.folder.path == folder.path
+                    && self.crew.store.thread_for(&folder.path, j.thread) == thread
+            })
+            .map(|j| self.reply_pane(&j, &name, cx));
+        let page = div()
+            .size_full()
+            .flex()
+            .child(div().flex_1().min_w_0().h_full().child(page))
+            .children(pane)
+            .into_any_element();
         let pick = None;
         self.split(pick, page, cx)
+    }
+
+    /// A job's conversation beside its thread: what the bot did and said,
+    /// with a box to answer it, like replies in a thread.
+    fn reply_pane(&mut self, job: &Job, thread: &str, cx: &mut Context<Self>) -> Div {
+        div()
+            .w(px(460.))
+            .flex_none()
+            .h_full()
+            .flex()
+            .flex_col()
+            .border_l_1()
+            .border_color(c(ui::line2()))
+            .bg(c(ui::bg()))
+            .child(
+                div()
+                    .h(px(46.))
+                    .flex_none()
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .border_b_1()
+                    .border_color(c(ui::line2()))
+                    .child(
+                        div()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Thread"),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::faint()))
+                            .child(format!("#{thread} \u{b7} {}", job.label())),
+                    )
+                    .child(
+                        ui::icon_btn("reply-full", IconName::Maximize)
+                            .tooltip(|window, cx| {
+                                gpui_kit::component::tooltip::Tooltip::new("Open the whole job")
+                                    .build(window, cx)
+                            })
+                            .on_click({
+                                let id = job.id;
+                                cx.listener(move |this, _, _, cx| {
+                                    this.reply_open = None;
+                                    this.open_job(id, cx);
+                                })
+                            }),
+                    )
+                    .child(
+                        ui::icon_btn("reply-close", IconName::X).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.reply_open = None;
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(self.live_main(job, cx)),
+            )
     }
 
     /// The bar over a thread, like a channel's: its name, who's in it as a
