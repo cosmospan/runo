@@ -95,7 +95,30 @@ pub fn pattern(area: crate::pattern::Area) -> Option<AnyElement> {
     if p == Pattern::Off || !shows(area) {
         return None;
     }
-    Some(pattern_of(p, 1.))
+    let t = theme();
+    let colors = (t.ink, VIOLET, !t.light);
+    Some(
+        canvas(
+            |_, _, _| (),
+            move |b, _, window, _| {
+                use crate::pattern::Area;
+                // The page's grid starts with a whole cell at its top-left corner;
+                // the sidebar's lines up with it, so they meet as one grid.
+                let anchor = if area == Area::Content {
+                    crate::pattern::set_page_origin(b.origin);
+                    b.origin
+                } else {
+                    crate::pattern::page_origin().unwrap_or(point(b.right(), b.top()))
+                };
+                crate::pattern::paint_in(p, b, None, Some(anchor), 1., colors, window)
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element(),
+    )
 }
 
 /// `p` painted over the element it's laid in, `gain` times its usual strength.
@@ -104,7 +127,9 @@ pub fn pattern_of(p: crate::pattern::Pattern, gain: f32) -> AnyElement {
     let colors = (t.ink, VIOLET, !t.light);
     canvas(
         |_, _, _| (),
-        move |b, _, window, _| crate::pattern::paint_in(p, b, None, gain, colors, window),
+        move |b, _, window, _| {
+            crate::pattern::paint_in(p, b, None, Some(b.origin), gain, colors, window)
+        },
     )
     .absolute()
     .top_0()
