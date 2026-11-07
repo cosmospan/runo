@@ -482,8 +482,6 @@ pub struct Shell {
     maker_open: bool,
     /// The engines popover over the status bar is open.
     usage_open: bool,
-    /// Where across the window the engines popover was opened from.
-    usage_x: f32,
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
     /// Engines shows each bot's brain rather than the engines themselves.
@@ -1051,7 +1049,6 @@ impl Shell {
             setup_step: 0,
             maker_open: false,
             usage_open: false,
-            usage_x: 0.,
             engine_sel: None,
             engine_brains: false,
             settings_pane: Pane::Work,
