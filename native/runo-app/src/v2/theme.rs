@@ -435,13 +435,47 @@ pub fn window_clear() -> bool {
     theme().frosted || see_through()
 }
 
-/// How far transparency has gone, 0 (off, or the slider at its start) to 1.
+/// A background image is set under Settings > Appearance.
+static IMAGE: AtomicBool = AtomicBool::new(false);
+/// How far the image shows through the window's surfaces, 0 to 100.
+static IMAGE_SHOW: AtomicU8 = AtomicU8::new(0);
+
+/// Puts a background image under the window, or takes it away, and sets how far it
+/// shows through the surfaces over it (0 to 100). The image covers the desktop, so
+/// while it's set it takes the place of window transparency.
+pub fn set_image(on: bool, show: u8) {
+    IMAGE.store(on, Ordering::Relaxed);
+    IMAGE_SHOW.store(show.min(100), Ordering::Relaxed);
+}
+
+/// A background image lies under the window.
+pub fn image_on() -> bool {
+    IMAGE.load(Ordering::Relaxed)
+}
+
+/// Something shows through the window's surfaces: the desktop, or a background
+/// image. Each surface then paints its own ground, since stacked see-through
+/// layers would add up to nearly solid.
+pub fn layered() -> bool {
+    window_clear() || image_on()
+}
+
+/// How far transparency has gone, 0 (off, or the slider at its start) to 1. With
+/// a background image it's the image's own slider; the same floor keeps text
+/// readable over a busy picture as over a busy desktop.
 pub fn amount() -> f32 {
-    if see_through() {
-        CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
+    if image_on() {
+        IMAGE_SHOW.load(Ordering::Relaxed).min(100) as f32 / 100.
+    } else if see_through() {
+        clear_amount()
     } else {
         0.
     }
+}
+
+/// Where the window transparency slider sits, 0 to 1, whether or not it's in use.
+pub fn clear_amount() -> f32 {
+    CLEAR.load(Ordering::Relaxed).min(100) as f32 / 100.
 }
 
 /// A surface thinned to `k` of its opacity. Faint overlays (a hover tint in a
@@ -509,7 +543,7 @@ pub fn hover() -> u32 {
 /// desktop, not the page under a popover, so even at its clearest a popover keeps
 /// `POP_FLOOR` of its opacity, enough that its text reads over the page.
 pub fn float() -> u32 {
-    float_at(theme(), pop_amount(), window_clear() && glass_popovers())
+    float_at(theme(), pop_amount(), layered() && glass_popovers())
 }
 
 /// The least opacity a see-through popover goes down to, its slider all the way up.
