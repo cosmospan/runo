@@ -447,7 +447,15 @@ impl Shell {
         let (tint, outfit) = self.maker;
         let line = Line::from_code(&cx.global::<crate::settings::AppSettings>().fin_line);
         let preview = self.pose_img(
-            runo_holo::Figure::Fin(Fin { tint, line, outfit }.pose(Mood::Signature)),
+            runo_holo::Figure::Fin(
+                Fin {
+                    tint,
+                    line,
+                    ears: false,
+                    outfit,
+                }
+                .pose(Mood::Signature),
+            ),
             220.,
             Framing::Full,
         );

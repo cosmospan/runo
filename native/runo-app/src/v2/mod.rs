@@ -127,13 +127,13 @@ const FPS: f64 = 60.0;
 /// How often a bot of this size needs a new frame. A calm bot drifts slowly,
 /// so it needs far fewer than one that is busy, celebrating or asking.
 fn fps_for(size: f32, pose: &Figure) -> u32 {
-    let lively = pose.lively();
-    match (lively, size >= 90.0, size >= 40.0) {
-        (true, _, true) => 60,
-        (true, false, false) => 30,
-        (false, true, _) => 60,
-        (false, false, true) => 30,
-        _ => 20,
+    // Anything moving quickly gets every frame, even in a small avatar, so
+    // hops, wiggles and mood changes never step. Calm bots drift so slowly
+    // that fewer frames look the same.
+    if pose.lively() || size >= 90.0 {
+        60
+    } else {
+        30
     }
 }
 
@@ -430,6 +430,9 @@ pub struct Shell {
     touched: Instant,
     /// The bot under the pointer: it gets the light sweep.
     hovered: Option<Member>,
+    /// Each bot's face per place it's drawn (bot, size, framing): the state
+    /// it shows, the one before, and when it changed, so moods ease.
+    moods: HashMap<(Member, u32, bool), (runo_holo::fin::State, runo_holo::fin::State, f64)>,
     /// Where the pointer is in the window, for the sidebar bots' eyes.
     mouse: Point<Pixels>,
     /// Where each sidebar bot was painted last frame, so its eyes can find the pointer.
@@ -864,6 +867,7 @@ impl Shell {
             dozing,
             touched: Instant::now(),
             hovered: None,
+            moods: HashMap::new(),
             target: None,
             setup_step: 0,
             maker_open: false,
@@ -2119,7 +2123,28 @@ impl Shell {
     /// A bot drawn at `size` logical pixels, in `mood`.
     fn bot(&mut self, who: Member, mood: Mood, size: f32, framing: Framing) -> Img {
         let pose = mascot::figure(who, mood).shine(self.hovered == Some(who));
+        let pose = self.eased(pose, (who, size.to_bits(), framing == Framing::Bust));
         self.pose_img(pose, size, framing)
+    }
+
+    /// `pose`, easing in from the last face shown at `slot` when its mood
+    /// just changed.
+    fn eased(&mut self, pose: Figure, slot: (Member, u32, bool)) -> Figure {
+        let Some(state) = pose.fin_state() else {
+            return pose;
+        };
+        let now = self.now();
+        let (shown, was, since) = self.moods.entry(slot).or_insert((state, state, -1.0));
+        if *shown != state {
+            *was = *shown;
+            *shown = state;
+            *since = now;
+        }
+        if self.motion && *since >= 0.0 && now - *since < runo_holo::fin::MOOD_EASE {
+            pose.easing_from(*was, *since)
+        } else {
+            pose
+        }
     }
 
     fn hover_bot(&mut self, who: Member, on: bool, cx: &mut Context<Self>) {

@@ -42,6 +42,8 @@ fn main() {
             let fin = Fin {
                 tint: Tint::RED,
                 line,
+                // Peek, with its ears, on the first row.
+                ears: i == 0,
                 outfit: Outfit::PLAIN,
             };
             cells.push((
@@ -51,6 +53,7 @@ fn main() {
                     shine: false,
                     gaze: (0, 0),
                     offset: 0,
+                    from: None,
                 },
                 cell,
             ));
@@ -60,6 +63,7 @@ fn main() {
         let fin = Fin {
             tint: r.tint,
             line: Line::default(),
+            ears: false,
             outfit: r.outfit,
         };
         cells.push((
@@ -69,6 +73,7 @@ fn main() {
                 shine: false,
                 gaze: (0, 0),
                 offset: 0,
+                from: None,
             },
             cell,
         ));
@@ -91,6 +96,7 @@ fn main() {
             let fin = Fin {
                 tint,
                 line: Line::default(),
+                ears: false,
                 outfit: Outfit::PLAIN,
             };
             let px = r
@@ -101,6 +107,7 @@ fn main() {
                         shine: false,
                         gaze: (0, 0),
                         offset: 0,
+                        from: None,
                     },
                     t,
                     Framing::Bust,

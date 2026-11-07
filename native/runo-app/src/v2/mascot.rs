@@ -123,6 +123,7 @@ pub fn fin_in(st: &AppSettings, who: Member) -> Fin {
     Fin {
         tint,
         line: Line::from_code(&st.fin_line),
+        ears: has_ears(who),
         outfit,
     }
 }
@@ -135,6 +136,11 @@ pub fn set_look(st: &mut AppSettings, who: Member, tint: Tint, outfit: Outfit) {
     } else {
         st.fin_looks.insert(key, code(tint, outfit));
     }
+}
+
+/// Only Peek, the crew's lead, wears ears.
+pub fn has_ears(who: Member) -> bool {
+    who == Member::Fin
 }
 
 /// The role kit a look matches, by outfit alone (any colour).
@@ -159,6 +165,7 @@ pub fn figure_with(who: Member, mood: Mood, gaze: (i8, i8), offset: u8) -> Figur
         Fin {
             tint,
             line: l.line.unwrap_or_default(),
+            ears: has_ears(who),
             outfit,
         }
         .pose(mood)

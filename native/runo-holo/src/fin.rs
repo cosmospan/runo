@@ -516,6 +516,8 @@ pub const ROLES: [Role; 8] = [
 pub struct Fin {
     pub tint: Tint,
     pub line: Line,
+    /// Peek, the crew's lead, wears ears; the rest of the crew doesn't.
+    pub ears: bool,
     pub outfit: Outfit,
 }
 
@@ -527,6 +529,7 @@ impl Fin {
             shine: false,
             gaze: (0, 0),
             offset: 0,
+            from: None,
         }
     }
 
@@ -574,7 +577,15 @@ pub struct FinPose {
     /// Shifts the animation clock, in steps of [`OFFSET_STEP`] seconds, so a
     /// row of bots in the same state doesn't move in lockstep.
     pub offset: u8,
+    /// The state Peek is easing out of, and when it left it, in hundredths
+    /// of a second on the same clock as the `t` it's drawn at. For
+    /// [`MOOD_EASE`] seconds after that the face glides from the old look to
+    /// the new one instead of snapping.
+    pub from: Option<(State, u32)>,
 }
+
+/// Seconds Peek takes to ease from one mood's face into the next.
+pub const MOOD_EASE: f64 = 0.4;
 
 /// Seconds per step of [`FinPose::offset`].
 pub const OFFSET_STEP: f64 = 0.37;
@@ -584,6 +595,23 @@ impl FinPose {
     pub fn looking(mut self, gaze: (i8, i8)) -> Self {
         self.gaze = (gaze.0.clamp(-10, 10), gaze.1.clamp(-10, 10));
         self
+    }
+
+    /// Easing in from `state`, which it left at `since` seconds (see
+    /// [`FinPose::from`]). Leaving the same state it's in does nothing.
+    pub fn easing_from(mut self, state: State, since: f64) -> Self {
+        if state != self.state {
+            self.from = Some((state, (since.max(0.0) * 100.0).round() as u32));
+        }
+        self
+    }
+
+    /// How far into easing from the old state it is at `t`: the old state
+    /// and an eased 0..1, or `None` when it isn't easing.
+    fn easing(&self, t: f64) -> Option<(State, f64)> {
+        let (from, since) = self.from?;
+        let d = (t - since as f64 / 100.0) / MOOD_EASE;
+        (0.0..1.0).contains(&d).then(|| (from, smooth(d)))
     }
 
     /// With its clock shifted by `offset` steps (see [`FinPose::offset`]).
@@ -598,6 +626,7 @@ impl FinPose {
             self.state,
             State::Idle | State::Sleep | State::Focused | State::Sorry | State::Shy
         ) || self.shine
+            || self.from.is_some()
     }
 }
 
@@ -781,8 +810,79 @@ struct Face {
     /// Brows, when the mood shows in them.
     brow: Option<Brow>,
     mouth: Mouth,
+    /// How tall the ears stand: 1 is relaxed, more is perked, less droops.
+    ear: f64,
+    /// How far the ears lean outwards, in degrees.
+    ear_out: f64,
+    /// While easing between moods: the parts of the old face that can't be
+    /// blended (eye shape, mouth, brows) and how far the new one has come.
+    was: Option<Was>,
     /// Free to follow the pointer and look around.
     roams: bool,
+}
+
+/// The old face's shapes while easing into a new mood.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Was {
+    eye: EyeShape,
+    brow: Option<Brow>,
+    mouth: Mouth,
+    /// How far into the new face, 0..1, eased.
+    k: f64,
+}
+
+/// Smoothstep: eases in and out over 0..1.
+fn smooth(x: f64) -> f64 {
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
+fn lerp(a: f64, b: f64, k: f64) -> f64 {
+    a + (b - a) * k
+}
+
+/// Blends face `a` into face `b` by `k`: everything that can move glides,
+/// and what can't (eye shape, mouth, brows) is kept to cross-fade.
+fn blend(a: &Face, b: &Face, k: f64) -> Face {
+    let l = |x: f64, y: f64| lerp(x, y, k);
+    let l2 = |x: (f64, f64), y: (f64, f64)| (l(x.0, y.0), l(x.1, y.1));
+    let la = |x: [f64; 2], y: [f64; 2]| [l(x[0], y[0]), l(x[1], y[1])];
+    let mut f = *b;
+    f.open = l(a.open, b.open);
+    f.r = l(a.r, b.r);
+    f.lid = la(a.lid, b.lid);
+    f.tilt = l(a.tilt, b.tilt);
+    f.low = l(a.low, b.low);
+    f.look = l2(a.look, b.look);
+    f.squash = l2(a.squash, b.squash);
+    f.spin = l(a.spin, b.spin);
+    f.lift = l(a.lift, b.lift);
+    f.lean = l2(a.lean, b.lean);
+    f.glow = l(a.glow, b.glow);
+    f.blush = l(a.blush, b.blush);
+    f.size = la(a.size, b.size);
+    f.ear = l(a.ear, b.ear);
+    f.ear_out = l(a.ear_out, b.ear_out);
+    // Brows both there: glide. A mouth of the same kind: reshape.
+    if let (Some(x), Some(y)) = (a.brow, b.brow) {
+        f.brow = Some(Brow {
+            raise: la(x.raise, y.raise),
+            knit: l(x.knit, y.knit),
+        });
+    }
+    f.mouth = match (a.mouth, b.mouth) {
+        (Mouth::Curve(x), Mouth::Curve(y)) => Mouth::Curve(l(x, y)),
+        (Mouth::Grin(x), Mouth::Grin(y)) => Mouth::Grin(l(x, y)),
+        (Mouth::Oh(x), Mouth::Oh(y)) => Mouth::Oh(l(x, y)),
+        (_, m) => m,
+    };
+    f.was = Some(Was {
+        eye: a.eye,
+        brow: a.brow,
+        mouth: a.mouth,
+        k,
+    });
+    f
 }
 
 /// A pair of short brows above the eyes.
@@ -840,6 +940,9 @@ impl Default for Face {
             eye: EyeShape::Dot,
             brow: None,
             mouth: Mouth::None,
+            ear: 1.0,
+            ear_out: 0.0,
+            was: None,
             roams: false,
         }
     }
@@ -872,7 +975,11 @@ fn face(state: State, t: f64) -> Face {
             f.lid = [0.42; 2];
             f.tilt = 0.12;
             f.r = 8.5;
-            let row = (t * 2.4 / PI).floor().rem_euclid(3.0);
+            // Reads a line, then glides down to the next instead of jumping.
+            let u = t * 2.4 / PI;
+            let n = u.floor();
+            let (a, b) = (n.rem_euclid(3.0), (n + 1.0).rem_euclid(3.0));
+            let row = lerp(a, b, smooth((u - n - 0.8) / 0.2));
             f.look = (s(t * 2.4) * 0.75, 0.25 + row * 0.12);
         }
         State::Focused => {
@@ -930,7 +1037,9 @@ fn face(state: State, t: f64) -> Face {
             } else {
                 0.0
             };
-            f.spin = s(t * 7.0) * 6.0 * if h < 0.9 { 1.0 } else { 0.2 };
+            // The wiggle fades out and back in rather than stopping dead.
+            let wave = 0.2 + 0.8 * smooth(h / 0.15) * (1.0 - smooth((h - 0.7) / 0.35));
+            f.spin = s(t * 7.0) * 6.0 * wave;
         }
         State::Love => {
             f.eye = EyeShape::Heart;
@@ -1010,10 +1119,13 @@ fn express(f: &mut Face, state: State, t: f64) {
         // Set brows, a flat line now and then pressed into a tiny smile.
         State::Work => (
             Brow::at(-0.1, 0.25),
-            Mouth::Curve(if (t * 0.7).rem_euclid(1.0) < 0.2 {
-                0.25
-            } else {
-                0.0
+            Mouth::Curve({
+                let ph = (t * 0.7).rem_euclid(1.0);
+                if ph < 0.2 {
+                    0.25 * (ph / 0.2 * std::f64::consts::PI).sin()
+                } else {
+                    0.0
+                }
             }),
         ),
         State::Focused => (Brow::at(-0.3, 0.45), Mouth::Curve(-0.05)),
@@ -1052,6 +1164,20 @@ fn express(f: &mut Face, state: State, t: f64) {
     };
     f.brow = brow;
     f.mouth = mouth;
+    // Ears: perked when alert or delighted, flat back when sorry, sleepy or
+    // shy, and turned out a little when puzzled.
+    (f.ear, f.ear_out) = match state {
+        State::Listen | State::Needs => (1.2, -4.0),
+        State::Surprised => (1.3, -8.0),
+        State::Done | State::Hello | State::Love | State::Proud => (1.1, 4.0),
+        State::Curious => (1.15, 0.0),
+        State::Confused => (0.95, 14.0),
+        State::Sorry | State::Shy => (0.65, 26.0),
+        State::Sleep => (0.6, 30.0),
+        State::Error => (0.8, 18.0),
+        State::Focused | State::Work | State::Blocked => (0.95, 8.0),
+        State::Idle | State::Think | State::Wink => (1.0, 4.0),
+    };
 }
 
 /// A steady pseudo-random number in 0..1 for slot `n`.
@@ -1118,7 +1244,8 @@ fn blink(t: f64) -> f64 {
     let k = t - n * cycle - noise(n) * 1.5;
     let one = |k: f64| {
         if (0.0..0.16).contains(&k) {
-            ((k - 0.08).abs() / 0.08).max(0.06)
+            // Shut and open again on a smooth curve rather than a sharp V.
+            1.0 - 0.94 * (k / 0.16 * std::f64::consts::PI).sin().powi(2)
         } else {
             1.0
         }
@@ -1733,6 +1860,8 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let xf = Affine::scale(k) * Affine::translate((-x0, -y0));
     let simple = px < 36;
     let full = framing == Framing::Full;
+    // Easing runs on the app's clock, before this bot's own offset.
+    let easing = pose.easing(t);
     let t = t + pose.offset as f64 * OFFSET_STEP;
     let mut p = Pen {
         ctx,
@@ -1743,7 +1872,20 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     let state = pose.state;
     let mut f = face(state, t);
     follow(&mut f, state, pose.gaze, t);
-    let open = if state == State::Sleep { 1.0 } else { blink(t) };
+    let old = easing.map(|(from, k)| {
+        let mut a = face(from, t);
+        follow(&mut a, from, pose.gaze, t);
+        f = blend(&a, &f, k);
+        (from, k)
+    });
+    // How much of a state shows: all of it, or part while easing in or out.
+    let shows = |s: State| match old {
+        Some((from, k)) => {
+            (if state == s { k } else { 0.0 }) + (if from == s { 1.0 - k } else { 0.0 })
+        }
+        None => (state == s) as u8 as f64,
+    };
+    let open = lerp(blink(t), 1.0, shows(State::Sleep));
     let strong = fin.tint.strong();
     let light = fin.tint.0[0];
     let line = fin.line;
@@ -1762,7 +1904,8 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
     };
     let lit = if pose.shine { 1.0 } else { 0.0 };
 
-    if state == State::Listen && full {
+    let listen = shows(State::Listen);
+    if listen > 0.0 && full {
         for i in 0..3 {
             let k = (t * 0.7 + i as f64 / 3.0).rem_euclid(1.0);
             let ring = RoundedRect::new(
@@ -1772,7 +1915,7 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
                 90.0 + k * 12.0,
                 28.0 + k * 12.0,
             );
-            p.stroke(&ring, w * 0.5, rim, (1.0 - k) * 0.5);
+            p.stroke(&ring, w * 0.5, rim, (1.0 - k) * 0.5 * listen);
         }
     }
 
@@ -1782,16 +1925,20 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
             rot(f.spin) * Affine::scale_non_uniform(f.squash.0, f.squash.1),
         );
     p.at(body, |p| {
+        if fin.ears {
+            ears(p, &f, rim, w, t);
+        }
         let shell = pill();
-        if line.ink == Ink::Rainbow && state != State::Needs {
-            let g = p.linear(&rainbow(1.0), (0.0, 0.0), (1.0, 1.0));
-            p.stroke_grad(&shell, w, g, rot(t * 40.0));
+        let needs = shows(State::Needs);
+        let pulse = mix(rim, AMBER, 0.5 + (t * 6.0).sin() * 0.4);
+        if line.ink == Ink::Rainbow {
+            p.fade(1.0 - needs, |p| {
+                let g = p.linear(&rainbow(1.0), (0.0, 0.0), (1.0, 1.0));
+                p.stroke_grad(&shell, w, g, rot(t * 40.0));
+            });
+            p.stroke(&shell, w, pulse, needs);
         } else {
-            let col = if state == State::Needs {
-                mix(rim, AMBER, 0.5 + (t * 6.0).sin() * 0.4)
-            } else {
-                mix(rim, WHITE, 0.25 * lit)
-            };
+            let col = mix(mix(rim, WHITE, 0.25 * lit), pulse, needs);
             p.stroke(&shell, w, col, 1.0);
         }
         let (l, r) = (42.0 + f.look.0 * 8.0, 78.0 + f.look.0 * 8.0);
@@ -1809,21 +1956,50 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
             }
         }
         let filled = line.eyes == Eyes::Dots;
-        eye(p, (l, cy), &f, 0, eye_col, w, filled, !simple, open);
-        eye(p, (r, cy), &f, 1, eye_col, w, filled, !simple, open);
+        let both = |p: &mut Pen, face: &Face| {
+            eye(p, (l, cy), face, 0, eye_col, w, filled, !simple, open);
+            eye(p, (r, cy), face, 1, eye_col, w, filled, !simple, open);
+        };
+        // A new eye shape cross-fades in over the old one.
+        match f.was {
+            Some(was) if was.eye != f.eye => {
+                let a = Face { eye: was.eye, ..f };
+                p.fade(1.0 - was.k, |p| both(p, &a));
+                p.fade(was.k, |p| both(p, &f));
+            }
+            _ => both(p, &f),
+        }
         if !simple {
-            if let Some(b) = f.brow {
-                brows(p, [l, r], cy, &f, b, eye_col, w);
+            let k = f.was.map_or(1.0, |w| w.k);
+            let brow_was = f.was.and_then(|w| w.brow);
+            match (brow_was, f.brow) {
+                (Some(a), None) if k < 1.0 => {
+                    p.fade(1.0 - k, |p| brows(p, [l, r], cy, &f, a, eye_col, w))
+                }
+                (None, Some(b)) if f.was.is_some() => {
+                    p.fade(k, |p| brows(p, [l, r], cy, &f, b, eye_col, w))
+                }
+                (_, Some(b)) => brows(p, [l, r], cy, &f, b, eye_col, w),
+                _ => {}
             }
             let at = (60.0 + f.look.0 * 6.0, cy + 15.0 + f.look.1 * 2.0);
-            mouth(p, at, f.mouth, eye_col, w);
+            match f.was {
+                Some(was)
+                    if std::mem::discriminant(&was.mouth) != std::mem::discriminant(&f.mouth) =>
+                {
+                    p.fade(1.0 - was.k, |p| mouth(p, at, was.mouth, eye_col, w));
+                    p.fade(was.k, |p| mouth(p, at, f.mouth, eye_col, w));
+                }
+                _ => mouth(p, at, f.mouth, eye_col, w),
+            }
         }
     });
 
     if simple {
         return;
     }
-    if let Some(prop) = prop_for(pose) {
+    let k = old.map_or(1.0, |o| o.1);
+    let badge = |p: &mut Pen, prop: Prop| {
         let (x, y, k) = if full {
             (108.0, 85.0, 0.8)
         } else {
@@ -1838,9 +2014,69 @@ fn draw_into(ctx: &mut RenderContext, pose: &FinPose, t: f64, framing: Framing, 
                 p.at(Affine::scale(0.82), |p| icon(p, prop, accent, t));
             },
         );
+    };
+    let prop_now = prop_for(pose);
+    let prop_was = match old {
+        Some((from, _)) => prop_for(&FinPose {
+            state: from,
+            ..*pose
+        }),
+        None => prop_now,
+    };
+    if prop_was == prop_now {
+        if let Some(prop) = prop_now {
+            badge(&mut p, prop);
+        }
+    } else {
+        if let Some(prop) = prop_was {
+            p.fade(1.0 - k, |p| badge(p, prop));
+        }
+        if let Some(prop) = prop_now {
+            p.fade(k, |p| badge(p, prop));
+        }
     }
     if full {
-        extras(&mut p, state, &f, accent, t);
+        if let Some((from, k)) = old {
+            p.fade(1.0 - k, |p| extras(p, from, &f, accent, t));
+            p.fade(k, |p| extras(p, state, &f, accent, t));
+        } else {
+            extras(&mut p, state, &f, accent, t);
+        }
+    }
+}
+
+/// Peek's ears, standing on the top of the pill. They perk up, fold back or
+/// turn out with the mood, and now and then one gives a quick twitch.
+fn ears(p: &mut Pen, f: &Face, col: Rgb, w: f64, t: f64) {
+    let base = 35.0;
+    for (side, x) in [(0usize, 45.0), (1, 75.0)] {
+        let out = if side == 0 { -1.0 } else { 1.0 };
+        let twitch = {
+            let cycle = 5.3;
+            let n = ((t + side as f64 * 2.4) / cycle).floor();
+            let k = t + side as f64 * 2.4 - n * cycle - noise(n + side as f64 * 31.0) * 2.0;
+            if (0.0..0.3).contains(&k) {
+                (k / 0.3 * std::f64::consts::PI).sin()
+            } else {
+                0.0
+            }
+        };
+        let lean = (f.ear_out + twitch * 10.0).to_radians();
+        let h = 13.0 * f.ear * lean.cos();
+        // The tip leans out; the root stays put on the pill.
+        let dx = out * 13.0 * f.ear * lean.sin();
+        let mut ear = BezPath::new();
+        ear.move_to((x - 8.5, base));
+        ear.curve_to(
+            (x - 6.5 + dx * 0.7, base - h * 1.3),
+            (x + 6.5 + dx * 0.7, base - h * 1.3),
+            (x + 8.5, base),
+        );
+        p.stroke(&ear, w, col, 1.0);
+        let mut inner = BezPath::new();
+        inner.move_to((x - 3.5, base - 1.5));
+        inner.quad_to((x + dx * 0.55, base - h * 0.85), (x + 3.5, base - 1.5));
+        p.stroke(&inner, w * 0.6, col, 0.55);
     }
 }
 
@@ -1888,6 +2124,7 @@ mod tests {
         Fin {
             tint: Tint::RED,
             line,
+            ears: false,
             outfit,
         }
     }
@@ -1915,6 +2152,7 @@ mod tests {
                     shine: false,
                     gaze: (0, 0),
                     offset: 0,
+                    from: None,
                 };
                 let px = r.draw(&pose, 1.3, Framing::Full);
                 assert!(coverage(px) > 150, "{m:?} {s:?} drew almost nothing");
@@ -1988,12 +2226,79 @@ mod tests {
                 shine: false,
                 gaze: (0, 0),
                 offset: 0,
+                from: None,
             };
             r.draw(&pose, 0.5, Framing::Bust).to_vec()
         };
         let a = draw(&mut r, State::Sorry);
         let b = draw(&mut r, State::Surprised);
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn only_peek_has_ears() {
+        let mut r = FinRenderer::new(96);
+        let plain = fin(Line::default(), Outfit::PLAIN);
+        let peek = Fin {
+            ears: true,
+            ..plain
+        };
+        let a = coverage(r.draw(&plain.pose(Mood::Idle), 0.0, Framing::Bust));
+        let b = coverage(r.draw(&peek.pose(Mood::Idle), 0.0, Framing::Bust));
+        assert!(b > a);
+    }
+
+    #[test]
+    fn moods_ease_into_each_other() {
+        let mut r = FinRenderer::new(96);
+        let base = fin(Line::default(), Outfit::PLAIN);
+        let draw =
+            |r: &mut FinRenderer, pose: FinPose, t: f64| r.draw(&pose, t, Framing::Bust).to_vec();
+        let sorry = base.pose(Mood::Idle);
+        let sorry = FinPose {
+            state: State::Sorry,
+            ..sorry
+        };
+        let done = FinPose {
+            state: State::Done,
+            ..sorry
+        };
+        let easing = done.easing_from(State::Sorry, 10.0);
+        // Halfway through, it is neither the old face nor the new one.
+        let mid = draw(&mut r, easing, 10.0 + MOOD_EASE / 2.0);
+        assert_ne!(mid, draw(&mut r, done, 10.0 + MOOD_EASE / 2.0));
+        assert_ne!(mid, draw(&mut r, sorry, 10.0 + MOOD_EASE / 2.0));
+        // Once it's done easing it is just the new face.
+        let after = 10.0 + MOOD_EASE + 0.05;
+        assert_eq!(draw(&mut r, easing, after), draw(&mut r, done, after));
+        // And a clock before the change (motion off) shows the new face too.
+        assert_eq!(draw(&mut r, easing, 2.0), draw(&mut r, done, 2.0));
+        // Leaving the same state is no change at all.
+        assert_eq!(done.easing_from(State::Done, 10.0).from, None);
+    }
+
+    #[test]
+    fn faces_move_without_jumps() {
+        // Small steps in time make small changes in the face, for every state,
+        // across many seconds.
+        for s in State::ALL {
+            if s == State::Error {
+                // The error shake starts with a deliberate jolt.
+                continue;
+            }
+            let mut t = 0.0;
+            let mut last = face(s, t);
+            while t < 12.0 {
+                t += 1.0 / 240.0;
+                let f = face(s, t);
+                let d = (f.look.0 - last.look.0).abs()
+                    + (f.look.1 - last.look.1).abs()
+                    + (f.spin - last.spin).abs() / 10.0
+                    + (f.lift - last.lift).abs() / 5.0;
+                assert!(d < 0.15, "{s:?} jumps at {t:.3}: {d}");
+                last = f;
+            }
+        }
     }
 
     #[test]

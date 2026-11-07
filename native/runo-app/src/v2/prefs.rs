@@ -1652,7 +1652,10 @@ impl Shell {
             shine: false,
             gaze: (0, 0),
             offset: 0,
+            from: None,
         });
+        // Glide from one state's face to the next, as the bots do in the app.
+        let figure = self.eased(figure, (who, u32::MAX, false));
         let preview = self.pose_img(figure, 240., Framing::Full);
         let accent = who.accent();
         let mut states = div().flex().flex_wrap().gap(px(6.));
