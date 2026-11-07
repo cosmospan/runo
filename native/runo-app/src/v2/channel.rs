@@ -51,15 +51,149 @@ impl Entry {
     }
 }
 
-/// The quick reactions on a message's hover bar.
-const REACTIONS: [&str; 4] = ["\u{1F44D}", "\u{2705}", "\u{1F440}", "\u{1F389}"];
-
 /// Who a reply to a message goes to: the job's own conversation, or a bot
 /// asked in the thread.
 #[derive(Clone, Copy)]
 enum Reply {
     Job(u64),
     Bot(Member),
+}
+
+/// What a message in a thread is, for what its hover bar offers.
+#[derive(Clone)]
+enum Msg {
+    /// Your own words: ask again, edit and resend.
+    Mine(String),
+    /// A bot's reply about a job, in the state the job is in.
+    Job(u64, Status, Member, String),
+    /// Peek's plan; `true` while it waits for you to start it.
+    Plan(u64, bool),
+    /// A bot's answer to a question, and the question.
+    Answer(Member, String),
+}
+
+/// A quick reaction that does something: its emoji, what it does (the
+/// tooltip), the word it leaves on the message, and the action.
+#[derive(Clone)]
+struct Quick {
+    emoji: &'static str,
+    tip: String,
+    done: &'static str,
+    act: QuickAct,
+}
+
+#[derive(Clone)]
+enum QuickAct {
+    /// Approve a job's changes, as its Approve button does.
+    Approve(u64),
+    /// Run a failed or stopped job again.
+    Retry(u64),
+    /// Start a plan's jobs.
+    Start(u64),
+    /// Say this in the thread, as if typed.
+    Say(String),
+    /// Mark a finished job seen, so it leaves Needs you.
+    Seen(u64),
+    /// Nothing but the mark itself.
+    Mark,
+}
+
+const OK: &str = "\u{2705}";
+const AGAIN: &str = "\u{1F501}";
+const LOOK: &str = "\u{1F440}";
+const THUMB: &str = "\u{1F44D}";
+
+/// The quick reactions a message offers, each with a use: approve or start
+/// what waits on you, try again what failed, have another bot look, or
+/// acknowledge it.
+fn quick_for(m: &Msg) -> Vec<Quick> {
+    let q = |emoji, tip: String, done, act| Quick {
+        emoji,
+        tip,
+        done,
+        act,
+    };
+    match m {
+        Msg::Mine(text) => vec![q(
+            AGAIN,
+            "Ask again".into(),
+            "Asked again",
+            QuickAct::Say(text.clone()),
+        )],
+        Msg::Job(id, status, bot, label) => {
+            let mut out = Vec::new();
+            match status {
+                Status::Review => {
+                    out.push(q(
+                        OK,
+                        "Approve the changes".into(),
+                        "Approved",
+                        QuickAct::Approve(*id),
+                    ));
+                    out.push(q(
+                        LOOK,
+                        "Ask Checker to review the changes".into(),
+                        "Checker asked",
+                        QuickAct::Say(format!("@Checker review the changes in job #{id}: {label}")),
+                    ));
+                }
+                Status::Failed | Status::Stopped | Status::Interrupted => {
+                    out.push(q(
+                        AGAIN,
+                        "Try again".into(),
+                        "Tried again",
+                        QuickAct::Retry(*id),
+                    ));
+                    out.push(q(
+                        LOOK,
+                        "Ask Fixer why it stopped".into(),
+                        "Fixer asked",
+                        QuickAct::Say(format!("@Fixer find out why job #{id} stopped: {label}")),
+                    ));
+                    out.push(q(
+                        THUMB,
+                        "Got it, clear it from Needs you".into(),
+                        "Seen",
+                        QuickAct::Seen(*id),
+                    ));
+                }
+                Status::Done | Status::Shipped => {
+                    out.push(q(
+                        THUMB,
+                        "Got it, clear it from Needs you".into(),
+                        "Seen",
+                        QuickAct::Seen(*id),
+                    ));
+                    if *bot != Member::Checker {
+                        out.push(q(
+                            LOOK,
+                            "Ask Checker to look it over".into(),
+                            "Checker asked",
+                            QuickAct::Say(format!("@Checker look over job #{id}: {label}")),
+                        ));
+                    }
+                }
+                _ => out.push(q(THUMB, "Thanks".into(), "Thanks", QuickAct::Mark)),
+            }
+            out
+        }
+        Msg::Plan(id, true) => vec![q(
+            OK,
+            "Start the crew on this plan".into(),
+            "Started",
+            QuickAct::Start(*id),
+        )],
+        Msg::Plan(..) => vec![q(THUMB, "Looks good".into(), "Looks good", QuickAct::Mark)],
+        Msg::Answer(bot, question) => vec![
+            q(THUMB, "Helpful".into(), "Helpful", QuickAct::Mark),
+            q(
+                LOOK,
+                format!("Ask {} to dig deeper", bot.name()),
+                "Asked for more",
+                QuickAct::Say(format!("@{} go deeper on that: {question}", bot.name())),
+            ),
+        ],
+    }
 }
 
 /// A small square button on a message's hover bar.
@@ -77,15 +211,52 @@ fn bar_btn(id: impl Into<ElementId>) -> Stateful<Div> {
         .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
 }
 
+fn tip_of(text: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |window, cx| gpui_kit::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+}
+
 impl Shell {
-    /// One message in a thread: the entry itself, the reactions on it, and a
-    /// bar of quick actions at its top right while the pointer is over it.
+    /// Does a quick reaction's action and leaves its mark on the message.
+    fn quick(&mut self, key: &str, q: &Quick, window: &mut Window, cx: &mut Context<Self>) {
+        match &q.act {
+            QuickAct::Approve(id) => self.approve(*id, cx),
+            QuickAct::Retry(id) => self.retry_job(*id, cx),
+            QuickAct::Start(id) => self.start_goal(*id, cx),
+            QuickAct::Say(text) => {
+                self.composer
+                    .update(cx, |i, cx| ui::put_text(i, text.clone(), window, cx));
+                self.send_from_composer(window, cx);
+            }
+            QuickAct::Seen(id) => {
+                if let Some(j) = self.crew.store.job_mut(*id) {
+                    j.seen = true;
+                }
+                self.crew.store.save();
+            }
+            QuickAct::Mark => {}
+        }
+        let mark = format!("{} {}", q.emoji, q.done);
+        let on = self
+            .crew
+            .store
+            .reactions
+            .get(key)
+            .is_some_and(|l| l.contains(&mark));
+        if !on {
+            self.crew.store.toggle_reaction(key, &mark);
+        }
+        cx.notify();
+    }
+
+    /// One message in a thread, yours or a bot's: the message, the marks
+    /// quick reactions left on it, and while the pointer is over this message
+    /// alone, a bar at its top right with what it offers, Reply and Copy.
     fn message(
         &mut self,
         key: String,
         copy: String,
-        reply: Reply,
-        body: AnyElement,
+        what: Msg,
+        body: impl IntoElement,
         cx: &mut Context<Self>,
     ) -> Div {
         let group: SharedString = format!("msg-{key}").into();
@@ -95,7 +266,7 @@ impl Shell {
             key.hash(&mut h);
             h.finish() as usize
         };
-        let on: Vec<String> = self
+        let marks: Vec<String> = self
             .crew
             .store
             .reactions
@@ -104,7 +275,7 @@ impl Shell {
             .unwrap_or_default();
         let mut bar = div()
             .absolute()
-            .top(px(-6.))
+            .top(px(-10.))
             .right(px(4.))
             .p(px(2.))
             .flex()
@@ -123,76 +294,98 @@ impl Shell {
             }])
             .invisible()
             .group_hover(group.clone(), |s| s.visible());
-        for (k, emoji) in REACTIONS.into_iter().enumerate() {
+        for (k, q) in quick_for(&what).into_iter().enumerate() {
             let key = key.clone();
+            let tip = q.tip.clone();
             bar = bar.child(
-                bar_btn(("react", n.wrapping_mul(8) + k))
-                    .child(emoji)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.crew.store.toggle_reaction(&key, emoji);
-                        cx.notify();
-                    })),
+                bar_btn(("quick", n.wrapping_mul(8) + k))
+                    .child(q.emoji)
+                    .tooltip(tip_of(tip))
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.quick(&key, &q, window, cx)),
+                    ),
             );
         }
+        let reply = match &what {
+            Msg::Job(id, ..) => Some(Reply::Job(*id)),
+            Msg::Answer(bot, _) => Some(Reply::Bot(*bot)),
+            Msg::Plan(..) => Some(Reply::Bot(Member::Fin)),
+            Msg::Mine(_) => None,
+        };
+        let edit = match &what {
+            Msg::Mine(text) => Some(text.clone()),
+            _ => None,
+        };
         bar = bar
             .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(c(ui::line())))
-            .child(
-                bar_btn(("reply", n))
-                    .child(Icon::new(IconName::MessageSquareText).size(px(15.)))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Reply").build(window, cx)
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| match reply {
-                        Reply::Job(id) => {
-                            this.reply_open = Some(id);
-                            cx.notify();
-                        }
-                        Reply::Bot(who) => {
+            .when_some(reply, |d, reply| {
+                d.child(
+                    bar_btn(("reply", n))
+                        .child(Icon::new(IconName::MessageSquareText).size(px(15.)))
+                        .tooltip(tip_of("Reply".into()))
+                        .on_click(cx.listener(move |this, _, window, cx| match reply {
+                            Reply::Job(id) => {
+                                this.reply_open = Some(id);
+                                cx.notify();
+                            }
+                            Reply::Bot(who) => {
+                                this.composer.update(cx, |i, cx| {
+                                    ui::put_text(i, format!("@{} ", who.name()), window, cx);
+                                    i.focus(window, cx);
+                                });
+                                cx.notify();
+                            }
+                        })),
+                )
+            })
+            .when_some(edit, |d, text| {
+                d.child(
+                    bar_btn(("edit", n))
+                        .child(Icon::new(IconName::Pencil).size(px(14.)))
+                        .tooltip(tip_of("Edit and send again".into()))
+                        .on_click(cx.listener(move |this, _, window, cx| {
                             this.composer.update(cx, |i, cx| {
-                                ui::put_text(i, format!("@{} ", who.name()), window, cx);
+                                ui::put_text(i, text.clone(), window, cx);
                                 i.focus(window, cx);
                             });
                             cx.notify();
-                        }
-                    })),
-            )
+                        })),
+                )
+            })
             .child(
                 bar_btn(("copy", n))
                     .child(Icon::new(IconName::Copy).size(px(14.)))
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new("Copy text").build(window, cx)
-                    })
+                    .tooltip(tip_of("Copy text".into()))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
                         this.say("Copied.");
                         cx.notify();
                     })),
             );
-        let reactions = (!on.is_empty()).then(|| {
+        let marks = (!marks.is_empty()).then(|| {
             let mut row = div().pl(px(46.)).pb(px(4.)).flex().flex_wrap().gap(px(6.));
-            for (k, emoji) in on.into_iter().enumerate() {
+            for (k, mark) in marks.into_iter().enumerate() {
                 let key = key.clone();
-                let emoji2 = emoji.clone();
+                let off = mark.clone();
                 row = row.child(
                     div()
-                        .id(("reacted", n.wrapping_mul(8) + k))
+                        .id(("mark", n.wrapping_mul(8) + k))
                         .h(px(24.))
-                        .px(px(8.))
+                        .px(px(9.))
                         .flex()
                         .items_center()
-                        .gap(px(5.))
                         .rounded_full()
-                        .bg(ca(ui::VIOLET, 0.10))
+                        .bg(ca(ui::VIOLET, 0.08))
                         .border_1()
-                        .border_color(ca(ui::VIOLET, 0.35))
+                        .border_color(ca(ui::VIOLET, 0.3))
                         .text_size(px(12.))
-                        .text_color(c(ui::ink()))
+                        .text_color(c(ui::body()))
                         .cursor_pointer()
-                        .hover(|s| s.bg(ca(ui::VIOLET, 0.18)))
-                        .child(emoji)
-                        .child("1")
+                        .hover(|s| s.bg(ca(ui::VIOLET, 0.16)))
+                        .tooltip(tip_of("Click to clear the mark".into()))
+                        .child(mark)
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.crew.store.toggle_reaction(&key, &emoji2);
+                            this.crew.store.toggle_reaction(&key, &off);
                             cx.notify();
                         })),
                 );
@@ -205,7 +398,7 @@ impl Shell {
             .rounded(px(10.))
             .hover(|s| s.bg(ca(ui::ink(), 0.025)))
             .child(body)
-            .children(reactions)
+            .children(marks)
             .child(bar)
     }
 }
@@ -461,34 +654,11 @@ impl Shell {
                 marked = true;
                 feed = feed.child(divider("New", Some(ui::RED)));
             }
-            // Each message can be reacted to, replied to and copied from a
-            // small bar that shows while the pointer is over it.
-            let (key, copy, reply) = match &e {
-                Entry::Job(j) => (
-                    format!("job-{}", j.id),
-                    j.label().to_string(),
-                    Reply::Job(j.id),
-                ),
-                Entry::Talk(t) => (
-                    format!("talk-{}", t.id),
-                    t.answer
-                        .as_ref()
-                        .map(|a| super::live::plain(&a.text))
-                        .unwrap_or_else(|| t.question.clone()),
-                    Reply::Bot(t.bot),
-                ),
-                Entry::Plan(g) => (
-                    format!("plan-{}", g.id),
-                    g.text.clone(),
-                    Reply::Bot(Member::Fin),
-                ),
-            };
-            let body = match e {
+            feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
                 Entry::Talk(t) => self.talk_entry(&t, cx).into_any_element(),
-            };
-            feed = feed.child(self.message(key, copy, reply, body, cx));
+            });
         }
 
         if thread == 0 {
@@ -932,70 +1102,94 @@ impl Shell {
             None => super::live::note_line("No answer came back. Ask again."),
         };
         let refs = self.ref_chips(t.id, &t.question, cx);
+        let copy = t
+            .answer
+            .as_ref()
+            .map(|a| super::live::plain(&a.text))
+            .unwrap_or_default();
+        // A bot-to-bot message has no question: only the bot's message shows.
+        let asked = (!t.question.is_empty()).then(|| {
+            self.message(
+                format!("you-talk-{}", t.id),
+                t.question.clone(),
+                Msg::Mine(t.question.clone()),
+                mine(t.question.clone(), t.at),
+                cx,
+            )
+        });
         div()
             .flex()
             .flex_col()
-            .child(mine(t.question.clone(), t.at))
+            .children(asked)
             .children(refs)
             .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .py(px(8.))
-                    .child(
-                        div()
-                            .size(px(34.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(face),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.))
-                            .child(
-                                byline(t.bot.name(), t.at).child(
-                                    div()
-                                        .px(px(6.))
-                                        .rounded(px(5.))
-                                        .bg(ca(accent, 0.12))
-                                        .text_size(px(11.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
-                                        .child(if t.bot == Member::Fin {
-                                            "Lead"
-                                        } else {
-                                            "Answers"
-                                        }),
-                                ),
-                            )
-                            .child(answer)
-                            .when(!t.choices.is_empty(), |d| {
-                                let mut row = div().pt(px(4.)).flex().flex_wrap().gap(px(6.));
-                                let talk = t.id;
-                                for (k, choice) in t.choices.iter().enumerate() {
-                                    let said = choice.clone();
-                                    row = row.child(
-                                        ui::ghost(
-                                            ("talk-choice", t.id as usize * 16 + k),
-                                            choice.clone(),
-                                        )
-                                        .h(px(28.))
-                                        .on_click(
-                                            cx.listener(move |this, _, _, cx| {
-                                                this.pick_choice(talk, said.clone(), cx)
+                self.message(
+                    format!("talk-{}", t.id),
+                    copy,
+                    Msg::Answer(t.bot, t.question.clone()),
+                    div()
+                        .flex()
+                        .gap(px(12.))
+                        .py(px(8.))
+                        .child(
+                            div()
+                                .size(px(34.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(face),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.))
+                                .child(
+                                    byline(t.bot.name(), t.at).child(
+                                        div()
+                                            .px(px(6.))
+                                            .rounded(px(5.))
+                                            .bg(ca(accent, 0.12))
+                                            .text_size(px(11.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(c(super::theme::mix(
+                                                accent,
+                                                ui::ink(),
+                                                0.35,
+                                            )))
+                                            .child(if t.bot == Member::Fin {
+                                                "Lead"
+                                            } else {
+                                                "Answers"
                                             }),
-                                        ),
-                                    );
-                                }
-                                d.child(row)
-                            }),
-                    ),
+                                    ),
+                                )
+                                .child(answer)
+                                .when(!t.choices.is_empty(), |d| {
+                                    let mut row = div().pt(px(4.)).flex().flex_wrap().gap(px(6.));
+                                    let talk = t.id;
+                                    for (k, choice) in t.choices.iter().enumerate() {
+                                        let said = choice.clone();
+                                        row =
+                                            row.child(
+                                                ui::ghost(
+                                                    ("talk-choice", t.id as usize * 16 + k),
+                                                    choice.clone(),
+                                                )
+                                                .h(px(28.))
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.pick_choice(talk, said.clone(), cx)
+                                                })),
+                                            );
+                                    }
+                                    d.child(row)
+                                }),
+                        ),
+                    cx,
+                ),
             )
     }
 
@@ -1519,9 +1713,21 @@ impl Shell {
             .w_full()
             .flex()
             .flex_col()
-            .child(mine(j.title.clone(), j.started))
+            .child(self.message(
+                format!("you-job-{}", j.id),
+                j.title.clone(),
+                Msg::Mine(j.title.clone()),
+                mine(j.title.clone(), j.started),
+                cx,
+            ))
             .children(handoff)
-            .child(reply)
+            .child(self.message(
+                format!("job-{}", j.id),
+                j.label().to_string(),
+                Msg::Job(j.id, j.status, j.bot, j.label().to_string()),
+                reply,
+                cx,
+            ))
     }
 
     /// A plan: your goal, then Peek's plan card with a step per job.
@@ -1764,8 +1970,20 @@ impl Shell {
             .w_full()
             .flex()
             .flex_col()
-            .child(mine(g.text.clone(), g.started))
-            .child(reply)
+            .child(self.message(
+                format!("you-plan-{}", g.id),
+                g.text.clone(),
+                Msg::Mine(g.text.clone()),
+                mine(g.text.clone(), g.started),
+                cx,
+            ))
+            .child(self.message(
+                format!("plan-{}", g.id),
+                g.text.clone(),
+                Msg::Plan(g.id, g.state == State::Ready),
+                reply,
+                cx,
+            ))
     }
 
     /// While the composer starts with `/`: the commands that match, to click.
