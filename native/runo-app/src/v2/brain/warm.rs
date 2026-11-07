@@ -10,6 +10,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -28,6 +29,8 @@ struct Warm {
     child: Child,
     stdin: ChildStdin,
     lines: Arc<Mutex<Receiver<String>>>,
+    /// End lines still to come from turns whose reply was already taken.
+    owed: Arc<AtomicU32>,
     turns: u32,
 }
 
@@ -154,6 +157,7 @@ fn spawn(k: &str, bin: &str, model: &str, dir: &str) -> Option<Warm> {
             child,
             stdin,
             lines: Arc::new(Mutex::new(rx)),
+            owed: Arc::new(AtomicU32::new(0)),
             turns: 0,
         })
     });
@@ -192,6 +196,22 @@ pub fn prepare(bin: &str, model: &str, dir: &str) {
     }
 }
 
+/// Counts off one end line owed by an earlier turn; false when none is.
+fn take_owed(owed: &AtomicU32) -> bool {
+    loop {
+        let n = owed.load(Ordering::SeqCst);
+        if n == 0 {
+            return false;
+        }
+        if owed
+            .compare_exchange(n, n - 1, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            return true;
+        }
+    }
+}
+
 /// Stops the warm engine whose key is `k`, if it's still the one running.
 fn drop_if(k: &str) {
     if let Ok(mut g) = WARM.lock() {
@@ -222,7 +242,11 @@ pub fn ask(
     // A read still under way holds the lines; this one reads cold.
     {
         let lines = w.lines.try_lock().ok()?;
-        while lines.try_recv().is_ok() {}
+        while let Ok(line) = lines.try_recv() {
+            if result_of(&line).is_some() {
+                take_owed(&w.owed);
+            }
+        }
     }
     let sent = w
         .stdin
@@ -236,13 +260,14 @@ pub fn ask(
     }
     w.turns += 1;
     let lines = w.lines.clone();
+    let owed = w.owed.clone();
     let k = w.key.clone();
     drop(g);
     let (tx, rx) = channel();
     std::thread::spawn(move || {
         let deadline = Instant::now() + limit;
-        // The reply goes back as soon as it's written; the turn's end is still
-        // read, so the next turn starts clean.
+        // The reply goes back as soon as it's written, a few seconds before
+        // the turn's end line; the next read skips that line.
         let mut sent = false;
         let result = match lines.lock() {
             Ok(lines) => loop {
@@ -250,13 +275,17 @@ pub fn ask(
                 match lines.recv_timeout(left) {
                     Ok(line) => {
                         if let Some(r) = result_of(&line) {
+                            // An earlier turn's end, not this one's.
+                            if take_owed(&owed) {
+                                continue;
+                            }
                             break r;
                         }
-                        if !sent {
-                            if let Some(text) = reply_of(&line) {
-                                let _ = tx.send(Event::Output(id.clone(), Ok(text)));
-                                sent = true;
-                            }
+                        if let Some(text) = reply_of(&line) {
+                            let _ = tx.send(Event::Output(id.clone(), Ok(text.clone())));
+                            sent = true;
+                            owed.fetch_add(1, Ordering::SeqCst);
+                            break Ok(text);
                         }
                     }
                     Err(RecvTimeoutError::Timeout) => {
@@ -385,8 +414,9 @@ fn real_reads() {
     prepare("claude", "haiku", &dir);
     std::thread::sleep(Duration::from_secs(4));
     for (i, text) in [
-        "whoa re you",
+        "runthe app",
         "the export button does nothing on safari",
+        "stp the server",
         "thanks",
     ]
     .iter()

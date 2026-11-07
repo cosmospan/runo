@@ -1,15 +1,11 @@
 //! Peek reads each message with the person's own engine.
 //!
-//! The keyword rules in [`super::front`] guess; a language model reads. So
-//! when an engine is signed in (Claude Code, Codex, Grok…, on the person's
-//! own plan), every message Peek gets is one short call on its smallest
-//! model, which answers with a decision as JSON: reply itself, ask back,
-//! stop what's running, answer a question about the project, or hand the
-//! work to a named bot with a one-line reason. Peek's words are the model's.
-//!
-//! The rules stay for what needs no thought ("stop app"), and as the answer
-//! when no engine can run or its reply doesn't parse. The guard rails still
-//! apply to whatever the model hands on: a risky ask waits for a yes.
+//! Every message Peek gets is one short call on the person's own engine
+//! (Claude Code, Codex, Grok…, on their own plan), on its smallest model,
+//! which answers with a decision as JSON: reply itself, ask back, stop
+//! what's running, run the app, answer a question about the project, or
+//! hand the work to a named bot with a one-line reason. Peek's words are the
+//! model's.
 
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
@@ -205,10 +201,27 @@ pub fn ask(
     Ok(rx)
 }
 
+/// Reads `text` with the engine and waits for the decision, for a terminal.
+/// Err says why the engine couldn't decide.
+pub fn decide(
+    st: &AppSettings,
+    dir: &str,
+    text: &str,
+    seen: &Seen,
+) -> Result<(Front, String), String> {
+    let rx = ask(st, dir, text, seen)?;
+    let reply = match rx.recv_timeout(LIMIT + Duration::from_secs(5)) {
+        Ok(Event::Output(_, r)) => r?,
+        _ => return Err(format!("{} didn't answer in time", engine_name(st))),
+    };
+    parse(&agent::strip_ansi(&reply), text, seen.crew)
+        .ok_or_else(|| format!("{}'s answer didn't make sense", engine_name(st)))
+}
+
 /// Starts Peek's engine warm for `dir`, so the next message reads fast.
 /// Nothing for an engine that can't be kept warm, or one not installed.
 pub fn prepare(st: &AppSettings, dir: &str) {
-    if !on(st) || dir.is_empty() {
+    if dir.is_empty() {
         return;
     }
     let p = &agent::PROVIDERS[crate::assistant::assistant_provider(st)];
@@ -228,37 +241,9 @@ pub fn prepare(st: &AppSettings, dir: &str) {
     super::warm::prepare(&bin, &model, dir);
 }
 
-/// What Peek does with a decision made without the engine, when the engine
-/// should have read it: chat, questions and stops go ahead, but work waits
-/// for a yes, because Peek leans on the person's engine and never starts a
-/// bot on a guess.
-pub fn without_engine(engine: &str, front: Front) -> Front {
-    match front {
-        Front::Hand(route) => Front::Confirm {
-            why: format!(
-                "I couldn't reach {engine} to read that, so I'd rather not start on a guess. \
-My best guess is {} for {} work. Go ahead?",
-                route.bot.name(),
-                route.mode.label().to_lowercase()
-            ),
-            route,
-        },
-        other => other,
-    }
-}
-
 /// The name of the engine Peek reads with, as the person knows it.
 pub fn engine_name(st: &AppSettings) -> &'static str {
     agent::PROVIDERS[crate::assistant::assistant_provider(st)].name
-}
-
-/// Whether Peek should read with the engine: on unless the person turned it
-/// off (`peek_reads_with_engine: false` in settings).
-pub fn on(st: &AppSettings) -> bool {
-    st.extra
-        .get("peek_reads_with_engine")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true)
 }
 
 #[cfg(test)]
@@ -346,27 +331,5 @@ mod tests {
         assert!(parse("I think you mean hello", "hi", &c).is_none());
         assert!(parse(r#"{"do":"reply","say":""}"#, "hi", &c).is_none());
         assert!(parse(r#"{"do":"dance"}"#, "hi", &c).is_none());
-    }
-
-    #[test]
-    fn without_the_engine_work_waits_for_a_yes() {
-        let r = Route {
-            mode: Mode::Test,
-            bot: Member::Checker,
-            sure: 0.6,
-            why: String::new(),
-            by: "rules".into(),
-        };
-        match without_engine("Claude Code", Front::Hand(r)) {
-            Front::Confirm { why, route } => {
-                assert!(why.contains("Claude Code") && why.contains("Checker"));
-                assert_eq!(route.bot, Member::Checker);
-            }
-            other => panic!("{other:?}"),
-        }
-        let chat = Front::Chat {
-            reply: "Hi!".into(),
-        };
-        assert_eq!(without_engine("Claude Code", chat.clone()), chat);
     }
 }
