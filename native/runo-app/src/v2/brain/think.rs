@@ -180,10 +180,46 @@ pub fn ask(
         return Err(format!("{} isn't installed", p.name));
     }
     let model = crate::assistant::assistant_model(st, p.id);
-    let command = agent::ask_command_on(p.id, &configured, &prompt(text, seen), &model);
+    let words = prompt(text, seen);
+    // The warm engine answers in a second or two; a cold start takes six.
+    if super::warm::can(p.id) {
+        let bin = if configured.trim().is_empty() {
+            p.bin.to_string()
+        } else {
+            configured.trim().to_string()
+        };
+        if let Some(rx) = super::warm::ask(&bin, &model, dir, &words, LIMIT, "v2-peek-reads".into())
+        {
+            return Ok(rx);
+        }
+    }
+    let command = agent::ask_command_on(p.id, &configured, &words, &model);
     let (tx, rx) = channel();
     agent::oneshot_within("v2-peek-reads".into(), command, dir, LIMIT, tx);
     Ok(rx)
+}
+
+/// Starts Peek's engine warm for `dir`, so the next message reads fast.
+/// Nothing for an engine that can't be kept warm, or one not installed.
+pub fn prepare(st: &AppSettings, dir: &str) {
+    if !on(st) || dir.is_empty() {
+        return;
+    }
+    let p = &agent::PROVIDERS[crate::assistant::assistant_provider(st)];
+    if !super::warm::can(p.id) {
+        return;
+    }
+    let configured = st.agent(p.id).binary;
+    if !agent::available(p.bin, &configured) {
+        return;
+    }
+    let bin = if configured.trim().is_empty() {
+        p.bin.to_string()
+    } else {
+        configured.trim().to_string()
+    };
+    let model = crate::assistant::assistant_model(st, p.id);
+    super::warm::prepare(&bin, &model, dir);
 }
 
 /// What Peek does with a decision made without the engine, when the engine

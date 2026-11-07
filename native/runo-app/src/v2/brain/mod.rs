@@ -45,6 +45,7 @@ pub mod teach;
 pub mod think;
 pub mod tiny;
 pub mod voice;
+pub mod warm;
 
 pub use place::{place, JobAsk, Site, Sites};
 

@@ -518,6 +518,8 @@ pub struct Shell {
     reading_since: Option<std::time::Instant>,
     /// Terminals running an app Squad Code started for the person.
     serving: Vec<u64>,
+    /// When Peek's engine was last made sure of being warm.
+    warmed_at: Option<std::time::Instant>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -1098,6 +1100,7 @@ impl Shell {
             reading: None,
             reading_since: None,
             serving: Vec::new(),
+            warmed_at: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1481,8 +1484,8 @@ impl Shell {
         }
         // No engine: what it decided before about words like these, else
         // the rules.
-        let (front, line) = Self::engine_missed(&st, &text, &recent);
-        self.act_on(front, text, line, None, cx);
+        let (front, line, via) = Self::engine_missed(&st, &text, &recent);
+        self.act_on(front, text, line, None, via, cx);
     }
 
     /// "run the app" in a thread: runs the app of this thread's latest job
@@ -1537,14 +1540,14 @@ impl Shell {
         st: &crate::settings::AppSettings,
         text: &str,
         recent: &[(String, String)],
-    ) -> (brain::front::Front, Option<String>) {
+    ) -> (brain::front::Front, Option<String>, bool) {
         if !brain::front::wants_stop(text) {
             let learned = brain::learn::load();
             if let Some((f, say)) = brain::learn::recall(text, &learned, &Member::all()) {
-                return (f, Some(say).filter(|s| !s.is_empty()));
+                return (f, Some(say).filter(|s| !s.is_empty()), true);
             }
         }
-        (brain::front::read(st, text, recent), None)
+        (brain::front::read(st, text, recent), None, false)
     }
 
     /// Peek's decision when its engine should have read `text` but couldn't:
@@ -1553,13 +1556,31 @@ impl Shell {
         st: &crate::settings::AppSettings,
         text: &str,
         recent: &[(String, String)],
-    ) -> (brain::front::Front, Option<String>) {
-        let (front, line) = Self::without_engine(st, text, recent);
+    ) -> (brain::front::Front, Option<String>, Option<String>) {
+        let (front, line, learned) = Self::without_engine(st, text, recent);
         if !brain::think::on(st) {
-            return (front, line);
+            return (front, line, None);
         }
-        let front = brain::think::without_engine(brain::think::engine_name(st), front);
-        (front, line)
+        let engine = brain::think::engine_name(st);
+        let front = brain::think::without_engine(engine, front);
+        let via = if learned {
+            format!("Peek, offline \u{b7} as {engine} decided before")
+        } else {
+            "Peek, offline".to_string()
+        };
+        (front, line, Some(via))
+    }
+
+    /// Keeps Peek's engine warm for the project open now, checked every few
+    /// seconds, so a message reads in a second or two.
+    fn keep_warm(&mut self, st: &crate::settings::AppSettings) {
+        if self.sampling || self.warmed_at.is_some_and(|at| at.elapsed().as_secs() < 5) {
+            return;
+        }
+        self.warmed_at = Some(std::time::Instant::now());
+        if let Some(f) = self.crew.store.folder() {
+            brain::think::prepare(st, &f.path);
+        }
     }
 
     /// What Peek's engine decided, once it has: acted on, or the rules'
@@ -1582,15 +1603,20 @@ impl Shell {
             .map(crate::agent::strip_ansi)
             .and_then(|r| brain::think::parse(&r, &text, &crew));
         let st = Self::app_settings(cx);
-        let (front, line) = match decided {
+        let took = self
+            .reading_since
+            .map(|at| at.elapsed().as_secs_f32())
+            .unwrap_or(0.);
+        let (front, line, via) = match decided {
             Some((f, say)) => {
                 // Kept, small, so Peek decides alike when the engine can't.
                 brain::learn::keep(&st, &text, &f, &say);
-                (f, Some(say).filter(|s| !s.is_empty()))
+                let via = format!("{} \u{b7} {took:.1}s", brain::think::engine_name(&st));
+                (f, Some(say).filter(|s| !s.is_empty()), Some(via))
             }
             None => Self::engine_missed(&st, &text, &recent),
         };
-        self.act_on(front, text, line, Some(talk), cx);
+        self.act_on(front, text, line, Some(talk), via, cx);
     }
 
     /// Does what Peek decided about `text`. `line` is Peek's own words for a
@@ -1602,17 +1628,25 @@ impl Shell {
         text: String,
         line: Option<String>,
         pending: Option<u64>,
+        via: Option<String>,
         cx: &mut Context<Self>,
     ) {
         let st = Self::app_settings(cx);
         let says = |this: &mut Self, reply: String, choices: Vec<String>| -> u64 {
-            match pending {
+            let id = match pending {
                 Some(id) if this.crew.fill_talk(id, reply.clone(), choices.clone()) => id,
                 _ => {
                     this.crew.peek_says(text.clone(), reply, choices);
                     this.crew.store.talks.last().map(|t| t.id).unwrap_or(0)
                 }
+            };
+            // Who decided, so Peek's word is honest about it.
+            if let Some(t) = this.crew.store.talks.iter_mut().find(|t| t.id == id) {
+                if let Some(a) = t.answer.as_mut() {
+                    a.via = via.clone();
+                }
             }
+            id
         };
         let drop_pending = |this: &mut Self| {
             if let Some(id) = pending {
@@ -2371,6 +2405,7 @@ impl Shell {
         self.poll_server_setup(cx);
         let finished = self.crew.poll(&st, viewing);
         self.poll_reading(cx);
+        self.keep_warm(&st);
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);
         }
