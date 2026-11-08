@@ -1,12 +1,12 @@
 # Provider setup
 
-Runo drives the agent CLIs you already have installed and signed in. It does not sell or proxy tokens.
+Squad Code drives the agent CLIs you already have installed and signed in. It does not sell or proxy tokens.
 
 ## Supported agents
 
-Install at least one, sign in, and make sure it is on your `PATH` (or point Runo at it with Locate… in Settings):
+Install at least one, sign in, and make sure it is on your `PATH` (or point Squad Code at it with Locate… in Settings):
 
-| Agent | Command | Output Runo reads | Follow-ups resume with |
+| Agent | Command | Output Squad Code reads | Follow-ups resume with |
 | --- | --- | --- | --- |
 | Claude Code | `claude` | `-p --output-format stream-json` | `--session-id <uuid>` on the first turn, then `--resume <uuid>` |
 | Codex | `codex` | `exec --json` | `exec … resume <thread id>` |
@@ -20,19 +20,19 @@ Install at least one, sign in, and make sure it is on your `PATH` (or point Runo
 | Grok (xAI's Grok Build) | `grok` | `-p --output-format streaming-messages-json` (Claude Code's stream-json) | `-s <uuid>` on the first turn, then `-r <uuid>` |
 | Antigravity (Google's `agy`) | `agy` | `-p --output-format stream-json` (its own NDJSON) | `--conversation <uuid>`, or `-c` for the most recent |
 
-Settings → Providers lists which are installed, their versions and paths, and whether each is signed in. If you install or update a CLI while Runo is open, use Re-detect. Agents that aren't installed can be installed from there with the vendor's installer.
+Settings → Providers lists which are installed, their versions and paths, and whether each is signed in. If you install or update a CLI while Squad Code is open, use Re-detect. Agents that aren't installed can be installed from there with the vendor's installer.
 
 ## Sign-in
 
-Runo checks each installed agent's sign-in in the background when it starts and when Settings or New session opens, and again after every turn:
+Squad Code checks each installed agent's sign-in in the background when it starts and when Settings or New session opens, and again after every turn:
 
 - An API key the CLI reads (such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY`), set in your login shell or in the agent's Environment setting, counts as signed in.
 - Codex and Cursor are asked directly (`codex login status`, `cursor-agent status`).
 - Claude Code: its login in the macOS keychain, or `~/.claude/.credentials.json` elsewhere.
 - Gemini CLI: `~/.gemini/oauth_creds.json` or `~/.gemini/.env`. OpenCode: `~/.local/share/opencode/auth.json`.
 - Grok: `~/.grok/auth.json`, which `grok login` writes when you sign in with your SuperGrok or X Premium+ subscription, or `XAI_API_KEY`.
-- Antigravity: its OAuth login lives in the OS keyring (Keychain, Secret Service, Credential Manager), which Runo doesn't read; `GEMINI_API_KEY` counts, and a turn that worked signed in is remembered. Antigravity's CLI has no `login` subcommand — running `agy` the first time opens a browser to sign in to your Google account.
-- Copilot, Amp, Droid and Qwen Code are only checked for their API keys; without one Runo can't tell, and says nothing.
+- Antigravity: its OAuth login lives in the OS keyring (Keychain, Secret Service, Credential Manager), which Squad Code doesn't read; `GEMINI_API_KEY` counts, and a turn that worked signed in is remembered. Antigravity's CLI has no `login` subcommand — running `agy` the first time opens a browser to sign in to your Google account.
+- Copilot, Amp, Droid and Qwen Code are only checked for their API keys; without one Squad Code can't tell, and says nothing.
 
 A signed-out agent is marked in New session and in Settings → Providers, and a turn sent to it shows how to sign in before it starts. A turn that fails because of the sign-in shows the same hint.
 
@@ -42,7 +42,7 @@ Each installed agent has its own page under Settings → Providers: a default mo
 
 ## Permission levels
 
-The composer's Permission chip offers Runo's three levels where the CLI can hold to them:
+The composer's Permission chip offers Squad Code's three levels where the CLI can hold to them:
 
 | Agent | Auto edit | Plan only | Full access |
 | --- | --- | --- | --- |
@@ -63,7 +63,7 @@ Codex has no Approval chip: `codex exec` never stops to ask, so an approval poli
 
 ## MCP servers and memory
 
-Runo's memory server and the MCP servers you share reach every agent except Grok and Antigravity: by flag or environment for Claude Code, Codex, OpenCode, Qwen Code, Copilot and Amp, and through their project config file for Cursor, Gemini CLI and Droid (merged with yours, kept out of git and removed after each turn). Grok and Antigravity take no servers by flag and read project ones only from a folder you trusted, so they get none and keep the servers in their own config.
+Squad Code's memory server and the MCP servers you share reach every agent except Grok and Antigravity: by flag or environment for Claude Code, Codex, OpenCode, Qwen Code, Copilot and Amp, and through their project config file for Cursor, Gemini CLI and Droid (merged with yours, kept out of git and removed after each turn). Grok and Antigravity take no servers by flag and read project ones only from a folder you trusted, so they get none and keep the servers in their own config.
 
 ## Cost and spending limits
 

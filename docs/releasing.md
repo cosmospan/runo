@@ -1,10 +1,10 @@
-# Releasing Runo
+# Releasing Squad Code
 
-A release is a `v*` tag. Pushing one runs `.github/workflows/release.yml`, which builds `Runo.app` for Apple silicon and Intel Macs (a zip and a disk image of each), Runo for x86_64 and arm64 Linux (a `.deb` and a tarball of each) and `Runo.exe` for 64-bit Windows (a zip), and attaches them all to a GitHub release. Runo's update check reads `releases/latest` and offers the download for the user's platform.
+A release is a `v*` tag. Pushing one runs `.github/workflows/release.yml`, which builds `Squad Code.app` for Apple silicon and Intel Macs (a zip and a disk image of each), Squad Code for x86_64 and arm64 Linux (a `.deb` and a tarball of each) and `SquadCode.exe` for 64-bit Windows (a zip), and attaches them all to a GitHub release. Squad Code's update check reads `releases/latest` and offers the download for the user's platform.
 
 ## Test builds
 
-To build the app without releasing it, open the repository's Actions tab, pick **Release**, and click **Run workflow** on any branch. The run builds the same files for every platform, named with the commit (for example `Runo-0.1.0-macos-arm64-a2831ac.dmg`), and keeps them as downloadable artifacts on the run's page instead of creating a release. Pull requests that change the workflow run it the same way.
+To build the app without releasing it, open the repository's Actions tab, pick **Release**, and click **Run workflow** on any branch. The run builds the same files for every platform, named with the commit (for example `SquadCode-2.0.0-macos-arm64-a2831ac.dmg`), and keeps them as downloadable artifacts on the run's page instead of creating a release. Pull requests that change the workflow run it the same way.
 
 ## Signing and notarization
 
@@ -33,4 +33,4 @@ Releases bump only the last number: 0.5.0, then 0.5.1, 0.5.2 and so on. Raise th
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [0.5.1] - YYYY-MM-DD` and start a new empty `## [Unreleased]` above it.
 3. Merge that to `main`, then tag it: `git tag v0.5.1 && git push origin v0.5.1`.
 
-The workflow stops if the tag doesn't match the version in `Cargo.toml`. A running Runo on an older version shows the update card on its next start, or within six hours while it runs (Settings can turn the check off). Settings > General > Updates also has Check now, which checks right away.
+The workflow stops if the tag doesn't match the version in `Cargo.toml`. A running Squad Code on an older version shows the update card on its next start, or within six hours while it runs (Settings can turn the check off). Settings > General > Updates also has Check now, which checks right away.

@@ -1,6 +1,6 @@
-# Publishes the agent manifest (native/squad-app/src/agents.json) for Runo to download:
+# Publishes the agent manifest (native/squad-app/src/agents.json) for Squad Code to download:
 # signed with the REGISTRY_SIGNING_KEY secret and attached to the `agent-registry`
-# release, a pre-release that isn't a Runo version. Runo keeps a download only when its
+# release, a pre-release that isn't a Squad Code version. Squad Code keeps a download only when its
 # signature checks out against agents.pub and its version is newer than the one it has,
 # so raise "version" with every change. Make the key once with scripts/registry-key.sh.
 name: Agent registry
@@ -64,5 +64,5 @@ jobs:
         run: |
           gh release view agent-registry >/dev/null 2>&1 || gh release create agent-registry \
             --title "Agent registry" --prerelease --latest=false \
-            --notes "Signed agent manifests that Runo downloads. Not a Runo release."
+            --notes "Signed agent manifests that Squad Code downloads. Not a Squad Code release."
           gh release upload agent-registry agents.json.sig agents.json --clobber

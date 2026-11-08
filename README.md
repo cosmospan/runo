@@ -346,10 +346,6 @@ On Linux the same command makes a `.deb`, and on Windows the icon is built into 
 
 Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. The first time Squad Code opens it copies what Runo had saved in `~/.runo`. Set `SQUADCODE_HOME` to move it all.
 
-## The classic window
-
-Squad Code grew out of Runo, a session-by-session app for running coding agents, with a Design canvas, Architecture diagrams, a Git place, Cove VMs, playbooks and a phone bridge. That window is still in the code for development (`SQUADCODE_V1=1`), and its [guide](docs/guide) describes it, but the crew is the app now and those parts are being brought over one at a time.
-
 ## Learn more
 
 - 🔌 **[Provider setup](docs/providers.md)**: installing and signing in to each engine.

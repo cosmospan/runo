@@ -49,8 +49,8 @@ jobs:
       # Tests make commits in temporary repositories.
       - name: Configure git
         run: |
-          git config --global user.name "Runo CI"
-          git config --global user.email "ci@runo.invalid"
+          git config --global user.name "Squad Code CI"
+          git config --global user.email "ci@squadcode.invalid"
           git config --global init.defaultBranch main
 
       - name: Format

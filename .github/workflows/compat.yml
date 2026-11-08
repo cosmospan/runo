@@ -1,6 +1,6 @@
 # Every night, installs the newest release of every agent in the manifest and runs
-# `Runo --check-agents`: the version, whether each CLI's help still mentions the flags
-# Runo waits on, and whether its protocol (ACP, Codex's app server, Pi's RPC mode)
+# `Squad Code --check-agents`: the version, whether each CLI's help still mentions the flags
+# Squad Code waits on, and whether its protocol (ACP, Codex's app server, Pi's RPC mode)
 # still answers the opening handshake. Nothing signs in and no model runs, so it costs
 # no tokens. The report is compared with the night before (kept on the agent-registry
 # release); a regression opens or updates the "Agent compatibility" issue, and the
@@ -87,19 +87,19 @@ jobs:
         run: |
           gh release view agent-registry >/dev/null 2>&1 || gh release create agent-registry \
             --title "Agent registry" --prerelease --latest=false \
-            --notes "Signed agent manifests that Runo downloads. Not a Runo release."
+            --notes "Signed agent manifests that Squad Code downloads. Not a Squad Code release."
           gh release upload agent-registry compat.json --clobber
 
       - name: Report a problem
         if: steps.check.outputs.code != '0' && github.ref == 'refs/heads/main'
         run: |
           {
-            echo "The nightly check found agents that no longer match Runo's manifest."
+            echo "The nightly check found agents that no longer match Squad Code's manifest."
             echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo
             cat summary.md
           } > body.md
-          gh label create agent-compat --color d93f0b --description "Agent CLIs that drifted from Runo's manifest" 2>/dev/null || true
+          gh label create agent-compat --color d93f0b --description "Agent CLIs that drifted from Squad Code's manifest" 2>/dev/null || true
           issue=$(gh issue list --label agent-compat --state open --json number --jq '.[0].number')
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body-file body.md

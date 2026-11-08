@@ -1,8 +1,19 @@
 # Changelog
 
-All notable changes to Runo are documented here.
+All notable changes to Squad Code are documented here. Entries before 2.0 were written when the app was called Runo.
 
 ## [Unreleased]
+
+### Removed
+
+- The classic Runo window (`RUNO_V1=1`) and everything only it used: sessions, projects, playbooks and their background job (taken off the computer the first time Squad Code starts), the phone bridge, the assistant, the arcade and the old settings, about 120,000 lines in all. The design canvas and architecture diagrams stay in the code for the bots' design tool. Squad Code still copies what Runo saved in `~/.runo` the first time it opens.
+- The guide to the classic window and the old design notes.
+
+### Changed
+
+- Environment variables start with `SQUADCODE_` instead of `RUNO_` (for example `SQUADCODE_DEMO=1`), and `RUNO_HOME` is no longer read: use `SQUADCODE_HOME`.
+- The app's folder is `native/squad-app` and its crate is `squadcode` (`cargo run -p squadcode`); the drawings crate is `squad-holo`.
+- On Linux the launcher is `squadcode.desktop` and names the window class the app uses, so docks pair the window with its icon.
 
 ## [2.0.0-alpha.7] - 2026-11-08
 

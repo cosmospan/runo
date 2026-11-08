@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with Runo. It is a Rust workspace; the app lives in `native/squad-app`.
+Thanks for helping with Squad Code. It is a Rust workspace; the app lives in `native/squad-app`.
 
 ## Build and run
 
