@@ -57,6 +57,8 @@ pub struct Config {
     pub key: String,
     /// Where jobs run: "" lets Squad pick, "server" or "here" is the person's choice.
     pub run: String,
+    /// The person said "Not now" to installing a desktop for its screen.
+    pub no_desktop: bool,
 }
 
 impl Config {
@@ -97,6 +99,14 @@ fn save(c: &Config) -> Result<(), String> {
 pub fn set_run(run: &str) {
     if let Some(mut c) = load() {
         c.run = run.to_string();
+        let _ = save(&c);
+    }
+}
+
+/// Keeps whether the person turned down a desktop on the server.
+pub fn set_no_desktop(no: bool) {
+    if let Some(mut c) = load() {
+        c.no_desktop = no;
         let _ = save(&c);
     }
 }
@@ -528,10 +538,17 @@ struct Tunnel {
 
 impl Tunnel {
     fn open(host: &str, key: &str) -> Result<Tunnel, String> {
+        Tunnel::to(host, key, PORT)
+    }
+
+    /// A tunnel to `there`, a port on the server's own 127.0.0.1.
+    fn to(host: &str, key: &str, there: u16) -> Result<Tunnel, String> {
         let port = free_port().ok_or("no free port on this computer")?;
         let mut cmd = ssh_base(host, key);
+        // Not `-N`: the server waits on our end of a pipe instead, so when
+        // Squad Code quits, however it quits, the pipe closes and ssh ends
+        // with it rather than holding the tunnel open on its own.
         cmd.args([
-            "-N",
             "-o",
             "ExitOnForwardFailure=yes",
             "-o",
@@ -539,9 +556,10 @@ impl Tunnel {
             "-o",
             "ServerAliveCountMax=3",
             "-L",
-            &format!("127.0.0.1:{port}:127.0.0.1:{PORT}"),
+            &format!("127.0.0.1:{port}:127.0.0.1:{there}"),
+            "cat >/dev/null",
         ])
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
         let mut child = cmd.spawn().map_err(|e| e.to_string())?;
@@ -826,6 +844,7 @@ fn setup(
         token: v["token"].as_str().unwrap_or("").to_string(),
         key,
         run: String::new(),
+        no_desktop: false,
     };
     if cfg.token.is_empty() {
         return Err("Pairing failed: the server sent no token.".into());
@@ -1868,6 +1887,78 @@ fn find_token(text: &str) -> Option<String> {
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
     (token.len() > 40).then_some(token)
+}
+
+// ---------- looking at the machine ----------
+
+/// Runs `command` on the server with the app's key, and gives back what it
+/// printed. It blocks, so it belongs off the window's thread.
+pub fn run_there(cfg: &Config, command: &str) -> Result<String, String> {
+    ssh(&cfg.host, &cfg.key, command, None)
+}
+
+/// What a terminal runs to open a shell on the server: ssh with Squad's own
+/// known_hosts and key, and a terminal of its own there. `cd` starts it in
+/// that folder.
+pub fn shell_program(cfg: &Config, cd: Option<&str>) -> (String, Vec<String>) {
+    let mut args = vec![
+        "-o".to_string(),
+        format!("UserKnownHostsFile={}", known_hosts().display()),
+        "-o".into(),
+        "StrictHostKeyChecking=accept-new".into(),
+    ];
+    if !cfg.key.is_empty() {
+        args.extend([
+            "-i".into(),
+            cfg.key.clone(),
+            "-o".into(),
+            "IdentitiesOnly=yes".into(),
+        ]);
+    }
+    args.extend([
+        "-o".into(),
+        "ConnectTimeout=10".into(),
+        "-o".into(),
+        "ServerAliveInterval=20".into(),
+        "-t".into(),
+        cfg.host.clone(),
+    ]);
+    if let Some(dir) = cd {
+        args.push(format!(
+            "cd {} && exec \"${{SHELL:-/bin/sh}}\" -l",
+            quote(dir)
+        ));
+    }
+    ("ssh".into(), args)
+}
+
+/// Runs a script on the server (fed to `sh -s`) and gives back what it printed.
+pub fn run_script(cfg: &Config, script: &str) -> Result<String, String> {
+    ssh(&cfg.host, &cfg.key, "sh -s", Some(script))
+}
+
+/// A port on the server's own 127.0.0.1, reached from this computer.
+pub struct Forward(Tunnel);
+
+impl Forward {
+    /// The port on this computer.
+    pub fn port(&self) -> u16 {
+        self.0.port
+    }
+
+    pub fn alive(&mut self) -> bool {
+        self.0.alive()
+    }
+}
+
+/// Opens an SSH tunnel to `there` on the server; it closes when dropped.
+pub fn forward(cfg: &Config, there: u16) -> Result<Forward, String> {
+    Tunnel::to(&cfg.host, &cfg.key, there).map(Forward)
+}
+
+/// Shell-quotes `s` for a command run on the server.
+pub fn quoted(s: &str) -> String {
+    quote(s)
 }
 
 #[cfg(test)]

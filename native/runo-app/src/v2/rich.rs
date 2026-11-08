@@ -24,15 +24,21 @@ pub enum Act {
 }
 
 impl Act {
-    fn chip(&self) -> (IconName, String) {
+    fn chip(&self, there: bool) -> (IconName, String) {
         match self {
             Act::Link(u) => {
                 let short = u
                     .trim_start_matches("https://")
                     .trim_start_matches("http://")
                     .trim_end_matches('/');
-                (IconName::Globe, format!("Open {short}"))
+                let on = if there && local_port(u).is_some() {
+                    " on the server"
+                } else {
+                    ""
+                };
+                (IconName::Globe, format!("Open {short}{on}"))
             }
+            Act::Run(cmd) if there => (IconName::SquareTerminal, format!("Run {cmd} there")),
             Act::Run(cmd) => (IconName::SquareTerminal, format!("Run {cmd}")),
             Act::File(p) => {
                 let name = p.rsplit('/').find(|x| !x.is_empty()).unwrap_or(p);
@@ -56,6 +62,21 @@ const COMMANDS: &[&str] = &[
     "pip3", "uv", "go", "make", "git", "ls", "cd", "curl", "docker", "pytest", "ruby", "rails",
     "bundle", "php", "composer", "mvn", "gradle", "swift", "flutter", "dotnet", "brew",
 ];
+
+/// The port of a link to this machine itself (localhost, 127.0.0.1,
+/// 0.0.0.0), and the rest of it after the port.
+pub fn local_port(url: &str) -> Option<(u16, &str)> {
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    let rest = ["localhost:", "127.0.0.1:", "0.0.0.0:"]
+        .iter()
+        .find_map(|h| rest.strip_prefix(h))?;
+    let end = rest
+        .find(|ch: char| !ch.is_ascii_digit())
+        .unwrap_or(rest.len());
+    Some((rest[..end].parse().ok()?, &rest[end..]))
+}
 
 /// What a bit of text is, if you can act on it.
 pub fn classify(s: &str) -> Option<Act> {
@@ -200,6 +221,7 @@ impl Shell {
     ) -> Div {
         let key: SharedString = key.into();
         let me = cx.entity().downgrade();
+        let there = self.rich_there.clone();
         let mut out = div().flex().flex_col().gap(px(8.));
         let mut all: Vec<Act> = Vec::new();
         for (n, para) in tidy(text).split("\n\n").enumerate() {
@@ -243,7 +265,8 @@ impl Shell {
                 }
             }
             let me = me.clone();
-            let dir = dir.to_string();
+            let dir = there.clone().unwrap_or_else(|| dir.to_string());
+            let on = there.is_some();
             out = out.child(
                 InteractiveText::new(
                     SharedString::from(format!("{key}-p{n}")),
@@ -253,7 +276,7 @@ impl Shell {
                     if let Some(a) = acts.get(i) {
                         let a = a.clone();
                         let dir = dir.clone();
-                        let _ = me.update(cx, |this, cx| this.act(&a, &dir, window, cx));
+                        let _ = me.update(cx, |this, cx| this.act_where(&a, &dir, on, window, cx));
                     }
                 }),
             );
@@ -261,9 +284,10 @@ impl Shell {
         if !all.is_empty() {
             let mut chips = div().flex().flex_wrap().gap(px(6.)).pt(px(2.));
             for (n, a) in all.into_iter().take(4).enumerate() {
-                let (icon, label) = a.chip();
+                let (icon, label) = a.chip(there.is_some());
                 let label: String = label.chars().take(48).collect();
-                let dir = dir.to_string();
+                let on = there.is_some();
+                let dir = there.clone().unwrap_or_else(|| dir.to_string());
                 chips = chips.child(
                     div()
                         .id(SharedString::from(format!("{key}-act{n}")))
@@ -282,14 +306,67 @@ impl Shell {
                         .hover(|s| s.bg(c(ui::hover())).border_color(c(ui::line_hi())))
                         .child(Icon::new(icon).size(px(13.)).text_color(c(ui::muted())))
                         .child(label)
-                        .on_click(
-                            cx.listener(move |this, _, window, cx| this.act(&a, &dir, window, cx)),
-                        ),
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.act_where(&a, &dir, on, window, cx)
+                        })),
                 );
             }
             out = out.child(chips);
         }
         out
+    }
+
+    /// Does what a message offered: on the server when `there` (`dir` is then
+    /// the job's folder on the server), here otherwise.
+    fn act_where(
+        &mut self,
+        a: &Act,
+        dir: &str,
+        there: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !there {
+            return self.act(a, dir, window, cx);
+        }
+        let Some(cfg) = self.crew.link.as_ref().map(|l| l.cfg.clone()) else {
+            self.say("The server isn't connected, so this can't be opened from here.");
+            cx.notify();
+            return;
+        };
+        match a {
+            // A port on the server: tunnel to it, then open it here.
+            Act::Link(u) => match local_port(u) {
+                Some((port, rest)) => {
+                    let alive = self.forwards.get_mut(&port).is_some_and(|f| f.alive());
+                    if !alive {
+                        match super::remote::forward(&cfg, port) {
+                            Ok(f) => {
+                                self.forwards.insert(port, f);
+                            }
+                            Err(why) => {
+                                self.say(format!(
+                                    "Couldn't reach port {port} on the server: {why}"
+                                ));
+                                cx.notify();
+                                return;
+                            }
+                        }
+                    }
+                    let here = self.forwards[&port].port();
+                    cx.open_url(&format!("http://127.0.0.1:{here}{rest}"));
+                }
+                None => cx.open_url(u),
+            },
+            Act::Run(cmd) => {
+                let line = format!("cd {} && {cmd}", super::remote::quoted(dir));
+                self.term_run(super::term::SERVER, &line, window, cx);
+            }
+            Act::File(_) => {
+                self.say("That file is on the server until you approve the job.");
+            }
+        }
+        cx.notify();
     }
 
     /// Does what a message offered.
@@ -384,6 +461,19 @@ mod tests {
         ));
         assert!(matches!(classify("./server.js"), Some(Act::File(_))));
         assert!(matches!(classify("/src/app.ts"), Some(Act::File(_))));
+    }
+
+    #[test]
+    fn a_link_to_this_machine_has_a_port() {
+        use super::local_port;
+        assert_eq!(local_port("http://localhost:5173"), Some((5173, "")));
+        assert_eq!(
+            local_port("http://127.0.0.1:3000/a?b=1"),
+            Some((3000, "/a?b=1"))
+        );
+        assert_eq!(local_port("http://0.0.0.0:8080/"), Some((8080, "/")));
+        assert_eq!(local_port("https://example.com:443/"), None);
+        assert_eq!(local_port("http://localhost/"), None);
     }
 
     #[test]
