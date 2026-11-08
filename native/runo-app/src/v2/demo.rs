@@ -420,6 +420,38 @@ pub fn seed() -> Store {
     };
     Store {
         setups,
+        // The night shift: one job waiting for tonight, one for its bot.
+        later: vec![
+            super::shift::Later {
+                id: 900,
+                bot: Member::Keeper,
+                mode: Mode::Tidy,
+                text: "Update the dependencies and fix what breaks".into(),
+                folder: folder.clone(),
+                thread: 0,
+                at: t + 6 * 3600,
+                made: t - 600,
+                ..Default::default()
+            },
+            super::shift::Later {
+                id: 901,
+                bot: Member::Builder,
+                mode: Mode::Build,
+                text: "Add a receipt email after checkout".into(),
+                folder: folder.clone(),
+                thread: 1,
+                at: 0,
+                made: t - 120,
+                ..Default::default()
+            },
+        ],
+        lessons: vec![super::learn::Lesson {
+            bot: Member::Builder,
+            folder: folder.path.clone(),
+            text: "Use the money helpers in src/lib/money.ts, never floats, for prices.".into(),
+            job: 1,
+            at: t - 3_000,
+        }],
         threads: vec![
             thread(
                 1,

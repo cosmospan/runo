@@ -23,7 +23,9 @@ mod gitcards;
 mod goal;
 mod history;
 mod home;
+mod issues;
 mod jobs;
+mod learn;
 mod live;
 mod machine;
 mod mascot;
@@ -31,9 +33,11 @@ mod motion;
 mod myserver;
 mod palette;
 mod prefs;
+mod project;
 mod race;
 mod remote;
 mod review;
+mod rewind;
 mod rfb;
 mod rich;
 mod runtime;
@@ -41,6 +45,7 @@ mod screenview;
 pub mod server;
 mod serverpage;
 mod setup;
+mod shift;
 mod ship;
 mod sidebar;
 mod start;
@@ -2597,6 +2602,11 @@ impl Shell {
         let place = match opened {
             runtime::Opened::Job(id) | runtime::Opened::Busy(id) => Place::Live(id),
             runtime::Opened::Race(id) => Place::Race(id),
+            // It waits in line; what it waits for was said.
+            runtime::Opened::Waiting(_) => {
+                cx.notify();
+                return;
+            }
         };
         self.go(place, cx);
     }

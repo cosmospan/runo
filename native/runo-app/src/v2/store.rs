@@ -59,6 +59,13 @@ pub struct Store {
     /// connected apps, permissions, memory), by `engine::bot_key`.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub setups: HashMap<String, super::setup::Setup>,
+    /// Jobs waiting to start: at a time you picked (the night shift), or
+    /// once their bot is free.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<super::shift::Later>,
+    /// What bots learned from your send-backs, each for one project.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lessons: Vec<super::learn::Lesson>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
@@ -330,6 +337,31 @@ pub struct Job {
     /// Other jobs in the same project whose work clashes with this one's:
     /// their id and where ("total.ts around line 40").
     pub clash_with: Vec<(u64, String)>,
+    /// Where its files stood before each turn, so it can be rewound to any of
+    /// them (see `rewind`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<super::rewind::Mark>,
+    /// It was rewound and its engine's conversation dropped: the next turn is
+    /// told what's still true.
+    pub rewound: bool,
+    /// When it carries on by itself after its engine's plan resets; 0 when
+    /// it isn't waiting.
+    pub resume_at: u64,
+    /// Times it was picked up again after running out of plan.
+    pub resumes: u8,
+    /// It started on the night shift: when its engine runs out, another
+    /// engine may take over rather than waiting.
+    pub shift: bool,
+    /// The issue it's for, as the line its pull request closes it with
+    /// ("Closes #12", "Fixes ENG-42"), and the issue's address.
+    pub issue: String,
+    pub issue_url: String,
+    /// The newest review feedback on its pull request already handed to its
+    /// bot, as GitHub's time.
+    pub pr_seen: String,
+    /// Its bot is answering review comments on the open pull request: when
+    /// the turn ends, Shipper pushes the fix to the same pull request.
+    pub answering: bool,
 }
 
 /// One file a job changed.
@@ -413,6 +445,15 @@ impl Default for Job {
             ahead: 0,
             behind: 0,
             clash_with: Vec::new(),
+            marks: Vec::new(),
+            rewound: false,
+            resume_at: 0,
+            resumes: 0,
+            shift: false,
+            issue: String::new(),
+            issue_url: String::new(),
+            pr_seen: String::new(),
+            answering: false,
         }
     }
 }
@@ -684,6 +725,7 @@ impl Store {
         }
         super::data::set_made(&s.made);
         super::setup::set_all(&s.setups);
+        super::learn::set_all(&s.lessons);
         super::data::set_removed(&s.removed);
         if s.current >= s.folders.len() {
             s.current = 0;
