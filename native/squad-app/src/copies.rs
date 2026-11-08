@@ -1,6 +1,6 @@
 //! Every copy of each agent CLI on this computer: the ones on PATH and the ones in the
-//! folders installers use (nvm, ~/.local/bin, Homebrew, npm, Bun, Cargo, Runo's own), with
-//! their versions. Settings lists them so the person can pick the one Runo runs, and an
+//! folders installers use (nvm, ~/.local/bin, Homebrew, npm, Bun, Cargo, Squad Code's own), with
+//! their versions. Settings lists them so the person can pick the one Squad Code runs, and an
 //! older copy that comes first on PATH is flagged.
 
 use std::collections::HashMap;

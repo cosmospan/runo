@@ -1,6 +1,6 @@
 //! Desktop notifications. They go through the system's own notification center for
-//! Runo where it has one (a bundled Mac app, Windows, Linux desktops), so clicking one
-//! brings Runo forward on the session it is about. A Mac build run outside its app
+//! Squad Code where it has one (a bundled Mac app, Windows, Linux desktops), so clicking one
+//! brings Squad Code forward on the session it is about. A Mac build run outside its app
 //! bundle falls back to AppleScript, whose notifications can't open anything.
 
 use gpui_kit::{App, SharedString, SystemNotification};
@@ -13,7 +13,7 @@ const APP_ID: &str = "dev.squadcode.app";
 /// may ask for permission, so it waits for the first notification.
 static LISTENING: AtomicBool = AtomicBool::new(false);
 
-/// Name Runo to the system, early, before any window opens.
+/// Name Squad Code to the system, early, before any window opens.
 pub(crate) fn install(cx: &mut App) {
     cx.set_app_identity(APP_ID, "Squad Code");
 }
@@ -47,7 +47,7 @@ pub(crate) fn send(cx: &App, session: Option<u64>, title: &str, body: &str) {
     });
 }
 
-/// Whether the system notification center takes Runo's notifications. On a Mac it needs
+/// Whether the system notification center takes Squad Code's notifications. On a Mac it needs
 /// the app bundle.
 fn native(cx: &App) -> bool {
     if cfg!(target_os = "macos") {

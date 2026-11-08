@@ -47,7 +47,7 @@ pub enum AgentEvent {
     /// The agent's own todo list, whole, as its todo tool last wrote it: Claude's
     /// TodoWrite, Codex's plan and the like. A Crew thread shows it as its checklist.
     Todos(Vec<Step>),
-    /// The turn's process ended; `ok` is how Runo judged it.
+    /// The turn's process ended; `ok` is how Squad Code judged it.
     TurnEnded { ok: bool },
     /// Where the agent's plan stands: a usage window near or past its limit.
     Limit(crate::planlimit::PlanLimit),
@@ -72,7 +72,7 @@ pub enum ToolKind {
     Plan,
     Question,
     Think,
-    /// Also any kind saved by a newer Runo that this one doesn't know.
+    /// Also any kind saved by a newer Squad Code that this one doesn't know.
     #[default]
     #[serde(other)]
     Other,
@@ -117,7 +117,7 @@ impl ToolKind {
 pub enum StepState {
     Running,
     Failed,
-    /// Also any state saved by a newer Runo that this one doesn't know. Serde needs
+    /// Also any state saved by a newer Squad Code that this one doesn't know. Serde needs
     /// the `other` variant last.
     #[default]
     #[serde(other)]

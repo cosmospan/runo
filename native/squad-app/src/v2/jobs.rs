@@ -217,7 +217,7 @@ pub fn start(
     // When Claude Code can ask through Squad Code's prompt tool (a run with
     // memory), the hard-to-undo commands are asked about with Go ahead /
     // Deny instead of refused: Claude never asks about a disallowed tool.
-    // Runo's own MCP server asks you, in the job's card, before a tool the bot
+    // Squad Code's own MCP server asks you, in the job's card, before a tool the bot
     // isn't allowed runs, rather than the run being refused.
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())

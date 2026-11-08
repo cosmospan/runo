@@ -1,5 +1,5 @@
 //! The pull request watcher. A Crew thread that pushed and opened a pull request ends its
-//! turn instead of waiting on CI; Runo reads the pull request every couple of minutes
+//! turn instead of waiting on CI; Squad Code reads the pull request every couple of minutes
 //! (`load_pr_status`) and wakes the thread only when there is something to do: a check
 //! failed, someone else reviewed or commented, or the branch conflicts with its base.
 //! Only comments from the repository's owner, members and collaborators wake it: anyone

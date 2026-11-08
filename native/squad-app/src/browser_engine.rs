@@ -1,8 +1,8 @@
 //! A headless Chromium driven over the DevTools protocol, for the Browser tab.
 //!
-//! Runo starts a Chromium-based browser already on the machine (the default browser when
+//! Squad Code starts a Chromium-based browser already on the machine (the default browser when
 //! it is one) with `--remote-debugging-pipe`, so CDP runs over two inherited file
-//! descriptors (3 and 4) as NUL-separated JSON. Each Runo session gets its own page (target); the one on
+//! descriptors (3 and 4) as NUL-separated JSON. Each Squad Code session gets its own page (target); the one on
 //! screen streams JPEG frames that are decoded here, off the UI thread.
 
 use gpui_kit::RenderImage;
@@ -30,7 +30,7 @@ impl<T> Locked<T> for Mutex<T> {
     }
 }
 
-/// A Chromium-based browser Runo can drive: its macOS app (and the executable inside it,
+/// A Chromium-based browser Squad Code can drive: its macOS app (and the executable inside it,
 /// which has the same name), its macOS bundle id, and its command names on Linux.
 pub struct Known {
     pub app: &'static str,
@@ -38,7 +38,7 @@ pub struct Known {
     commands: &'static [&'static str],
 }
 
-/// The Chromium-based browsers Runo knows, in the order they're tried when the default
+/// The Chromium-based browsers Squad Code knows, in the order they're tried when the default
 /// browser isn't one of them.
 const KNOWN: &[Known] = &[
     Known {
@@ -171,7 +171,7 @@ pub fn https_handler(launch_services: &Value) -> Option<String> {
     })
 }
 
-/// The person's default browser, when it's one Runo can drive. Looked up once per run.
+/// The person's default browser, when it's one Squad Code can drive. Looked up once per run.
 fn default_browser() -> Option<&'static Known> {
     static FOUND: std::sync::OnceLock<Option<&'static Known>> = std::sync::OnceLock::new();
     *FOUND.get_or_init(|| {
@@ -425,7 +425,7 @@ fn pipe() -> std::io::Result<(i32, i32)> {
 }
 
 impl Engine {
-    /// Start the browser headless with a Runo-only profile.
+    /// Start the browser headless with a Squad Code-only profile.
     #[cfg(unix)]
     pub fn start(browser: PathBuf, profile: &Path) -> Result<Engine, String> {
         use std::os::fd::FromRawFd;

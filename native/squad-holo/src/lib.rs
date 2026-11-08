@@ -1,6 +1,6 @@
 //! # squad-holo
 //!
-//! Runo's crew, drawn as glass cubes floating over projectors.
+//! Squad Code's crew, drawn as glass cubes floating over projectors.
 //!
 //! A bot is a [`Look`] (its cube, colours, face and props). Its pose is a pure
 //! function of time: [`render`] draws a look at time `t` with Vello's CPU

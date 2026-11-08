@@ -16,7 +16,7 @@ pub struct Provider {
     pub color: u32,
 }
 
-/// Every agent Runo can run, from the manifest (see `registry`): the built-in ones in
+/// Every agent Squad Code can run, from the manifest (see `registry`): the built-in ones in
 /// a fixed order, then any the person added.
 pub static PROVIDERS: Providers = Providers;
 
@@ -37,9 +37,9 @@ fn holds(
     crate::registry::spec(provider).is_some_and(|s| fact(s).holds(provider))
 }
 
-/// Whether the CLI can resume the conversation Runo kept for a session. Grok (xAI's
+/// Whether the CLI can resume the conversation Squad Code kept for a session. Grok (xAI's
 /// Grok Build) and Antigravity both resume only by UUID; a session from the community
-/// Grok CLI Runo ran before keeps a shorter id, so it starts a new conversation with the
+/// Grok CLI Squad Code ran before keeps a shorter id, so it starts a new conversation with the
 /// history in the prompt instead.
 pub fn can_resume(provider: &str, conversation: &str) -> bool {
     !matches!(provider, "grok" | "antigravity") || conversation.is_empty() || is_uuid(conversation)
@@ -73,7 +73,7 @@ pub(crate) fn strip_ansi(text: &str) -> String {
     out
 }
 
-/// CLIs that take a conversation id chosen by Runo on the first run. Copilot and Gemini
+/// CLIs that take a conversation id chosen by Squad Code on the first run. Copilot and Gemini
 /// do once their help lists `--session-id`; otherwise the id comes from their output.
 pub fn names_conversation(provider: &str) -> bool {
     holds(provider, |s| &s.names_conversation)
@@ -164,14 +164,14 @@ pub struct RunSpec<'a> {
     pub session_id: &'a str,
     /// Image files attached to the prompt.
     pub images: &'a [String],
-    /// Runo's memory server for this folder: (Runo's executable, the session folder).
+    /// Squad Code's memory server for this folder: (Squad Code's executable, the session folder).
     pub memory: Option<(&'a str, &'a str)>,
     /// The run is on this machine, so MCP servers that are local programs can start.
     pub local: bool,
     /// The session's id when it is a Crew thread, whose memory server adds the tools
     /// threads report through; 0 otherwise.
     pub thread: u64,
-    /// Runo may trust the folder for CLIs that ask (Cursor, Gemini) and approve its MCP
+    /// Squad Code may trust the folder for CLIs that ask (Cursor, Gemini) and approve its MCP
     /// servers up front: the person trusts the project's agent settings, or the folder
     /// holds none that start programs (see `folder_trusted`).
     pub trusted: bool,
@@ -216,7 +216,7 @@ pub enum Output {
     Text,
 }
 
-/// The output format Runo asks the CLI for. Formats only newer releases have are used
+/// The output format Squad Code asks the CLI for. Formats only newer releases have are used
 /// once the installed CLI's help lists them.
 pub fn output(provider: &str) -> Output {
     match crate::registry::spec(provider).map(|s| s.format()) {
@@ -228,7 +228,7 @@ pub fn output(provider: &str) -> Output {
     }
 }
 
-/// Runo's permission levels a CLI can hold to, given its `--help`. Amp has no read-only
+/// Squad Code's permission levels a CLI can hold to, given its `--help`. Amp has no read-only
 /// mode; Cursor's print mode either only proposes changes or, with `--force`, also runs
 /// commands, so it has no edit-only level.
 pub fn modes(provider: &str) -> Vec<&'static str> {
@@ -254,12 +254,12 @@ pub fn mode_error(provider: &str, mode: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "{} has no read-only mode, so Runo won't run it in Plan only. Switch to Auto edit or Full access, or plan with another agent.",
+        "{} has no read-only mode, so Squad Code won't run it in Plan only. Switch to Auto edit or Full access, or plan with another agent.",
         self::provider(provider).name
     ))
 }
 
-/// MCP servers for one run: the ones the person shares, then Cove's and Runo's memory
+/// MCP servers for one run: the ones the person shares, then Cove's and Squad Code's memory
 /// server when the run is on this machine.
 fn mcp_servers(spec: &RunSpec) -> Vec<(String, crate::mcp::McpSpec)> {
     use crate::mcp::McpSpec;
@@ -292,7 +292,7 @@ fn mcp_servers(spec: &RunSpec) -> Vec<(String, crate::mcp::McpSpec)> {
             ]
         };
         // So it can tell the person's answers from ones anyone else left in the folder.
-        // A connection's relay answers in Runo itself, which has the key.
+        // A connection's relay answers in Squad Code itself, which has the key.
         if let Some(file) = spec.local.then(crate::approvals::key_file).flatten() {
             args.extend([crate::approvals::KEY_FILE_ARG.into(), file]);
         }
@@ -376,7 +376,7 @@ fn provider_args(spec: &RunSpec) -> Vec<String> {
     let mode = effective_mode(spec.provider, &mode).to_string();
     let knows = |flag: &str| crate::caps::mentions(spec.provider, flag);
     let mut args: Vec<String> = Vec::new();
-    // An agent Runo knows only from the manifest: its print command, if it gave one.
+    // An agent Squad Code knows only from the manifest: its print command, if it gave one.
     if let Some(agent) = crate::registry::spec(spec.provider).filter(|a| a.driver == "acp") {
         let print = agent.print.clone().unwrap_or_default();
         args.extend(print.args);
@@ -474,7 +474,7 @@ fn provider_args(spec: &RunSpec) -> Vec<String> {
                 args.push(s("--force"));
             }
             // Servers from the project file wait for approval unless approved up front,
-            // which happens only when they are all Runo's or the person trusts the repo.
+            // which happens only when they are all Squad Code's or the person trusts the repo.
             if spec.trusted && knows("--approve-mcps") && !file_servers(spec).is_empty() {
                 args.push(s("--approve-mcps"));
             }
@@ -762,7 +762,7 @@ fn provider_args(spec: &RunSpec) -> Vec<String> {
                 let config = serde_json::json!({ "mcpServers": servers });
                 args.extend([s("--mcp-config"), config.to_string()]);
             }
-            // A tool it isn't allowed is asked about in Runo while the turn waits, instead
+            // A tool it isn't allowed is asked about in Squad Code while the turn waits, instead
             // of being refused and shown only once the turn has ended.
             if spec.memory.is_some()
                 && !matches!(permission, "bypassPermissions" | "plan" | "dontAsk")
@@ -802,9 +802,9 @@ fn provider_args(spec: &RunSpec) -> Vec<String> {
     args
 }
 
-/// Pi's flags for a turn, in JSON or RPC mode: the conversation (named by Runo, which
+/// Pi's flags for a turn, in JSON or RPC mode: the conversation (named by Squad Code, which
 /// Pi creates when it doesn't have it yet), the model and thinking level, and the tools
-/// Runo's mode allows. Pi asks nothing before it acts, so Plan only gives it only tools
+/// Squad Code's mode allows. Pi asks nothing before it acts, so Plan only gives it only tools
 /// that read and Auto edit adds the ones that edit, but no shell.
 fn pi_args(spec: &RunSpec, model: &str, effort: &str, mode: &str) -> Vec<String> {
     let s = |v: &str| v.to_string();
@@ -847,7 +847,7 @@ fn conversation_args(spec: &RunSpec) -> Vec<String> {
     }
 }
 
-/// Why Runo won't trust `dir` for `spec`'s CLI, when the person hasn't trusted the
+/// Why Squad Code won't trust `dir` for `spec`'s CLI, when the person hasn't trusted the
 /// project's agent settings and the folder has settings that start programs (from the
 /// repository, a pull request, or a VM sharing the folder). None when it may. What an
 /// earlier run added to the folder's settings is taken out first, so only the folder's
@@ -865,10 +865,10 @@ pub fn untrusted_config(spec: &RunSpec, dir: &str) -> Option<String> {
     let name = provider(spec.provider).name;
     crate::applog::warn_once(
         "agent",
-        format!("not trusting {dir} for {name}: {found} starts programs Runo didn't add"),
+        format!("not trusting {dir} for {name}: {found} starts programs Squad Code didn't add"),
     );
     Some(format!(
-        "Runo didn't trust this folder for {name}, because {found} can start programs. \
+        "Squad Code didn't trust this folder for {name}, because {found} can start programs. \
          If this project's agent settings are yours, turn on \"Trust agent settings in this \
          repository\" in the project's settings."
     ))
@@ -917,7 +917,7 @@ fn cove_server() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
-/// Name of Runo's memory MCP server in the agents' config.
+/// Name of Squad Code's memory MCP server in the agents' config.
 pub const MEMORY_SERVER: &str = "runo";
 
 /// The prompt with attached image paths listed, for CLIs that read images from disk.
@@ -1193,11 +1193,11 @@ pub fn ask_command_on(provider: &str, configured_bin: &str, prompt: &str, model:
 #[derive(Clone)]
 /// A running process, which leads its own process group so stopping it also stops what
 /// it started (dev servers, test runs, the ssh or cove process of a connection run).
-/// `runner` marks Runo's own connection runner.
+/// `runner` marks Squad Code's own connection runner.
 pub struct Handle(Option<Arc<Mutex<Child>>>, bool, Option<u32>);
 
 impl Handle {
-    /// A local turn running detached from Runo in process group `group`.
+    /// A local turn running detached from Squad Code in process group `group`.
     pub(crate) fn detached(group: u32) -> Self {
         Self(None, false, Some(group))
     }
@@ -1280,7 +1280,7 @@ pub fn prepare_folder(spec: &RunSpec, dir: &str, sandboxed: bool) {
     }
 }
 
-/// Whether Runo talks to the agent while it works: Claude Code takes its prompt, and
+/// Whether Squad Code talks to the agent while it works: Claude Code takes its prompt, and
 /// any message sent while it runs, on stdin (`--input-format stream-json`), and so does
 /// Amp, in the same format, once its help lists `--stream-json-input`.
 pub fn takes_live_input(provider: &str) -> bool {
@@ -1325,7 +1325,7 @@ pub fn live_command(provider: &str, command: &Command) -> Option<(Command, Strin
 }
 
 /// The arguments that run `provider` as an ACP agent, once the installed CLI's help
-/// lists them. `SQUADCODE_NO_ACP` set in Runo's environment keeps every agent in print mode.
+/// lists them. `SQUADCODE_NO_ACP` set in Squad Code's environment keeps every agent in print mode.
 pub fn acp_args(provider: &str) -> Option<Vec<String>> {
     if std::env::var_os("SQUADCODE_NO_ACP").is_some() {
         return None;
@@ -1493,7 +1493,7 @@ pub fn run_agent(
         prepare_folder(spec, dir, false);
     }
     if let (Target::Session(id), Some(root)) = (target, crate::detach::root()) {
-        // Local turns outlive Runo, so closing or a crash doesn't stop them.
+        // Local turns outlive Squad Code, so closing or a crash doesn't stop them.
         if crate::updater::resolve(bin).is_some() {
             if let Some((config, prompt)) = acp {
                 let setup = |turn: &std::path::Path| config.write(turn);

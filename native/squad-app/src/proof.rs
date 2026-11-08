@@ -102,7 +102,7 @@ pub fn commands(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// How much Runo checks after each turn when it picks the commands itself.
+/// How much Squad Code checks after each turn when it picks the commands itself.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Level {
     /// Each ecosystem's fast check: a compile, type check or lint, no tests.
@@ -113,13 +113,13 @@ pub enum Level {
 
 impl Level {}
 
-/// A project's `check_level`: Runo picks the commands at the Settings level, at its own,
+/// A project's `check_level`: Squad Code picks the commands at the Settings level, at its own,
 /// runs the person's commands, or runs none.
 pub const LEVEL_DEFAULT: &str = "";
 pub const LEVEL_CUSTOM: &str = "custom";
 
 /// The level for a project saved before levels, and whether its typed checks stay. Its
-/// checks are the person's own unless they are just what Runo suggests for the folder
+/// checks are the person's own unless they are just what Squad Code suggests for the folder
 /// (`suggested`), which now follow the Settings level, Quick unless changed.
 pub fn migrate(checks: &str, suggested: &[String]) -> (&'static str, bool) {
     let mut have = commands(checks);
@@ -460,7 +460,7 @@ pub fn fix_prompt(results: &[CheckRun]) -> String {
         .filter(|r| !r.ok && r.infra.is_empty())
         .collect();
     let mut out = format!(
-        "Runo ran the project's checks after your last turn and {} failed. Fix the cause in \
+        "Squad Code ran the project's checks after your last turn and {} failed. Fix the cause in \
          the code. Don't skip, disable or loosen tests or lint rules to make them pass. Run \
          the failing command{} yourself to confirm before you stop.\n",
         if failed.len() == 1 {

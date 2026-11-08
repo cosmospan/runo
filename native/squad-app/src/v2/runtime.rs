@@ -2872,7 +2872,7 @@ fn fix_turn(job: &mut store::Job) -> Option<String> {
         names.join(" and "),
         job.bot.name()
     )));
-    let mut prompt = crate::proof::fix_prompt(&job.checks).replace("Runo ran", "Squad Code ran");
+    let mut prompt = crate::proof::fix_prompt(&job.checks);
     // Checks can fail before a job touches anything; fixing that here would
     // redo other work and clash with it later.
     prompt.push_str(

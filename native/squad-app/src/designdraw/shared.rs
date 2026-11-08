@@ -1,5 +1,5 @@
 //! Libraries shared across projects. A project publishes its components and styles to
-//! Runo's data folder (`libraries/<id>/`), and any other project adds them: they're copied
+//! Squad Code's data folder (`libraries/<id>/`), and any other project adds them: they're copied
 //! into its `design/components/<id>/`, so its screens keep working with the library's
 //! files gone, and instances carry `data-component="<id>/<component>"`. The library's
 //! styles come along as one sheet scoped to its instances (`data-library`), so they

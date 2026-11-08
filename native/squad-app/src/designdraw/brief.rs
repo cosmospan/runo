@@ -68,7 +68,7 @@ pub(crate) fn context(c: &Canvas) -> String {
          Keep what Design keeps on its own as you change files. data-rid is a layer's \
          lasting id that ties it to the code built from it: keep it on the element when you \
          edit or move it, never copy it onto another element (drop it from a copy), and \
-         leave new elements without one; Runo gives them theirs. A layer that's on several \
+         leave new elements without one; Squad Code gives them theirs. A layer that's on several \
          screens should keep the same data-name on each, so Smart animate moves it between \
          them. Shapes drawn in Design are inline <svg> with preserveAspectRatio=\"none\" and \
          vector-effect=\"non-scaling-stroke\" on their paths: keep those, and make new \
@@ -79,16 +79,16 @@ pub(crate) fn context(c: &Canvas) -> String {
          in the app's code each design component is: keep a mapped component's id, variant \
          names and property names, since code is written from them, and add a variant \
          rather than rename one. Leave {FOLDER}/.versions/ (the version history) and \
-         {FOLDER}/handoff/ (what was handed off to be built) as they are. Runo checks \
+         {FOLDER}/handoff/ (what was handed off to be built) as they are. Squad Code checks \
          this after your turn and puts back lost ids, library files and mapped variants. \
-         To change layers already on a screen, use Runo's design tools when you have them \
+         To change layers already on a screen, use Squad Code's design tools when you have them \
          (design_set_text, design_set_style, design_set_text_style, design_set_attribute, \
          design_swap_variant, design_insert, design_move, design_remove; \
          design_selection says what the person has selected): they make the change the way \
          Design's own controls do, each one on the person's undo history. Write the files \
          for new screens and for changes too big for them. \
          New screen files show up on the canvas by themselves. Make the \
-         change by editing these files directly: Runo shows it live and the user keeps or \
+         change by editing these files directly: Squad Code shows it live and the user keeps or \
          undoes it, so don't ask before editing. Don't change files outside {FOLDER}/ for this \
          request."
     )];
@@ -99,7 +99,7 @@ pub(crate) fn context(c: &Canvas) -> String {
         let mut p = String::from("There are no screens yet.");
         if super::model::var(c.tokens, "--primary").as_deref() == Some("#2563eb") {
             p.push_str(
-                " The theme is still Runo's default. If this project already has an app or a \
+                " The theme is still Squad Code's default. If this project already has an app or a \
                  site, first look through its code for its brand (a Tailwind config, CSS \
                  variables, theme files, the logo's colours, the fonts it loads) and set \
                  tokens.css to match, so the design looks like this product. If it has none, \
@@ -244,7 +244,7 @@ pub(crate) fn icon_names() -> Vec<&'static str> {
         .collect()
 }
 
-/// The classes and tokens of Runo's components.css, by what they're for.
+/// The classes and tokens of Squad Code's components.css, by what they're for.
 const CATALOG: &str = "\
 Build from the classes in components.css and the variables in tokens.css rather than raw \
 colours and sizes, so the theme keeps working. A screen can add its own styles in a <style> \
@@ -324,7 +324,7 @@ pub(crate) fn variants_task(id: &str, name: &str) -> String {
          new screens {FOLDER}/screens/{id}-v1.html, {id}-v2.html and {id}-v3.html. Keep its \
          purpose, content and links, but make each a clearly different take: a different \
          layout, hierarchy or density, not just other colours. Finish each one as fully as a \
-         real screen. Title each \"{name} · variant N\". Don't change {id}.html itself; Runo \
+         real screen. Title each \"{name} · variant N\". Don't change {id}.html itself; Squad Code \
          shows the variants under it to pick from."
     )
 }
@@ -404,11 +404,11 @@ pub(crate) struct Looked {
 }
 
 /// The task for the agent to look at what it made and polish it: the pictures of the
-/// screens it changed and what Runo's checks found on them.
+/// screens it changed and what Squad Code's checks found on them.
 pub(crate) fn review_task(asked: &str, screens: &[Looked]) -> String {
     let mut out = format!(
         "## Check your work\n\
-         Here is how the screens you just changed look as Runo draws them. Look at each \
+         Here is how the screens you just changed look as Squad Code draws them. Look at each \
          picture closely, as a demanding design lead would before it ships, against what was \
          asked: \"{}\".\n",
         asked.trim()
@@ -436,7 +436,7 @@ pub(crate) fn review_task(asked: &str, screens: &[Looked]) -> String {
         .collect();
     if !found.is_empty() {
         out.push_str(
-            "\nRuno's design checks also found these (elements are CSS paths from <body>):\n",
+            "\nSquad Code's design checks also found these (elements are CSS paths from <body>):\n",
         );
         out.push_str(&checks::listed(&found));
     }

@@ -1,14 +1,14 @@
-//! The agent host: `Runo --agent-host runo-turn <turn folder> <agent> <args…>`. It runs
+//! The agent host: `Squad Code --agent-host runo-turn <turn folder> <agent> <args…>`. It runs
 //! an agent that takes its prompts on stdin (Claude Code's `--input-format stream-json`)
-//! as a detached turn. Like the plain turn wrapper, it outlives Runo: the agent's output
+//! as a detached turn. Like the plain turn wrapper, it outlives Squad Code: the agent's output
 //! goes to `out` and `err` in the turn folder, and `exit` holds its exit code once it
-//! ends. It also forwards each line Runo appends to `in` to the agent's stdin, so a
+//! ends. It also forwards each line Squad Code appends to `in` to the agent's stdin, so a
 //! message sent while the agent works reaches it at once. `sent` counts the lines
 //! forwarded.
 //!
 //! The agent answers each message with a `result` event. Once every message forwarded so
 //! far has had one, the host closes stdin and the agent exits, ending the turn. A line
-//! that arrives after that stays in `in` unsent, and Runo sends it as the next turn.
+//! that arrives after that stays in `in` unsent, and Squad Code sends it as the next turn.
 
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -21,11 +21,11 @@ use std::time::{Duration, Instant};
 /// one go; when it prints nothing for this long its input is closed anyway.
 const IDLE: Duration = Duration::from_secs(10);
 
-/// `Runo --agent-host <mark> <turn folder> <agent> <args…>`. Returns the exit code.
+/// `Squad Code --agent-host <mark> <turn folder> <agent> <args…>`. Returns the exit code.
 pub fn main(args: &[String]) -> i32 {
-    // args[0] is the mark that names Runo's turns in the process list.
+    // args[0] is the mark that names Squad Code's turns in the process list.
     let (Some(turn), Some(program)) = (args.get(1), args.get(2)) else {
-        eprintln!("usage: Runo --agent-host runo-turn <turn folder> <agent> [args…]");
+        eprintln!("usage: Squad Code --agent-host runo-turn <turn folder> <agent> [args…]");
         return 2;
     };
     // An agent that speaks ACP, with its command in the turn folder.
@@ -62,7 +62,7 @@ pub fn run(turn: &Path, program: &str, args: &[String], idle: Duration) -> i32 {
         Err(e) => {
             let _ = std::fs::write(
                 turn.join("err"),
-                format!("Runo could not start {program}: {e}\n"),
+                format!("Squad Code could not start {program}: {e}\n"),
             );
             127
         }
@@ -83,7 +83,7 @@ pub(crate) fn exit_code(status: std::process::ExitStatus) -> i32 {
     status.code().unwrap_or(1)
 }
 
-/// Record how the turn ended, for Runo to read from `turn/exit`.
+/// Record how the turn ended, for Squad Code to read from `turn/exit`.
 pub(super) fn finish(turn: &Path, code: i32) {
     let tmp = turn.join("exit.tmp");
     if std::fs::write(&tmp, format!("{code}\n")).is_ok() {
@@ -165,7 +165,7 @@ fn forward(
         for line in new_lines(&path, &mut offset) {
             let Ok(mut guard) = stdin.lock() else { return };
             let Some(pipe) = guard.as_mut() else {
-                // Input is closed: the line stays in `in` for Runo to send next.
+                // Input is closed: the line stays in `in` for Squad Code to send next.
                 return;
             };
             if writeln!(pipe, "{line}").and_then(|_| pipe.flush()).is_err() {

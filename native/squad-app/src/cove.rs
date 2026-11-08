@@ -1,6 +1,6 @@
 //! Running a session inside its own Cove VM (https://github.com/deltalark/cove).
 //!
-//! Cove is a separate product. Runo only talks to it through the `cove` command:
+//! Cove is a separate product. Squad Code only talks to it through the `cove` command:
 //! every process a Cove session starts (the agent, the setup command, terminal tabs)
 //! is wrapped as `cove exec runo-<id> --create … -- <program>`, which creates or
 //! starts the VM on first use. The worktree is shared into the VM at the same path,

@@ -1,6 +1,6 @@
 //! Colour themes, picked under Settings > Appearance. A theme pairs a light and a dark
 //! palette, and the Light / Dark / System switch picks between them. Each palette maps an
-//! editor theme onto Runo's colour tokens; the `c_*` functions in `settings.rs` read the
+//! editor theme onto Squad Code's colour tokens; the `c_*` functions in `settings.rs` read the
 //! one in use.
 
 use std::sync::atomic::{AtomicU8, Ordering};

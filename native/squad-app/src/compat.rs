@@ -1,4 +1,4 @@
-//! `Runo --check-agents`: how well the installed agent CLIs match what the manifest
+//! `Squad Code --check-agents`: how well the installed agent CLIs match what the manifest
 //! says about them, without signing in or starting a model. For each agent it records
 //! the version, whether the help still mentions each text a manifest fact waits on, and
 //! whether its protocol (ACP, Codex's app server, Pi's RPC mode) still answers the
@@ -27,13 +27,13 @@ pub struct AgentReport {
     /// Each text a manifest fact waits on, and whether the help mentions it.
     #[serde(default)]
     pub mentions: BTreeMap<String, bool>,
-    /// The protocol Runo would use: "acp", "codex" or "pi", if any.
+    /// The protocol Squad Code would use: "acp", "codex" or "pi", if any.
     #[serde(default)]
     pub protocol: String,
     /// "ok", or why the handshake failed.
     #[serde(default)]
     pub handshake: String,
-    /// Messages the agent sent during the handshake that Runo doesn't know.
+    /// Messages the agent sent during the handshake that Squad Code doesn't know.
     #[serde(default)]
     pub unknown: Vec<String>,
 }
@@ -139,7 +139,7 @@ fn acp(dir: &Path, bin: &str, args: &[String], unknown: &mut Vec<String>) -> Res
         json!({
             "protocolVersion": 1,
             "clientCapabilities": { "fs": { "readTextFile": true, "writeTextFile": true }, "terminal": false },
-            "clientInfo": { "name": "Runo", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
         }),
     );
     let result = answer(&mut agent, id, &["session/update"], unknown);
@@ -156,7 +156,7 @@ fn codex(dir: &Path, bin: &str, args: &[String], unknown: &mut Vec<String>) -> R
     let id = agent.request(
         "initialize",
         json!({
-            "clientInfo": { "name": "runo", "title": "Runo", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "runo", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
             "capabilities": null,
         }),
     );
@@ -273,7 +273,7 @@ pub fn changes(old: &Report, new: &Report) -> Vec<(bool, String)> {
             out.push((
                 false,
                 format!(
-                    "{}: sends `{method}`, which Runo doesn't read yet",
+                    "{}: sends `{method}`, which Squad Code doesn't read yet",
                     agent.id
                 ),
             ));
@@ -318,7 +318,7 @@ pub fn table(report: &Report) -> String {
     out
 }
 
-/// `Runo --check-agents [--report <file>] [--since <file>]`: check every agent, write
+/// `Squad Code --check-agents [--report <file>] [--since <file>]`: check every agent, write
 /// the report to `--report` (JSON), and print it with what changed since `--since`.
 /// Exits 1 when a handshake fails, 2 when something regressed since `--since`.
 pub fn main(args: &[String]) -> i32 {
@@ -335,7 +335,7 @@ pub fn main(args: &[String]) -> i32 {
             &path,
             serde_json::to_vec_pretty(&report).unwrap_or_default(),
         ) {
-            eprintln!("Runo couldn't write {path}: {e}");
+            eprintln!("Squad Code couldn't write {path}: {e}");
             return 2;
         }
     }
@@ -433,7 +433,8 @@ mod tests {
                 (false, "gemini: 0.65 → 0.66".to_string()),
                 (
                     false,
-                    "gemini: sends `session/new_thing`, which Runo doesn't read yet".to_string()
+                    "gemini: sends `session/new_thing`, which Squad Code doesn't read yet"
+                        .to_string()
                 ),
                 (false, "qwen: help now mentions `--acp`".to_string()),
                 (false, "qwen: the acp handshake works again".to_string()),

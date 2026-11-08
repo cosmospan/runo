@@ -1,11 +1,11 @@
-//! Live approvals. Claude Code asks Runo's MCP server (its permission prompt tool) before
+//! Live approvals. Claude Code asks Squad Code's MCP server (its permission prompt tool) before
 //! it uses a tool it isn't allowed, and the turn waits while the person answers in the
 //! corner card or the Inbox. Requests and answers are small files in one folder, so the
 //! server process, a connection's relay and the app all meet there.
 //!
 //! The folder is the person's own (0700, files 0600), but any program running as them
-//! could still drop an answer there. So every answer is signed with a key Runo makes at
-//! launch and keeps in memory. Runo's MCP server, which waits for answers, gets it from
+//! could still drop an answer there. So every answer is signed with a key Squad Code makes at
+//! launch and keeps in memory. Squad Code's MCP server, which waits for answers, gets it from
 //! a one-time file it deletes as it starts (never the environment, which the agent's
 //! shell would inherit), and ignores an answer that isn't signed for its request or was
 //! signed more than a few minutes ago.
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// The permission prompt tool's name in Runo's MCP server.
+/// The permission prompt tool's name in Squad Code's MCP server.
 pub const TOOL: &str = "permission_prompt";
 
 /// One question to the person: may the agent working in `dir` use `tool` with `input`?
@@ -113,7 +113,7 @@ static KEY: std::sync::RwLock<Option<Vec<u8>>> = std::sync::RwLock::new(None);
 const FRESH_SECS: u64 = 300;
 
 /// Make this launch's key. Call it once at launch, in every mode that starts agents or
-/// answers them, but not in Runo's MCP server, which is handed its agent's key instead.
+/// answers them, but not in Squad Code's MCP server, which is handed its agent's key instead.
 pub fn init_key() {
     let mut key = vec![0u8; 32];
     if ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut key).is_ok() {
@@ -140,7 +140,7 @@ pub fn adopt_key(text: &str) {
 /// The flag that names the key file for `runo --mcp-memory`.
 pub const KEY_FILE_ARG: &str = "--approval-key-file";
 
-/// The argument Runo's MCP server is started with so it can check answers: the path of
+/// The argument Squad Code's MCP server is started with so it can check answers: the path of
 /// a private one-time file holding the key, which the server reads and deletes as it
 /// starts, before its agent can run anything. None when this process has no key.
 pub fn key_file() -> Option<String> {
@@ -164,10 +164,10 @@ pub fn key_file() -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
-/// Runo's MCP server: take the key from its one-time file (see `key_file`).
+/// Squad Code's MCP server: take the key from its one-time file (see `key_file`).
 pub fn load_key_file(path: &str) {
     let path = Path::new(path);
-    // Only a file in Runo's own keys folder, so the argument can't delete anything else.
+    // Only a file in Squad Code's own keys folder, so the argument can't delete anything else.
     if path.parent() != Some(folder().join("keys").as_path()) {
         return;
     }
@@ -233,7 +233,7 @@ struct Signed {
 }
 
 /// Read the answer to request `id`. With a key, only one signed with it for this request
-/// in the last few minutes counts; without one (an agent that wasn't handed Runo's key),
+/// in the last few minutes counts; without one (an agent that wasn't handed Squad Code's key),
 /// any answer does, as before.
 fn read_answer(text: &[u8], id: &str, key: Option<&[u8]>, now: u64) -> Option<Answer> {
     let Ok(signed) = serde_json::from_slice::<Signed>(text) else {
@@ -257,7 +257,7 @@ fn read_answer(text: &[u8], id: &str, key: Option<&[u8]>, now: u64) -> Option<An
 pub fn timed_out(wait: Duration) -> String {
     let mins = (wait.as_secs() / 60).max(1);
     format!(
-        "The person hasn't granted this: nobody answered in Runo within {mins} minute{}. Carry on without it if you can, or end your turn and say what you need allowed.",
+        "The person hasn't granted this: nobody answered in Squad Code within {mins} minute{}. Carry on without it if you can, or end your turn and say what you need allowed.",
         if mins == 1 { "" } else { "s" }
     )
 }
@@ -275,16 +275,16 @@ fn ask_keyed(
     wait: Duration,
     key: Option<&[u8]>,
 ) -> Answer {
-    // Plans and questions are shown in Runo after the turn, as before.
+    // Plans and questions are shown in Squad Code after the turn, as before.
     match tool {
         "ExitPlanMode" => {
             return Answer::Deny {
-                message: "Runo shows this plan to the person for approval. Stop here; they answer in their next message.".into(),
+                message: "Squad Code shows this plan to the person for approval. Stop here; they answer in their next message.".into(),
             }
         }
         "AskUserQuestion" => {
             return Answer::Deny {
-                message: "Runo shows these questions to the person. Stop here; they answer in their next message.".into(),
+                message: "Squad Code shows these questions to the person. Stop here; they answer in their next message.".into(),
             }
         }
         _ => {}
@@ -306,7 +306,7 @@ fn ask_keyed(
     if let Err(e) = written {
         return Answer::Deny {
             message: format!(
-                "Runo couldn't ask the person for permission ({e}), so this was not allowed."
+                "Squad Code couldn't ask the person for permission ({e}), so this was not allowed."
             ),
         };
     }
@@ -319,7 +319,7 @@ fn ask_keyed(
                 let _ = std::fs::remove_file(&path);
                 return answer;
             }
-            // Not signed by Runo for this request: someone else wrote it. Keep waiting.
+            // Not signed by Squad Code for this request: someone else wrote it. Keep waiting.
             let _ = std::fs::remove_file(&answered);
         }
         if !path.exists() {
@@ -328,7 +328,8 @@ fn ask_keyed(
                 .ok()
                 .and_then(|text| read_answer(&text, id, key, now()))
                 .unwrap_or(Answer::Deny {
-                    message: "The request was withdrawn in Runo, so this was not allowed.".into(),
+                    message: "The request was withdrawn in Squad Code, so this was not allowed."
+                        .into(),
                 });
             let _ = std::fs::remove_file(&answered);
             return answer;
@@ -377,7 +378,7 @@ fn answer_keyed(base: &Path, id: &str, answer: &Answer, key: Option<&[u8]>) -> s
         .ok()
         .and_then(|data| serde_json::from_slice(&data).ok())
         .ok_or(std::io::ErrorKind::NotFound)?;
-    // Asked under another launch of Runo, whose key this one doesn't have: its answer
+    // Asked under another launch of Squad Code, whose key this one doesn't have: its answer
     // couldn't be checked, so it would only be dropped.
     if !request.key.is_empty() && key.map(key_id).as_deref() != Some(request.key.as_str()) {
         return Err(std::io::ErrorKind::PermissionDenied.into());
@@ -680,7 +681,7 @@ mod tests {
         };
         assert!(read_answer(&signed(at), "1-2", Some(&key), at + 10).is_some());
         assert!(read_answer(&signed(at), "1-2", Some(&key), at + FRESH_SECS + 1).is_none());
-        // Without a key (an agent Runo didn't hand one), any answer counts, as before.
+        // Without a key (an agent Squad Code didn't hand one), any answer counts, as before.
         assert!(read_answer(text.as_bytes(), "1-2", None, at).is_some());
         assert!(read_answer(text.as_bytes(), "1-2", Some(&key), at).is_none());
 
@@ -720,7 +721,7 @@ mod tests {
     fn a_key_file_outside_runos_folder_is_left_alone() {
         let other = std::env::temp_dir().join(format!("runo-key-{}", new_id()));
         std::fs::write(&other, "x").unwrap();
-        // Only a file in Runo's keys folder is read (and deleted).
+        // Only a file in Squad Code's keys folder is read (and deleted).
         load_key_file(&other.to_string_lossy());
         assert!(other.exists());
         let _ = std::fs::remove_file(&other);

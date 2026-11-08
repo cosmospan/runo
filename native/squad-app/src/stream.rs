@@ -1336,7 +1336,7 @@ pub struct AntigravityStream {
     named: bool,
     any_text: bool,
     /// Tool steps shown by step_index, so repeated updates don't re-emit them. The value
-    /// is the id Runo gives the step, which the matching `tool_done` carries.
+    /// is the id Squad Code gives the step, which the matching `tool_done` carries.
     tools: std::collections::HashMap<u64, String>,
 }
 
@@ -1482,7 +1482,7 @@ impl AntigravityStream {
 }
 
 /// Antigravity's per-step usage, if the event names one. The CLI reports thinking
-/// tokens separately; Runo folds them into the output count so the token limit sees them.
+/// tokens separately; Squad Code folds them into the output count so the token limit sees them.
 fn antigravity_usage(event: &Value) -> Option<Usage> {
     let u = &event["usage"];
     if !u.is_object() {

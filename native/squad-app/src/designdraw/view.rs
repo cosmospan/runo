@@ -964,7 +964,7 @@ impl DesignCanvas {
     }
 
     /// Look for screens and styles changed outside the canvas (an agent, an editor, git)
-    /// every so often, and draw them again; not while Runo's window is hidden.
+    /// every so often, and draw them again; not while Squad Code's window is hidden.
     fn watch(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
@@ -1390,9 +1390,9 @@ impl DesignCanvas {
             .filter(|(_, paths)| !paths.is_empty());
         if scope.is_some() {
             context.push_str(
-                "\nThis ask is about the selection. Change it with Runo's design tools: they \
+                "\nThis ask is about the selection. Change it with Squad Code's design tools: they \
                  change only the selected layers and what's inside them, and refuse the rest. \
-                 Runo also puts back any other screen changed during this ask. If the ask needs \
+                 Squad Code also puts back any other screen changed during this ask. If the ask needs \
                  more than the selection, make what you can there and say in one line what \
                  else it needs.\n",
             );
@@ -5908,7 +5908,7 @@ impl DesignCanvas {
                 .text_size(px(12.5))
                 .text_color(rgb(c_secondary()))
                 .child(if self.canvas.screens.is_empty() {
-                    "Add a screen, and Runo checks it for text that's hard to read, targets too small to tap, colours outside the theme and more.".to_string()
+                    "Add a screen, and Squad Code checks it for text that's hard to read, targets too small to tap, colours outside the theme and more.".to_string()
                 } else if total == 0 {
                     "Nothing to fix: text is readable, targets are big enough, colours come from the theme and every link has a screen.".to_string()
                 } else {

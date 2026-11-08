@@ -35,7 +35,7 @@ pub fn read(index: &Path) -> Result<(State, Option<String>), String> {
         },
     };
     let root = index.parent().unwrap_or(Path::new("."));
-    // A session written just before Runo stopped may be missing from the index. Ids up to
+    // A session written just before Squad Code stopped may be missing from the index. Ids up to
     // `next_id` that aren't listed were deleted.
     let mut ids = listed.clone();
     if let Ok(entries) = std::fs::read_dir(root.join("sessions")) {

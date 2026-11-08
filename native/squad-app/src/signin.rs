@@ -18,7 +18,7 @@ static WORKED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// How long a check stands before opening a page checks again.
 const FRESH: Duration = Duration::from_secs(60);
 
-/// Whether the agent is signed in here, once checked; None when Runo can't tell.
+/// Whether the agent is signed in here, once checked; None when Squad Code can't tell.
 pub fn get(provider: &str) -> Option<bool> {
     STATE.read().ok()?.as_ref()?.get(provider).copied()
 }
@@ -243,7 +243,7 @@ fn judge(
         }
         "antigravity" => {
             // Antigravity's OAuth sign-in lives in the OS keyring (Keychain, Secret
-            // Service, Credential Manager), which Runo doesn't read; a settings file is
+            // Service, Credential Manager), which Squad Code doesn't read; a settings file is
             // only written once a turn has started, so an absent one isn't a signed-out
             // signal. Only an API key counts here, and a turn that ran sets `turn_showed`.
             None

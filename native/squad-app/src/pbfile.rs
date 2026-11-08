@@ -1,5 +1,5 @@
 //! Playbook files: a playbook as one Markdown file people share through Git, a link or
-//! a chat, and Runo installs from the Playbooks page.
+//! a chat, and Squad Code installs from the Playbooks page.
 //!
 //! ```text
 //! +++

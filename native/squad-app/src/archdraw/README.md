@@ -1,7 +1,7 @@
 <!-- Written by Runo. It describes the files next to it; edit them, not this. -->
 # Architecture diagrams
 
-This folder holds the project's architecture as plain TOML, drawn and edited in Runo's
+This folder holds the project's architecture as plain TOML, drawn and edited in Squad Code's
 Architecture page. People edit it on the canvas; agents can edit these files directly, and
 the canvas shows the change as a preview to accept or reject.
 
@@ -112,5 +112,5 @@ caption = "The cart is sent to the API"
   To remove it everywhere, also delete its `[[element]]` and its relations.
 - To split a diagram, copy its file under a new id and drop nodes from each copy; set
   `link` on a part to drill into the detailed one.
-- Keep both files valid TOML. If an edit doesn't read, Runo keeps showing the last good
+- Keep both files valid TOML. If an edit doesn't read, Squad Code keeps showing the last good
   diagram and says what's wrong until it's fixed.

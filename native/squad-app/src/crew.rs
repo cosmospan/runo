@@ -2,7 +2,7 @@
 //! is an ordinary session with a `ThreadInfo` beside it: the brief Crew gave it, the
 //! checklist and reports its agent keeps, and whether it needs the person.
 //!
-//! Threads talk back to the app through Runo's MCP server (`memory_mcp.rs`), which leaves
+//! Threads talk back to the app through Squad Code's MCP server (`memory_mcp.rs`), which leaves
 //! one small event file per call in `events_dir()`, written under a temporary name and
 //! renamed so the app never reads half a file. Agents with no MCP write the same things as
 //! fenced `runo-…` blocks in their reply, which `TagFilter` takes out of the visible text.
@@ -43,11 +43,11 @@ pub struct ThreadInfo {
     /// Hidden from the open threads; the session itself stays.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub resolved: bool,
-    /// The pull request Runo watches for the thread after it opened one and ended its
+    /// The pull request Squad Code watches for the thread after it opened one and ended its
     /// turn (`prwatch.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watch: Option<crate::prwatch::Watch>,
-    /// CI runs Runo watches for the thread after it pushed or merged to the default
+    /// CI runs Squad Code watches for the thread after it pushed or merged to the default
     /// branch, or pushed a tag (`runwatch.rs`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<crate::runwatch::RunWatch>,
@@ -265,7 +265,7 @@ pub fn check_decision(decision: Decision) -> Result<Decision, String> {
 
 // ---------- Crew's own chat ----------
 
-/// What Crew asks Runo to do, from the `runo-actions` block that ends its reply.
+/// What Crew asks Squad Code to do, from the `runo-actions` block that ends its reply.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(tag = "do", rename_all = "snake_case")]
 #[allow(clippy::enum_variant_names)] // the names are the wire format Crew writes

@@ -1,12 +1,12 @@
-//! The Codex app-server driver. Codex turns run under Runo's agent host as
+//! The Codex app-server driver. Codex turns run under Squad Code's agent host as
 //! `codex app-server`, the JSON-RPC server Codex's own apps use, instead of
-//! `codex exec`: `Runo --agent-host runo-turn <turn folder> --codex` reads `codex.json`
+//! `codex exec`: `Squad Code --agent-host runo-turn <turn folder> --codex` reads `codex.json`
 //! from the turn folder, starts or resumes the thread and runs each prompt from `in` as a
 //! turn. A message sent while a turn runs steers it (`turn/steer`), so Codex reads it
 //! before its next step.
 //!
 //! The host answers Codex's approval requests: Full access allows them, Plan only
-//! refuses file changes, and the rest wait for the person in Runo (the corner card and
+//! refuses file changes, and the rest wait for the person in Squad Code (the corner card and
 //! the Inbox). The sandbox follows the session's mode as with `exec`, but a command that
 //! needs more than the sandbox allows is asked about instead of failing.
 //!
@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use super::rpc::{self, Agent, Message, Out, Reply};
 
-/// The turn's settings, written by Runo into the turn folder.
+/// The turn's settings, written by Squad Code into the turn folder.
 pub const CONFIG: &str = "codex.json";
 
 /// How long Codex has to start and open the thread.
@@ -45,7 +45,7 @@ pub struct Config {
     pub model: String,
     #[serde(default)]
     pub effort: String,
-    /// Runo's mode: "plan", "edit" (or empty) or "full".
+    /// Squad Code's mode: "plan", "edit" (or empty) or "full".
     #[serde(default)]
     pub mode: String,
 }
@@ -70,7 +70,7 @@ impl Config {
     }
 }
 
-/// `Runo --agent-host <mark> <turn folder> --codex`. Returns the exit code, which is
+/// `Squad Code --agent-host <mark> <turn folder> --codex`. Returns the exit code, which is
 /// also written to `turn/exit`.
 pub fn main(turn: &Path) -> i32 {
     let code = match Config::read(turn) {
@@ -78,7 +78,7 @@ pub fn main(turn: &Path) -> i32 {
         None => {
             let _ = std::fs::write(
                 turn.join("err"),
-                "Runo couldn't read the turn's settings.\n",
+                "Squad Code couldn't read the turn's settings.\n",
             );
             2
         }
@@ -125,13 +125,13 @@ impl Handler<'_> {
         let input = agent.input.clone();
         let Some(ask) = approval(method, params) else {
             let result = match method {
-                // Extra permissions and MCP forms aren't granted from Runo yet.
+                // Extra permissions and MCP forms aren't granted from Squad Code yet.
                 "item/permissions/requestApproval" => {
                     json!({ "permissions": {}, "scope": "turn" })
                 }
                 "mcpServer/elicitation/request" => json!({ "action": "decline" }),
                 _ => {
-                    rpc::respond_error(&input, &id, -32601, "Runo doesn't offer this");
+                    rpc::respond_error(&input, &id, -32601, "Squad Code doesn't offer this");
                     return;
                 }
             };
@@ -260,7 +260,7 @@ fn open(agent: &mut Agent, h: &Handler) -> Result<String, String> {
     let id = agent.request(
         "initialize",
         json!({
-            "clientInfo": { "name": "runo", "title": "Runo", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "runo", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
             "capabilities": null,
         }),
     );
@@ -349,10 +349,12 @@ fn turns(turn: &Path, agent: &mut Agent, h: &Handler, thread: &str) -> Result<bo
         sent += 1;
         count(sent);
         let turn_id = match h.wait(agent, id, Some(START)) {
-            // A Codex whose app server doesn't take Runo's first turn (a protocol change
+            // A Codex whose app server doesn't take Squad Code's first turn (a protocol change
             // in a newer or older release) runs the turn with `exec` instead.
             Reply::Result(result) if started == 0 && result["turn"]["id"].as_str().is_none() => {
-                return Err("its app server answered the turn in a shape Runo doesn't know".into());
+                return Err(
+                    "its app server answered the turn in a shape Squad Code doesn't know".into(),
+                );
             }
             Reply::Error(e) if started == 0 => {
                 return Err(format!("its app server refused the turn: {e}"));
@@ -456,7 +458,7 @@ fn turns(turn: &Path, agent: &mut Agent, h: &Handler, thread: &str) -> Result<bo
     }
 }
 
-/// Notifications Runo reads or knowingly passes over. Others are noted in `turn/drift`,
+/// Notifications Squad Code reads or knowingly passes over. Others are noted in `turn/drift`,
 /// so a protocol change in a new Codex release shows up early.
 pub(crate) const KNOWN: &[&str] = &[
     "error",
@@ -529,7 +531,7 @@ mod host_tests {
     }
 
     /// An app server whose turns end with the thread going idle, without the
-    /// `turn/completed` Runo knows.
+    /// `turn/completed` Squad Code knows.
     const IDLE: &str = r#"
 import json, sys
 for line in sys.stdin:

@@ -1,6 +1,6 @@
 //! Contract tests from recorded runs. Each `tests/fixtures/<agent>-<what>.jsonl` holds an
 //! agent CLI's raw output from a real turn (recorded with `SQUADCODE_RECORD`, home folders and
-//! accounts taken out), and the `.events.json` beside it the events Runo must turn it
+//! accounts taken out), and the `.events.json` beside it the events Squad Code must turn it
 //! into. A parser change that alters what a real run produces fails here; when the change
 //! is meant, `SQUADCODE_UPDATE_FIXTURES=1 cargo test fixtures` rewrites the expectations, and
 //! the diff shows what moved.

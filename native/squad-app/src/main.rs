@@ -169,7 +169,7 @@ fn menu_box(key: &str, list: impl IntoElement) -> Div {
         )
 }
 
-/// Runo's app icon, for showing inside the app.
+/// Squad Code's app icon, for showing inside the app.
 fn app_icon() -> std::sync::Arc<Image> {
     static ICON: std::sync::OnceLock<std::sync::Arc<Image>> = std::sync::OnceLock::new();
     ICON.get_or_init(|| {
@@ -186,7 +186,7 @@ fn icon(name: IconName, size: f32, color: u32) -> Icon {
 }
 
 /// The UI typeface, bundled so the app looks the same on every platform.
-/// Turn macOS font smoothing on or off for Runo. The renderer reads Runo's own
+/// Turn macOS font smoothing on or off for Squad Code. The renderer reads Squad Code's own
 /// `AppleFontSmoothing` preference once, the first time it draws text; with smoothing on,
 /// CoreGraphics thickens every glyph whose colour isn't near black, which makes grey
 /// and light text look bold. Off draws text with plain antialiasing, crisp and light.
@@ -222,8 +222,8 @@ fn set_font_smoothing(on: bool) {
 #[cfg(not(target_os = "macos"))]
 fn set_font_smoothing(_on: bool) {}
 
-/// Show Runo's icon in the Dock when it runs outside an app bundle (`cargo run`), where
-/// macOS would otherwise show a generic executable icon. A bundled Runo.app already has it.
+/// Show Squad Code's icon in the Dock when it runs outside an app bundle (`cargo run`), where
+/// macOS would otherwise show a generic executable icon. A bundled Squad Code.app already has it.
 #[cfg(target_os = "macos")]
 fn set_dock_icon() {
     use std::ffi::{c_char, c_void};
@@ -326,7 +326,7 @@ fn main() {
         return;
     }
     // Every other mode may start agents or answer them: give it this launch's approval
-    // key, and keep Runo's data folder private.
+    // key, and keep Squad Code's data folder private.
     store::adopt_runo_data();
     approvals::init_key();
     store::tighten_data_dir();
@@ -359,7 +359,7 @@ fn main() {
     store::keep_before_version_change(&store::data_dir(), env!("CARGO_PKG_VERSION"));
     let app = application().with_assets(icons::Icons);
     startup::mark("gpui application");
-    // Clicking the Dock icon with the window closed (macOS keeps Runo running) opens it again.
+    // Clicking the Dock icon with the window closed (macOS keeps Squad Code running) opens it again.
     app.on_reopen(|cx| {
         if cx.windows().is_empty() {
             v2::open_window(cx);

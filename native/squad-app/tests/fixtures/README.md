@@ -1,8 +1,8 @@
 # Recorded agent runs
 
-Each `<agent>-<version>-<what>.jsonl` is the raw output of one real turn of an agent CLI. The `.events.json` beside it holds the events Runo must turn that output into. `harness::fixtures` replays every file through the parser for that agent and fails when the events change. It also checks that every running step gets exactly one result.
+Each `<agent>-<version>-<what>.jsonl` is the raw output of one real turn of an agent CLI. The `.events.json` beside it holds the events Squad Code must turn that output into. `harness::fixtures` replays every file through the parser for that agent and fails when the events change. It also checks that every running step gets exactly one result.
 
-To record a new run, start Runo with `SQUADCODE_RECORD=<folder>` set. Every structured agent's output is copied to `<folder>/<agent>-<session>-<turn>.jsonl` as it arrives. Before adding a file here:
+To record a new run, start Squad Code with `SQUADCODE_RECORD=<folder>` set. Every structured agent's output is copied to `<folder>/<agent>-<session>-<turn>.jsonl` as it arrives. Before adding a file here:
 
 - Replace home folders with `/Users/dev` and the project folder with `/work/app`.
 - Cut Claude's `system` `init` line down to `type`, `subtype`, `session_id`, `model` and `cwd`. It lists your MCP servers, plugins and account details.

@@ -2,7 +2,7 @@
 
 Source: https://crates.io/crates/vt100/0.15.2
 
-Archive SHA-256 (verified against Runo's original Cargo.lock):
+Archive SHA-256 (verified against the app's original Cargo.lock):
 `84cd863bf0db7e392ba3bd04994be3473491b31e66340672af5d11943c6274de`
 
 This copy preserves the published source, manifest, and MIT license. Package-only

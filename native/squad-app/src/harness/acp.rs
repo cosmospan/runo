@@ -1,12 +1,12 @@
 //! The Agent Client Protocol (ACP) driver. Agents that speak ACP (OpenCode's `acp`,
 //! Gemini CLI and Qwen Code's `--acp`, Copilot's `--acp --stdio`, Cursor's `acp`) run
-//! under Runo's agent host as one live session per turn instead of a print-mode run:
-//! `Runo --agent-host runo-turn <turn folder> --acp` reads `acp.json` from the turn
+//! under Squad Code's agent host as one live session per turn instead of a print-mode run:
+//! `Squad Code --agent-host runo-turn <turn folder> --acp` reads `acp.json` from the turn
 //! folder, starts the agent, opens or reloads the conversation and sends it each prompt
 //! from `in`, one after another.
 //!
 //! While it works, the host answers the agent's requests: permission requests by the
-//! session's mode, asking the person in Runo (the corner card and the Inbox) for anything
+//! session's mode, asking the person in Squad Code (the corner card and the Inbox) for anything
 //! the mode doesn't settle, and file reads and writes inside the session folder. MCP
 //! servers go in `session/new`, so nothing is merged into the agent's project files.
 //!
@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 
 use super::rpc::{self, Agent, Message, Out, Reply};
 
-/// The turn's settings, written by Runo into the turn folder.
+/// The turn's settings, written by Squad Code into the turn folder.
 pub const CONFIG: &str = "acp.json";
 
 /// How long the agent has to start and answer `initialize` or open a session. Agents
@@ -50,7 +50,7 @@ pub struct Config {
     pub session: String,
     #[serde(default)]
     pub model: String,
-    /// Runo's mode: "plan", "edit" (or empty) or "full".
+    /// Squad Code's mode: "plan", "edit" (or empty) or "full".
     #[serde(default)]
     pub mode: String,
     /// MCP servers in ACP's shape (`McpSpec::acp_json`).
@@ -69,7 +69,7 @@ impl Config {
     }
 }
 
-/// `Runo --agent-host <mark> <turn folder> --acp`. Returns the exit code, which is
+/// `Squad Code --agent-host <mark> <turn folder> --acp`. Returns the exit code, which is
 /// also written to `turn/exit`.
 pub fn main(turn: &Path) -> i32 {
     let code = match Config::read(turn) {
@@ -77,7 +77,7 @@ pub fn main(turn: &Path) -> i32 {
         None => {
             let _ = std::fs::write(
                 turn.join("err"),
-                "Runo couldn't read the turn's settings.\n",
+                "Squad Code couldn't read the turn's settings.\n",
             );
             2
         }
@@ -149,7 +149,7 @@ impl Handler<'_> {
                 Ok(()) => rpc::respond(&input, &id, Value::Null),
                 Err(e) => rpc::respond_error(&input, &id, -32603, &e),
             },
-            _ => rpc::respond_error(&input, &id, -32601, "Runo doesn't offer this"),
+            _ => rpc::respond_error(&input, &id, -32601, "Squad Code doesn't offer this"),
         }
     }
 
@@ -195,7 +195,7 @@ fn open(agent: &mut Agent, h: &mut Handler) -> Result<String, String> {
                 "fs": { "readTextFile": true, "writeTextFile": true },
                 "terminal": false,
             },
-            "clientInfo": { "name": "Runo", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
         }),
     );
     let init = match h.wait(agent, id, Some(START)) {
@@ -386,7 +386,7 @@ fn selected(option: &str) -> Value {
     json!({ "outcome": { "outcome": "selected", "optionId": option } })
 }
 
-/// Ask the person in Runo and turn the answer into the agent's option.
+/// Ask the person in Squad Code and turn the answer into the agent's option.
 fn ask_person(cwd: &str, params: &Value) -> Value {
     let call = &params["toolCall"];
     let tool = call["title"]
@@ -405,7 +405,7 @@ fn ask_person(cwd: &str, params: &Value) -> Value {
     }
 }
 
-/// The agent's mode for Runo's: its plan mode for Plan only. Other modes are kept to
+/// The agent's mode for Squad Code's: its plan mode for Plan only. Other modes are kept to
 /// by answering permission requests.
 fn pick_mode(mode: &str, modes: &Value) -> Option<String> {
     if mode != "plan" {
@@ -421,7 +421,7 @@ fn pick_mode(mode: &str, modes: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The agent's id for the model picked in Runo: the same id, or one that ends in it
+/// The agent's id for the model picked in Squad Code: the same id, or one that ends in it
 /// (`anthropic/claude-sonnet-4` for `claude-sonnet-4`).
 fn pick_model(model: &str, models: &Value) -> Option<String> {
     let ids: Vec<&str> = models["availableModels"]
@@ -435,7 +435,7 @@ fn pick_model(model: &str, models: &Value) -> Option<String> {
         .map(|id| id.to_string())
 }
 
-/// A file the agent reads through Runo.
+/// A file the agent reads through Squad Code.
 fn read_file(params: &Value) -> Result<String, String> {
     let path = params["path"].as_str().ok_or("no path")?;
     let text = std::fs::read_to_string(path).map_err(|e| format!("couldn't read {path}: {e}"))?;
@@ -451,13 +451,13 @@ fn read_file(params: &Value) -> Result<String, String> {
     })
 }
 
-/// A file the agent writes through Runo: only inside the session folder.
+/// A file the agent writes through Squad Code: only inside the session folder.
 fn write_file(cwd: &str, params: &Value) -> Result<(), String> {
     let path = PathBuf::from(params["path"].as_str().ok_or("no path")?);
     let content = params["content"].as_str().ok_or("no content")?;
     if !inside(Path::new(cwd), &path) {
         return Err(format!(
-            "{} is outside the session folder, so Runo didn't write it",
+            "{} is outside the session folder, so Squad Code didn't write it",
             path.display()
         ));
     }

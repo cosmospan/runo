@@ -2,12 +2,12 @@
 //!
 //! An app opened from the Dock, Finder or a desktop launcher does not run the person's
 //! shell profile, so its PATH misses nvm, fnm, volta, asdf, Homebrew and npm's global
-//! folder. Runo asks the login shell for its PATH once at startup and adds the folders
+//! folder. Squad Code asks the login shell for its PATH once at startup and adds the folders
 //! those tools use, so `codex`, `node` and `npm` are found the same way a terminal finds
-//! them, and the agents Runo starts inherit the same PATH.
+//! them, and the agents Squad Code starts inherit the same PATH.
 //!
 //! The rest of the login shell's environment (API keys, `JAVA_HOME`, `GOPATH`, proxy
-//! settings…) is brought over too, without overriding anything Runo was started with
+//! settings…) is brought over too, without overriding anything Squad Code was started with
 //! and leaving out what only makes sense inside that shell.
 
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 /// Where each folder on the PATH came from, for Settings.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
-    /// Already on the PATH Runo was started with.
+    /// Already on the PATH Squad Code was started with.
     Inherited,
     /// From the login shell's PATH (`$SHELL -ilc env`).
     Shell,
@@ -229,7 +229,7 @@ fn valid_name(name: &str) -> bool {
 }
 
 /// The login shell's variables worth bringing over: valid names, not shell-session
-/// state, and not already set (`is_set`) in Runo's own environment.
+/// state, and not already set (`is_set`) in Squad Code's own environment.
 pub(crate) fn importable(
     env: &[(String, String)],
     is_set: impl Fn(&str) -> bool,

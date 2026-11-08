@@ -18,7 +18,7 @@ const MAX_SCREENS_TALL: f32 = 4.;
 
 /// Where a project's screen browser keeps its profile. Each project's canvas runs its own
 /// browser, and Chromium won't start a second one on a profile that's in use, so every
-/// project gets its own, and so does every run of Runo: a browser left behind by a run
+/// project gets its own, and so does every run of Squad Code: a browser left behind by a run
 /// that crashed or was force-quit can't block the next one.
 #[cfg(any(not(target_os = "macos"), test))]
 pub(crate) fn profile_dir(root: &Path) -> PathBuf {

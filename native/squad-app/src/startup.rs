@@ -1,6 +1,6 @@
-//! How long Runo takes to start, for `SQUADCODE_TRACE_STARTUP=1`: each step's time since
+//! How long Squad Code takes to start, for `SQUADCODE_TRACE_STARTUP=1`: each step's time since
 //! `main` began, on stderr. `SQUADCODE_TRACE_STARTUP=exit` also quits once the window
-//! responds, so a script can launch Runo again and again.
+//! responds, so a script can launch Squad Code again and again.
 
 use std::sync::OnceLock;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};

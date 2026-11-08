@@ -320,7 +320,7 @@ pub fn fall_back(turn: &Path, fallback: &[String], cwd: &str, out: &Out, why: &s
         Err(e) => {
             note(
                 out,
-                json!({ "error": format!("Runo could not start {program}: {e}") }),
+                json!({ "error": format!("Squad Code could not start {program}: {e}") }),
             );
             127
         }

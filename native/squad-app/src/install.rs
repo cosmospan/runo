@@ -1,4 +1,4 @@
-//! Installing agent CLIs from inside Runo, with each vendor's own installer or npm package.
+//! Installing agent CLIs from inside Squad Code, with each vendor's own installer or npm package.
 //! The exact command is shown before anything runs.
 
 use std::path::PathBuf;

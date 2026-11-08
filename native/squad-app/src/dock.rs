@@ -1,5 +1,5 @@
-//! The count on Runo's Dock icon, the red bubble other apps show: everything that needs
-//! the person (`RunoApp::attention`). The corner mark counts only the assistant's own
+//! The count on Squad Code's Dock icon, the red bubble other apps show: everything that needs
+//! the person. The corner mark counts only the assistant's own
 //! unread answers.
 
 use std::sync::Mutex;

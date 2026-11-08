@@ -1173,7 +1173,7 @@ impl ArchEditor {
                 };
                 let _ = this.update(cx, |this, cx| {
                     if !icons::is_picture(&path) {
-                        this.note("That isn't a picture Runo can show.".into(), true);
+                        this.note("That isn't a picture Squad Code can show.".into(), true);
                         cx.notify();
                         return;
                     }
@@ -1869,7 +1869,7 @@ impl ArchEditor {
         let mut out = format!(
             "## Change the architecture diagram\n\
              The diagram is in {FOLDER}/. Read {FOLDER}/README.md for the file format, then make \
-             the change by editing {FOLDER}/model.toml and {FOLDER}/views/*.toml directly. Runo \
+             the change by editing {FOLDER}/model.toml and {FOLDER}/views/*.toml directly. Squad Code \
              shows your edit on the canvas as a preview the user accepts or rejects, so don't ask \
              before editing. Change no other files for this request.\n\n\
              The diagram open now is \"{}\" ({FOLDER}/views/{}.toml); change that one unless the \
@@ -4629,7 +4629,7 @@ impl ArchEditor {
             && self.ed.cur().nodes.len() > was.nodes.len();
         let text = if !changed {
             format!(
-                "This is already the cleanest layout Runo found: {}.",
+                "This is already the cleanest layout Squad Code found: {}.",
                 after.describe()
             )
         } else if after.is_clean() {

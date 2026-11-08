@@ -1,10 +1,10 @@
-//! The Pi driver. Pi turns run under Runo's agent host as `pi --mode rpc`, Pi's own
+//! The Pi driver. Pi turns run under Squad Code's agent host as `pi --mode rpc`, Pi's own
 //! protocol of JSON records on stdin and stdout, instead of one `pi --mode json` run per
-//! prompt: `Runo --agent-host runo-turn <turn folder> --pi` reads `pi.json` from the
+//! prompt: `Squad Code --agent-host runo-turn <turn folder> --pi` reads `pi.json` from the
 //! turn folder and sends each prompt from `in`. A message sent while Pi works steers it
 //! (`steer`), so Pi reads it once its current tool call is done.
 //!
-//! Pi asks nothing before it acts; Runo's mode picks the tools it is given instead (see
+//! Pi asks nothing before it acts; Squad Code's mode picks the tools it is given instead (see
 //! `agent::provider_args`). Its events go to `out` as they are and `PiStream` reads
 //! them, the same records `--mode json` prints, so the fallback reads the same way.
 //! When the installed Pi has no RPC mode, or it can't start, the host runs the
@@ -20,7 +20,7 @@ use super::rpc::{self, Agent, HostLines, Out};
 use super::{AgentEvent, ToolStep};
 use crate::stream::Parser;
 
-/// The turn's settings, written by Runo into the turn folder.
+/// The turn's settings, written by Squad Code into the turn folder.
 pub const CONFIG: &str = "pi.json";
 
 /// How long Pi has to start and answer.
@@ -51,7 +51,7 @@ impl Config {
     }
 }
 
-/// `Runo --agent-host <mark> <turn folder> --pi`. Returns the exit code, which is also
+/// `Squad Code --agent-host <mark> <turn folder> --pi`. Returns the exit code, which is also
 /// written to `turn/exit`.
 pub fn main(turn: &Path) -> i32 {
     let code = match Config::read(turn) {
@@ -59,7 +59,7 @@ pub fn main(turn: &Path) -> i32 {
         None => {
             let _ = std::fs::write(
                 turn.join("err"),
-                "Runo couldn't read the turn's settings.\n",
+                "Squad Code couldn't read the turn's settings.\n",
             );
             2
         }
@@ -167,7 +167,7 @@ impl Pi<'_> {
                 self.failed = true;
             }
             "extension_ui_request" => {
-                // Runo shows no extension dialogs yet; one that waits is turned down, so
+                // Squad Code shows no extension dialogs yet; one that waits is turned down, so
                 // the extension goes on without an answer.
                 let waits = matches!(
                     record["method"].as_str(),
@@ -190,7 +190,7 @@ impl Pi<'_> {
     }
 }
 
-/// Events Runo reads or knowingly passes over. Others are noted in `turn/drift`.
+/// Events Squad Code reads or knowingly passes over. Others are noted in `turn/drift`.
 pub(crate) const KNOWN: &[&str] = &[
     "agent_start",
     "agent_end",
@@ -299,7 +299,7 @@ fn prompts(pi: &mut Pi) -> Result<bool, String> {
         sent += 1;
         count(pi.turn, sent);
         match pi.pump(&id, START) {
-            // A Pi whose RPC mode doesn't take Runo's first prompt (a protocol change in
+            // A Pi whose RPC mode doesn't take Squad Code's first prompt (a protocol change in
             // a newer or older release) runs the turn in JSON mode instead.
             Answer::Got(r) if r["success"] != true && runs == 0 => {
                 return Err(format!(

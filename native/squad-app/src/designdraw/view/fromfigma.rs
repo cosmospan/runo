@@ -198,7 +198,7 @@ impl DesignCanvas {
         let mut out = div().v_flex().gap(px(6.)).child(field(&self.f_figma));
         if !has_token {
             out = out.child(field(&self.f_figma_token)).child(caption(
-                "Make a personal access token in Figma under Settings > Security, with read access to files. Runo keeps it in its settings on this computer.",
+                "Make a personal access token in Figma under Settings > Security, with read access to files. Squad Code keeps it in its settings on this computer.",
             ));
         }
         out.child(

@@ -1,29 +1,29 @@
-//! The agents Runo can run, described as data rather than code. Each agent's facts (its
+//! The agents Squad Code can run, described as data rather than code. Each agent's facts (its
 //! command, how it installs and signs in, which output format and protocols it speaks,
 //! and which of them only newer releases have) come from a manifest: `agents.json`,
-//! built into Runo, with the person's own `agents.json` in Runo's folder on top. That
+//! built into Squad Code, with the person's own `agents.json` in Squad Code's folder on top. That
 //! file can change a built-in agent's facts or add an agent of its own, such as any ACP
-//! agent, without a new release of Runo.
+//! agent, without a new release of Squad Code.
 //!
 //! A fact that depends on the installed release is a `Gate`: true, false, or text the
-//! CLI's `--help` must mention, checked against what `caps` found when Runo started.
+//! CLI's `--help` must mention, checked against what `caps` found when Squad Code started.
 //! Nothing here starts a model or costs tokens.
 //!
-//! Newer manifests come over the air: alongside the check for a new Runo, `fetch`
+//! Newer manifests come over the air: alongside the check for a new Squad Code, `fetch`
 //! downloads the manifest published with the `agent-registry` release, and keeps it when
-//! its Ed25519 signature checks out against the key built into Runo (`agents.pub`), its
-//! version is newer than any Runo has, and this Runo is new enough for it. It is used
+//! its Ed25519 signature checks out against the key built into Squad Code (`agents.pub`), its
+//! version is newer than any Squad Code has, and this Squad Code is new enough for it. It is used
 //! from the next start, so the list of agents never changes under a running window.
 
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::OnceLock;
 
-/// The manifest built into Runo.
+/// The manifest built into Squad Code.
 const BUILT_IN: &str = include_str!("agents.json");
 
 /// The public half of the key published manifests are signed with: 32 bytes of Ed25519,
-/// in base64. Empty, Runo downloads nothing and keeps the manifest it was built with.
+/// in base64. Empty, Squad Code downloads nothing and keeps the manifest it was built with.
 const PUBLIC_KEY: &str = include_str!("agents.pub");
 
 /// A fact that holds always, never, or once the CLI's help mentions some text.
@@ -99,7 +99,7 @@ pub struct Models {
     pub table: bool,
 }
 
-/// A print-mode command for an agent Runo has no code for: the arguments, the flag that
+/// A print-mode command for an agent Squad Code has no code for: the arguments, the flag that
 /// picks a model, and the prompt last.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct Print {
@@ -123,11 +123,11 @@ pub struct AgentSpec {
     /// "#rrggbb".
     #[serde(default)]
     pub color: String,
-    /// How Runo talks to an agent it has no code of its own for: "acp", or "pi" for
-    /// Pi's RPC mode. Empty for the agents Runo knows.
+    /// How Squad Code talks to an agent it has no code of its own for: "acp", or "pi" for
+    /// Pi's RPC mode. Empty for the agents Squad Code knows.
     #[serde(default)]
     pub driver: String,
-    /// The npm package Runo checks for updates.
+    /// The npm package Squad Code checks for updates.
     #[serde(default)]
     pub package: Option<String>,
     #[serde(default)]
@@ -141,13 +141,13 @@ pub struct AgentSpec {
     /// The CLI keeps its own conversation that a follow-up can resume.
     #[serde(default)]
     pub resumes: Gate,
-    /// The CLI takes a conversation id Runo picks on the first run.
+    /// The CLI takes a conversation id Squad Code picks on the first run.
     #[serde(default)]
     pub names_conversation: Gate,
     /// Images can be attached for the agent.
     #[serde(default)]
     pub images: Gate,
-    /// Runo's permission levels the CLI can hold to.
+    /// Squad Code's permission levels the CLI can hold to.
     #[serde(default = "all_modes")]
     pub modes: Vec<String>,
     /// The output format to ask for: the first whose `when` the help mentions.
@@ -212,7 +212,7 @@ struct Manifest {
     /// Raised with every change, so an older manifest never replaces a newer one.
     #[serde(default)]
     version: u64,
-    /// The oldest Runo that understands this manifest.
+    /// The oldest Squad Code that understands this manifest.
     #[serde(default)]
     min_runo: String,
     #[serde(default)]
@@ -231,8 +231,8 @@ pub fn verify(text: &[u8], signature: &str, key: &str) -> bool {
         .is_ok()
 }
 
-/// The version of manifest `text`, when this Runo can use it: well formed, and not
-/// written for a newer Runo.
+/// The version of manifest `text`, when this Squad Code can use it: well formed, and not
+/// written for a newer Squad Code.
 fn usable(text: &str) -> Option<u64> {
     let manifest: Manifest = serde_json::from_str(text).ok()?;
     let runo = env!("CARGO_PKG_VERSION");
@@ -248,7 +248,7 @@ fn version_of(text: &str) -> u64 {
 }
 
 /// The downloaded manifest kept in `dir`, when its signature checks out against `key`,
-/// it is newer than the built-in one, and this Runo can use it.
+/// it is newer than the built-in one, and this Squad Code can use it.
 fn kept(dir: &std::path::Path, key: &str, built_in: &str) -> Option<String> {
     if key.trim().is_empty() {
         return None;
@@ -316,7 +316,7 @@ struct Registry {
 
 static REGISTRY: OnceLock<Registry> = OnceLock::new();
 
-/// The person's own manifest, read once when Runo starts.
+/// The person's own manifest, read once when Squad Code starts.
 fn own() -> Option<String> {
     if cfg!(test) {
         return None;
@@ -337,7 +337,7 @@ fn registry() -> &'static Registry {
             Ok(specs) => specs,
             Err(why) => {
                 // A broken file of the person's leaves the built-in agents as they are.
-                eprintln!("Runo couldn't read your agents.json, so it was left out: {why}");
+                eprintln!("Squad Code couldn't read your agents.json, so it was left out: {why}");
                 merge(base, None).expect("a kept manifest reads")
             }
         };

@@ -1,10 +1,10 @@
-//! How to update the exact agent CLI Runo runs, and what to tell the person when an
+//! How to update the exact agent CLI Squad Code runs, and what to tell the person when an
 //! update can't or shouldn't run: another app owns the copy, npm needs admin rights,
 //! a file is in the way, or the network is down.
 
 use std::path::{Path, PathBuf};
 
-/// The file Runo starts for an agent: its Settings path, or the first match on PATH.
+/// The file Squad Code starts for an agent: its Settings path, or the first match on PATH.
 pub(crate) fn resolve(bin: &str) -> Option<PathBuf> {
     if bin.contains('/') || bin.contains('\\') {
         let path = PathBuf::from(bin);
@@ -41,7 +41,7 @@ pub(crate) fn owner_app(real: &Path) -> Option<String> {
                 .map(|seg| seg.trim_end_matches(".app").to_string())
         })
         .or_else(|| after("/AppData/Local/Programs/"))?;
-    // Runo itself and generic tool folders aren't "another app".
+    // Squad Code itself and generic tool folders aren't "another app".
     let lower = app.to_lowercase();
     (!app.is_empty() && !["runo", "npm", "node", "nvm", "fnm", "volta"].contains(&lower.as_str()))
         .then(|| {

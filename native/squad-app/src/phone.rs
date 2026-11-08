@@ -1,4 +1,4 @@
-//! The phone bridge: a small HTTP API that Runo's mobile app talks to.
+//! The phone bridge: a small HTTP API that Squad Code's mobile app talks to.
 //!
 //! It runs inside the app when it is turned on in Settings > Phone, or without a window
 //! from `runo --phone [address]`. Reads come straight from the saved state

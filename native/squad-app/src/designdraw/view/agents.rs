@@ -1,4 +1,4 @@
-//! Agents using Design's own actions: a call to one of Runo's design tools lands here, on
+//! Agents using Design's own actions: a call to one of Squad Code's design tools lands here, on
 //! the canvas open for the agent's project, and runs as the same operation a click runs.
 //! It goes on the same undo history as the person's edits, marked as AI's, so any one
 //! step can be undone, and it keeps ids and locked layers as a click does.

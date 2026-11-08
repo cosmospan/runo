@@ -69,7 +69,7 @@ pub(crate) struct ProjectMap {
     pub files: usize,
     /// The file limit was reached; the map covers part of the project.
     pub partial: bool,
-    /// Folders holding Runo's own design screens and diagrams, left out of the code.
+    /// Folders holding Squad Code's own design screens and diagrams, left out of the code.
     pub runo: Vec<String>,
     /// What the project runs, from Docker Compose, Terraform, ECS and Copilot files.
     pub infra: crate::archdraw::infra::Infra,
@@ -803,7 +803,7 @@ pub(crate) fn scan(root: &Path) -> ProjectMap {
         partial,
         ..Default::default()
     };
-    // Runo's own folders: the Design canvas's screens and the Architecture diagrams.
+    // Squad Code's own folders: the Design canvas's screens and the Architecture diagrams.
     for (folder, marker) in [
         (crate::designdraw::model::FOLDER, "canvas.toml"),
         (crate::archdraw::model::FOLDER, "model.toml"),

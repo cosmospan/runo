@@ -2,7 +2,7 @@
 //! pull request watcher (`prwatch.rs`) stops once a pull request is merged, but a thread
 //! that merged or pushed to main, or pushed a release tag, often has more to do once the
 //! runs on that commit or tag finish ("I'll push the release once main's CI is green").
-//! Such a thread ends its turn; Runo reads the GitHub Actions runs for what it pushed,
+//! Such a thread ends its turn; Squad Code reads the GitHub Actions runs for what it pushed,
 //! on the pull request watcher's pace, and wakes it when they have all finished: "Main CI
 //! passed for 1a2b3c4" or "Release workflow failed: build (macos)".
 //!

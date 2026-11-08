@@ -181,7 +181,7 @@ fn drawio_style(kind: Kind, n: &Node, edge_like: bool) -> String {
 
 /// Every diagram as one draw.io file, a page per diagram.
 pub(crate) fn drawio(doc: &Doc) -> String {
-    let mut out = String::from("<mxfile host=\"Runo\" type=\"device\">\n");
+    let mut out = String::from("<mxfile host=\"Squad Code\" type=\"device\">\n");
     for v in &doc.views {
         let _ = writeln!(
             out,

@@ -1,4 +1,4 @@
-//! Local agent turns that outlive Runo. Each runs in its own process session with its
+//! Local agent turns that outlive Squad Code. Each runs in its own process session with its
 //! output going to files in the session's folder (`turn/out`, `turn/err`, and `turn/exit`
 //! once it ends), so closing or a crash leaves it running and the next launch follows it
 //! again from those files.
@@ -11,7 +11,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-/// Marks Runo's wrapper in the process list, so an unrelated process that reused a pid is
+/// Marks Squad Code's wrapper in the process list, so an unrelated process that reused a pid is
 /// never mistaken for a turn.
 pub(crate) const MARK: &str = "runo-turn";
 /// Runs the agent with its output in files, then records how it ended.
@@ -53,7 +53,7 @@ pub(crate) fn turn_dir(root: &Path, id: u64) -> PathBuf {
 pub enum Left {
     /// Still running.
     Running,
-    /// It ended (or was killed) while Runo wasn't watching; its output is there to read.
+    /// It ended (or was killed) while Squad Code wasn't watching; its output is there to read.
     Ended,
 }
 
@@ -87,7 +87,7 @@ fn alive(pid: u32) -> bool {
     }
 }
 
-/// Whether `pid` is alive and is one of Runo's turn wrappers.
+/// Whether `pid` is alive and is one of Squad Code's turn wrappers.
 fn is_turn(pid: u32) -> bool {
     alive(pid)
         && Command::new("ps")
@@ -108,7 +108,7 @@ pub fn stop(group: u32) {
         if let Ok(mut stopped) = STOPPED.lock() {
             stopped.push(group);
         }
-        // SAFETY: signals to the process group of a turn wrapper Runo started.
+        // SAFETY: signals to the process group of a turn wrapper Squad Code started.
         unsafe {
             libc::kill(-(group as i32), libc::SIGTERM);
         }
@@ -144,7 +144,7 @@ pub fn spawn(
     start(id, turn, sh, &command, dir, tx)
 }
 
-/// Start `command` as a detached turn that takes its messages on stdin: Runo's agent
+/// Start `command` as a detached turn that takes its messages on stdin: Squad Code's agent
 /// host runs it, sends it `prompt` first, and forwards each message added while it works
 /// (see `harness::host`).
 pub fn spawn_live(
@@ -158,7 +158,7 @@ pub fn spawn_live(
     let turn = fresh_turn(root, id)?;
     crate::harness::host::send(&turn, prompt)
         .map_err(|e| format!("could not set up the turn: {e}"))?;
-    let exe = std::env::current_exe().map_err(|e| format!("could not find Runo: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("could not find Squad Code: {e}"))?;
     let mut host = Command::new(exe);
     host.arg("--agent-host")
         .arg(MARK)
@@ -186,7 +186,7 @@ pub fn spawn_driver(
     setup(&turn)
         .and_then(|_| crate::harness::host::send(&turn, prompt))
         .map_err(|e| format!("could not set up the turn: {e}"))?;
-    let exe = std::env::current_exe().map_err(|e| format!("could not find Runo: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("could not find Squad Code: {e}"))?;
     let mut host = Command::new(exe);
     host.arg("--agent-host").arg(MARK).arg(&turn).arg(driver);
     start(id, turn, host, &command, dir, tx)
@@ -220,7 +220,7 @@ fn start(
     {
         use std::os::unix::process::CommandExt;
         // SAFETY: setsid is async-signal-safe; it gives the turn its own session and
-        // process group, so it survives Runo and can be stopped as a whole.
+        // process group, so it survives Squad Code and can be stopped as a whole.
         unsafe {
             wrapper.pre_exec(|| {
                 libc::setsid();
@@ -278,7 +278,9 @@ fn exit_code(turn: &Path) -> Option<i32> {
 fn exit_text(code: Option<i32>) -> String {
     match code {
         Some(code) => format!("the agent exited with code {code}"),
-        None => "the agent ended without an exit code (killed, or Runo lost track of it)".into(),
+        None => {
+            "the agent ended without an exit code (killed, or Squad Code lost track of it)".into()
+        }
     }
 }
 
@@ -312,7 +314,7 @@ fn follow(target: Target, turn: PathBuf, pid: u32, mut child: Option<Child>, tx:
                 }
             }
             if ended {
-                // A child of this Runo is reaped; give the wrapper a moment to write how
+                // A child of this Squad Code is reaped; give the wrapper a moment to write how
                 // it ended.
                 if let Some(mut c) = child.take() {
                     let _ = c.wait();

@@ -236,7 +236,7 @@ mod mac {
         // SAFETY: NSObject has no subclassing requirements, and Target has no Drop.
         #[unsafe(super(NSObject))]
         #[thread_kind = MainThreadOnly]
-        #[name = "RunoMenuBarTarget"]
+        #[name = "SquadCodeMenuBarTarget"]
         struct Target;
 
         impl Target {
@@ -403,7 +403,7 @@ mod mac {
         }
     }
 
-    /// Show or hide Runo's Dock icon: hidden while it runs only in the menu bar.
+    /// Show or hide Squad Code's Dock icon: hidden while it runs only in the menu bar.
     pub(super) fn set_dock_icon(shown: bool) {
         let Some(mtm) = MainThreadMarker::new() else {
             return;
@@ -415,7 +415,7 @@ mod mac {
             NSApplicationActivationPolicy::Accessory
         });
         if shown {
-            // The icon comes back as the bundle's; set Runo's own again, and its count.
+            // The icon comes back as the bundle's; set Squad Code's own again, and its count.
             crate::set_dock_icon();
             crate::dock::reapply();
         }

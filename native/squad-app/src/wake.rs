@@ -1,9 +1,9 @@
-//! Waiting without polling, and how much of Runo the person can see.
+//! Waiting without polling, and how much of Squad Code the person can see.
 //!
 //! - [`Inbox`] takes over a channel's receiving end, so the UI wakes when something
 //!   arrives instead of checking the channel on a timer.
 //! - [`shown`] says whether the window can be seen, so periodic work can slow down or
-//!   stop while Runo is hidden, minimized or covered.
+//!   stop while Squad Code is hidden, minimized or covered.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;

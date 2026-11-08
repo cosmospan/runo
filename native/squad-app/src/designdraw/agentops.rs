@@ -1,4 +1,4 @@
-//! Design's own edit actions, offered to agents as tools of Runo's MCP server, so an agent
+//! Design's own edit actions, offered to agents as tools of Squad Code's MCP server, so an agent
 //! changes a layer the way a click in Design does: through the same operations, with the
 //! same undo, ids kept and locked layers left alone. The server process and the app meet
 //! in a folder of small files, as approvals do: a call is a request file, the open canvas
@@ -148,7 +148,10 @@ pub(crate) fn call(base: &Path, dir: &str, tool: &str, input: &Value) -> Value {
         .map_err(std::io::Error::other)
         .and_then(|data| crate::approvals::write_atomic(&path, &data));
     if let Err(e) = written {
-        return result(false, format!("Runo couldn't pass this to Design: {e}"));
+        return result(
+            false,
+            format!("Squad Code couldn't pass this to Design: {e}"),
+        );
     }
     let start = Instant::now();
     loop {
@@ -163,7 +166,7 @@ pub(crate) fn call(base: &Path, dir: &str, tool: &str, input: &Value) -> Value {
             let _ = std::fs::remove_file(&path);
             return result(
                 false,
-                "Design isn't open for this project in Runo, so its actions are unavailable. Edit the screen files instead.",
+                "Design isn't open for this project in Squad Code, so its actions are unavailable. Edit the screen files instead.",
             );
         }
         std::thread::sleep(Duration::from_millis(100));

@@ -284,7 +284,7 @@ fn thread_call(
             "message_crew" => "Sent to Crew.",
             _ => "Shown to the person.",
         }),
-        Err(e) => failure(format!("Runo could not take this: {e}")),
+        Err(e) => failure(format!("Squad Code could not take this: {e}")),
     }
 }
 
@@ -314,6 +314,6 @@ fn call(dir: &str, name: &str, args: &Value) -> Value {
     }
 }
 
-/// Runo's saved sessions, read without changing anything.
+/// Squad Code's saved sessions, read without changing anything.
 /// The name of the CLI this server talks to, from its `initialize` request.
 static CLIENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();

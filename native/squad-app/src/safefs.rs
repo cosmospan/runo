@@ -1,4 +1,4 @@
-//! Files Runo reads and writes in folders something else can change too, such as a
+//! Files Squad Code reads and writes in folders something else can change too, such as a
 //! session folder shared with a Cove VM. Paths are plain names under a root folder (no
 //! `..`, nothing absolute), and no step follows a symlink planted there: a VM that
 //! swaps `out/` or a file for a link to `~/.zshrc` gets an error, not a write there.
@@ -80,7 +80,7 @@ mod imp {
     }
 
     /// The folder `parts` under `root`, opened without following a link at any step.
-    /// `root` itself is Runo's own path and may be reached through links.
+    /// `root` itself is Squad Code's own path and may be reached through links.
     pub fn open_dirs(root: &Path, parts: &[String], create: bool) -> io::Result<OwnedFd> {
         let flags = libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC;
         let root = CString::new(root.as_os_str().as_bytes())

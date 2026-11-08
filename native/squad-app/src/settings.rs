@@ -77,7 +77,7 @@ pub struct AppSettings {
     pub default_provider: String,
     /// Stop the computer from sleeping while an agent runs.
     pub keep_awake: bool,
-    /// Add a line crediting the agent to commits made from Runo.
+    /// Add a line crediting the agent to commits made from Squad Code.
     pub attribution: bool,
     /// How Peek's outline is drawn, as `weight.ink.eyes` (see
     /// `squad_holo::fin::Line`), such as `bold.pastel.dots`. Empty is the default.
@@ -132,11 +132,11 @@ pub struct AppSettings {
     pub v2_bg_dim: u8,
     /// How far the image shows through the page and the sidebar, 0 to 100.
     pub v2_bg_show: u8,
-    /// Interface font: "bundled" (Runo's own, tuned for sharp small text) or "system".
+    /// Interface font: "bundled" (Squad Code's own, tuned for sharp small text) or "system".
     pub font: String,
     /// macOS font smoothing, which thickens text strokes. Off keeps text crisp and light.
     pub font_smoothing: bool,
-    /// Pass Runo's memory MCP server to agents that accept one per run.
+    /// Pass Squad Code's memory MCP server to agents that accept one per run.
     pub memory_server: bool,
     /// Terminal text size in points.
     pub term_font_size: u32,
@@ -165,7 +165,7 @@ pub struct AppSettings {
     pub approval_wait_mins: u32,
     /// Runs of each scheduled playbook to keep; 0 keeps them all.
     pub playbook_keep_runs: u32,
-    /// Run a scheduled playbook once on launch when it came due while Runo was closed.
+    /// Run a scheduled playbook once on launch when it came due while Squad Code was closed.
     pub playbook_catch_up: bool,
     /// Give agents Cove's own tools (`cove mcp`): scratch VMs, commands, files, ports.
     pub cove_tools: bool,
@@ -196,7 +196,7 @@ pub struct AppSettings {
     pub checks_at_once: String,
     /// Run the checks after each turn at low CPU and disk priority.
     pub checks_low_priority: bool,
-    /// How much Runo checks after each turn when it picks the commands: "quick" (a
+    /// How much Squad Code checks after each turn when it picks the commands: "quick" (a
     /// compile, type check or lint) or "full" (tests too). Projects can pick their own.
     pub check_level: String,
     /// Settings from before 0.5.9: Crew threads that may run at once, 0 for no cap. Read
@@ -212,19 +212,19 @@ pub struct AppSettings {
     pub plan_hold_percent: u32,
     /// The agent that answers, by id; empty answers with the default agent.
     pub assistant_agent: String,
-    /// Its model; empty is a fast one where Runo knows it, else the agent's default.
+    /// Its model; empty is a fast one where Squad Code knows it, else the agent's default.
     pub assistant_model: String,
-    /// Show Runo in the macOS menu bar with what agents are doing.
+    /// Show Squad Code in the macOS menu bar with what agents are doing.
     pub menu_bar: bool,
-    /// With the menu bar on, ⌘Q and closing the window hide Runo to it instead of quitting.
+    /// With the menu bar on, ⌘Q and closing the window hide Squad Code to it instead of quitting.
     pub run_in_background: bool,
-    /// The person was told once that Runo kept running in the menu bar.
+    /// The person was told once that Squad Code kept running in the menu bar.
     pub background_told: bool,
-    /// Runo v2: the agent and model each bot runs on, by bot name ("builder"). A bot
+    /// Squad Code v2: the agent and model each bot runs on, by bot name ("builder"). A bot
     /// that isn't here runs on `default_provider` with that agent's default model.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub bot_engines: HashMap<String, BotEngine>,
-    /// Runo v2: the agent that double-checks the crew's decisions. Best from another
+    /// Squad Code v2: the agent that double-checks the crew's decisions. Best from another
     /// vendor than the one that did the work; empty is no second check.
     pub challenge_agent: String,
     /// Smart Peek: the local model Squad's intelligence layer asks first, by its
@@ -243,7 +243,7 @@ pub struct AppSettings {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// The engine under one of Runo v2's bots.
+/// The engine under one of Squad Code v2's bots.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BotEngine {

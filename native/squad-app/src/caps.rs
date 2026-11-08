@@ -152,7 +152,7 @@ pub fn detect(provider: &'static crate::agent::Provider) {
     }
 }
 
-/// Agents without parseable help: the version, and Runo's three permission levels,
+/// Agents without parseable help: the version, and Squad Code's three permission levels,
 /// which `agent::provider_args` maps onto each CLI's own flags.
 fn generic(provider: &str, bin: &str) -> Caps {
     let installed = crate::agent::available(bin, bin);
@@ -334,7 +334,7 @@ fn claude(bin: &str) -> Caps {
 }
 
 /// The model ids inside a Claude Code binary. Scanning it means reading a few
-/// hundred MB, so the answer is kept next to Runo's data, keyed by the binary's
+/// hundred MB, so the answer is kept next to Squad Code's data, keyed by the binary's
 /// path, size and time, and the scan only runs again after Claude Code updates.
 fn known_ids(bin: &std::path::Path) -> Vec<String> {
     let key = bin

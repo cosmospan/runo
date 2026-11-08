@@ -1,5 +1,5 @@
 //! Gemini CLI specifics. Gemini only applies an approval mode in folders it trusts, and
-//! a new worktree isn't trusted yet, so Runo trusts the folder it runs Gemini in.
+//! a new worktree isn't trusted yet, so Squad Code trusts the folder it runs Gemini in.
 
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ fn trust_file(env: &str) -> Option<PathBuf> {
 }
 
 /// Trust `dir` for Gemini, so the session's mode applies there. A folder the person
-/// marked untrusted stays so, and a file Runo can't read as JSON is left alone.
+/// marked untrusted stays so, and a file Squad Code can't read as JSON is left alone.
 pub fn trust(dir: &str, env: &str) {
     if let Some(file) = trust_file(env) {
         let _ = trust_in(&file, Path::new(dir));

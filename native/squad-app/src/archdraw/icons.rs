@@ -1,7 +1,7 @@
 //! A searchable library of logos and tech icons for diagrams: Simple Icons (brand logos
 //! such as Docker, Node.js or Postgres) and Devicon (languages and tools). Nothing is
 //! bundled: each set's index is downloaded the first time someone searches, and each icon
-//! when it's first shown, then kept in Runo's data folder so they work offline. An icon
+//! when it's first shown, then kept in Squad Code's data folder so they work offline. An icon
 //! placed on a diagram is copied into `architecture/icons/` in the repository, so the
 //! diagram carries it everywhere.
 
@@ -94,7 +94,7 @@ impl Library {
     }
 }
 
-/// Runo's own copies of indexes and icons.
+/// Squad Code's own copies of indexes and icons.
 pub(crate) fn cache_dir() -> PathBuf {
     crate::store::data_dir().join("icons")
 }

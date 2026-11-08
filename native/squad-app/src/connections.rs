@@ -142,7 +142,7 @@ pub struct Connection {
     /// Pause an idle VM instead of stopping it: its memory and running programs are
     /// kept, and it carries on as soon as it is used. Needs a Cove with auto-pause.
     pub idle_pause: bool,
-    /// Cove: the server's SSH login (user@host). Set, Runo installs and pairs Cove over
+    /// Cove: the server's SSH login (user@host). Set, Squad Code installs and pairs Cove over
     /// SSH and reaches it through a tunnel it keeps open itself.
     pub ssh: String,
     /// Cove over SSH: the local port of the tunnel; `url` points at it.
@@ -159,9 +159,9 @@ pub struct Connection {
     pub keys: String,
     /// Pass this machine's GitHub login (`gh auth token`) to the agent's commands.
     pub github: bool,
-    /// Agents may run commands here themselves (Runo's `run_on` tool).
+    /// Agents may run commands here themselves (Squad Code's `run_on` tool).
     pub agents: bool,
-    /// Groups of Runo's tools (`RELAY_GROUPS`) that agents running here may call through
+    /// Groups of Squad Code's tools (`RELAY_GROUPS`) that agents running here may call through
     /// the relay, beyond the ones that stay inside their session. Empty: none.
     pub relay_tools: Vec<String>,
 }
@@ -196,7 +196,7 @@ impl Default for Connection {
 
 impl Connection {}
 
-// ---------- the connections Runo knows, for code without access to settings ----------
+// ---------- the connections Squad Code knows, for code without access to settings ----------
 
 fn store() -> &'static Mutex<Vec<Connection>> {
     static ALL: OnceLock<Mutex<Vec<Connection>>> = OnceLock::new();

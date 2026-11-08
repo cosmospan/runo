@@ -1,7 +1,7 @@
-//! Runo's own log file, crash reports, and the check for a newer Runo release.
+//! Squad Code's own log file, crash reports, and the check for a newer Squad Code release.
 //!
 //! Each launch writes what used to go to stderr into `~/.runo/logs/runo-<time>.log`,
-//! keeping the latest few. A log that grows past `LOG_LIMIT` (a Runo left open for weeks)
+//! keeping the latest few. A log that grows past `LOG_LIMIT` (a Squad Code left open for weeks)
 //! moves to `runo-<time>.log.1` and a fresh file starts, keeping `PARTS_KEPT` pieces. A
 //! panic writes `crash-<time>.txt` there too, which the next launch offers to show.
 
@@ -79,7 +79,7 @@ pub fn warn(area: &str, message: impl AsRef<str>) {
     write(Level::Warn, area, message.as_ref());
 }
 
-/// Something went wrong that stops a piece of Runo working, such as a save that failed.
+/// Something went wrong that stops a piece of Squad Code working, such as a save that failed.
 pub fn error(area: &str, message: impl AsRef<str>) {
     write(Level::Error, area, message.as_ref());
 }
@@ -281,7 +281,7 @@ fn redact_word(word: &str) -> String {
 static CURRENT_LOG: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
 /// Start this launch's log file and send stderr to it (and still to the terminal, when
-/// Runo was started from one), then install the crash reporter.
+/// Squad Code was started from one), then install the crash reporter.
 pub fn init() {
     let dir = logs_dir();
     let _ = std::fs::create_dir_all(&dir);
@@ -302,7 +302,7 @@ pub fn init() {
     install_panic_hook();
 }
 
-/// "Runo 0.5.9 on macos aarch64".
+/// "Squad Code 0.5.9 on macos aarch64".
 fn about() -> String {
     format!(
         "Squad Code {} on {} {}",
@@ -523,7 +523,11 @@ fn mark_downloaded(path: &Path) -> Result<(), String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let ok = std::process::Command::new("xattr")
-        .args(["-w", "com.apple.quarantine", &format!("0081;{now:x};Runo;")])
+        .args([
+            "-w",
+            "com.apple.quarantine",
+            &format!("0081;{now:x};Squad Code;"),
+        ])
         .arg(path)
         .status()
         .is_ok_and(|s| s.success());

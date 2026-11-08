@@ -1386,7 +1386,7 @@ mod tests {
             ..Default::default()
         });
         save(&root, &now).unwrap();
-        // The model, the new diagram, and the hand-written one saved in Runo's words.
+        // The model, the new diagram, and the hand-written one saved in Squad Code's words.
         assert_eq!(crate::git::changed_under(&dir, FOLDER).len(), 3);
         for id in ["containers", "extra"] {
             let (committed_doc, was) = committed(&root, id).unwrap();

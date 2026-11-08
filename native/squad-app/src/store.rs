@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-// Saved enums take a value they don't know, as a newer Runo may have written it, as
+// Saved enums take a value they don't know, as a newer Squad Code may have written it, as
 // their plainest variant (`serde(other)`), so going back to an older build keeps the
 // session instead of failing to read it.
 
@@ -23,7 +23,7 @@ pub enum Status {
     Failed,
     /// The person stopped the turn on purpose: not an error.
     Stopped,
-    /// Also any status saved by a newer Runo that this one doesn't know. Serde needs
+    /// Also any status saved by a newer Squad Code that this one doesn't know. Serde needs
     /// the `other` variant last.
     #[default]
     #[serde(other)]
@@ -128,7 +128,7 @@ impl Session {}
 
 impl Session {}
 
-/// An optional part of a session, or none when it can't be read (a newer Runo saved it
+/// An optional part of a session, or none when it can't be read (a newer Squad Code saved it
 /// in a shape this one doesn't know), so the rest of the session still loads.
 fn or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(
     d: D,
@@ -221,12 +221,12 @@ pub struct Project {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mode: String,
     /// Let agent CLIs use settings committed in the repository that start programs
-    /// (Cursor and Gemini MCP servers, hooks, tool commands): Runo trusts the folder
-    /// for them and approves the servers up front. Off, Runo trusts a folder only when
+    /// (Cursor and Gemini MCP servers, hooks, tool commands): Squad Code trusts the folder
+    /// for them and approves the servers up front. Off, Squad Code trusts a folder only when
     /// it holds no such settings.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub trust_agent_config: bool,
-    /// How Runo watches CI for this project: `provider::CiTracking::parse` reads it.
+    /// How Squad Code watches CI for this project: `provider::CiTracking::parse` reads it.
     /// Empty and "auto" use the three-signal detection; "off"/"none" turns the watcher
     /// off; "github_actions"/"gitlab_pipelines"/"bitbucket_pipelines" pin a kind;
     /// "custom:<url>" links a status page.
@@ -295,7 +295,7 @@ pub struct Session {
     /// Where the session runs: a connection's id, or 0 for this machine.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub connection: u64,
-    /// The running turn is on a connection, where it keeps going while Runo is closed.
+    /// The running turn is on a connection, where it keeps going while Squad Code is closed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub remote_turn: bool,
     /// The branch this session's branch started from and lands in, such as `main`.
@@ -312,12 +312,12 @@ pub struct Session {
     /// sends only what changed.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub canvas_context: String,
-    /// The newest snapshot of the folder Runo took (end of a turn, an undo or a redo),
+    /// The newest snapshot of the folder Squad Code took (end of a turn, an undo or a redo),
     /// so Undo can leave alone what changed after it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub snapshot: String,
     /// The branch is a pull request from someone else's fork: its scripts are theirs, so
-    /// Runo never runs its checks on its own.
+    /// Squad Code never runs its checks on its own.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fork: bool,
     /// Told to the agent with the next prompt, such as that its last turn was undone.
@@ -484,7 +484,7 @@ pub struct Automation {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub version: String,
     /// Where it was installed from (a link, repository or file) and the file inside it,
-    /// so it can be updated; empty for playbooks made in Runo.
+    /// so it can be updated; empty for playbooks made in Squad Code.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -604,7 +604,7 @@ pub fn read_json_or_backup<T: Default + Serialize + serde::de::DeserializeOwned>
 }
 
 /// The parts of a JSON object that can still be read as a `T`, the rest left at their
-/// defaults: one field saved in a shape this Runo doesn't know (by a newer one, or a
+/// defaults: one field saved in a shape this Squad Code doesn't know (by a newer one, or a
 /// hand edit) then costs that field, not the whole file. `None` when `value` isn't an
 /// object.
 pub fn salvage<T: Default + Serialize + serde::de::DeserializeOwned>(
@@ -628,12 +628,12 @@ pub fn salvage<T: Default + Serialize + serde::de::DeserializeOwned>(
     serde_json::from_value(serde_json::Value::Object(kept)).ok()
 }
 
-/// Move a file Runo can't read out of the way, keeping it next to where it was.
+/// Move a file Squad Code can't read out of the way, keeping it next to where it was.
 pub fn move_aside(path: &Path, error: &str) {
     set_aside(path, error, true);
 }
 
-/// Copy a file Runo could read only in part next to where it was, before it is saved over.
+/// Copy a file Squad Code could read only in part next to where it was, before it is saved over.
 pub fn keep_aside(path: &Path, error: &str) {
     set_aside(path, error, false);
 }
@@ -716,7 +716,7 @@ pub fn create_private_dir(dir: &Path) -> std::io::Result<()> {
     builder.create(dir)
 }
 
-/// Make Runo's data folder private: 0700, and its files and request folders readable
+/// Make Squad Code's data folder private: 0700, and its files and request folders readable
 /// only by the person. Installs from before this kept it 0755 with 0644 files, which
 /// left settings (API keys, env lines), transcripts and approvals open to every
 /// account on the computer. On Windows the folder sits in the person's profile, which
@@ -759,7 +759,7 @@ fn tighten(dir: &Path, depth: u32) {
     }
 }
 
-/// When this Runo is not the one that last ran on `root` (an update, or going back to an
+/// When this Squad Code is not the one that last ran on `root` (an update, or going back to an
 /// older build), keep a copy of the files it is about to rewrite: `state.json.prev` and
 /// `settings.json.prev`. When the last one was newer, every session file is copied too, to
 /// `backups/<version>-<time>/`, since an older build drops what it doesn't know as it saves.
@@ -787,7 +787,7 @@ pub fn keep_before_version_change(root: &Path, current: &str) {
         crate::applog::warn(
             "load",
             format!(
-                "Runo {last} last used this data and this is {current}; copied {copied} files \
+                "Squad Code {last} last used this data and this is {current}; copied {copied} files \
                  to {} before saving over them",
                 backup.display()
             ),
@@ -870,7 +870,7 @@ fn adopt_from(old: &Path, new: &Path) {
     }
 }
 
-/// Give a project saved before check levels its level: checks Runo suggested follow the
+/// Give a project saved before check levels its level: checks Squad Code suggested follow the
 /// Settings level from now on, and commands the person typed stay as they are.
 fn migrate_check_level(project: &mut Project) {
     if project.check_level.is_some() {
@@ -913,7 +913,7 @@ impl State {
             }
         };
         // A turn on a connection keeps going there, and a local turn runs detached from
-        // Runo; both are picked up again on start. Anything else could not survive.
+        // Squad Code; both are picked up again on start. Anything else could not survive.
         for session in &mut state.sessions {
             if session.status == Status::Working
                 && !session.remote_turn
@@ -922,7 +922,7 @@ impl State {
                 session.status = Status::Failed;
                 session.messages.push(Message::new(
                     Role::System,
-                    "Interrupted: Runo closed while this run was active.",
+                    "Interrupted: Squad Code closed while this run was active.",
                 ));
             }
         }
