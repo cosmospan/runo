@@ -243,6 +243,11 @@ pub struct Job {
     pub agent: String,
     pub started: u64,
     pub ended: Option<u64>,
+    /// Seconds its finished turns actually ran. Follow-ups move `ended`
+    /// on, so `ended - started` would count the waiting in between too.
+    pub worked: u64,
+    /// When the turn running now began; 0 when none is.
+    pub turn: u64,
     pub status: Status,
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
@@ -344,6 +349,8 @@ impl Default for Job {
             agent: String::new(),
             started: 0,
             ended: None,
+            worked: 0,
+            turn: 0,
             status: Status::Done,
             feed: Vec::new(),
             plan: Vec::new(),
@@ -380,9 +387,32 @@ impl Default for Job {
 }
 
 impl Job {
-    /// Seconds it has run, or ran.
+    /// Seconds it has run, or ran: its turns only, not the time it sat
+    /// waiting for a follow-up.
     pub fn seconds(&self) -> u64 {
-        self.ended.unwrap_or_else(now).saturating_sub(self.started)
+        if self.worked == 0 && self.turn == 0 {
+            // Saved before turns were timed.
+            return self.ended.unwrap_or_else(now).saturating_sub(self.started);
+        }
+        let running = if self.turn > 0 {
+            self.ended.unwrap_or_else(now).saturating_sub(self.turn)
+        } else {
+            0
+        };
+        self.worked + running
+    }
+
+    /// A turn starts: the first run or a follow-up.
+    pub fn turn_began(&mut self) {
+        self.turn = now();
+    }
+
+    /// The running turn ended; its time goes on the job.
+    pub fn turn_ended(&mut self) {
+        if self.turn > 0 {
+            self.worked += now().saturating_sub(self.turn).max(1);
+            self.turn = 0;
+        }
     }
 
     /// Steps done out of steps planned, when the agent keeps a plan.
@@ -1139,6 +1169,37 @@ pub fn span(s: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_waiting_for_a_follow_up_is_not_time_at_work() {
+        let t = now();
+        // Ran 6 seconds, sat for hours, then a 4 second follow-up.
+        let j = Job {
+            started: t - 30_000,
+            ended: Some(t),
+            worked: 10,
+            ..Job::default()
+        };
+        assert_eq!(j.seconds(), 10);
+        // A turn running now counts from when it began.
+        let mut k = Job {
+            started: t - 30_000,
+            worked: 6,
+            turn: t - 5,
+            ..Job::default()
+        };
+        assert!((11..=12).contains(&k.seconds()));
+        k.turn_ended();
+        assert_eq!(k.turn, 0);
+        assert!(k.worked >= 11);
+        // Jobs saved before turns were timed keep their old span.
+        let old = Job {
+            started: t - 60,
+            ended: Some(t),
+            ..Job::default()
+        };
+        assert_eq!(old.seconds(), 60);
+    }
 
     fn with_project() -> Store {
         let mut s = Store::default();
