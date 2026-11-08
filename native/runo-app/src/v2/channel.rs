@@ -735,6 +735,16 @@ impl Shell {
         if let Some(asks) = self.ask_card(j, cx) {
             body = body.child(asks);
         }
+        // Its branch, and git news about it: the seatbelt, a clash ahead.
+        if let Some(line) = self.branch_line(j) {
+            body = body.child(line);
+        }
+        if let Some(card) = self.belt_card(j, cx) {
+            body = body.child(card);
+        }
+        if let Some(card) = self.clash_card(j, cx) {
+            body = body.child(card);
+        }
         if review || matches!(j.status, Status::Done | Status::Shipped) && !j.changes.is_empty() {
             body = body.child(
                 div()

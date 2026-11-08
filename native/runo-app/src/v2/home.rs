@@ -242,18 +242,36 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(
+                    .children([(false, "Jobs"), (true, "Git")].map(|(git, label)| {
+                        let on = self.list_git == git;
                         div()
+                            .id(("list-side", git as usize))
+                            .flex()
+                            .items_center()
+                            .gap(px(5.))
+                            .cursor_pointer()
                             .text_size(px(17.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("Jobs"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(c(ui::faint()))
-                            .child(all.len().to_string()),
-                    )
+                            .text_color(c(if on { ui::ink() } else { ui::faint() }))
+                            .when(!on, |d| d.hover(|s| s.text_color(c(ui::muted()))))
+                            .child(label)
+                            .when(!git, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .font_weight(FontWeight::NORMAL)
+                                        .text_color(c(ui::faint()))
+                                        .child(all.len().to_string()),
+                                )
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.list_git = git;
+                                if git {
+                                    this.crew.look_at_git_soon();
+                                }
+                                cx.notify();
+                            }))
+                    }))
                     .child(div().flex_1())
                     .child(
                         div()
@@ -306,7 +324,7 @@ impl Shell {
                             .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
                     ),
             )
-            .child(filters);
+            .when(!self.list_git, |d| d.child(filters));
 
         let mut body = div()
             .id("job-list")
@@ -360,7 +378,13 @@ impl Shell {
             .border_l_1()
             .border_color(c(ui::line()))
             .child(head)
-            .child(body)
+            .map(|d| {
+                if self.list_git {
+                    d.child(self.git_side(&folder, &all, cx))
+                } else {
+                    d.child(body)
+                }
+            })
     }
 
     /// One job in the list: the bot's face, the title, its state, and a thin

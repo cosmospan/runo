@@ -502,6 +502,12 @@ impl Shell {
         if let Some(card) = self.trouble_card(job, cx) {
             feed = feed.child(card);
         }
+        if let Some(card) = self.belt_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
+        if let Some(card) = self.clash_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
         if let Some(card) = self.review_card(job, cx) {
             feed = feed.child(card);
         }

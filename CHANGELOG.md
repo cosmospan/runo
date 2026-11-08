@@ -4,6 +4,13 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Git in the thread. Every job card shows the branch it works on, the commits it made there and how far its base moved since it started ("squad/apple-pay · 3 commits · 2 behind main").
+- The seatbelt now runs before Shipper pushes a job and before a job is merged here. A secret, a key file or a leftover clash marker in the change holds it with a card that says what and where, with "Ask <bot> to take them out" or "Push anyway". Debugging leftovers are pointed out but don't hold it. It works the same for jobs on your server.
+- Clash ahead: every 45 seconds Squad test-merges the work of jobs in the same project, uncommitted work included, without touching any folder. When two change the same lines, Peek says so on both jobs, with where, before either is approved.
+- The Jobs panel has a Git side: the project's branch against GitHub (with Refresh), the branches the crew is working on with their commits, clashes and how far behind they are, and the watch-outs to sort out before approving.
+
 ### Changed
 
 - The menu bar panel is rebuilt for the Squad Code window. It used to say the window was closed even while it was open, and showed nothing else. Now it lists what needs you (a bot waiting on your yes, with Allow and Deny right there; changes ready for review; jobs that stopped with a problem), what the crew is working on, with Stop and a progress bar, and the last few jobs that ended. A box at the top hands the crew a new job without opening the window. With the window closed it reads your saved jobs, and any row opens the window on that job. The panel is as tall as what it shows, Quit asks first while jobs are running, Escape closes it, and the count beside the menu bar glyph now works too.

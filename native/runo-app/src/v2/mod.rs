@@ -19,6 +19,7 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod gitcards;
 mod goal;
 mod history;
 mod home;
@@ -499,6 +500,8 @@ pub struct Shell {
     /// Which jobs the list beside a job shows: all, needing you, running or done.
     /// The Jobs panel shows the thread you're in (false) or every job (true).
     list_all: bool,
+    /// The Jobs panel shows its Git side: branches, the folder's state, watch-outs.
+    list_git: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
     /// A thread waiting for you to confirm deleting it.
@@ -1027,8 +1030,12 @@ impl Shell {
             scale: 1.0,
             mode: Mode::Build,
             crew: {
+                let demo = store.demo;
                 let mut rt = runtime::Runtime::new(store);
                 rt.link = remote::load().map(remote::Link::start);
+                if demo {
+                    rt.repos = demo::repos();
+                }
                 rt
             },
             composer,
@@ -1068,6 +1075,7 @@ impl Shell {
             inbox_pick: None,
             list_filter: 0,
             list_all: false,
+            list_git: false,
             jobs_open: false,
             deleting: None,
             removing: None,
@@ -1151,6 +1159,11 @@ impl Shell {
             Ok("maker-review") => {
                 shell.open_maker(Some(builder::SAMPLE), None, window, cx);
                 shell.start_blank(window, cx);
+            }
+            // The Jobs panel open on its Git side.
+            Ok("git") => {
+                shell.jobs_open = true;
+                shell.list_git = true;
             }
             Ok("setup") => {
                 let who = Member::all()
@@ -2018,6 +2031,22 @@ impl Shell {
     pub(super) fn resolve(&mut self, id: u64, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);
         self.crew.resolve(&st, id);
+        cx.notify();
+    }
+
+    /// Approves a job the seatbelt held, as it is.
+    pub(super) fn approve_anyway(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
+        self.crew.approve_anyway(id);
+        cx.notify();
+    }
+
+    /// Hands what the seatbelt found back to the job's bot to take out.
+    pub(super) fn take_out(&mut self, id: u64, cx: &mut Context<Self>) {
+        let st = Self::app_settings(cx);
+        self.crew.take_out(&st, id);
         cx.notify();
     }
 
