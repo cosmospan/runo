@@ -438,7 +438,11 @@ impl Shell {
                         let face = self.avatar(who, 32.);
                         let kind = (Some(at) == last_text && job.status != Status::Running)
                             .then(|| super::rich::Kind::of(&t, job.status));
+                        // Still on the server: its links and commands are there.
+                        self.rich_there = (!job.remote_on.is_empty() && !job.remote_dir.is_empty())
+                            .then(|| job.remote_dir.clone());
                         let text = self.rich(format!("feed-{}-{at}", job.id), &t, &dir, cx);
+                        self.rich_there = None;
                         feed.child(
                             div().flex().gap(px(12.)).child(face).child(
                                 super::rich::bubble(kind, text)

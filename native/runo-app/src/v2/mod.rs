@@ -595,6 +595,11 @@ pub struct Shell {
     server_desktop_installing: bool,
     server_desktop_err: String,
     server_desktop_want: bool,
+    /// While a server job's words are laid out: its folder on the server, so
+    /// what they offer (a local port, a command) is done there.
+    rich_there: Option<String>,
+    /// Tunnels to ports on the server that a job's links opened, by port there.
+    forwards: HashMap<u16, remote::Forward>,
     /// Watching that screen in Squad: the connection, the picture and the
     /// frame it was made from, pictures to let go of, where it's drawn and
     /// the focus that sends keys to it.
@@ -1190,6 +1195,8 @@ impl Shell {
             server_desktop_installing: false,
             server_desktop_err: String::new(),
             server_desktop_want: false,
+            rich_there: None,
+            forwards: HashMap::new(),
             screen_view: None,
             screen_img: None,
             screen_seen: u64::MAX,
