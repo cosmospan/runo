@@ -602,12 +602,12 @@ mod tests {
     use super::*;
 
     /// Draws, picks and edits a real screen. Needs a Chromium, so it runs only when
-    /// RUNO_BROWSER_TESTS is set. Not on macOS: WebKit answers on the main thread's run
+    /// SQUADCODE_BROWSER_TESTS is set. Not on macOS: WebKit answers on the main thread's run
     /// loop, which the test runner doesn't turn.
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn screens_draw_pick_and_edit() {
-        if std::env::var_os("RUNO_BROWSER_TESTS").is_none() {
+        if std::env::var_os("SQUADCODE_BROWSER_TESTS").is_none() {
             return;
         }
         let root = std::env::temp_dir().join(format!("runo-render-{}", std::process::id()));

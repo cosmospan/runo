@@ -1333,9 +1333,9 @@ pub fn live_command(provider: &str, command: &Command) -> Option<(Command, Strin
 }
 
 /// The arguments that run `provider` as an ACP agent, once the installed CLI's help
-/// lists them. `RUNO_NO_ACP` set in Runo's environment keeps every agent in print mode.
+/// lists them. `SQUADCODE_NO_ACP` set in Runo's environment keeps every agent in print mode.
 pub fn acp_args(provider: &str) -> Option<Vec<String>> {
-    if std::env::var_os("RUNO_NO_ACP").is_some() {
+    if std::env::var_os("SQUADCODE_NO_ACP").is_some() {
         return None;
     }
     let spec = crate::registry::spec(provider)?;
@@ -1391,7 +1391,7 @@ pub fn codex_app_config(
     dir: &str,
     fallback: &Command,
 ) -> Option<crate::harness::codex::Config> {
-    if spec.provider != "codex" || std::env::var_os("RUNO_NO_APP_SERVER").is_some() {
+    if spec.provider != "codex" || std::env::var_os("SQUADCODE_NO_APP_SERVER").is_some() {
         return None;
     }
     let agent = crate::registry::spec("codex")?;
@@ -1437,7 +1437,7 @@ pub fn pi_config(
     fallback: &Command,
 ) -> Option<(crate::harness::pi::Config, String)> {
     let agent = crate::registry::spec(spec.provider).filter(|a| a.driver == "pi")?;
-    if std::env::var_os("RUNO_NO_RPC").is_some() {
+    if std::env::var_os("SQUADCODE_NO_RPC").is_some() {
         return None;
     }
     let rpc = agent.pick(&agent.rpc)?;
@@ -1919,7 +1919,7 @@ mod arg_tests {
         let mut command = Command::new("claude");
         command
             .args(["-p", "--output-format", "stream-json", "--", "Fix it"])
-            .env("RUNO_X", "1");
+            .env("SQUAD_TEST_X", "1");
         let (live, prompt) = live_command("claude", &command).unwrap();
         assert_eq!(prompt, "Fix it");
         let args: Vec<_> = live
@@ -1936,7 +1936,7 @@ mod arg_tests {
                 "stream-json"
             ]
         );
-        assert!(live.get_envs().any(|(k, v)| k == "RUNO_X" && v.is_some()));
+        assert!(live.get_envs().any(|(k, v)| k == "SQUAD_TEST_X" && v.is_some()));
         // Without a trailing prompt there's nothing to move.
         let mut bare = Command::new("claude");
         bare.args(["-p", "hi"]);
@@ -1989,7 +1989,7 @@ mod arg_tests {
         let script = dir.join("fake-agent");
         std::fs::write(
             &script,
-            "#!/bin/sh\necho \"env=$RUNO_T\"\necho \"args=$*\"\necho oops 1>&2\nexit 3\n",
+            "#!/bin/sh\necho \"env=$SQUAD_TEST_T\"\necho \"args=$*\"\necho oops 1>&2\nexit 3\n",
         )
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1997,7 +1997,7 @@ mod arg_tests {
         let sel = sel(&[("model", "opus")]);
         let o = AgentOptions {
             binary: script.to_string_lossy().into_owned(),
-            env: " RUNO_T = from-env \nNOT_A_PAIR\n=ignored".into(),
+            env: " SQUAD_TEST_T = from-env \nNOT_A_PAIR\n=ignored".into(),
             ..Default::default()
         };
         let spec = RunSpec {

@@ -1,5 +1,5 @@
-//! How long Runo takes to start, for `RUNO_TRACE_STARTUP=1`: each step's time since
-//! `main` began, on stderr. `RUNO_TRACE_STARTUP=exit` also quits once the window
+//! How long Runo takes to start, for `SQUADCODE_TRACE_STARTUP=1`: each step's time since
+//! `main` began, on stderr. `SQUADCODE_TRACE_STARTUP=exit` also quits once the window
 //! responds, so a script can launch Runo again and again.
 
 use std::sync::OnceLock;
@@ -10,7 +10,7 @@ static MODE: OnceLock<Option<String>> = OnceLock::new();
 
 fn mode() -> Option<&'static str> {
     MODE.get_or_init(|| {
-        std::env::var("RUNO_TRACE_STARTUP")
+        std::env::var("SQUADCODE_TRACE_STARTUP")
             .ok()
             .filter(|v| !v.is_empty())
     })

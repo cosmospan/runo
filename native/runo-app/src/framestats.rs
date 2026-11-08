@@ -1,4 +1,4 @@
-//! Frame timing for the main window, on only when `RUNO_FRAME_STATS` names a file: every
+//! Frame timing for the main window, on only when `SQUADCODE_FRAME_STATS` names a file: every
 //! two seconds a line goes to it with how many frames drew, how long building and drawing
 //! them took, how many missed the display's refresh, and how much CPU Squad Code used
 //! meanwhile.
@@ -32,7 +32,7 @@ struct Stats {
 
 thread_local! {
     static STATS: RefCell<Option<Stats>> = RefCell::new(
-        std::env::var_os("RUNO_FRAME_STATS").map(|p| Stats {
+        std::env::var_os("SQUADCODE_FRAME_STATS").map(|p| Stats {
             path: Some(p.into()),
             ..Stats::default()
         }),

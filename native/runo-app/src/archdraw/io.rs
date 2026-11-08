@@ -1771,11 +1771,11 @@ mod tests {
 
     /// The Shipyard test project's diagrams as pictures, as drawn from its code and after
     /// each Beautify, for looking at a change to layout by eye. Writes nothing unless
-    /// RUNO_SHOTS names a folder; downloads logos when it can.
+    /// SQUADCODE_SHOTS names a folder; downloads logos when it can.
     #[test]
-    #[ignore = "RUNO_SHOTS=<folder> cargo test -p runo shipyard_pictures -- --ignored"]
+    #[ignore = "SQUADCODE_SHOTS=<folder> cargo test -p runo shipyard_pictures -- --ignored"]
     fn shipyard_pictures() {
-        let Some(out) = std::env::var_os("RUNO_SHOTS").map(std::path::PathBuf::from) else {
+        let Some(out) = std::env::var_os("SQUADCODE_SHOTS").map(std::path::PathBuf::from) else {
             return;
         };
         let root =
@@ -1786,8 +1786,8 @@ mod tests {
         std::fs::create_dir_all(&project).unwrap();
         infra::attach_logos(&mut doc, &project);
         save(&project, &doc).unwrap();
-        // RUNO_SHOTS_ONLY=a,b draws only the pictures whose names start with one of those.
-        let only: Vec<String> = std::env::var("RUNO_SHOTS_ONLY")
+        // SQUADCODE_SHOTS_ONLY=a,b draws only the pictures whose names start with one of those.
+        let only: Vec<String> = std::env::var("SQUADCODE_SHOTS_ONLY")
             .map(|o| o.split(',').map(String::from).collect())
             .unwrap_or_default();
         let shoot = |doc: &Doc, view: &str, name: &str| {

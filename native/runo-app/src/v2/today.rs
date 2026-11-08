@@ -17,7 +17,7 @@ use super::{Place, Shell};
 
 /// The person's first name, from the account they're signed in to.
 fn first_name() -> Option<String> {
-    let raw = std::env::var("RUNO_NAME")
+    let raw = std::env::var("SQUADCODE_NAME")
         .ok()
         .filter(|n| !n.trim().is_empty())
         .or_else(full_name)

@@ -794,10 +794,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// Runs against a real server when `RUNO_TEST_PG` holds its URL.
+    /// Runs against a real server when `SQUADCODE_TEST_PG` holds its URL.
     #[test]
     fn postgres_queries_stay_read_only() {
-        let Ok(url) = std::env::var("RUNO_TEST_PG") else {
+        let Ok(url) = std::env::var("SQUADCODE_TEST_PG") else {
             return;
         };
         let (mut s, _) = Session::open(Kind::Postgres, &url).unwrap();

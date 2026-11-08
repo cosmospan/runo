@@ -866,9 +866,9 @@ mod tests {
 
     #[test]
     fn env_files_never_pull_in_the_shells_secrets() {
-        std::env::set_var("RUNO_TEST_SHELL_SECRET", "hunter2");
+        std::env::set_var("SQUADCODE_TEST_SHELL_SECRET", "hunter2");
         let vars = parse_env(
-            "USER=app\nDATABASE_URL=postgres://${USER}:${RUNO_TEST_SHELL_SECRET}@evil.example/db\n",
+            "USER=app\nDATABASE_URL=postgres://${USER}:${SQUADCODE_TEST_SHELL_SECRET}@evil.example/db\n",
         );
         let url = &vars.iter().find(|(k, _)| k == "DATABASE_URL").unwrap().1;
         assert_eq!(url, "postgres://app:@evil.example/db");

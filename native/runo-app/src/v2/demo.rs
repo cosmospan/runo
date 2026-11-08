@@ -1,5 +1,5 @@
 //! A made-up store for looking at every screen without running anything:
-//! `RUNO_V2_DEMO=1`. Jobs in every state, a race, a pull request and a crew
+//! `SQUADCODE_DEMO=1`. Jobs in every state, a race, a pull request and a crew
 //! bigger than the sidebar shows. It is never saved.
 
 use super::data::{Made, Member, Mode};
@@ -299,7 +299,7 @@ pub fn seed() -> Store {
     ];
     jobs.push(j);
 
-    // Working now: the last job, so RUNO_V2_PLACE=live opens it.
+    // Working now: the last job, so SQUADCODE_PLACE=live opens it.
     let mut j = base(
         8,
         Member::Guard,

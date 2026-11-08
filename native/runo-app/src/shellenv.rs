@@ -71,7 +71,7 @@ pub fn ready() {
 
 /// The login shell's environment, or none where it isn't asked.
 fn ask_shell() -> Vec<(String, String)> {
-    if cfg!(windows) || std::env::var_os("RUNO_NO_SHELL_PATH").is_some() {
+    if cfg!(windows) || std::env::var_os("SQUADCODE_NO_SHELL_PATH").is_some() {
         Vec::new()
     } else {
         login_shell_env(Duration::from_secs(4)).unwrap_or_default()
@@ -162,7 +162,7 @@ fn merge(
 }
 
 /// Marks where the environment starts in the shell's output, after any profile noise.
-const MARKER: &str = "__RUNO_ENV__";
+const MARKER: &str = "__SQUADCODE_ENV__";
 
 /// Variables that describe the shell or terminal session itself, not the person's setup.
 const SKIP: &[&str] = &[

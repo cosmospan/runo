@@ -751,9 +751,9 @@ fn folders_from(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
 }
 
 /// How long the app waits, untouched, before the crew dozes (five minutes;
-/// `RUNO_DOZE_SECS` shortens it for testing).
+/// `SQUADCODE_DOZE_SECS` shortens it for testing).
 fn doze_after() -> Duration {
-    let secs = std::env::var("RUNO_DOZE_SECS")
+    let secs = std::env::var("SQUADCODE_DOZE_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(300);
@@ -1113,14 +1113,14 @@ impl Shell {
         });
         // Learn which agents are installed and the models they offer.
         crate::caps::refresh();
-        let store = if std::env::var_os("RUNO_V2_DEMO").is_some() {
+        let store = if std::env::var_os("SQUADCODE_DEMO").is_some() {
             let mut s = demo::seed();
             demo::usage(&mut s);
             s
         } else {
             Store::load()
         };
-        let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
+        let start = match std::env::var("SQUADCODE_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
             Ok("chat") => Place::Chat(Member::Fin),
             Ok("inbox") => Place::Inbox,
@@ -1343,7 +1343,7 @@ impl Shell {
             _pump: pump,
         };
         // The maker, for looking at it: empty, with a draft, or a bot's setup.
-        match std::env::var("RUNO_V2_PLACE").as_deref() {
+        match std::env::var("SQUADCODE_PLACE").as_deref() {
             Ok("maker") => shell.open_maker(None, None, window, cx),
             Ok("maker-review") => {
                 shell.open_maker(Some(builder::SAMPLE), None, window, cx);
@@ -1359,10 +1359,10 @@ impl Shell {
                 shell.jobs_open = true;
                 shell.side_job = false;
             }
-            // A job's browser, on RUNO_V2_URL when it's set.
+            // A job's browser, on SQUADCODE_URL when it's set.
             Ok("browser") => {
                 if let Some(id) = shell.crew.store.jobs.last().map(|j| j.id) {
-                    let url = std::env::var("RUNO_V2_URL").ok();
+                    let url = std::env::var("SQUADCODE_URL").ok();
                     shell.open_job_browser(id, url, cx);
                 }
             }
@@ -3486,7 +3486,7 @@ impl Render for Shell {
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
             .children(self.remove_dialog(cx).map(|d| dialog(d, "remove")))
-            // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
+            // Painted last: with SQUADCODE_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
                     .absolute()
@@ -3500,7 +3500,7 @@ impl Render for Shell {
         motion::end();
         crate::framestats::rendered();
         // A stand-in desktop under a see-through window, for screenshots taken where
-        // the window can't really be see-through (Xvfb): RUNO_BACKDROP names an image.
+        // the window can't really be see-through (Xvfb): SQUADCODE_BACKDROP names an image.
         // A background image, under Settings > Appearance, lies under everything.
         match wallpaper::layer().or_else(backdrop) {
             Some(desk) => div()
@@ -3515,7 +3515,7 @@ impl Render for Shell {
 }
 
 fn backdrop() -> Option<AnyElement> {
-    let path = std::env::var_os("RUNO_BACKDROP")?;
+    let path = std::env::var_os("SQUADCODE_BACKDROP")?;
     theme::window_clear().then(|| {
         img(std::path::PathBuf::from(path))
             .absolute()

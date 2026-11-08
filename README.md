@@ -329,7 +329,7 @@ cd squadcode
 cargo run -p runo --release
 ```
 
-Set `RUNO_V2_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
+Set `SQUADCODE_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
 
 ### Build the app
 
@@ -348,7 +348,7 @@ Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.js
 
 ## The classic window
 
-Squad Code grew out of Runo, a session-by-session app for running coding agents, with a Design canvas, Architecture diagrams, a Git place, Cove VMs, playbooks and a phone bridge. That window is still in the code for development (`RUNO_V1=1`), and its [guide](docs/guide) describes it, but the crew is the app now and those parts are being brought over one at a time.
+Squad Code grew out of Runo, a session-by-session app for running coding agents, with a Design canvas, Architecture diagrams, a Git place, Cove VMs, playbooks and a phone bridge. That window is still in the code for development (`SQUADCODE_V1=1`), and its [guide](docs/guide) describes it, but the crew is the app now and those parts are being brought over one at a time.
 
 ## Learn more
 

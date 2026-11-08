@@ -365,9 +365,9 @@ mod tests {
         command
             .args([
                 "-c",
-                "echo \"one $RUNO_X\"; echo oops >&2; printf two; exit 3",
+                "echo \"one $SQUAD_TEST_X\"; echo oops >&2; printf two; exit 3",
             ])
-            .env("RUNO_X", "x");
+            .env("SQUAD_TEST_X", "x");
         spawn(&root, 4, command, root.to_str().unwrap(), tx).unwrap();
         let (out, err, ok) = collect(&rx);
         assert_eq!(out, ["one x", "two"]);

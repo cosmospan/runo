@@ -1,8 +1,8 @@
 //! Contract tests from recorded runs. Each `tests/fixtures/<agent>-<what>.jsonl` holds an
-//! agent CLI's raw output from a real turn (recorded with `RUNO_RECORD`, home folders and
+//! agent CLI's raw output from a real turn (recorded with `SQUADCODE_RECORD`, home folders and
 //! accounts taken out), and the `.events.json` beside it the events Runo must turn it
 //! into. A parser change that alters what a real run produces fails here; when the change
-//! is meant, `RUNO_UPDATE_FIXTURES=1 cargo test fixtures` rewrites the expectations, and
+//! is meant, `SQUADCODE_UPDATE_FIXTURES=1 cargo test fixtures` rewrites the expectations, and
 //! the diff shows what moved.
 
 use std::path::{Path, PathBuf};
@@ -56,7 +56,7 @@ fn fixtures() -> Vec<PathBuf> {
 
 #[test]
 fn recorded_runs_give_the_expected_events() {
-    let update = std::env::var_os("RUNO_UPDATE_FIXTURES").is_some();
+    let update = std::env::var_os("SQUADCODE_UPDATE_FIXTURES").is_some();
     let mut failed = Vec::new();
     let found = fixtures();
     assert!(!found.is_empty(), "no fixtures in {}", dir().display());
@@ -70,7 +70,7 @@ fn recorded_runs_give_the_expected_events() {
         }
         let Ok(expected) = std::fs::read_to_string(&expected_path) else {
             failed.push(format!(
-                "{}: no expected events; run with RUNO_UPDATE_FIXTURES=1",
+                "{}: no expected events; run with SQUADCODE_UPDATE_FIXTURES=1",
                 path.display()
             ));
             continue;

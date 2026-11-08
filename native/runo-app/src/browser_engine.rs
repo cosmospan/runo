@@ -525,7 +525,7 @@ impl Engine {
         if let Some(s) = session.filter(|s| !s.is_empty()) {
             msg["sessionId"] = json!(s);
         }
-        if std::env::var_os("RUNO_CDP_LOG").is_some() {
+        if std::env::var_os("SQUADCODE_CDP_LOG").is_some() {
             eprintln!("cdp> {msg}");
         }
         let _ = self.writer.locked().write_all(&frame_message(&msg));
@@ -796,7 +796,7 @@ fn read_loop(
             }
             let session = msg["sessionId"].as_str().unwrap_or_default();
             let params = &msg["params"];
-            if std::env::var_os("RUNO_CDP_LOG").is_some() {
+            if std::env::var_os("SQUADCODE_CDP_LOG").is_some() {
                 eprintln!(
                     "cdp< {}",
                     msg.to_string().chars().take(300).collect::<String>()
@@ -933,7 +933,7 @@ pub(crate) fn decode_image(data: &str, format: image::ImageFormat) -> Option<Arc
     let mut rgba = image::load_from_memory_with_format(&bytes, format)
         .ok()?
         .into_rgba8();
-    if std::env::var_os("RUNO_CDP_LOG").is_some() {
+    if std::env::var_os("SQUADCODE_CDP_LOG").is_some() {
         eprintln!("cdp  decoded {}x{}", rgba.width(), rgba.height());
     }
     for px in rgba.as_chunks_mut::<4>().0 {

@@ -621,9 +621,9 @@ fn node(n: &Value, parent: Option<&Value>, assets: &Assets, out: &mut String, de
 
 // ---- Figma's REST API
 
-/// Where Figma's API is; `RUNO_FIGMA_API` points elsewhere for testing.
+/// Where Figma's API is; `SQUADCODE_FIGMA_API` points elsewhere for testing.
 fn api() -> String {
-    std::env::var("RUNO_FIGMA_API").unwrap_or_else(|_| "https://api.figma.com".into())
+    std::env::var("SQUADCODE_FIGMA_API").unwrap_or_else(|_| "https://api.figma.com".into())
 }
 
 /// GET from Figma's API. The token goes to curl on stdin so it never shows in the process

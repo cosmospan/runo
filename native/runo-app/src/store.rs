@@ -899,10 +899,9 @@ pub fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Runo's data folder: `$RUNO_HOME`, else `~/.runo`.
+/// Squad Code's data folder: `$SQUADCODE_HOME`, else `~/.squadcode`.
 pub fn data_dir() -> PathBuf {
     std::env::var_os("SQUADCODE_HOME")
-        .or_else(|| std::env::var_os("RUNO_HOME"))
         .map(PathBuf::from)
         .or_else(|| home_dir().map(|home| home.join(".squadcode")))
         .unwrap_or_else(|| PathBuf::from(".squadcode"))
@@ -912,7 +911,7 @@ pub fn data_dir() -> PathBuf {
 /// settings and v2 jobs, the files at the top of ~/.runo), so nothing has to be set up
 /// again. Runo's own folder is left as it is.
 pub fn adopt_runo_data() {
-    if std::env::var_os("SQUADCODE_HOME").is_some() || std::env::var_os("RUNO_HOME").is_some() {
+    if std::env::var_os("SQUADCODE_HOME").is_some() {
         return;
     }
     let Some(home) = home_dir() else {
@@ -1150,23 +1149,22 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn data_dir_uses_runo_home_else_falls_back_to_home_dot_squadcode() {
+    fn data_dir_uses_squadcode_home_else_falls_back_to_home_dot_squadcode() {
         let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _restore = RestoreEnv(
-            ["SQUADCODE_HOME", "RUNO_HOME", "HOME"]
+            ["SQUADCODE_HOME", "HOME"]
                 .into_iter()
                 .map(|k| (k, std::env::var_os(k)))
                 .collect(),
         );
-        let base = std::env::temp_dir().join(format!("runo-data-dir-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("squad-data-dir-{}", std::process::id()));
 
-        std::env::remove_var("SQUADCODE_HOME");
-        let runo_home = base.join("runo-home");
-        std::env::set_var("RUNO_HOME", &runo_home);
-        assert_eq!(data_dir(), runo_home);
+        let squad_home = base.join("squad-home");
+        std::env::set_var("SQUADCODE_HOME", &squad_home);
+        assert_eq!(data_dir(), squad_home);
 
         let home = base.join("home");
-        std::env::remove_var("RUNO_HOME");
+        std::env::remove_var("SQUADCODE_HOME");
         std::env::set_var("HOME", &home);
         assert_eq!(data_dir(), home.join(".squadcode"));
     }

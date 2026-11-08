@@ -59,7 +59,7 @@ pub struct Store {
     /// connected apps, permissions, memory), by `engine::bot_key`.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub setups: HashMap<String, super::setup::Setup>,
-    /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
+    /// A made-up store for looking at every screen (SQUADCODE_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
 }

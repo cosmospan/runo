@@ -68,7 +68,7 @@ fn program() -> Option<pty::Program> {
         return None;
     }
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-    let mut env = vec![("RUNO_V2".to_string(), "1".to_string())];
+    let mut env = vec![("SQUADCODE".to_string(), "1".to_string())];
     if let Some(dir) = shim_dir() {
         let path = std::env::var("PATH").unwrap_or_default();
         env.push(("PATH".into(), format!("{}:{path}", dir.display())));
