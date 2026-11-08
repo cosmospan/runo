@@ -80,11 +80,16 @@ fn add_rules(list: &str, more: &[String]) -> String {
     rules.join(",")
 }
 
-/// What the bot is told, around the person's words.
-fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
+/// What a bot with Squad Code's browser tools is told about trying web pages.
+const BROWSER_RULE: &str = " To try a web page, such as the app you started on localhost, use Squad Code's browser tools (browser_open, browser_look, browser_click, browser_type, browser_press): they drive this job's own browser inside Squad Code, where the person can watch and step in. They read a page as a short text outline with a [number] on each control, so prefer browser_look to browser_screenshot unless how it looks matters. Don't open an outside browser or install Playwright or Puppeteer for this.";
+
+/// What the bot is told, around the person's words. `browser` says it has
+/// Squad Code's browser tools.
+fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String], browser: bool) -> String {
     if follow_up {
         return text.to_string();
     }
+    let browser_rule = if browser { BROWSER_RULE } else { "" };
     let rules = match job.mode {
         Mode::Ask | Mode::Review => {
             "Read the code to be sure, and don't change any files.".to_string()
@@ -101,7 +106,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
     };
     let crew = super::brain::talk::crew_rule(job.bot, &Member::all());
     format!(
-        "{}\n\n{part}{rules}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
+        "{}\n\n{part}{rules}{browser_rule}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         super::setup::brief(job.bot)
     )
 }
@@ -197,7 +202,9 @@ pub fn start(
             opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
         }
     }
-    let sent = prompt(job, text, resume, &checks);
+    // The browser tools come with Squad Code's own MCP server.
+    let browser = memory.is_some() && crate::browse::tools::offered();
+    let sent = prompt(job, text, resume, &checks, browser);
     let spec = agent::RunSpec {
         provider: p.id,
         prompt: &sent,

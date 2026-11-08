@@ -345,6 +345,8 @@ fn unasked_tools(spec: &RunSpec) -> Vec<&'static str> {
         "get_playbook",
         "list_connections",
     ];
+    // The job's own headless browser, inside Squad: nothing outside it changes.
+    tools.extend(crate::browse::tools::TOOLS);
     if spec.thread != 0 {
         tools.extend(crate::memory_mcp::THREAD_TOOLS);
     }
