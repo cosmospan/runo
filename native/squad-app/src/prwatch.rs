@@ -14,6 +14,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::github::{PrStatus, Voice};
+
 /// Why a thread was last woken, so its card can say what it is doing.
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -73,4 +75,24 @@ pub struct Watch {
     /// The push produced no CI at all; the card says so instead of pretending to wait.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub no_ci_detected: bool,
+}
+
+/// The time of the latest feedback since `seen` from the repository's people, which wakes
+/// the thread.
+pub fn new_feedback(pr: &PrStatus, seen: &str) -> Option<String> {
+    others_since(pr, seen)
+        .filter(|v| v.trusted)
+        .map(|v| v.at.clone())
+        .max()
+}
+
+/// Reviews and comments on `pr` from someone other than its author (the account the
+/// thread pushes with) posted after `seen`. Bots' conversation comments, such as
+/// coverage or preview links, don't count; their reviews do.
+fn others_since<'a>(pr: &'a PrStatus, seen: &'a str) -> impl Iterator<Item = &'a Voice> {
+    pr.voices
+        .iter()
+        .filter(|v| !v.author.is_empty() && v.author != pr.author)
+        .filter(|v| v.review || !v.author.ends_with("[bot]"))
+        .filter(move |v| v.at.as_str() > seen)
 }

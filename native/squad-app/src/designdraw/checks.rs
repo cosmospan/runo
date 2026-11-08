@@ -307,6 +307,13 @@ fn contrast(a: [f32; 4], b: [f32; 4]) -> f32 {
     (x.max(y) + 0.05) / (x.min(y) + 0.05)
 }
 
+/// The WCAG contrast ratio between two colours given as red, green, blue and alpha.
+#[cfg(test)]
+pub(crate) fn contrast_of(a: [u8; 4], b: [u8; 4]) -> f32 {
+    let f = |c: [u8; 4]| [c[0] as f32, c[1] as f32, c[2] as f32, c[3] as f32 / 255.];
+    contrast(over(f(a), f(b)), f(b))
+}
+
 /// The findings as a task for an agent to fix.
 pub(crate) fn fix_task(screens: &[(String, String, Vec<Finding>)]) -> String {
     let mut out = String::from(

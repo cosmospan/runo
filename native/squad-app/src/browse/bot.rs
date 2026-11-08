@@ -557,6 +557,11 @@ impl Driver {
         self.report("Went back.")
     }
 
+    /// Runs `js` in the page and gives back its value as it is.
+    pub fn eval_value(&mut self, js: &str) -> Result<Value, String> {
+        self.eval(js)
+    }
+
     pub fn eval_js(&mut self, js: &str) -> Result<String, String> {
         let v = self.eval(js)?;
         let text = match &v {

@@ -354,6 +354,44 @@ pub fn has_uncommitted(dir: &str) -> Option<bool> {
         .map(|s| !s.trim().is_empty())
 }
 
+/// The last `n` commits on the checked-out branch: short hash, subject and how
+/// long ago, newest first. Empty for a repository with no commits yet.
+pub fn log_lines(dir: &str, n: usize) -> Vec<(String, String, String)> {
+    git(
+        dir,
+        &[
+            "log",
+            &format!("-{n}"),
+            "--no-decorate",
+            "--format=%h%x1f%s%x1f%cr",
+        ],
+    )
+    .unwrap_or_default()
+    .lines()
+    .filter_map(|l| {
+        let mut p = l.splitn(3, '\x1f');
+        Some((
+            p.next()?.to_string(),
+            p.next()?.to_string(),
+            p.next().unwrap_or("").to_string(),
+        ))
+    })
+    .collect()
+}
+
+/// Uncommitted files: git's two-letter status and the path, at most `n` of
+/// them, and how many there are in all.
+pub fn changed_paths(dir: &str, n: usize) -> (Vec<(String, String)>, usize) {
+    let out = git(dir, &["status", "--porcelain"]).unwrap_or_default();
+    let all: Vec<&str> = out.lines().filter(|l| l.len() > 3).collect();
+    let some = all
+        .iter()
+        .take(n)
+        .map(|l| (l[..2].trim().to_string(), l[3..].trim().to_string()))
+        .collect();
+    (some, all.len())
+}
+
 /// Delete a branch. Without `force` git refuses when it holds unmerged work.
 pub fn delete_branch(repo: &str, branch: &str, force: bool) -> Result<(), String> {
     git(repo, &["branch", if force { "-D" } else { "-d" }, branch]).map(|_| ())
@@ -1096,6 +1134,243 @@ pub fn open_pull_request(
         .find(|l| l.starts_with("https://"))
         .unwrap_or(text.trim())
         .to_string())
+}
+
+/// Every file git knows or would add (tracked plus untracked, minus ignored).
+pub fn tracked_files(dir: &str) -> Vec<String> {
+    git(
+        dir,
+        &[
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
+    )
+    .map(|out| {
+        let mut files = split_z(&out);
+        // A file both staged and changed is listed once.
+        files.dedup();
+        files
+    })
+    .unwrap_or_default()
+}
+
+/// Snapshot the working tree as a commit that no branch points at, so a turn can be
+/// undone (or an undo redone). Its first parent is HEAD at the time and its second a
+/// commit of the index, so both come back too. Kept alive by a ref under `refs/squadcode/`.
+pub fn checkpoint(dir: &str) -> Result<String, String> {
+    // One copy of the index gives both the staging (before `add`) and the folder.
+    let (copy, staged) = index_copy(dir)?;
+    let tree = tree_from(dir, &copy.0)?;
+    drop(copy);
+    let head = rev(dir, "HEAD");
+    let index = staged
+        .map(|t| commit_tree(dir, &t, &[], "squadcode index"))
+        .transpose()?;
+    let mut parents: Vec<&str> = Vec::new();
+    let message = match &head {
+        Some(head) => {
+            parents.push(head);
+            "squadcode checkpoint"
+        }
+        None => "squadcode checkpoint\n\nno-head",
+    };
+    if let Some(index) = &index {
+        parents.push(index);
+    }
+    let commit = commit_tree(dir, &tree, &parents, message)?;
+    let _ = git(
+        dir,
+        &[
+            "update-ref",
+            &format!("refs/squadcode/checkpoints/{commit}"),
+            &commit,
+        ],
+    );
+    Ok(commit)
+}
+
+/// Put the working tree back as it was at `checkpoint`: changed files are restored with
+/// their modes and symlinks, files created since are deleted, and the index entries of
+/// those files are restored too. Ignored files are left alone. When the branch gained
+/// or lost commits since, it is moved back to the checkpoint's HEAD.
+///
+/// With `guard` (a later snapshot, such as the end of the last turn) only the files
+/// that differ between the checkpoint and the guard are touched, and of those only the
+/// ones nobody changed after it; the rest are reported as skipped.
+pub fn restore(dir: &str, checkpoint: &str, guard: Option<&str>) -> Result<Restored, String> {
+    let now = snapshot_tree(dir)?;
+    let mut done = Restored::default();
+    let paths = match guard {
+        Some(guard) => {
+            let later = diff_names(dir, guard, &now)?;
+            let mut paths = Vec::new();
+            for path in diff_names(dir, checkpoint, guard)? {
+                if later.contains(&path) {
+                    done.skipped.push(path);
+                } else {
+                    paths.push(path);
+                }
+            }
+            paths
+        }
+        None => diff_names(dir, checkpoint, &now)?,
+    };
+    let (head, index) = checkpoint_parts(dir, checkpoint);
+    // Move the branch only along its own history, never onto another line of work.
+    if let (Some(target), Some(current)) = (head.as_deref(), rev(dir, "HEAD")) {
+        if target != current
+            && (is_ancestor(dir, target, &current) || is_ancestor(dir, &current, target))
+        {
+            git(dir, &["reset", "-q", "--soft", target])?;
+            done.moved_head = true;
+        }
+    }
+    if paths.is_empty() {
+        return Ok(done);
+    }
+    let in_checkpoint = |source: &str| -> Result<Vec<(String, String)>, String> {
+        // `mode type sha<TAB>path` for every file in the tree.
+        let listing = git(dir, &["ls-tree", "-r", "-z", source])?;
+        Ok(listing
+            .split('\0')
+            .filter_map(|e| e.split_once('\t'))
+            .map(|(meta, path)| (path.to_string(), meta.to_string()))
+            .collect())
+    };
+    let wanted: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
+    let saved: std::collections::HashMap<String, String> = in_checkpoint(checkpoint)?
+        .into_iter()
+        .filter(|(p, _)| wanted.contains(p.as_str()))
+        .collect();
+    // Files the checkpoint has come back through a private index, so git writes the
+    // executable bit and symlinks exactly as they were.
+    let restore_index = temp_index(dir);
+    let back: Vec<&String> = paths.iter().filter(|p| saved.contains_key(*p)).collect();
+    if !back.is_empty() {
+        git_index(dir, &restore_index, &["read-tree", checkpoint])?;
+        let mut list = Vec::new();
+        for path in &back {
+            let target = Path::new(dir).join(path);
+            // A folder or link where a file was would block the checkout.
+            if target.is_dir() && !target.is_symlink() {
+                let _ = std::fs::remove_dir_all(&target);
+            } else {
+                let _ = std::fs::remove_file(&target);
+            }
+            list.extend_from_slice(path.as_bytes());
+            list.push(0);
+        }
+        let index = restore_index.to_string_lossy().into_owned();
+        let result = git_with(
+            dir,
+            &["checkout-index", "-f", "-z", "--stdin"],
+            &[("GIT_INDEX_FILE", index.as_str())],
+            Some(&list),
+        );
+        let _ = std::fs::remove_file(&restore_index);
+        result?;
+    }
+    for path in paths.iter().filter(|p| !saved.contains_key(*p)) {
+        let target = Path::new(dir).join(path);
+        let _ = std::fs::remove_file(&target);
+        // Drop folders the removed files leave empty.
+        let mut parent = target.parent();
+        while let Some(p) = parent.filter(|p| *p != Path::new(dir)) {
+            if std::fs::remove_dir(p).is_err() {
+                break;
+            }
+            parent = p.parent();
+        }
+    }
+    // The index entries of these files go back to the checkpoint's index (or to HEAD
+    // for older checkpoints); every other file keeps the user's staging.
+    let source = index.or(head);
+    let staged: std::collections::HashMap<String, String> = match &source {
+        Some(source) => in_checkpoint(source)?
+            .into_iter()
+            .filter(|(p, _)| wanted.contains(p.as_str()))
+            .collect(),
+        None => Default::default(),
+    };
+    let mut info = Vec::new();
+    for path in &paths {
+        let entry = match staged.get(path) {
+            // `mode blob sha` becomes `mode sha`.
+            Some(meta) => {
+                let parts: Vec<&str> = meta.split_whitespace().collect();
+                format!("{} {}\t{path}", parts[0], parts.get(2).unwrap_or(&""))
+            }
+            None => format!("0 {}\t{path}", "0".repeat(40)),
+        };
+        info.extend_from_slice(entry.as_bytes());
+        info.push(0);
+    }
+    git_with(
+        dir,
+        &["update-index", "-z", "--index-info"],
+        &[],
+        Some(&info),
+    )?;
+    done.files = paths;
+    Ok(done)
+}
+
+/// What a restore did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Restored {
+    /// Files put back.
+    pub files: Vec<String>,
+    /// Files left alone because they changed after `guard`.
+    pub skipped: Vec<String>,
+    /// The branch was moved back (or forward) to where it was.
+    pub moved_head: bool,
+}
+
+fn commit_tree(dir: &str, tree: &str, parents: &[&str], message: &str) -> Result<String, String> {
+    let mut args = vec!["commit-tree", tree, "-m", message];
+    for p in parents {
+        args.extend(["-p", p]);
+    }
+    let who = [
+        ("GIT_AUTHOR_NAME", "Squad Code"),
+        ("GIT_AUTHOR_EMAIL", "squadcode@localhost"),
+        ("GIT_COMMITTER_NAME", "Squad Code"),
+        ("GIT_COMMITTER_EMAIL", "squadcode@localhost"),
+    ];
+    git_with(dir, &args, &who, None).map(|s| s.trim().to_string())
+}
+
+/// Paths that differ between two trees or commits.
+fn diff_names(dir: &str, a: &str, b: &str) -> Result<Vec<String>, String> {
+    git(dir, &["diff", "--name-only", "--no-renames", "-z", a, b]).map(|s| split_z(&s))
+}
+
+/// HEAD and index commit recorded in a checkpoint. Older checkpoints have no index.
+fn checkpoint_parts(dir: &str, checkpoint: &str) -> (Option<String>, Option<String>) {
+    let parents: Vec<String> = git(dir, &["rev-list", "--parents", "-n", "1", checkpoint])
+        .unwrap_or_default()
+        .split_whitespace()
+        .skip(1)
+        .map(str::to_string)
+        .collect();
+    let headless = git(dir, &["log", "-1", "--format=%B", checkpoint])
+        .unwrap_or_default()
+        .contains("no-head");
+    if headless {
+        (None, parents.first().cloned())
+    } else {
+        (parents.first().cloned(), parents.get(1).cloned())
+    }
+}
+
+fn temp_index(dir: &str) -> std::path::PathBuf {
+    let git_dir = git(dir, &["rev-parse", "--absolute-git-dir"])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned());
+    temp_index_in(&git_dir)
 }
 
 #[cfg(test)]
