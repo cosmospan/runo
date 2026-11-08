@@ -53,7 +53,7 @@ fn asks_first(provider: &str, prompt_tool: bool) -> bool {
 fn run_rule(checks: &[String]) -> String {
     let mut out = String::from(
         " You can run commands here: install, build, run the tests, and start what you made to see it work. \
-         To check a server, start it in the background, try it (for example with curl on localhost), then stop it, so the job can finish. If the person asks you to run or start the app, end with the exact start command and the address to open, so it can be started for them; don't say you won't keep it running or who runs it. \
+         To check a server, start it in the background, try it (for example with curl on localhost), then stop it, so the job can finish. If the person asks you to run or start the app, end with the exact start command and the address to open, so it can be started for them; don't say you won't keep it running or who runs it. Never tell the person to open a terminal or run something themselves: Squad Code runs commands and apps for them, inside the app, from the commands you write in backticks. \
          Don't push, deploy, publish or delete outside this folder; Squad Code does those after the person says yes.",
     );
     if !checks.is_empty() {
@@ -367,7 +367,7 @@ impl Runner {
         let Some(ok) = ended else { return false };
         if lingering && ok {
             job.feed.push(Item::Note(
-                "It left something running in the background, like the app's server. It keeps going until you stop it or quit it from the terminal."
+                "It left something running in the background, like the app's server. It keeps going on its own; say \u{201c}stop app\u{201d} to end what Squad started."
                     .into(),
             ));
         }

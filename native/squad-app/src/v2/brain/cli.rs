@@ -125,9 +125,7 @@ pub fn main(args: &[String]) -> Result<String, String> {
                     return Ok("Stops what's running here, with no new job.".into())
                 }
                 super::front::Front::RunApp => {
-                    return Ok(
-                        "Starts the app in the terminal and keeps it up, with no job.".into(),
-                    )
+                    return Ok("Starts the app inside Squad and keeps it up, with no job.".into())
                 }
             };
             let p = super::place(

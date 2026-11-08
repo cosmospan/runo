@@ -8,6 +8,7 @@
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
+mod apps;
 mod asks;
 mod brain;
 mod builder;
@@ -444,6 +445,8 @@ pub struct Shell {
     chat_len: usize,
     thread_scroll: ScrollHandle,
     thread_key: u64,
+    /// Frames left to keep the thread at its newest after it changed.
+    thread_settle: u8,
     /// Who spoke last in the chat being drawn, and when: a run of messages
     /// from one author shows their face and name once.
     streak: Option<(String, u64)>,
@@ -569,8 +572,16 @@ pub struct Shell {
     reading_for: Option<Member>,
     /// While Peek's decision is acted on: the bot named with @, who answers.
     answer_by: Option<Member>,
-    /// Terminals running an app Squad Code started for the person.
-    serving: Vec<u64>,
+    /// Apps and commands Squad runs for you, each in a hidden shell of its
+    /// own and shown as a card: never in your terminal.
+    runs: Vec<apps::Run>,
+    next_run: u64,
+    /// Typing into a run's output, for a prompt it shows.
+    run_focus: FocusHandle,
+    run_typing: Option<u64>,
+    /// Where a command clicked in a message was said: Peek's message, the
+    /// job. Its card shows there.
+    act_from: (Option<u64>, Option<u64>),
     /// When Peek's engine was last made sure of being warm.
     warmed_at: Option<std::time::Instant>,
     /// "run the app", read by Peek: started on the next draw, which has the
@@ -1281,6 +1292,7 @@ impl Shell {
             chat_len: 0,
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
+            thread_settle: 0,
             streak: None,
             maker: (squad_holo::Tint::VIOLET, squad_holo::fin::ROLES[6].outfit),
             history_filter: 0,
@@ -1328,7 +1340,11 @@ impl Shell {
             reading_since: None,
             reading_for: None,
             answer_by: None,
-            serving: Vec::new(),
+            runs: Vec::new(),
+            next_run: 0,
+            run_focus: cx.focus_handle(),
+            run_typing: None,
+            act_from: (None, None),
             warmed_at: None,
             run_wanted: None,
             follow_reading: None,
@@ -1926,7 +1942,7 @@ impl Shell {
     fn run_latest_app(
         &mut self,
         text: String,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         if self.crew.store.folder().is_none() || self.sampling {
@@ -1952,7 +1968,17 @@ impl Shell {
                     && j.mode.writes()
             })
             .map(|j| j.id);
-        match self.run_app(job, window, cx) {
+        // Peek's message about it, which its card sits under.
+        let talk = self
+            .crew
+            .store
+            .talks
+            .iter()
+            .map(|t| t.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        match self.run_app(job, Some(talk), cx) {
             Some(line) => {
                 self.crew.peek_says(text, line, Vec::new());
                 true
@@ -3099,6 +3125,7 @@ impl Shell {
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
+        self.poll_runs();
         let finished = self
             .crew
             .poll(cx.global::<crate::settings::AppSettings>(), viewing);
@@ -3422,12 +3449,15 @@ impl Render for Shell {
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
+        if self.run_typing.is_some() && !self.run_focus.is_focused(window) {
+            self.run_typing = None;
+        }
         if let Some((text, pending, job)) = self.run_wanted.take() {
             if let Some(id) = pending {
                 self.crew.store.talks.retain(|t| t.id != id);
             }
             let started = match job {
-                Some(job) => self.run_app(Some(job), window, cx).is_some(),
+                Some(job) => self.run_app(Some(job), None, cx).is_some(),
                 None => self.run_latest_app(text.clone(), window, cx),
             };
             if !started {

@@ -341,6 +341,7 @@ impl Shell {
         let none_ready = ready.is_empty();
         let brains_tab = self.engine_brains;
         let add = self.add_engine(&ready, cx);
+        let setup = self.setup_runs(cx);
         div()
             .id("engines")
             .size_full()
@@ -391,6 +392,7 @@ impl Shell {
                             "Engines on this computer",
                             "Install a new one, update one, or pick the default for new jobs.",
                         ))
+                        .children(setup)
                         .children(add)
                     })
                     .when(none_ready && !brains_tab, |d| {
@@ -414,20 +416,6 @@ impl Shell {
                     }),
             )
             .into_any_element()
-    }
-
-    /// Runs an install or update in the terminal drawer, so you watch it and
-    /// can answer if it asks; with no folder open, copies it instead.
-    fn run_setup(&mut self, cmd: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.crew.store.folder().is_some() {
-            let id = super::term::project_id(self.crew.store.current);
-            self.term_run(id, cmd, window, cx);
-            self.say("Running in the terminal below. Once it's done, sign in once and the engine shows as ready.");
-        } else {
-            cx.write_to_clipboard(ClipboardItem::new_string(cmd.to_string()));
-            self.say("Copied. Open a folder to run it here, or paste it in a terminal.");
-        }
-        cx.notify();
     }
 
     /// Engines you could add: each one not on this computer, with its
@@ -476,9 +464,9 @@ impl Shell {
                             .child(p.name),
                     )
                     .child(ui::ghost(("engine-add", i), "Install").h(px(26.)).on_click(
-                        cx.listener(move |this, _, window, cx| {
+                        cx.listener(move |this, _, _, cx| {
                             this.engine_sel = Some(i);
-                            this.run_setup(&cmd, window, cx)
+                            this.run_setup(&cmd, cx)
                         }),
                     )),
             );
@@ -920,9 +908,10 @@ impl Shell {
             head = head.child(ui::status(ui::GREEN, "Default for new jobs"));
         }
         if let Some(cmd) = update_cmd(id).filter(|_| ok) {
-            head = head.child(ui::ghost("engine-update", "Update").on_click(
-                cx.listener(move |this, _, window, cx| this.run_setup(&cmd, window, cx)),
-            ));
+            head = head.child(
+                ui::ghost("engine-update", "Update")
+                    .on_click(cx.listener(move |this, _, _, cx| this.run_setup(&cmd, cx))),
+            );
         }
         let mut body = ui::card()
             .flex_1()
@@ -964,14 +953,14 @@ impl Shell {
                         )
                         .child({
                             let run = copy.clone();
-                            ui::solid("engine-install", "Install").on_click(cx.listener(
-                                move |this, _, window, cx| this.run_setup(&run, window, cx),
-                            ))
+                            ui::solid("engine-install", "Install").on_click(
+                                cx.listener(move |this, _, _, cx| this.run_setup(&run, cx)),
+                            )
                         })
                         .child(ui::ghost("engine-copy", "Copy").on_click(cx.listener(
                             move |this, _, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
-                                this.say("Copied. Paste it in a terminal.");
+                                this.say("Copied.");
                                 cx.notify();
                             },
                         ))),
