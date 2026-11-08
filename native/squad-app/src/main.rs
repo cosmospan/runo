@@ -50,7 +50,6 @@ mod persist;
 mod phone;
 mod planlimit;
 mod playbooks;
-mod procs;
 mod proof;
 mod prwatch;
 mod pty;

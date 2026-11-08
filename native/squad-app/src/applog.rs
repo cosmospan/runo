@@ -148,6 +148,26 @@ pub fn format_line(time: &str, level: Level, area: &str, message: &str) -> Strin
     format!("{time} {:<5} [{area}] {text}\n", level.tag())
 }
 
+/// The line of a command's output that says what went wrong: the first that reads like an
+/// error, else the first that isn't blank. Cut to a sensible length.
+#[cfg(target_os = "macos")]
+pub fn gist(output: &str) -> String {
+    const WORDS: [&str; 6] = ["error", "fatal", "denied", "failed", "not found", "cannot"];
+    let lines = || output.lines().map(str::trim).filter(|l| !l.is_empty());
+    let line = lines()
+        .find(|l| {
+            let lower = l.to_lowercase();
+            WORDS.iter().any(|w| lower.contains(w))
+        })
+        .or_else(|| lines().next())
+        .unwrap_or("");
+    if line.chars().count() > 300 {
+        line.chars().take(300).collect::<String>() + "…"
+    } else {
+        line.to_string()
+    }
+}
+
 /// Prefixes of well-known API keys and tokens.
 const TOKEN_PREFIXES: [&str; 14] = [
     "github_pat_",
