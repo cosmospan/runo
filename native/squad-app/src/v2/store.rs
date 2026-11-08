@@ -863,24 +863,8 @@ impl Store {
         });
         s.format = FORMAT;
         s.read_feeds(owner);
-        for j in &mut s.jobs {
-            if owner && j.status == Status::Running {
-                j.status = Status::Interrupted;
-                j.ended = Some(j.ended.unwrap_or(j.started));
-                j.feed.push(Item::Note(
-                    "Squad Code closed while this was running.".into(),
-                ));
-            }
-            if owner && j.checking {
-                j.checking = false;
-            }
-            // Squad Code closed while Shipper was opening the pull request.
-            if owner && j.shipping {
-                j.shipping = false;
-                if j.pr.is_empty() && j.status == Status::Shipping {
-                    j.status = Status::Review;
-                }
-            }
+        if owner {
+            s.after_restart();
         }
         s.folders.retain(|f| std::path::Path::new(&f.path).is_dir());
         // People who used v2 before the walkthrough existed don't need it.
@@ -895,6 +879,29 @@ impl Store {
             s.current = 0;
         }
         s
+    }
+
+    /// What was going on when Squad Code last closed can't still be: a running
+    /// job was cut off, its checks stopped, and a pull request it was opening
+    /// may not exist. Only for the process that runs the jobs.
+    fn after_restart(&mut self) {
+        for j in &mut self.jobs {
+            if j.status == Status::Running {
+                j.status = Status::Interrupted;
+                j.ended = Some(j.ended.unwrap_or(j.started));
+                j.feed.push(Item::Note(
+                    "Squad Code closed while this was running.".into(),
+                ));
+            }
+            j.checking = false;
+            // Squad Code closed while Shipper was opening the pull request.
+            if j.shipping {
+                j.shipping = false;
+                if j.pr.is_empty() && j.status == Status::Shipping {
+                    j.status = Status::Review;
+                }
+            }
+        }
     }
 
     /// Marks a getting-started step done. True when it wasn't before.
@@ -1773,6 +1780,53 @@ mod tests {
         let s = parse(&text, false).unwrap();
         assert_eq!(s.next_id, 9);
         assert!(!s.set_up);
+    }
+
+    #[test]
+    fn a_restart_cuts_off_what_was_running() {
+        let mut s = Store {
+            jobs: vec![
+                Job {
+                    id: 1,
+                    status: Status::Running,
+                    started: 100,
+                    checking: true,
+                    ..Job::default()
+                },
+                Job {
+                    id: 2,
+                    status: Status::Shipping,
+                    shipping: true,
+                    ..Job::default()
+                },
+                Job {
+                    id: 3,
+                    status: Status::Shipping,
+                    shipping: true,
+                    pr: "https://example.test/pr/9".into(),
+                    ..Job::default()
+                },
+                Job {
+                    id: 4,
+                    status: Status::Review,
+                    ..Job::default()
+                },
+            ],
+            ..Store::default()
+        };
+        s.after_restart();
+        let j = &s.jobs[0];
+        assert_eq!(j.status, Status::Interrupted);
+        assert_eq!(j.ended, Some(100));
+        assert!(!j.checking);
+        assert!(matches!(j.feed.last(), Some(Item::Note(n)) if n.contains("closed")));
+        // A pull request that wasn't opened goes back for review; one that was stays.
+        assert_eq!(s.jobs[1].status, Status::Review);
+        assert!(!s.jobs[1].shipping);
+        assert_eq!(s.jobs[2].status, Status::Shipping);
+        assert!(!s.jobs[2].shipping);
+        assert_eq!(s.jobs[3].status, Status::Review);
+        assert!(s.jobs[3].feed.is_empty());
     }
 
     #[test]

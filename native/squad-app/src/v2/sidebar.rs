@@ -1379,7 +1379,13 @@ impl Shell {
                             .cursor_pointer()
                             .hover(|s| s.border_color(c(ui::line_hi())).text_color(c(ui::muted())))
                             .child(Icon::new(IconName::Search).size(px(14.)))
-                            .child(div().flex_1().min_w_0().truncate().child("Search jobs, bots…"))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .child("Search jobs, bots…"),
+                            )
                             .child(ui::kbd(if cfg!(target_os = "macos") {
                                 "⌘K"
                             } else {

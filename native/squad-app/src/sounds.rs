@@ -23,6 +23,7 @@ pub(crate) enum Cue {
 }
 
 impl Cue {
+    #[cfg(test)]
     pub(crate) const ALL: [Cue; 3] = [Cue::NeedsYou, Cue::Failed, Cue::Done];
 
     #[cfg_attr(windows, allow(dead_code))]

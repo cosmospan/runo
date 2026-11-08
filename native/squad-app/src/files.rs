@@ -71,4 +71,3 @@ pub(crate) fn filter_files<'a>(files: &'a [String], query: &str) -> Vec<&'a Stri
         })
         .collect()
 }
-

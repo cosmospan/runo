@@ -253,14 +253,7 @@ pub fn ask(
             };
             turn(text, seen, heading, shown)
         };
-        if let Some(rx) = super::warm::ask(
-            &bin,
-            &model,
-            dir,
-            &said,
-            &turn_for,
-            LIMIT,
-        ) {
+        if let Some(rx) = super::warm::ask(&bin, &model, dir, &said, &turn_for, LIMIT) {
             return Ok(rx);
         }
     }

@@ -485,15 +485,7 @@ fn real_reads() {
             super::think::turn(text, &seen, "The conversation so far:", shown)
         };
         let at = Instant::now();
-        let rx = ask(
-            "claude",
-            "haiku",
-            &dir,
-            &[],
-            &turn,
-            Duration::from_secs(40),
-        )
-        .unwrap();
+        let rx = ask("claude", "haiku", &dir, &[], &turn, Duration::from_secs(40)).unwrap();
         let got = rx.recv_timeout(Duration::from_secs(45)).ok();
         let reply = match got {
             Some(Event::Output(r)) => format!("{r:?}"),
