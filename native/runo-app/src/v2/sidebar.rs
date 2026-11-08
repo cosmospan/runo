@@ -1162,8 +1162,9 @@ impl Shell {
             .flex()
             .items_center()
             .gap(px(10.))
-            .pl(px(20.))
-            .pr(px(14.))
+            // The same inset as the thread's bar under it, so their right
+            // edges line up.
+            .px(px(20.))
             .border_b_1()
             .border_color(c(ui::line2()))
             .text_size(px(13.))
@@ -1207,7 +1208,14 @@ impl Shell {
             // The Jobs panel toggle: what's running and what needs you, at a glance.
             .child({
                 let asks = self.inbox_count();
-                let open = self.jobs_open;
+                // On a job's page the sidebar is always there; the toggle says
+                // whether it shows the Jobs list rather than the job's details.
+                let on_job = matches!(self.place, Place::Live(_));
+                let open = if on_job {
+                    !self.side_job
+                } else {
+                    self.jobs_open
+                };
                 div()
                     .id("top-jobs")
                     .h(px(30.))
@@ -1255,7 +1263,16 @@ impl Shell {
                                 .child(asks.to_string()),
                         )
                     })
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if on_job {
+                            // Swap the one sidebar between the job and the list.
+                            this.side_job = !this.side_job;
+                            if !this.side_job {
+                                this.jobs_open = true;
+                            }
+                            cx.notify();
+                            return;
+                        }
                         this.jobs_open = !this.jobs_open;
                         // The panel sits beside a thread or a job: open it there.
                         if this.jobs_open && !matches!(this.place, Place::Today | Place::Live(_)) {
@@ -1290,14 +1307,6 @@ impl Shell {
                         "Ctrl K"
                     }))
                     .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
-            )
-            .child(
-                ui::solid_i("top-new", IconName::Plus, "New job")
-                    .h(px(30.))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.go(Place::Today, cx);
-                        this.composer.update(cx, |i, cx| i.focus(window, cx));
-                    })),
             )
     }
 }

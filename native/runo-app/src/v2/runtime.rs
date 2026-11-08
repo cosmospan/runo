@@ -2164,7 +2164,15 @@ impl Runtime {
                 let secs = ask.started.elapsed().as_secs_f32();
                 let said = match reply {
                     engine::Reply::Answer(text) if !text.is_empty() => {
-                        Said::bot(text, format!("{engine} · {secs:.0}s"))
+                        let (words, job) = engine::split_job(&text);
+                        let words = if words.is_empty() {
+                            "I can do that as a job.".to_string()
+                        } else {
+                            words
+                        };
+                        let mut said = Said::bot(words, format!("{engine} · {secs:.0}s"));
+                        said.job = job;
+                        said
                     }
                     engine::Reply::Answer(_) => {
                         Said::note("The engine answered with nothing. Try asking again.")

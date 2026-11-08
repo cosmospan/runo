@@ -540,6 +540,15 @@ pub struct Said {
     pub folder: String,
     /// When it was said, to place it among the bot's jobs.
     pub at: u64,
+    /// The job the bot offers to do, in its words; empty when its answer
+    /// needs no code changed.
+    pub job: String,
+    /// Once the offer is taken: the job it started (0 when the work went
+    /// another way, as a plan). The offer then can't be taken again.
+    pub job_id: u64,
+    pub job_taken: bool,
+    /// "Not now" on the offer.
+    pub job_off: bool,
 }
 
 impl Said {
@@ -1061,6 +1070,15 @@ impl Store {
     pub fn say_in_dm(&mut self, who: Member, mut said: Said) {
         said.folder = self.folder().map(|f| f.path.clone()).unwrap_or_default();
         self.chats.entry(who).or_default().push(said);
+    }
+
+    /// The line in the DM with `who` said at `at` with these words.
+    pub fn dm_line_mut(&mut self, who: Member, at: u64, text: &str) -> Option<&mut Said> {
+        self.chats
+            .get_mut(&who)?
+            .iter_mut()
+            .rev()
+            .find(|m| !m.mine && m.at == at && m.text == text)
     }
 
     /// Clears the DM with `who` in the project you're in; other projects keep theirs.
