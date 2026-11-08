@@ -1,0 +1,90 @@
+[package]
+name = "squadcode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Squad Code's native desktop client"
+
+build = "build.rs"
+
+[[bin]]
+name = "SquadCode"
+path = "src/main.rs"
+
+# App bundle metadata for `cargo bundle` (macOS .app, Linux .deb).
+[package.metadata.bundle]
+name = "Squad Code"
+identifier = "dev.squadcode.app"
+icon = [
+    "assets/icon/png/squadcode-32.png",
+    "assets/icon/png/squadcode-128.png",
+    "assets/icon/png/squadcode-256.png",
+    "assets/icon/png/squadcode-512.png",
+    "assets/icon/png/squadcode-1024.png",
+    "assets/icon/squadcode.icns",
+]
+category = "public.app-category.developer-tools"
+short_description = "A crew of coding bots that work on your code"
+
+[dependencies]
+gpui-kit = { version = "0.7.1", features = [
+    "tree-sitter-bash",
+    "tree-sitter-css",
+    "tree-sitter-go",
+    "tree-sitter-html",
+    "tree-sitter-javascript",
+    "tree-sitter-make",
+    "tree-sitter-markdown",
+    "tree-sitter-python",
+    "tree-sitter-rust",
+    "tree-sitter-sql",
+    "tree-sitter-toml",
+    "tree-sitter-tsx",
+    "tree-sitter-typescript",
+    "tree-sitter-yaml",
+] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+portable-pty = { path = "../../vendor/portable-pty" }
+vt100 = { path = "../../vendor/vt100" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+base64 = "0.22"
+# Checks the signature on agent manifests Squad Code downloads (see `registry`).
+ring = "0.17"
+i_overlay = "9"
+libc = "0.2"
+serde.workspace = true
+serde_json.workspace = true
+toml = "0.8"
+# The architecture editor: draw.io files (XML, sometimes deflated) and PNG export.
+roxmltree = "0.21"
+flate2 = "1"
+resvg = "0.45"
+# The crew, drawn from the Holo rigs.
+squad-holo = { path = "../squad-holo" }
+
+[build-dependencies]
+embed-resource = "3.0.11"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+dispatch2 = "0.3"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFRunLoop", "CFDate"] }
+objc2-foundation = "0.3"
+# The menu bar panel finds its own NSWindow to hang it under the glyph.
+raw-window-handle = "0.6"
+# The design canvas draws its screens with WebKit, the engine built into macOS.
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-app-kit",
+    "objc2-core-foundation",
+    "WKContentWorld",
+    "WKFrameInfo",
+    "WKNavigation",
+    "WKSnapshotConfiguration",
+    "WKWebView",
+    "WKWebViewConfiguration",
+] }

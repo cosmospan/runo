@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Runo are documented here.
+All notable changes to Squad Code are documented here. Entries before 2.0 were written when the app was called Runo.
 
 ## [Unreleased]
 
@@ -33,6 +33,16 @@ All notable changes to Runo are documented here.
 
 - A short sound when something needs you: a bot asking for your OK or asking you to choose, a job done or ready to review, or a job that failed, each with its own sound. Pick how they sound in Settings > General > Alerts: Bubble (the default), Marimba, Pluck or Glass; picking one plays it. Nothing plays for the job or thread you're looking at, and several at once sound once. Sounds can be turned off, or each kind on its own. The sounds are made by Squad Code, so they are the same on Mac, Windows and Linux.
 - Peek reads each message with fewer tokens. Its warm Claude Code now gets Peek's rules once, as its system prompt in place of Claude Code's own coding prompt, instead of in every message. Each read sends only what changed: the crew, what's running, the new lines of the conversation and the message. Before, each of the 12 reads a warm engine takes repeated the full rules and the last 8 messages.
+### Removed
+
+- The classic Runo window (`RUNO_V1=1`) and everything only it used: sessions, projects, playbooks and their background job (taken off the computer the first time Squad Code starts), the phone bridge, the assistant, the arcade and the old settings, about 120,000 lines in all. The design canvas and architecture diagrams stay in the code for the bots' design tool. Squad Code still copies what Runo saved in `~/.runo` the first time it opens.
+- The guide to the classic window and the old design notes.
+
+### Changed
+
+- Environment variables start with `SQUADCODE_` instead of `RUNO_` (for example `SQUADCODE_DEMO=1`), and `RUNO_HOME` is no longer read: use `SQUADCODE_HOME`.
+- The app's folder is `native/squad-app` and its crate is `squadcode` (`cargo run -p squadcode`); the drawings crate is `squad-holo`.
+- On Linux the launcher is `squadcode.desktop` and names the window class the app uses, so docks pair the window with its icon.
 
 ## [2.0.0-alpha.7] - 2026-11-08
 

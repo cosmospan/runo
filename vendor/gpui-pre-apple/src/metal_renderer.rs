@@ -1349,7 +1349,7 @@ fn build_pipeline_state(
     color_attachment.set_source_rgb_blend_factor(metal::MTLBlendFactor::SourceAlpha);
     color_attachment.set_source_alpha_blend_factor(metal::MTLBlendFactor::One);
     color_attachment.set_destination_rgb_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
-    // Runo: composite alpha with "source over" so antialiased edges keep the coverage
+    // Squad Code: composite alpha with "source over" so antialiased edges keep the coverage
     // they were drawn with. Adding alpha (`One`) made edge pixels of shapes and glyphs
     // drawn over translucent glass turn opaque, which left a dark fringe on rounded
     // corners and around text.
@@ -1387,7 +1387,7 @@ fn build_path_sprite_pipeline_state(
     color_attachment.set_source_rgb_blend_factor(metal::MTLBlendFactor::One);
     color_attachment.set_source_alpha_blend_factor(metal::MTLBlendFactor::One);
     color_attachment.set_destination_rgb_blend_factor(metal::MTLBlendFactor::OneMinusSourceAlpha);
-    // Runo: composite alpha with "source over" so antialiased edges keep the coverage
+    // Squad Code: composite alpha with "source over" so antialiased edges keep the coverage
     // they were drawn with. Adding alpha (`One`) made edge pixels of shapes and glyphs
     // drawn over translucent glass turn opaque, which left a dark fringe on rounded
     // corners and around text.

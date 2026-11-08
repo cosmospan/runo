@@ -1,0 +1,750 @@
+//! Proof of done: the project's checks run after each turn that changed files, a red
+//! result goes back to the agent, and an agent from another vendor reviews the change.
+
+use std::io::Read;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
+
+/// Lines of a check's output kept for the card and the fix prompt.
+const TAIL_LINES: usize = 40;
+const TAIL_BYTES: usize = 6000;
+
+/// The verdict on a session's last turn, kept with the session.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Debug)]
+pub struct Proof {
+    /// Index of the user message whose turn was checked.
+    pub turn: usize,
+    #[serde(default)]
+    pub results: Vec<CheckRun>,
+    /// Automatic fix rounds sent in a row; back to 0 once the checks pass.
+    #[serde(default)]
+    pub rounds: u32,
+    /// What the last failure looked like, so the same failure twice stops fixing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub last_failure: String,
+    /// What the second opinion said, such as "Codex left 2 notes".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub review: String,
+    /// Why the checks didn't run, such as a session on a connection.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub skipped: String,
+    /// The checks are waiting for the person to look and press Run (see `hold`), rather
+    /// than skipped for good.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
+}
+
+impl Proof {}
+
+/// One check's result.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Debug)]
+pub struct CheckRun {
+    pub command: String,
+    pub ok: bool,
+    #[serde(default)]
+    pub secs: u64,
+    /// The end of its output, colours removed.
+    #[serde(default)]
+    pub tail: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub timed_out: bool,
+    /// Why the check couldn't run, such as "disk full", when the computer stopped it
+    /// rather than the code: it isn't a failure and doesn't start a fix turn.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub infra: String,
+}
+
+/// Why a check that didn't pass couldn't run, from how it ended and what it printed:
+/// a full disk, a kill by a signal (out of memory, or by hand), the time limit, or a
+/// missing tool. `None` when it ran and failed.
+pub fn infra_reason(
+    code: Option<i32>,
+    signal: Option<i32>,
+    timed_out: bool,
+    output: &str,
+) -> Option<&'static str> {
+    let has = |s: &str| output.contains(s);
+    if has("No space left on device") || has("ENOSPC") || has("os error 28") {
+        return Some("disk full");
+    }
+    if timed_out {
+        return Some("timed out");
+    }
+    // The shell reports a child killed by SIGKILL, SIGTERM or SIGINT as 128 + signal,
+    // and build tools print the signal of a compiler they lost.
+    if signal.is_some()
+        || matches!(code, Some(137 | 143 | 130))
+        || has("signal: 9, SIGKILL")
+        || has("signal: 15, SIGTERM")
+    {
+        return Some("stopped by a signal, maybe out of memory");
+    }
+    if code == Some(127)
+        || code == Some(9009)
+        || has("command not found")
+        || has("is not recognized as an internal or external command")
+    {
+        return Some("a tool is missing");
+    }
+    None
+}
+
+/// The project's checks: one command per line, blank lines and `#` comments skipped.
+pub fn commands(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::to_string)
+        .collect()
+}
+
+/// How much Squad Code checks after each turn when it picks the commands itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Level {
+    /// Each ecosystem's fast check: a compile, type check or lint, no tests.
+    Quick,
+    /// Tests too, plus lint and build scripts.
+    Full,
+}
+
+impl Level {}
+
+/// A project's `check_level`: Squad Code picks the commands at the Settings level, at its own,
+/// runs the person's commands, or runs none.
+pub const LEVEL_DEFAULT: &str = "";
+pub const LEVEL_CUSTOM: &str = "custom";
+
+/// The level for a project saved before levels, and whether its typed checks stay. Its
+/// checks are the person's own unless they are just what Squad Code suggests for the folder
+/// (`suggested`), which now follow the Settings level, Quick unless changed.
+pub fn migrate(checks: &str, suggested: &[String]) -> (&'static str, bool) {
+    let mut have = commands(checks);
+    if have.is_empty() {
+        return (LEVEL_DEFAULT, false);
+    }
+    let mut found = suggested.to_vec();
+    have.sort();
+    found.sort();
+    if have == found {
+        (LEVEL_DEFAULT, false)
+    } else {
+        (LEVEL_CUSTOM, true)
+    }
+}
+
+/// The full set of checks worth suggesting for the project in `dir`, from its manifests.
+pub fn detect(dir: &Path) -> Vec<String> {
+    detect_at(dir, Level::Full)
+}
+
+/// The checks for the project in `dir` at `level`, from its manifests.
+pub fn detect_at(dir: &Path, level: Level) -> Vec<String> {
+    let quick = level == Level::Quick;
+    let mut out = Vec::new();
+    let has = |name: &str| dir.join(name).exists();
+    if has("package.json") {
+        let pm = if has("pnpm-lock.yaml") {
+            "pnpm"
+        } else if has("yarn.lock") {
+            "yarn"
+        } else if has("bun.lockb") || has("bun.lock") {
+            "bun"
+        } else {
+            "npm"
+        };
+        let scripts = std::fs::read_to_string(dir.join("package.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| v.get("scripts").cloned())
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+        for name in ["typecheck", "lint", "test", "build"] {
+            let Some(script) = scripts.get(name).and_then(|s| s.as_str()) else {
+                continue;
+            };
+            // npm init's placeholder test only fails.
+            if script.contains("no test specified") {
+                continue;
+            }
+            if quick && !matches!(name, "typecheck" | "lint") {
+                continue;
+            }
+            out.push(if pm == "npm" && name == "test" {
+                "npm test".to_string()
+            } else {
+                format!("{pm} run {name}")
+            });
+            // Quick runs the type check, or the lint when there is none.
+            if quick {
+                break;
+            }
+        }
+    }
+    if has("Cargo.toml") {
+        out.push(if quick { "cargo check" } else { "cargo test" }.into());
+    }
+    if has("go.mod") {
+        out.push("go vet ./...".into());
+        if !quick {
+            out.push("go test ./...".into());
+        }
+    }
+    if has("pyproject.toml") || has("setup.py") || has("requirements.txt") {
+        let pyproject = std::fs::read_to_string(dir.join("pyproject.toml")).unwrap_or_default();
+        if pyproject.contains("ruff") || has("ruff.toml") || has(".ruff.toml") {
+            out.push("ruff check .".into());
+        }
+        if !quick && (pyproject.contains("pytest") || has("pytest.ini") || has("tests")) {
+            out.push("pytest -q".into());
+        }
+    }
+    if out.is_empty() && has("Makefile") {
+        let make = std::fs::read_to_string(dir.join("Makefile")).unwrap_or_default();
+        let targets: &[&str] = if quick {
+            &["check", "lint"]
+        } else {
+            &["check", "lint", "test"]
+        };
+        for target in targets {
+            if make.lines().any(|l| l.starts_with(&format!("{target}:"))) {
+                out.push(format!("make {target}"));
+                if quick {
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Windows' priority class for checks; processes they start inherit it.
+#[cfg_attr(not(windows), allow(dead_code))]
+const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+
+/// The programs that run a check at low CPU and disk priority on this OS, found by `find`
+/// (a usable path, or `None` when the tool is missing). Children inherit the priority.
+fn low_prefix(mut find: impl FnMut(&str, &[&str]) -> Option<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    if cfg!(target_os = "macos") {
+        // Background QoS: low CPU, disk and network priority.
+        if let Some(tp) = find("taskpolicy", &["-b"]) {
+            out.extend([tp, "-b".into()]);
+        }
+    } else if cfg!(unix) {
+        if let Some(ionice) = find("ionice", &["-c", "3"]) {
+            out.extend([ionice, "-c".into(), "3".into()]);
+        }
+        if let Some(nice) = find("nice", &["-n", "10"]) {
+            out.extend([nice, "-n".into(), "10".into()]);
+        }
+    }
+    out
+}
+
+/// The program and arguments that run `command`, after `prefix`.
+fn check_argv(command: &str, prefix: &[String]) -> Vec<String> {
+    let mut out = prefix.to_vec();
+    if cfg!(windows) {
+        out.extend(["cmd".into(), "/C".into(), command.into()]);
+    } else {
+        // One pipe for both streams keeps errors next to what led to them.
+        out.extend(["sh".into(), "-c".into(), format!("exec 2>&1\n{command}")]);
+    }
+    out
+}
+
+/// A priority tool that is on this computer and works here (a container may refuse
+/// `ionice`), tried once with `true`.
+fn working_tool(name: &str, args: &[&str]) -> Option<String> {
+    let dirs = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let fixed = ["/usr/sbin", "/usr/bin", "/sbin", "/bin"].map(std::path::PathBuf::from);
+    let path = dirs
+        .into_iter()
+        .chain(fixed)
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())?;
+    let ok = Command::new(&path)
+        .args(args)
+        .arg("true")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    ok.then(|| path.to_string_lossy().into_owned())
+}
+
+/// The low-priority prefix for this computer, looked up once. A missing tool is noted
+/// once in the log and its checks run at normal priority.
+fn low_prefix_here() -> &'static [String] {
+    static PREFIX: OnceLock<Vec<String>> = OnceLock::new();
+    PREFIX.get_or_init(|| {
+        let mut missing = Vec::new();
+        let prefix = low_prefix(|name, args| {
+            let found = working_tool(name, args);
+            if found.is_none() {
+                missing.push(name.to_string());
+            }
+            found
+        });
+        if !missing.is_empty() {
+            crate::applog::info(
+                "proof",
+                format!(
+                    "{} isn't available, so checks run without it at normal priority",
+                    missing.join(" and ")
+                ),
+            );
+        }
+        prefix
+    })
+}
+
+/// Run each check in turn in `dir`. Every check runs, so one card shows all that failed.
+/// `low` runs them at low CPU and disk priority, with everything they start.
+/// `env` is added to each check's environment.
+pub fn run_all(
+    dir: &str,
+    commands: &[String],
+    limit: Duration,
+    low: bool,
+    env: &[(String, String)],
+) -> Vec<CheckRun> {
+    commands
+        .iter()
+        .map(|c| run_one(dir, c, limit, low, env))
+        .collect()
+}
+
+fn run_one(
+    dir: &str,
+    command: &str,
+    limit: Duration,
+    low: bool,
+    env: &[(String, String)],
+) -> CheckRun {
+    let started = Instant::now();
+    let prefix = if low { low_prefix_here() } else { &[] };
+    let argv = check_argv(command, prefix);
+    let mut cmd = Command::new(&argv[0]);
+    cmd.args(&argv[1..]);
+    #[cfg(windows)]
+    if low {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(BELOW_NORMAL_PRIORITY_CLASS);
+    }
+    cmd.current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .envs(env.iter().map(|(k, v)| (k, v)));
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Its own process group, so a timeout also stops what it started.
+        cmd.process_group(0);
+    }
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return CheckRun {
+                command: command.into(),
+                ok: false,
+                secs: 0,
+                tail: format!("Could not start it: {error}"),
+                timed_out: false,
+                infra: if error.kind() == std::io::ErrorKind::NotFound {
+                    "a tool is missing"
+                } else {
+                    infra_reason(None, None, false, &error.to_string()).unwrap_or_default()
+                }
+                .into(),
+            }
+        }
+    };
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            String::from_utf8_lossy(&bytes).into_owned()
+        })
+    };
+    let out = drain(child.stdout.take().map(|p| Box::new(p) as _));
+    let err = drain(child.stderr.take().map(|p| Box::new(p) as _));
+    let deadline = started + limit;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(200)),
+            _ => {
+                #[cfg(unix)]
+                unsafe {
+                    // SAFETY: kill on our own child's process group id.
+                    libc::kill(-(child.id() as i32), libc::SIGKILL);
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    let secs = started.elapsed().as_secs();
+    let text = match status {
+        Some(_) => {
+            let mut text = out.join().unwrap_or_default();
+            text.push_str(&err.join().unwrap_or_default());
+            text
+        }
+        // A grandchild may still hold the pipes open after a timeout.
+        None => String::new(),
+    };
+    let timed_out = status.is_none();
+    let ok = status.is_some_and(|s| s.success());
+    let code = status.and_then(|s| s.code());
+    #[cfg(unix)]
+    let signal = status.and_then(|s| std::os::unix::process::ExitStatusExt::signal(&s));
+    #[cfg(not(unix))]
+    let signal = None;
+    let infra = if ok {
+        ""
+    } else {
+        infra_reason(code, signal, timed_out, &text).unwrap_or_default()
+    };
+    let mut tail = tail(&crate::agent::strip_ansi(&text));
+    if timed_out {
+        tail = format!("Stopped after {} minutes.", limit.as_secs() / 60);
+    } else if let Some(code) = status.and_then(|s| s.code()).filter(|c| *c != 0) {
+        if tail.is_empty() {
+            tail = format!("Exited with code {code} and printed nothing.");
+        }
+    }
+    CheckRun {
+        command: command.into(),
+        ok,
+        secs,
+        tail,
+        timed_out,
+        infra: infra.into(),
+    }
+}
+
+/// The last lines of `text`, at most `TAIL_LINES` lines and about `TAIL_BYTES` bytes.
+pub fn tail(text: &str) -> String {
+    let lines: Vec<&str> = text.trim_end().lines().collect();
+    let start = lines.len().saturating_sub(TAIL_LINES);
+    let mut out = lines[start..].join("\n");
+    if out.len() > TAIL_BYTES {
+        let mut cut = out.len() - TAIL_BYTES;
+        while !out.is_char_boundary(cut) {
+            cut += 1;
+        }
+        out = out[cut..].to_string();
+    }
+    out.trim_start_matches('\n').to_string()
+}
+
+/// The follow-up that asks the agent to make the failing checks pass.
+pub fn fix_prompt(results: &[CheckRun]) -> String {
+    let failed: Vec<&CheckRun> = results
+        .iter()
+        .filter(|r| !r.ok && r.infra.is_empty())
+        .collect();
+    let mut out = format!(
+        "Squad Code ran the project's checks after your last turn and {} failed. Fix the cause in \
+         the code. Don't skip, disable or loosen tests or lint rules to make them pass. Run \
+         the failing command{} yourself to confirm before you stop.\n",
+        if failed.len() == 1 {
+            "one".to_string()
+        } else {
+            format!("{} of them", failed.len())
+        },
+        if failed.len() == 1 { "" } else { "s" }
+    );
+    for r in failed {
+        out.push_str(&format!("\n`{}`:\n```\n{}\n```\n", r.command, r.tail));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("runo-proof-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn commands_skip_blanks_and_comments() {
+        assert_eq!(
+            commands("npm test\n\n  # later\n cargo test \n"),
+            vec!["npm test", "cargo test"]
+        );
+    }
+
+    #[test]
+    fn checks_are_found_from_manifests() {
+        let dir = temp("detect");
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"scripts":{"build":"vite build","test":"vitest","lint":"eslint .","dev":"vite"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("pnpm-lock.yaml"), "").unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]").unwrap();
+        assert_eq!(
+            detect(&dir),
+            vec![
+                "pnpm run lint",
+                "pnpm run test",
+                "pnpm run build",
+                "cargo test"
+            ]
+        );
+        std::fs::remove_file(dir.join("pnpm-lock.yaml")).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"scripts":{"test":"echo \"Error: no test specified\" && exit 1"}}"#,
+        )
+        .unwrap();
+        std::fs::remove_file(dir.join("Cargo.toml")).unwrap();
+        assert!(detect(&dir).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn quick_runs_each_languages_fast_check_and_full_runs_tests() {
+        let dir = temp("levels");
+        let quick = |d: &Path| detect_at(d, Level::Quick);
+        let full = |d: &Path| detect_at(d, Level::Full);
+        // JS/TS: the typecheck script, else lint, else nothing.
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"scripts":{"typecheck":"tsc","lint":"eslint .","test":"vitest","build":"vite build"}}"#,
+        )
+        .unwrap();
+        assert_eq!(quick(&dir), vec!["npm run typecheck"]);
+        assert_eq!(
+            full(&dir),
+            vec![
+                "npm run typecheck",
+                "npm run lint",
+                "npm test",
+                "npm run build"
+            ]
+        );
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"scripts":{"lint":"eslint .","test":"vitest"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("yarn.lock"), "").unwrap();
+        assert_eq!(quick(&dir), vec!["yarn run lint"]);
+        std::fs::write(dir.join("package.json"), r#"{"scripts":{"test":"vitest"}}"#).unwrap();
+        assert!(quick(&dir).is_empty());
+        assert_eq!(full(&dir), vec!["yarn run test"]);
+        std::fs::remove_file(dir.join("package.json")).unwrap();
+        // Rust.
+        std::fs::write(dir.join("Cargo.toml"), "[package]").unwrap();
+        assert_eq!(quick(&dir), vec!["cargo check"]);
+        assert_eq!(full(&dir), vec!["cargo test"]);
+        std::fs::remove_file(dir.join("Cargo.toml")).unwrap();
+        // Go.
+        std::fs::write(dir.join("go.mod"), "module x").unwrap();
+        assert_eq!(quick(&dir), vec!["go vet ./..."]);
+        assert_eq!(full(&dir), vec!["go vet ./...", "go test ./..."]);
+        std::fs::remove_file(dir.join("go.mod")).unwrap();
+        // Python: ruff, no pytest.
+        std::fs::write(
+            dir.join("pyproject.toml"),
+            "[tool.ruff]\n[tool.pytest.ini_options]\n",
+        )
+        .unwrap();
+        assert_eq!(quick(&dir), vec!["ruff check ."]);
+        assert_eq!(full(&dir), vec!["ruff check .", "pytest -q"]);
+        std::fs::remove_file(dir.join("pyproject.toml")).unwrap();
+        // make: check, else lint.
+        std::fs::write(
+            dir.join("Makefile"),
+            "lint:\n\tx\ncheck:\n\ty\ntest:\n\tz\n",
+        )
+        .unwrap();
+        assert_eq!(quick(&dir), vec!["make check"]);
+        assert_eq!(full(&dir), vec!["make check", "make lint", "make test"]);
+        std::fs::write(dir.join("Makefile"), "lint:\n\tx\ntest:\n\tz\n").unwrap();
+        assert_eq!(quick(&dir), vec!["make lint"]);
+        std::fs::write(dir.join("Makefile"), "test:\n\tz\n").unwrap();
+        assert!(quick(&dir).is_empty());
+        assert_eq!(detect(&dir), full(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_tool_or_a_kill_is_reported_as_couldnt_run() {
+        let dir = temp("infra");
+        let d = dir.to_string_lossy().to_string();
+        let limit = Duration::from_secs(20);
+        let missing = run_one(&d, "no-such-tool-for-runo-checks", limit, false, &[]);
+        assert!(!missing.ok);
+        assert_eq!(missing.infra, "a tool is missing", "{missing:?}");
+        let killed = run_one(&d, "kill -9 $$", limit, false, &[]);
+        assert!(!killed.ok && killed.infra.contains("signal"), "{killed:?}");
+        let failed = run_one(&d, "exit 1", limit, false, &[]);
+        assert!(!failed.ok && failed.infra.is_empty());
+        let timed = run_one(&d, "sleep 5", Duration::from_millis(300), false, &[]);
+        assert_eq!(timed.infra, "timed out");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn makefile_targets_are_used_when_nothing_else_is_found() {
+        let dir = temp("make");
+        std::fs::write(
+            dir.join("Makefile"),
+            "build:\n\tcc x.c\ntest: build\n\t./t\n",
+        )
+        .unwrap();
+        assert_eq!(detect(&dir), vec!["make test"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checks_run_and_report_failures_with_their_output() {
+        let dir = temp("run");
+        let d = dir.to_string_lossy().to_string();
+        let runs = run_all(
+            &d,
+            &["echo fine".into(), "echo broke >&2; exit 3".into()],
+            Duration::from_secs(20),
+            false,
+            &[],
+        );
+        assert!(runs[0].ok);
+        assert_eq!(runs[0].tail, "fine");
+        assert!(!runs[1].ok);
+        assert_eq!(runs[1].tail, "broke");
+        let timed = run_one(&d, "sleep 5", Duration::from_millis(300), true, &[]);
+        assert!(!timed.ok && timed.timed_out);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn checks_run_normally_without_a_priority_tool() {
+        let argv = check_argv("make test", &low_prefix(|_, _| None));
+        if cfg!(windows) {
+            assert_eq!(argv, ["cmd", "/C", "make test"]);
+        } else {
+            assert_eq!(argv, ["sh", "-c", "exec 2>&1\nmake test"]);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_checks_run_with_background_priority() {
+        let prefix = low_prefix(|name, _| Some(format!("/usr/sbin/{name}")));
+        assert_eq!(
+            check_argv("npm test", &prefix),
+            [
+                "/usr/sbin/taskpolicy",
+                "-b",
+                "sh",
+                "-c",
+                "exec 2>&1\nnpm test"
+            ]
+        );
+        // What the check starts runs in the background band too (priority 4).
+        let dir = temp("mac-low");
+        let run = run_one(
+            &dir.to_string_lossy(),
+            "sh -c 'ps -o pri= -p $$'",
+            Duration::from_secs(20),
+            true,
+            &[],
+        );
+        assert_eq!(run.tail.trim(), "4", "{run:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn linux_checks_run_niced_and_idle_for_disk() {
+        let prefix = low_prefix(|name, _| Some(format!("/usr/bin/{name}")));
+        assert_eq!(
+            check_argv("go test ./...", &prefix),
+            [
+                "/usr/bin/ionice",
+                "-c",
+                "3",
+                "/usr/bin/nice",
+                "-n",
+                "10",
+                "sh",
+                "-c",
+                "exec 2>&1\ngo test ./..."
+            ]
+        );
+        // Without ionice, nice alone.
+        let prefix = low_prefix(|name, _| (name == "nice").then(|| "nice".to_string()));
+        assert_eq!(prefix, ["nice", "-n", "10"]);
+        // What the check starts inherits the niceness.
+        let dir = temp("linux-low");
+        let run = run_one(
+            &dir.to_string_lossy(),
+            "sh -c nice",
+            Duration::from_secs(20),
+            true,
+            &[],
+        );
+        assert_eq!(run.tail.trim(), "10", "{run:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_checks_start_below_normal() {
+        assert!(low_prefix(|_, _| Some("x".into())).is_empty());
+        assert_eq!(BELOW_NORMAL_PRIORITY_CLASS, 0x4000);
+    }
+
+    #[test]
+    fn tails_keep_the_end() {
+        let text: String = (1..=100).map(|i| format!("line {i}\n")).collect();
+        let t = tail(&text);
+        assert!(t.starts_with("line 61") && t.ends_with("line 100"));
+    }
+
+    #[test]
+    fn fix_prompts_name_each_failing_check() {
+        let runs = vec![
+            CheckRun {
+                command: "npm test".into(),
+                ok: false,
+                tail: "1 failed".into(),
+                ..Default::default()
+            },
+            CheckRun {
+                command: "npm run lint".into(),
+                ok: true,
+                ..Default::default()
+            },
+        ];
+        let p = fix_prompt(&runs);
+        assert!(p.contains("`npm test`") && p.contains("1 failed"));
+        assert!(!p.contains("npm run lint"));
+    }
+}

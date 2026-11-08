@@ -1,7 +1,7 @@
-# Runo native app
+# Squad Code native app
 
-This folder holds the Runo desktop app (`runo-app`), written in pure Rust. See the [main README](../README.md) for features, setup and build steps, and [DESIGN.md](DESIGN.md) for the design notes.
+This folder holds the Squad Code desktop app (`squad-app`) and the crew's drawings (`squad-holo`), written in pure Rust. See the [main README](../README.md) for features, setup and build steps.
 
 ```bash
-cargo run -p runo --release
+cargo run -p squadcode --release
 ```

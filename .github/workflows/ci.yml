@@ -49,18 +49,18 @@ jobs:
       # Tests make commits in temporary repositories.
       - name: Configure git
         run: |
-          git config --global user.name "Runo CI"
-          git config --global user.email "ci@runo.invalid"
+          git config --global user.name "Squad Code CI"
+          git config --global user.email "ci@squadcode.invalid"
           git config --global init.defaultBranch main
 
       - name: Format
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy -p runo --all-targets -- -D warnings
+        run: cargo clippy -p squadcode --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test -p runo
+        run: cargo test -p squadcode
 
   # Windows builds were first compiled at release time, so Unix-only code broke
   # the v0.5.7 release. This lints the app (not the tests, many of which need a
@@ -83,4 +83,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Clippy
-        run: cargo clippy -p runo -- -D warnings
+        run: cargo clippy -p squadcode -- -D warnings

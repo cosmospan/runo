@@ -1,6 +1,6 @@
 # Training Squad's own model
 
-Squad's intelligence layer (`native/runo-app/src/v2/brain/`) picks the kind of
+Squad's intelligence layer (`native/squad-app/src/v2/brain/`) picks the kind of
 job and the bot in three steps, each used only when the one before isn't sure:
 
 1. **The tiny classifier**, built into the app: about 15,000 word and

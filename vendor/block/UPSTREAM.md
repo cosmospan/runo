@@ -2,10 +2,10 @@
 
 Source: https://crates.io/crates/block/0.1.6
 
-Archive SHA-256 (verified against Runo's original Cargo.lock):
+Archive SHA-256 (verified against the app's original Cargo.lock):
 `0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a`
 
-Runo does not use this crate directly. It comes in on macOS through `cocoa`,
+Squad Code does not use this crate directly. It comes in on macOS through `cocoa`,
 `cocoa-foundation`, `metal`, `core-video` and `core-graphics2`, all under gpui, and
 is patched in through `[patch.crates-io]` in the workspace `Cargo.toml`.
 

@@ -1,16 +1,16 @@
 name: Bug report
-description: Report a problem in Runo
+description: Report a problem in Squad Code
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Runo supports macOS, Linux, and Windows.
+        Squad Code supports macOS, Linux, and Windows.
 
   - type: input
     id: version
     attributes:
-      label: Runo version
+      label: Squad Code version
       placeholder: "0.1.0"
     validations:
       required: true
@@ -74,4 +74,4 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: In Runo, open Settings › General › Updates › Logs and crash reports and click Copy diagnostics, then paste here. It leaves secrets out, but look it over before you post.
+      description: In Squad Code, open Settings › General › Updates › Logs and crash reports and click Copy diagnostics, then paste here. It leaves secrets out, but look it over before you post.

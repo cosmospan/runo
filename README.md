@@ -344,8 +344,10 @@ A two-step welcome checks which coding agents are installed and asks for a folde
 ```bash
 git clone https://github.com/hyperhale/squadcode
 cd squadcode
-cargo run --release --bin SquadCode
+cargo run -p squadcode --release
 ```
+
+Set `SQUADCODE_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
 
 ### Build the app
 
@@ -353,14 +355,14 @@ To build `Squad Code.app` and a disk image with its icon, use [cargo-bundle](htt
 
 ```bash
 cargo install cargo-bundle
-cd native/runo-app && cargo bundle --release
+cd native/squad-app && cargo bundle --release
 ```
 
 On Linux the same command makes a `.deb`, and on Windows the icon is built into `SquadCode.exe`. To publish a release, see [docs/releasing.md](docs/releasing.md).
 
 ### Where Squad Code keeps its data
 
-Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. Set `SQUADCODE_HOME` to move it all.
+Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. The first time Squad Code opens it copies what Runo had saved in `~/.runo`. Set `SQUADCODE_HOME` to move it all.
 
 ## Learn more
 

@@ -23,7 +23,7 @@ step() { printf '\n== %s\n' "$*"; }
 
 step "Squad Code from this branch (for export and eval)"
 if [ ! -x "$SQUAD" ] && command -v cargo >/dev/null; then
-  (cd .. && cargo build --release -p runo)
+  (cd .. && cargo build --release -p squadcode)
 fi
 
 step "Python packages"

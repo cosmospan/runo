@@ -1,6 +1,6 @@
-# Publishes the agent manifest (native/runo-app/src/agents.json) for Runo to download:
+# Publishes the agent manifest (native/squad-app/src/agents.json) for Squad Code to download:
 # signed with the REGISTRY_SIGNING_KEY secret and attached to the `agent-registry`
-# release, a pre-release that isn't a Runo version. Runo keeps a download only when its
+# release, a pre-release that isn't a Squad Code version. Squad Code keeps a download only when its
 # signature checks out against agents.pub and its version is newer than the one it has,
 # so raise "version" with every change. Make the key once with scripts/registry-key.sh.
 name: Agent registry
@@ -8,7 +8,7 @@ name: Agent registry
 on:
   push:
     branches: [main]
-    paths: ["native/runo-app/src/agents.json"]
+    paths: ["native/squad-app/src/agents.json"]
   workflow_dispatch:
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
     env:
       REGISTRY_SIGNING_KEY: ${{ secrets.REGISTRY_SIGNING_KEY }}
       GH_TOKEN: ${{ github.token }}
-      MANIFEST: native/runo-app/src/agents.json
+      MANIFEST: native/squad-app/src/agents.json
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +52,7 @@ jobs:
           rm key.pem
           python3 - <<'PY'
           import base64, subprocess
-          pub = base64.b64decode(open("native/runo-app/src/agents.pub").read().strip())
+          pub = base64.b64decode(open("native/squad-app/src/agents.pub").read().strip())
           der = bytes.fromhex("302a300506032b6570032100") + pub
           open("pub.der", "wb").write(der)
           open("sig.bin", "wb").write(base64.b64decode(open("agents.json.sig").read()))
@@ -64,5 +64,5 @@ jobs:
         run: |
           gh release view agent-registry >/dev/null 2>&1 || gh release create agent-registry \
             --title "Agent registry" --prerelease --latest=false \
-            --notes "Signed agent manifests that Runo downloads. Not a Runo release."
+            --notes "Signed agent manifests that Squad Code downloads. Not a Squad Code release."
           gh release upload agent-registry agents.json.sig agents.json --clobber
