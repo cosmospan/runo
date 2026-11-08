@@ -145,6 +145,10 @@ pub fn start(
         .map(|s| (s.name.clone(), s.spec()))
         .collect();
     opts.disallowed_tools = add_rules(&opts.disallowed_tools, &setup.tool_rules());
+    // Unmerged threads it was pointed at live in other worktrees: it may read them.
+    if !job.reads.is_empty() {
+        opts.add_dirs = add_rules(&opts.add_dirs, &job.reads);
+    }
     let mode = if job.mode.writes() && setup.perms.edit {
         agent::effective_mode(p.id, "edit")
     } else {

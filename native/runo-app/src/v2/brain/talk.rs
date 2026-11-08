@@ -75,10 +75,21 @@ pub fn crew_rule(me: Member, crew: &[Member]) -> String {
     )
 }
 
-/// What a bot gets when another bot @mentions it.
-pub fn relay_text(from: Member, from_job: u64, said: &str) -> String {
+/// What a bot gets when another bot @mentions it: the line meant for it,
+/// and the whole reply it ends, since that line often points back at it
+/// ("can you fix items 1 and 2?").
+pub fn relay_text(from: Member, from_job: u64, said: &str, whole: &str) -> String {
+    let whole = whole.trim();
+    let context = if whole.is_empty() || whole == said.trim() {
+        String::new()
+    } else {
+        format!(
+            "Their whole message, for what it refers to:\n\n<message from=\"{}\">\n{whole}\n</message>\n\n",
+            from.name()
+        )
+    };
     format!(
-        "{} (another bot on your crew, working on #{from_job}) says to you in the thread:\n\n{said}\n\nAnswer them. If you need to reply to {} directly, end with a line starting \"@{}:\". Push back if you disagree.",
+        "{} (another bot on your crew, working on #{from_job}) says to you in the thread:\n\n{said}\n\n{context}Answer them. If you need to reply to {} directly, end with a line starting \"@{}:\". Push back if you disagree.",
         from.name(),
         from.name(),
         from.name()
@@ -110,7 +121,10 @@ mod tests {
     fn a_bot_hears_who_is_on_its_crew() {
         let r = crew_rule(Member::Builder, &Member::CREW);
         assert!(r.contains("Guard") && r.contains("@Guard:") && !r.contains("Builder ("));
-        let t = relay_text(Member::Guard, 4, "The cookie isn't httpOnly.");
-        assert!(t.contains("#4") && t.contains("@Guard:"));
+        let t = relay_text(Member::Guard, 4, "The cookie isn't httpOnly.", "");
+        assert!(t.contains("#4") && t.contains("@Guard:") && !t.contains("<message"));
+        let whole = "1. The cookie isn't httpOnly.\n2. No rate limit.\n\n@Builder: can you fix items 1 and 2?";
+        let t = relay_text(Member::Guard, 4, "can you fix items 1 and 2?", whole);
+        assert!(t.contains("No rate limit") && t.contains("can you fix items 1 and 2?"));
     }
 }

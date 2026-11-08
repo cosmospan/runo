@@ -253,6 +253,10 @@ pub struct Job {
     pub worked: u64,
     /// When the turn running now began; 0 when none is.
     pub turn: u64,
+    /// Where the latest turn's items start in the feed.
+    pub turn_from: usize,
+    /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
+    pub reads: Vec<String>,
     pub status: Status,
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
@@ -370,6 +374,8 @@ impl Default for Job {
             ended: None,
             worked: 0,
             turn: 0,
+            turn_from: 0,
+            reads: Vec::new(),
             status: Status::Done,
             feed: Vec::new(),
             plan: Vec::new(),
@@ -430,6 +436,7 @@ impl Job {
     /// A turn starts: the first run or a follow-up.
     pub fn turn_began(&mut self) {
         self.turn = now();
+        self.turn_from = self.feed.len();
     }
 
     /// The running turn ended; its time goes on the job.
@@ -491,6 +498,17 @@ impl Job {
             &self.folder.path
         } else {
             &self.worktree
+        }
+    }
+
+    /// The bot that started this job by @mentioning its bot in the thread;
+    /// None when the person asked for it.
+    pub fn asked_by(&self) -> Option<Member> {
+        match self.feed.first() {
+            Some(Item::By(m, _)) if self.title.starts_with(&format!("{} asked:", m.name())) => {
+                Some(*m)
+            }
+            _ => None,
         }
     }
 
@@ -823,8 +841,11 @@ impl Store {
                 }
             }
         }
+        // A job a bot asked for: its words are in the thread already, as its own.
         for j in self.jobs_in(folder, thread) {
-            said.push((j.started, "you".into(), j.title.clone()));
+            if j.asked_by().is_none() {
+                said.push((j.started, "you".into(), j.title.clone()));
+            }
         }
         said.sort_by_key(|s| s.0);
         let n = said.len();

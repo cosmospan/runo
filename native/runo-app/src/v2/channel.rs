@@ -743,7 +743,8 @@ impl Shell {
                 .cloned()
                 .map(Entry::Talk),
         );
-        entries.sort_by_key(|e| e.at());
+        // In the same second, a bot's message comes before the job it starts.
+        entries.sort_by_key(|e| (e.at(), !matches!(e, Entry::Talk(_))));
         let total = entries.len();
         // The last 30 things, newest at the bottom beside the composer.
         let shown: Vec<Entry> = entries.into_iter().skip(total.saturating_sub(30)).collect();
@@ -1512,7 +1513,10 @@ impl Shell {
         // Your ask, then Peek's hand-off when it picked the bot, then the
         // bot's reply; each leaves out the face and name when it carries on
         // a run from the same author.
-        let you_lead = !self.continues("You", j.started);
+        // A bot asked for this one: its message is in the thread as its own,
+        // so nothing shows as yours.
+        let asked_by_you = j.asked_by().is_none();
+        let you_lead = asked_by_you && !self.continues("You", j.started);
         let handoff = (!j.handoff.is_empty()).then(|| {
             self.streak = Some(("Peek".into(), j.started));
             div()
@@ -1559,18 +1563,21 @@ impl Shell {
                 )
             })
             .child(div().when(running, |d| d.mt(px(4.))).child(body));
-        div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .child(self.message(
+        let yours = asked_by_you.then(|| {
+            self.message(
                 format!("you-job-{}", j.id),
                 j.title.clone(),
                 Msg::Mine(j.title.clone()),
                 (!you_lead).then_some(j.started),
                 mine(j.title.clone(), j.started, you_lead),
                 cx,
-            ))
+            )
+        });
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .children(yours)
             .children(handoff)
             .child(self.message(
                 format!("job-{}", j.id),

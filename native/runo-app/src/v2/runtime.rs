@@ -39,6 +39,8 @@ struct Relay {
     folder: store::Folder,
     thread: u64,
     said: String,
+    /// The whole reply the @mention ends.
+    whole: String,
 }
 
 pub struct Runtime {
@@ -317,6 +319,19 @@ impl Runtime {
         }
         // A thread it builds on that isn't merged yet: this job starts from
         // the base without those changes, so say so and show where they are.
+        // A bot that only reads (Guard reviewing, say) is told where those
+        // changes are, or it would look at the folder without them.
+        if !mode.writes() {
+            for j in brain::digest::unmerged(text, &self.store.jobs) {
+                if j.folder.path != job.folder.path {
+                    continue;
+                }
+                job.context = format!("{}\n\n{}", job.context, brain::digest::read_hint(j))
+                    .trim()
+                    .to_string();
+                job.reads.push(j.worktree.clone());
+            }
+        }
         if mode.writes() {
             for j in brain::digest::unmerged(text, &self.store.jobs) {
                 if j.folder.path != job.folder.path {
@@ -332,6 +347,7 @@ impl Runtime {
                 job.context = format!("{}\n\n{}", job.context, brain::digest::unmerged_hint(j))
                     .trim()
                     .to_string();
+                job.reads.push(j.worktree.clone());
             }
         }
         // Peek's short title for the card, when Smart Peek is on.
@@ -2227,6 +2243,7 @@ impl Runtime {
             for id in &finished {
                 self.begin_review(*id);
                 self.peek(st, *id, true);
+                self.post_turn(*id);
                 self.relay_mentions(*id);
             }
             self.deliver_relays(st);
@@ -2250,13 +2267,29 @@ impl Runtime {
         let Some(job) = self.store.job(id) else {
             return;
         };
-        if job.goal != 0 || job.race != 0 {
+        // A turn the person stopped, or one that failed, says nothing to the crew.
+        if job.goal != 0
+            || job.race != 0
+            || matches!(
+                job.status,
+                Status::Failed | Status::Stopped | Status::Interrupted
+            )
+        {
             return;
         }
-        let Some(last) = job.feed.iter().rev().find_map(|i| match i {
-            store::Item::Text(t) => Some(t.clone()),
-            _ => None,
-        }) else {
+        // Only this turn's last words: an @mention from an earlier turn has
+        // been passed on already.
+        let Some(last) = job
+            .feed
+            .get(job.turn_from..)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                store::Item::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+        else {
             return;
         };
         let said = brain::talk::mentions(&last, job.bot, &Member::all());
@@ -2269,10 +2302,11 @@ impl Runtime {
             let hops = self.relay_hops.entry(key.clone()).or_insert(0);
             if *hops >= brain::talk::HOPS {
                 let note = format!(
-                    "{} and {} have gone back and forth {} times, so they've stopped for you. Reply here, or @ one of them to carry on.",
+                    "The bots have messaged each other {} times without you, so they've stopped here. {} was about to ask {}. Tell one of them what to do next, like \"@{} go ahead\", and they'll carry on.",
+                    brain::talk::HOPS,
                     from.name(),
                     to.name(),
-                    brain::talk::HOPS
+                    from.name(),
                 );
                 if let Some(j) = self.store.job_mut(id) {
                     j.feed.push(store::Item::Note(note.clone()));
@@ -2281,6 +2315,13 @@ impl Runtime {
                 return;
             }
             *hops += 1;
+            // An answer it passed on to another bot isn't waiting on the
+            // person; changes to approve still are.
+            if let Some(j) = self.store.job_mut(id) {
+                if j.status == Status::Done {
+                    j.seen = true;
+                }
+            }
             self.crew_says(
                 &folder,
                 thread,
@@ -2295,6 +2336,7 @@ impl Runtime {
                 folder: folder.clone(),
                 thread,
                 said: words,
+                whole: last.clone(),
             });
         }
     }
@@ -2308,7 +2350,7 @@ impl Runtime {
                 self.relays.push(r);
                 continue;
             }
-            let text = brain::talk::relay_text(r.from, r.from_job, &r.said);
+            let text = brain::talk::relay_text(r.from, r.from_job, &r.said, &r.whole);
             let theirs = self
                 .store
                 .jobs
@@ -2335,6 +2377,7 @@ impl Runtime {
                     job.thread = r.thread;
                     job.title = format!("{} asked: {}", r.from.name(), r.said);
                     job.feed.insert(0, store::Item::By(r.from, r.said.clone()));
+                    job.turn_from += 1;
                     self.store.jobs.push(job);
                 }
             }
@@ -2367,6 +2410,112 @@ impl Runtime {
             at: store::now(),
             choices: Vec::new(),
         });
+    }
+
+    /// `who`'s job in this thread that has been talking with the rest of the
+    /// crew, when it's waiting for its next turn: where the person's
+    /// "@Builder ..." goes once they step in, so it carries on that work
+    /// instead of starting again from scratch.
+    pub fn talking_job(&self, folder: &str, thread: u64, who: Member) -> Option<u64> {
+        self.store
+            .jobs_in(folder, thread)
+            .into_iter()
+            .rev()
+            .find(|j| j.bot == who && j.goal == 0 && j.race == 0)
+            .filter(|j| matches!(j.status, Status::Done | Status::Review))
+            .filter(|j| self.in_crew_talk(j))
+            .map(|j| j.id)
+    }
+
+    /// Whether a job has been talking with other bots: one messaged it, or
+    /// it messaged one.
+    fn in_crew_talk(&self, j: &store::Job) -> bool {
+        let from = format!("from #{}", j.id);
+        j.feed.iter().any(|i| matches!(i, store::Item::By(..)))
+            || self.store.talks.iter().any(|t| {
+                t.folder == j.folder.path
+                    && t.question.is_empty()
+                    && t.answer
+                        .as_ref()
+                        .and_then(|a| a.via.as_deref())
+                        .is_some_and(|v| v.ends_with(&from))
+            })
+    }
+
+    /// A later turn of a job in the bots' talk ends: what it said goes in the
+    /// thread as the bot's message, since its card sits further up where the
+    /// job began. Its @mentions are posted on their own after it.
+    fn post_turn(&mut self, id: u64) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.goal != 0
+            || job.race != 0
+            // Its first turn shows in its card, right where it began.
+            || !job
+                .feed
+                .get(..job.turn_from)
+                .unwrap_or_default()
+                .iter()
+                .any(|i| matches!(i, store::Item::Text(_)))
+            || matches!(
+                job.status,
+                Status::Failed | Status::Stopped | Status::Interrupted
+            )
+            || !self.in_crew_talk(job)
+        {
+            return;
+        }
+        let Some(last) = job
+            .feed
+            .get(job.turn_from..)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                store::Item::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+        else {
+            return;
+        };
+        let crew = Member::all();
+        let body = last
+            .lines()
+            .filter(|l| brain::talk::mentions(l, job.bot, &crew).is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+        if body.is_empty() {
+            return;
+        }
+        let (folder, thread, bot) = (job.folder.clone(), job.thread, job.bot);
+        self.crew_says(&folder, thread, bot, body, Some(format!("in #{id}")));
+    }
+
+    /// The person steps into the bots' talk with "@Builder ...": their words
+    /// show in the thread and go to Builder's job there as its next turn.
+    pub fn step_in(&mut self, st: &AppSettings, id: u64, text: String) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        let (folder, thread, who) = (job.folder.path.clone(), job.thread, job.bot);
+        let tid = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.store.talks.push(Talk {
+            id: tid,
+            folder,
+            thread,
+            bot: who,
+            question: text.clone(),
+            answer: Some(Said::note(format!(
+                "{} picks this up in #{id}, where it was working with the crew.",
+                who.name()
+            ))),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        self.follow_up(st, id, text);
     }
 
     /// The person spoke in a thread: its bots may talk to each other again.
@@ -2817,7 +2966,7 @@ mod tests {
         assert!(fix_turn(&mut job).is_none());
     }
 
-    fn quiet_store() -> Store {
+    pub(super) fn quiet_store() -> Store {
         // A demo store is never saved, so tests leave ~/.runo alone.
         Store {
             demo: true,
@@ -2882,6 +3031,38 @@ mod tests {
         rt.person_spoke(&folder.path, 3);
         assert!(rt.relay_hops.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_old_mention_isnt_sent_again() {
+        let mut rt = Runtime::new(quiet_store());
+        let folder = store::Folder {
+            name: "t".into(),
+            path: "/tmp/squad-old-mention".into(),
+            ship: String::new(),
+        };
+        rt.store.jobs.push(store::Job {
+            id: 1,
+            thread: 3,
+            bot: Member::Builder,
+            folder: folder.clone(),
+            status: Status::Done,
+            feed: vec![
+                store::Item::Text("Done.\n@Guard: is the cookie safe?".into()),
+                store::Item::You("Also add a logout button".into()),
+            ],
+            // The person's follow-up began a turn that said nothing.
+            turn_from: 1,
+            ..Default::default()
+        });
+        rt.relay_mentions(1);
+        assert!(rt.store.talks.is_empty() && rt.relays.is_empty());
+        // Nor does a turn the person stopped.
+        let j = rt.store.job_mut(1).unwrap();
+        j.turn_from = 0;
+        j.status = Status::Stopped;
+        rt.relay_mentions(1);
+        assert!(rt.store.talks.is_empty() && rt.relays.is_empty());
     }
 
     #[test]
@@ -2991,5 +3172,191 @@ mod tests {
         mirror(&mut here, there);
         assert_eq!(here.feed.len(), 2);
         assert_eq!(here.engine, "Claude Code on vps");
+    }
+}
+
+#[cfg(all(test, unix))]
+mod talk_e2e {
+    use super::*;
+
+    /// A stand-in for Claude Code: answers in stream-json, scripted by what
+    /// it's told, so bots can be watched talking with no real engine.
+    const FAKE: &str = r#"#!/bin/bash
+all="$*"
+sid="sess-$$"
+if [[ "$all" == *"another bot on your crew"* ]]; then
+  who=$(printf '%s' "$all" | grep -o '[A-Za-z]* (another bot on your crew' | head -1 | cut -d' ' -f1)
+  text="I disagree: the cookie needs httpOnly.\\n@$who: please set httpOnly on the session cookie."
+elif [[ "$all" == *"TALK-START"* ]]; then
+  echo '<form>login</form>' > login.html
+  text="The login page works.\\n@Guard: is the session cookie safe?"
+else
+  text="Done, nothing to add."
+fi
+echo "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"$sid\"}"
+echo "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$text\"}]},\"session_id\":\"$sid\"}"
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"$text\",\"session_id\":\"$sid\"}"
+"#;
+
+    fn run_until_idle(rt: &mut Runtime, st: &AppSettings) {
+        let t = Instant::now();
+        loop {
+            rt.poll(st, None);
+            if rt.runners.is_empty() && rt.relays.is_empty() {
+                // Let a finished turn's relays go out.
+                rt.poll(st, None);
+                if rt.runners.is_empty() {
+                    return;
+                }
+            }
+            assert!(t.elapsed() < Duration::from_secs(60), "jobs never settled");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn two_bots_argue_until_the_person_is_needed() {
+        let base = std::env::temp_dir().join(format!("squad-talk-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let fake = base.join("claude");
+        std::fs::write(&fake, FAKE).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let sh = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+        };
+        sh(&["init", "-q"]);
+        std::fs::write(repo.join("README.md"), "demo\n").unwrap();
+        sh(&["add", "."]);
+        sh(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ]);
+
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = if p.id == "claude" {
+                fake.to_string_lossy().into_owned()
+            } else {
+                "/nonexistent/squad-test-agent".into()
+            };
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let folder = store::Folder {
+            name: "repo".into(),
+            path: repo.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let mut rt = Runtime::new(super::tests::quiet_store());
+        let job = rt.make_job(
+            &st,
+            Member::Builder,
+            Mode::Build,
+            "TALK-START build a login page and have Guard check it",
+            folder.clone(),
+            None,
+            None,
+        );
+        let thread = job.thread;
+        rt.store.jobs.push(job);
+        run_until_idle(&mut rt, &st);
+
+        // Each bot's words show in the thread as its own message.
+        let said: Vec<(Member, String)> = rt
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.thread == thread)
+            .map(|t| (t.bot, t.answer.clone().unwrap().text))
+            .collect();
+        assert_eq!(said[0].0, Member::Builder);
+        assert!(said[0].1.starts_with("@Guard"));
+        assert_eq!(said[1].0, Member::Guard);
+        assert!(said[1].1.starts_with("@Builder") && said[1].1.contains("httpOnly"));
+        // Guard reads Builder's unmerged work where it is.
+        let builder = rt.store.jobs[0].clone();
+        let guard = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap();
+        assert_eq!(guard.thread, thread);
+        assert!(guard.context.contains(&builder.worktree));
+        assert_eq!(guard.reads, vec![builder.worktree.clone()]);
+        // Guard's job was Builder's ask, not the person's, and its answer
+        // went on to Builder, so it isn't waiting on the person.
+        assert_eq!(guard.asked_by(), Some(Member::Builder));
+        assert_eq!(builder.asked_by(), None);
+        assert!(guard.seen && !guard.needs_you());
+        let recent = rt.store.recent(&folder.path, thread);
+        assert!(!recent
+            .iter()
+            .any(|(who, w)| who == "you" && w.contains("asked:")));
+        let via = |t: &Talk| {
+            t.answer
+                .as_ref()
+                .and_then(|a| a.via.clone())
+                .unwrap_or_default()
+        };
+        let bot_msgs = rt
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.thread == thread && via(t).starts_with("to "))
+            .count();
+        assert_eq!(bot_msgs as u32, brain::talk::HOPS);
+        // A later turn's words show in the thread too, without the @line.
+        let turn = rt
+            .store
+            .talks
+            .iter()
+            .find(|t| via(t).starts_with("in #"))
+            .unwrap();
+        let text = &turn.answer.as_ref().unwrap().text;
+        assert!(text.contains("I disagree") && !text.contains('@'));
+        assert_eq!(rt.store.talks.last().unwrap().bot, Member::Fin);
+        let paused = rt.store.talks.len();
+        // Nothing more goes on while they wait for the person.
+        run_until_idle(&mut rt, &st);
+        assert_eq!(rt.store.talks.len(), paused);
+        // The person steps in, answering Builder: the bots may talk again.
+        // "@Builder ..." goes on in Builder's job, not a new one.
+        let id = rt.talking_job(&folder.path, thread, Member::Builder);
+        assert_eq!(id, Some(builder.id));
+        let guard_id = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap()
+            .id;
+        assert_eq!(
+            rt.talking_job(&folder.path, thread, Member::Guard),
+            Some(guard_id)
+        );
+        assert_eq!(rt.talking_job(&folder.path, thread, Member::Checker), None);
+        rt.step_in(&st, builder.id, "TALK-START Fine, add httpOnly.".into());
+        assert!(rt.store.talks[paused]
+            .question
+            .contains("Fine, add httpOnly"));
+        let paused = paused + 1;
+        run_until_idle(&mut rt, &st);
+        let after: Vec<Member> = rt.store.talks[paused..].iter().map(|t| t.bot).collect();
+        assert_eq!(after.first(), Some(&Member::Builder));
+        assert!(after.len() > 1);
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
