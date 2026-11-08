@@ -3205,23 +3205,23 @@ impl Shell {
             .iter()
             .filter(|j| j.bot == who && j.ended.is_some())
             .max_by_key(|j| j.ended);
+        // Drawn every frame for each bot on screen: nothing is copied.
         let said = store
-            .chat(who)
-            .into_iter()
+            .chat_lines(who)
             .filter(|m| !m.mine && !m.note)
-            .map(|m| (m.at, m.text))
+            .map(|m| (m.at, m.text.as_str()))
             .chain(store.talks.iter().filter(|t| t.bot == who).filter_map(|t| {
                 t.answer
                     .as_ref()
                     .filter(|a| !a.note)
-                    .map(|a| (t.at, a.text.clone()))
+                    .map(|a| (t.at, a.text.as_str()))
             }))
             .max_by_key(|(at, _)| *at);
         let job_at = job.and_then(|j| j.ended).unwrap_or(0);
         let fresh = |at: u64| store::now().saturating_sub(at) < 30 * 60;
         match (job, said) {
             (_, Some((at, text))) if at > job_at => {
-                let mood = text_mood(&text);
+                let mood = text_mood(text);
                 if fresh(at) {
                     mood
                 } else {
@@ -3401,7 +3401,7 @@ impl Shell {
             .into_iter()
             .max_by_key(|m| {
                 (
-                    self.crew.store.chat(*m).len().min(1),
+                    self.crew.store.chat_lines(*m).next().is_some() as usize,
                     (*m == Member::Fin) as u8,
                 )
             })
