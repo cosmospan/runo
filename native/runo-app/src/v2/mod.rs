@@ -1693,8 +1693,10 @@ impl Shell {
                 .collect();
             let (worked, in_thread) = self.bots_here();
             let server = self.server_note(&folder);
+            let thread = self.crew.store.thread_label(here);
             let seen = brain::think::Seen {
                 project: &project,
+                thread: &thread,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
@@ -1757,6 +1759,7 @@ impl Shell {
         let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
+            thread: "",
             recent: &recent,
             crew: &crew,
             running: &[],

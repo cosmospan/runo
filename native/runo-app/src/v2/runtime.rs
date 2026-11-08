@@ -2026,14 +2026,23 @@ impl Runtime {
             ));
             history.push((false, format!("Got it, I've read #{label}.")));
         }
-        for t in self.store.talks.iter().filter(|t| {
-            t.folder == folder.path && t.thread == thread && t.bot == who && !t.question.is_empty()
-        }) {
-            if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
-                history.push((true, t.question.clone()));
-                history.push((false, a.text.clone()));
-            }
-        }
+        // What's been said in this thread, by the person and every bot, so a
+        // reply like "no, this is for discussion" makes sense.
+        let said = self.store.recent(&folder.path, thread);
+        let talk_so_far = (!said.is_empty()).then(|| {
+            let lines: Vec<String> = said
+                .iter()
+                .map(|(who, words)| {
+                    let words: String = words.chars().take(600).collect();
+                    format!("{who}: {words}")
+                })
+                .collect();
+            format!(
+                "The conversation in #{} so far, oldest first:\n{}",
+                self.store.thread_label(thread),
+                lines.join("\n")
+            )
+        });
         let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
         let mut talk = Talk {
             id,
@@ -2052,11 +2061,11 @@ impl Runtime {
         } else {
             // Jobs named with #12 or #their-slug: a short digest of each goes first.
             let digest = super::brain::digest::context_for(&text, &self.store.jobs);
-            let asked = if digest.is_empty() {
-                text.clone()
-            } else {
-                format!("{digest}\n\n{text}")
-            };
+            let asked = [talk_so_far.unwrap_or_default(), digest, text.clone()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
             match engine::Ask::start(st, who, &folder, &asked, &history) {
                 Ok(ask) => {
                     self.asking = Some(ask);

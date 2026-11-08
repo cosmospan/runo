@@ -30,6 +30,7 @@ fn decide_here(
     let crew = Member::all();
     let seen = super::think::Seen {
         project: &f.name,
+        thread: "",
         recent: &[],
         crew: &crew,
         running: &[],
