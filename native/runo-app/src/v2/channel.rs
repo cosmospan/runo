@@ -18,9 +18,13 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The commands the composer knows, with what each does.
-pub(super) const COMMANDS: [(&str, &str); 7] = [
+pub(super) const COMMANDS: [(&str, &str); 8] = [
     ("/plan", "Peek plans it first, you press Start"),
     ("/race", "Try it on two engines, keep the best"),
+    (
+        "/later",
+        "Start it later: /later tonight, 2am, in 2h or tomorrow",
+    ),
     ("/ask", "A question, no code changes"),
     ("/thread", "Start a new thread: /thread gift cards @Builder"),
     ("/rename", "Rename this thread"),
@@ -866,6 +870,7 @@ impl Shell {
                             .flex()
                             .flex_col()
                             .gap(px(8.))
+                            .children(self.waiting_strip(&folder.path, thread, cx))
                             .children(offer)
                             .children(self.slash_strip(cx))
                             .children(self.hash_strip(cx))
@@ -2581,6 +2586,26 @@ impl Shell {
             "Deletes this thread".to_string()
         } else if value.starts_with("/ask") || (self.mode == Mode::Ask && !value.starts_with('/')) {
             format!("{} answers here", self.ask_who().name())
+        } else if value.starts_with("/later") {
+            match super::shift::parse_when(
+                value.trim_start_matches("/later").trim(),
+                chrono::Local::now(),
+            ) {
+                Some((at, rest)) => {
+                    // The bot /later hands it to, as hand_over picks it.
+                    let mode = match Mode::guess(&rest) {
+                        m if m.writes() => m,
+                        _ => Mode::Build,
+                    };
+                    let who = Member::doer_for(mode).unwrap_or(Member::for_mode(mode));
+                    format!(
+                        "{} starts it {}",
+                        who.name(),
+                        super::shift::when_words(at, store::now())
+                    )
+                }
+                None => "Say when: tonight, 2am, in 2h, tomorrow".to_string(),
+            }
         } else if value.starts_with("/race") {
             // A race runs as asked, plan-first or not, as hand_over does.
             format!("{} races it", target.name())

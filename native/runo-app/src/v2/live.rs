@@ -443,6 +443,30 @@ impl Shell {
                 continue;
             }
             feed = flush(feed, &mut tools);
+            // Every turn after the first can be undone from where it began.
+            if let Some(k) = super::rewind::mark_at(job, at) {
+                let id = job.id;
+                feed = feed.child(
+                    div().flex().justify_end().child(
+                        ui::ghost_i(
+                            SharedString::from(format!("rewind-{id}-{k}")),
+                            IconName::Undo2,
+                            "Rewind to before this",
+                        )
+                        .h(px(24.))
+                        .px(px(8.))
+                        .text_size(px(12.))
+                        .text_color(c(ui::muted()))
+                        .tooltip(|window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(
+                                "Put the files back as they were before this message, and drop what came after",
+                            )
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| this.rewind_job(id, k, cx))),
+                    ),
+                );
+            }
             feed = match item {
                 Item::Text(t) if super::rich::tool_chatter(t) => feed,
                 Item::Text(t) => {

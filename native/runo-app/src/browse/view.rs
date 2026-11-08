@@ -34,6 +34,86 @@ pub struct Viewer {
     pub version: Arc<AtomicU64>,
 }
 
+/// An element picked on the page, to ask a bot to change.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Picked {
+    pub tag: String,
+    pub selector: String,
+    pub text: String,
+    pub html: String,
+    pub url: String,
+}
+
+impl Picked {
+    fn from_json(v: &Value) -> Picked {
+        let s = |k: &str| v[k].as_str().unwrap_or("").to_string();
+        Picked {
+            tag: s("tag"),
+            selector: s("sel"),
+            text: s("text"),
+            html: s("html"),
+            url: s("url"),
+        }
+    }
+
+    /// "the button \u{201c}Pay now\u{201d}", for the bar under the page.
+    pub fn short(&self) -> String {
+        let kind = match self.tag.as_str() {
+            "a" => "link",
+            "button" => "button",
+            "input" | "textarea" | "select" => "field",
+            "img" | "svg" => "image",
+            "h1" | "h2" | "h3" | "h4" => "heading",
+            "p" | "span" | "label" => "text",
+            "nav" => "navigation",
+            "form" => "form",
+            _ => "part",
+        };
+        if self.text.is_empty() {
+            format!("this {kind} ({})", self.selector)
+        } else {
+            format!("the {kind} \u{201c}{}\u{201d}", self.text)
+        }
+    }
+
+    /// What the bot is told: where it is and what the person wants.
+    pub fn ask(&self, words: &str) -> String {
+        format!(
+            "On the page {url}, change {short}: {words}\n\nThe element: `{sel}`\n```html\n{html}\n```\nFind it in the code, make the change, and check it in the job's browser.",
+            url = self.url,
+            short = self.short(),
+            words = words.trim(),
+            sel = self.selector,
+            html = self.html,
+        )
+    }
+}
+
+/// Finds and describes the element at __X__, __Y__, outlining it briefly.
+const PICK_JS: &str = r#"(() => {
+  const el = document.elementFromPoint(__X__, __Y__);
+  if (!el) return null;
+  const sel = (e) => {
+    const parts = [];
+    while (e && e.nodeType === 1 && parts.length < 4) {
+      let s = e.tagName.toLowerCase();
+      if (e.id) { parts.unshift(s + '#' + e.id); break; }
+      const cls = [...e.classList].slice(0, 2).join('.');
+      if (cls) s += '.' + cls;
+      parts.unshift(s);
+      e = e.parentElement;
+    }
+    return parts.join(' > ');
+  };
+  const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('alt') || '')
+    .trim().replace(/\s+/g, ' ').slice(0, 80);
+  const html = el.outerHTML.slice(0, 400);
+  const was = el.style.outline;
+  el.style.outline = '3px solid #f59e0b';
+  setTimeout(() => { el.style.outline = was; }, 1600);
+  return { tag: el.tagName.toLowerCase(), sel: sel(el), text, html, url: location.href };
+})()"#;
+
 /// A point in the view (from its top-left) as page CSS pixels, when it's on the page.
 /// The page is fitted into `area` keeping its shape, and centred.
 pub fn to_page(local: (f32, f32), area: (f32, f32), css: (f32, f32)) -> Option<(f64, f64)> {
@@ -156,6 +236,40 @@ impl Viewer {
             "Input.dispatchMouseEvent",
             json!({"type": "mouseWheel", "x": x, "y": y, "deltaX": dx, "deltaY": dy}),
         );
+    }
+
+    /// What's on the page at `(x, y)` (CSS pixels), described for a bot: its
+    /// tag, a selector, its text and the start of its HTML. Outlines it on the
+    /// page for a moment so you see what was picked. Answers on another
+    /// thread.
+    pub fn pick_at(&self, (x, y): (f64, f64)) -> std::sync::mpsc::Receiver<Result<Picked, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (cdp, session) = {
+            let sh = self.locked();
+            (sh.cdp.clone(), sh.session.clone())
+        };
+        std::thread::spawn(move || {
+            let got = (|| -> Result<Picked, String> {
+                let cdp = cdp
+                    .filter(|_| !session.is_empty())
+                    .ok_or("the browser isn't ready")?;
+                let js = PICK_JS
+                    .replace("__X__", &x.to_string())
+                    .replace("__Y__", &y.to_string());
+                let r = cdp.call(
+                    "Runtime.evaluate",
+                    json!({"expression": js, "returnByValue": true}),
+                    &session,
+                )?;
+                let v = &r["result"]["value"];
+                if v.is_null() {
+                    return Err("nothing is there".into());
+                }
+                Ok(Picked::from_json(v))
+            })();
+            let _ = tx.send(got);
+        });
+        rx
     }
 
     pub fn insert_text(&self, text: &str) {
@@ -305,6 +419,25 @@ fn watch(
     shared.lock().unwrap_or_else(|e| e.into_inner()).state = Some(State::Live);
     version.fetch_add(1, Ordering::Relaxed);
     Ok(())
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    #[test]
+    fn a_picked_element_reads_plainly() {
+        let p = Picked::from_json(
+            &json!({"tag": "button", "sel": "form > button.pay", "text": "Pay now", "html": "<button class=\"pay\">Pay now</button>", "url": "http://localhost:3000/cart"}),
+        );
+        assert_eq!(p.short(), "the button \u{201c}Pay now\u{201d}");
+        let ask = p.ask("make it green");
+        assert!(
+            ask.contains("http://localhost:3000/cart")
+                && ask.contains("make it green")
+                && ask.contains("form > button.pay")
+        );
+    }
 }
 
 #[cfg(test)]

@@ -22,6 +22,8 @@ use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 mod more;
 
 type Landing = Receiver<Result<(), String>>;
+/// A pull request read again, with its review feedback.
+type Reviewed = (crate::github::PrStatus, Vec<crate::github::Feedback>);
 
 /// What starting something opened, so a client can go and show it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,10 +122,7 @@ pub struct Runtime {
     /// Issues being read for waiting jobs, by their id in `Store::later`.
     reading: Vec<(u64, Receiver<Result<super::issues::Issue, String>>)>,
     /// Review feedback being read from open pull requests, by job.
-    feedback: Vec<(
-        u64,
-        Receiver<(crate::github::PrStatus, Vec<crate::github::Feedback>)>,
-    )>,
+    feedback: Vec<(u64, Receiver<Reviewed>)>,
     /// Pull requests whose new review feedback is waiting to be read, by job.
     feedback_due: Vec<(u64, crate::github::PrStatus)>,
     /// Lessons the engine is looking for in a send-back: the job and what

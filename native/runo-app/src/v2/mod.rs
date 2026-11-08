@@ -58,6 +58,7 @@ pub(crate) mod tray;
 mod trouble;
 mod ui;
 mod usage;
+mod waiting;
 mod wallpaper;
 mod webpage;
 mod welcome;
@@ -684,6 +685,14 @@ pub struct Shell {
     /// The changed file whose diff is open on a job's review, if any.
     diff_open: Option<(u64, String)>,
     diff_text: String,
+    /// The diff line a comment is being written on: job, file, and the
+    /// line's place in the shown diff.
+    line_at: Option<(u64, String, usize)>,
+    line_input: Entity<InputState>,
+    /// Comments on diff lines, waiting to go back with Send back.
+    line_notes: Vec<review::LineNote>,
+    /// The point-and-change bar on a job's browser.
+    pick_input: Entity<InputState>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
@@ -795,6 +804,12 @@ impl Shell {
         let chat_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the code…"));
         let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
+        let line_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("What should change here? Enter adds it")
+        });
+        let pick_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("What should change about it? Enter sends it")
+        });
         let deny_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Tell it why (optional)"));
         let palette_input = cx.new(|cx| {
@@ -1033,6 +1048,24 @@ impl Shell {
                     }
                 }
             }),
+            cx.subscribe_in(&line_input, window, |this, input, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    let text = input.read(cx).value().trim().to_string();
+                    if !text.is_empty() {
+                        input.update(cx, |i, cx| i.set_value("", window, cx));
+                        this.add_line_note(text, cx);
+                    }
+                }
+            }),
+            cx.subscribe_in(&pick_input, window, |this, input, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    let text = input.read(cx).value().trim().to_string();
+                    if !text.is_empty() {
+                        input.update(cx, |i, cx| i.set_value("", window, cx));
+                        this.send_pick(text, cx);
+                    }
+                }
+            }),
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
@@ -1193,6 +1226,10 @@ impl Shell {
             deny_input,
             denying: None,
             live_input,
+            line_input: line_input.clone(),
+            line_notes: Vec::new(),
+            line_at: None,
+            pick_input: pick_input.clone(),
             live_scroll: ScrollHandle::new(),
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
@@ -2216,7 +2253,8 @@ impl Shell {
         let mut text = text;
         let mut plan = false;
         let mut race = 0;
-        if let Some(rest) = text.strip_prefix('/') {
+        let mut later: Option<u64> = None;
+        if let Some(rest) = text.clone().strip_prefix('/') {
             let (cmd, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
             let arg = arg.trim().to_string();
             match cmd {
@@ -2285,18 +2323,38 @@ impl Shell {
                 }
                 "plan" => plan = true,
                 "race" => race = 2,
+                // "/later tonight tidy the deps": a job for the night shift.
+                "later" => match shift::parse_when(&arg, chrono::Local::now()) {
+                    Some((at, rest)) => {
+                        later = Some(at);
+                        text = rest.clone();
+                        if !self.mode_pinned {
+                            self.mode = Mode::guess(&rest);
+                        }
+                        if !self.mode.writes() {
+                            self.mode = Mode::Build;
+                        }
+                        self.mode_pinned = true;
+                    }
+                    None => {
+                        self.say("Say when, then the job: /later tonight tidy the deps, /later 2am …, /later in 2h …, /later tomorrow ….");
+                        return;
+                    }
+                },
                 "ask" => {
                     self.mode = Mode::Ask;
                     self.mode_pinned = true;
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename, /archive or /delete."
+                        "There's no /{cmd}. Try /plan, /race, /later, /ask, /thread, /rename, /archive or /delete."
                     ));
                     return;
                 }
             }
-            text = arg;
+            if later.is_none() {
+                text = arg;
+            }
         }
         if !self.mode_pinned {
             self.mode = Mode::guess(&text);
@@ -2352,6 +2410,18 @@ impl Shell {
             return;
         };
         let mode = self.mode;
+        if let Some(at) = later {
+            self.mode_pinned = false;
+            let when = shift::when_words(at, store::now());
+            self.crew.queue_later(doer, mode, text.clone(), folder, at);
+            self.say(format!(
+                "{} starts \u{201c}{}\u{201d} {when}. It's in the Waiting list until then.",
+                doer.name(),
+                text.lines().next().unwrap_or("").trim()
+            ));
+            cx.notify();
+            return;
+        }
         if racing > 1 && mode.writes() {
             self.start_race(doer, mode, text, folder, racing, cx);
             return;
@@ -2618,6 +2688,15 @@ impl Shell {
         if self.crew.rerun(&st, id, pick) {
             self.go(Place::Live(id), cx);
         }
+    }
+
+    /// Rewinds a job to before its turn `k`: its files go back and the
+    /// later turns leave its feed.
+    pub(super) fn rewind_job(&mut self, id: u64, k: usize, cx: &mut Context<Self>) {
+        if let Err(why) = self.crew.rewind(id, k) {
+            self.say(why);
+        }
+        cx.notify();
     }
 
     /// A stopped or interrupted job picks up where it was.
