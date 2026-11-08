@@ -4,6 +4,8 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.7] - 2026-11-08
+
 ### Added
 
 - Bots test web pages inside Squad. Each job gets its own headless browser (the Chromium-based browser already on the computer, or on your server for a job there), and its bot drives it with Squad's browser tools: open, look, click, type, press, back, screenshot and run JavaScript. Pages are read as a short numbered text outline, and each step reports only what changed plus the page's errors and failed requests, so trying a page takes a few hundred tokens instead of a screenshot each time. Click Browser on a job to watch that page live in Squad and click, scroll or type into it yourself; localhost links in a job's messages open there, with Open outside for your usual browser. Every engine gets it: Squad's MCP server now goes to every v2 bot whose engine takes MCP servers, and the others (like Grok) are given the same steps as `squad browser` commands. Builder and Checker are told to use it rather than an outside browser or Playwright.
@@ -20,10 +22,15 @@ All notable changes to Runo are documented here.
 
 ### Changed
 
+- One right sidebar on a job's page: Details, Jobs and Git share it instead of sitting side by side, and the top bar's Jobs toggle swaps it to the job list and back. The New job button is gone; jobs start from the thread's box.
+- Sleeker thread chat. A run of messages from one person or bot shows the face and name once, times are clock times (12:41 PM), and a job that ended with nothing to look at is one clickable line with Try again.
+- Clearer bot replies. A question gets an answer; a bot offers a job only when you want code changed, as a card with Start the job and Not now. `@Bot` in a thread is read by Peek, so small talk is answered in place and only real work becomes a job. While typing a DM, Start a job asks for work directly.
+- The README describes the threads layout, with new screenshots.
 - The menu bar panel is rebuilt for the Squad Code window. It used to say the window was closed even while it was open, and showed nothing else. Now it lists what needs you (a bot waiting on your yes, with Allow and Deny right there; changes ready for review; jobs that stopped with a problem), what the crew is working on, with Stop and a progress bar, and the last few jobs that ended. A box at the top hands the crew a new job without opening the window. With the window closed it reads your saved jobs, and any row opens the window on that job. The panel is as tall as what it shows, Quit asks first while jobs are running, Escape closes it, and the count beside the menu bar glyph now works too.
 
 ### Fixed
 
+- Bots talking to each other: only the turn that just ended is passed on, so a stopped turn no longer repeats an old @mention; a bot's ask shows as the bot's own message, before the job it starts; a bot gets the whole message, not just its @line; and Guard can read the unmerged work it's asked to check.
 - Signing a server in with your Claude plan no longer rejects the code from the browser. Claude read the long code and the Enter after it as one paste and dropped the Enter, so it never checked the code. Squad now sends the Enter on its own, reads Claude's screen the way a terminal shows it (Claude redraws only what changed, which could garble the token or leave a stray "B" as its last words), and if Claude turns a code down it shows Claude's reason.
 - Connecting to a server no longer fails with "Host key verification failed" when your own `~/.ssh/known_hosts` has an old key for that address. Squad keeps its own list of trusted server keys, trusts a new server on first connect and shows its fingerprint, and if a known server's key changes it stops and offers "I rebuilt it: trust the new key and connect".
 - Connecting to a server that makes you change its password on the first login (as many VPS providers do) no longer stops with "Password change required but no TTY available". Squad asks for a new password, changes it on the server and carries on.
