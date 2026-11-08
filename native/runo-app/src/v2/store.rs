@@ -501,6 +501,17 @@ impl Job {
         }
     }
 
+    /// The bot that started this job by @mentioning its bot in the thread;
+    /// None when the person asked for it.
+    pub fn asked_by(&self) -> Option<Member> {
+        match self.feed.first() {
+            Some(Item::By(m, _)) if self.title.starts_with(&format!("{} asked:", m.name())) => {
+                Some(*m)
+            }
+            _ => None,
+        }
+    }
+
     pub fn needs_you(&self) -> bool {
         // Changes waiting for approval stay in Needs you until you decide.
         if self.status == Status::Review {
@@ -821,8 +832,11 @@ impl Store {
                 }
             }
         }
+        // A job a bot asked for: its words are in the thread already, as its own.
         for j in self.jobs_in(folder, thread) {
-            said.push((j.started, "you".into(), j.title.clone()));
+            if j.asked_by().is_none() {
+                said.push((j.started, "you".into(), j.title.clone()));
+            }
         }
         said.sort_by_key(|s| s.0);
         let n = said.len();

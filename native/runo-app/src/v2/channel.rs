@@ -643,7 +643,8 @@ impl Shell {
                 .cloned()
                 .map(Entry::Talk),
         );
-        entries.sort_by_key(|e| e.at());
+        // In the same second, a bot's message comes before the job it starts.
+        entries.sort_by_key(|e| (e.at(), !matches!(e, Entry::Talk(_))));
         let total = entries.len();
         // The last 30 things, newest at the bottom beside the composer.
         let shown: Vec<Entry> = entries.into_iter().skip(total.saturating_sub(30)).collect();
@@ -1779,17 +1780,22 @@ impl Shell {
                         .child(j.handoff.clone()),
                 )
         });
-        div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .child(self.message(
+        // A bot asked for this one: its message is in the thread as its own,
+        // so nothing shows as yours.
+        let yours = j.asked_by().is_none().then(|| {
+            self.message(
                 format!("you-job-{}", j.id),
                 j.title.clone(),
                 Msg::Mine(j.title.clone()),
                 mine(j.title.clone(), j.started),
                 cx,
-            ))
+            )
+        });
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .children(yours)
             .children(handoff)
             .child(self.message(
                 format!("job-{}", j.id),

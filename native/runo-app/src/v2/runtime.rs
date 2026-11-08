@@ -39,6 +39,8 @@ struct Relay {
     folder: store::Folder,
     thread: u64,
     said: String,
+    /// The whole reply the @mention ends.
+    whole: String,
 }
 
 pub struct Runtime {
@@ -2233,6 +2235,7 @@ impl Runtime {
             for id in &finished {
                 self.begin_review(*id);
                 self.peek(st, *id, true);
+                self.post_turn(*id);
                 self.relay_mentions(*id);
             }
             self.deliver_relays(st);
@@ -2291,10 +2294,11 @@ impl Runtime {
             let hops = self.relay_hops.entry(key.clone()).or_insert(0);
             if *hops >= brain::talk::HOPS {
                 let note = format!(
-                    "{} and {} have gone back and forth {} times, so they've stopped for you. Reply here, or @ one of them to carry on.",
+                    "The bots have messaged each other {} times without you, so they've stopped here. {} was about to ask {}. Tell one of them what to do next, like \"@{} go ahead\", and they'll carry on.",
+                    brain::talk::HOPS,
                     from.name(),
                     to.name(),
-                    brain::talk::HOPS
+                    from.name(),
                 );
                 if let Some(j) = self.store.job_mut(id) {
                     j.feed.push(store::Item::Note(note.clone()));
@@ -2303,6 +2307,13 @@ impl Runtime {
                 return;
             }
             *hops += 1;
+            // An answer it passed on to another bot isn't waiting on the
+            // person; changes to approve still are.
+            if let Some(j) = self.store.job_mut(id) {
+                if j.status == Status::Done {
+                    j.seen = true;
+                }
+            }
             self.crew_says(
                 &folder,
                 thread,
@@ -2317,6 +2328,7 @@ impl Runtime {
                 folder: folder.clone(),
                 thread,
                 said: words,
+                whole: last.clone(),
             });
         }
     }
@@ -2330,7 +2342,7 @@ impl Runtime {
                 self.relays.push(r);
                 continue;
             }
-            let text = brain::talk::relay_text(r.from, r.from_job, &r.said);
+            let text = brain::talk::relay_text(r.from, r.from_job, &r.said, &r.whole);
             let theirs = self
                 .store
                 .jobs
@@ -2357,6 +2369,7 @@ impl Runtime {
                     job.thread = r.thread;
                     job.title = format!("{} asked: {}", r.from.name(), r.said);
                     job.feed.insert(0, store::Item::By(r.from, r.said.clone()));
+                    job.turn_from += 1;
                     self.store.jobs.push(job);
                 }
             }
@@ -2389,6 +2402,112 @@ impl Runtime {
             at: store::now(),
             choices: Vec::new(),
         });
+    }
+
+    /// `who`'s job in this thread that has been talking with the rest of the
+    /// crew, when it's waiting for its next turn: where the person's
+    /// "@Builder ..." goes once they step in, so it carries on that work
+    /// instead of starting again from scratch.
+    pub fn talking_job(&self, folder: &str, thread: u64, who: Member) -> Option<u64> {
+        self.store
+            .jobs_in(folder, thread)
+            .into_iter()
+            .rev()
+            .find(|j| j.bot == who && j.goal == 0 && j.race == 0)
+            .filter(|j| matches!(j.status, Status::Done | Status::Review))
+            .filter(|j| self.in_crew_talk(j))
+            .map(|j| j.id)
+    }
+
+    /// Whether a job has been talking with other bots: one messaged it, or
+    /// it messaged one.
+    fn in_crew_talk(&self, j: &store::Job) -> bool {
+        let from = format!("from #{}", j.id);
+        j.feed.iter().any(|i| matches!(i, store::Item::By(..)))
+            || self.store.talks.iter().any(|t| {
+                t.folder == j.folder.path
+                    && t.question.is_empty()
+                    && t.answer
+                        .as_ref()
+                        .and_then(|a| a.via.as_deref())
+                        .is_some_and(|v| v.ends_with(&from))
+            })
+    }
+
+    /// A later turn of a job in the bots' talk ends: what it said goes in the
+    /// thread as the bot's message, since its card sits further up where the
+    /// job began. Its @mentions are posted on their own after it.
+    fn post_turn(&mut self, id: u64) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.goal != 0
+            || job.race != 0
+            // Its first turn shows in its card, right where it began.
+            || !job
+                .feed
+                .get(..job.turn_from)
+                .unwrap_or_default()
+                .iter()
+                .any(|i| matches!(i, store::Item::Text(_)))
+            || matches!(
+                job.status,
+                Status::Failed | Status::Stopped | Status::Interrupted
+            )
+            || !self.in_crew_talk(job)
+        {
+            return;
+        }
+        let Some(last) = job
+            .feed
+            .get(job.turn_from..)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                store::Item::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+        else {
+            return;
+        };
+        let crew = Member::all();
+        let body = last
+            .lines()
+            .filter(|l| brain::talk::mentions(l, job.bot, &crew).is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+        if body.is_empty() {
+            return;
+        }
+        let (folder, thread, bot) = (job.folder.clone(), job.thread, job.bot);
+        self.crew_says(&folder, thread, bot, body, Some(format!("in #{id}")));
+    }
+
+    /// The person steps into the bots' talk with "@Builder ...": their words
+    /// show in the thread and go to Builder's job there as its next turn.
+    pub fn step_in(&mut self, st: &AppSettings, id: u64, text: String) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        let (folder, thread, who) = (job.folder.path.clone(), job.thread, job.bot);
+        let tid = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.store.talks.push(Talk {
+            id: tid,
+            folder,
+            thread,
+            bot: who,
+            question: text.clone(),
+            answer: Some(Said::note(format!(
+                "{} picks this up in #{id}, where it was working with the crew.",
+                who.name()
+            ))),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        self.follow_up(st, id, text);
     }
 
     /// The person spoke in a thread: its bots may talk to each other again.
@@ -3169,25 +3288,63 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
         assert_eq!(guard.thread, thread);
         assert!(guard.context.contains(&builder.worktree));
         assert_eq!(guard.reads, vec![builder.worktree.clone()]);
+        // Guard's job was Builder's ask, not the person's, and its answer
+        // went on to Builder, so it isn't waiting on the person.
+        assert_eq!(guard.asked_by(), Some(Member::Builder));
+        assert_eq!(builder.asked_by(), None);
+        assert!(guard.seen && !guard.needs_you());
+        let recent = rt.store.recent(&folder.path, thread);
+        assert!(!recent
+            .iter()
+            .any(|(who, w)| who == "you" && w.contains("asked:")));
+        let via = |t: &Talk| {
+            t.answer
+                .as_ref()
+                .and_then(|a| a.via.clone())
+                .unwrap_or_default()
+        };
         let bot_msgs = rt
             .store
             .talks
             .iter()
-            .filter(|t| t.thread == thread && t.bot != Member::Fin)
+            .filter(|t| t.thread == thread && via(t).starts_with("to "))
             .count();
         assert_eq!(bot_msgs as u32, brain::talk::HOPS);
+        // A later turn's words show in the thread too, without the @line.
+        let turn = rt
+            .store
+            .talks
+            .iter()
+            .find(|t| via(t).starts_with("in #"))
+            .unwrap();
+        let text = &turn.answer.as_ref().unwrap().text;
+        assert!(text.contains("I disagree") && !text.contains('@'));
         assert_eq!(rt.store.talks.last().unwrap().bot, Member::Fin);
         let paused = rt.store.talks.len();
         // Nothing more goes on while they wait for the person.
         run_until_idle(&mut rt, &st);
         assert_eq!(rt.store.talks.len(), paused);
         // The person steps in, answering Builder: the bots may talk again.
-        rt.send_on(
-            &st,
-            builder.id,
-            "TALK-START Fine, add httpOnly.".into(),
-            None,
+        // "@Builder ..." goes on in Builder's job, not a new one.
+        let id = rt.talking_job(&folder.path, thread, Member::Builder);
+        assert_eq!(id, Some(builder.id));
+        let guard_id = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap()
+            .id;
+        assert_eq!(
+            rt.talking_job(&folder.path, thread, Member::Guard),
+            Some(guard_id)
         );
+        assert_eq!(rt.talking_job(&folder.path, thread, Member::Checker), None);
+        rt.step_in(&st, builder.id, "TALK-START Fine, add httpOnly.".into());
+        assert!(rt.store.talks[paused]
+            .question
+            .contains("Fine, add httpOnly"));
+        let paused = paused + 1;
         run_until_idle(&mut rt, &st);
         let after: Vec<Member> = rt.store.talks[paused..].iter().map(|t| t.bot).collect();
         assert_eq!(after.first(), Some(&Member::Builder));

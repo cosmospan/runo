@@ -1542,6 +1542,19 @@ impl Shell {
         let Some((who, rest)) = mention else {
             return self.read_first(text, cx);
         };
+        // Stepping into the bots' talk: "@Builder ..." carries on Builder's
+        // job there, on its branch, rather than starting over.
+        if self.place == Place::Today && !rest.trim().is_empty() {
+            let here = self.crew.store.thread_here();
+            let folder = self.crew.store.folder().map(|f| f.path.clone());
+            if let Some(id) = folder.and_then(|f| self.crew.talking_job(&f, here, who)) {
+                let st = Self::app_settings(cx);
+                self.crew.step_in(&st, id, rest);
+                self.crew.store.save();
+                cx.notify();
+                return;
+            }
+        }
         if self.place == Place::Today {
             let here = self.crew.store.thread_here();
             if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == here) {
