@@ -120,7 +120,7 @@ impl Web {
     }
 }
 
-/// The `port=` and `path=` lines `squad v2 browser` prints.
+/// The `port=` and `path=` lines `squad v2 browser port` prints.
 pub fn parse_endpoint(out: &str) -> Option<(u16, String)> {
     let mut port = None;
     let mut path = None;
@@ -187,25 +187,27 @@ impl Shell {
                 } else {
                     remote::quoted(&cfg.bin)
                 };
-                let got =
-                    remote::run_script(&cfg, &format!("{bin} v2 browser {}", remote::quoted(&dir)))
-                        .and_then(|out| {
-                            let (port, path) = parse_endpoint(&out).ok_or_else(|| {
-                                let why = out.trim();
-                                if why.is_empty() {
-                                    "the server didn't start its browser".to_string()
-                                } else {
-                                    why.to_string()
-                                }
-                            })?;
-                            let tunnel = remote::forward(&cfg, port)
-                                .map_err(|why| format!("couldn't reach its browser: {why}"))?;
-                            Ok(Opened {
-                                port: tunnel.port(),
-                                path,
-                                tunnel: Some(tunnel),
-                            })
-                        });
+                let got = remote::run_script(
+                    &cfg,
+                    &format!("{bin} v2 browser port --dir {}", remote::quoted(&dir)),
+                )
+                .and_then(|out| {
+                    let (port, path) = parse_endpoint(&out).ok_or_else(|| {
+                        let why = out.trim();
+                        if why.is_empty() {
+                            "the server didn't start its browser".to_string()
+                        } else {
+                            why.to_string()
+                        }
+                    })?;
+                    let tunnel = remote::forward(&cfg, port)
+                        .map_err(|why| format!("couldn't reach its browser: {why}"))?;
+                    Ok(Opened {
+                        port: tunnel.port(),
+                        path,
+                        tunnel: Some(tunnel),
+                    })
+                });
                 let _ = tx.send(got);
             });
         }

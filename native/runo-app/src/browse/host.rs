@@ -217,6 +217,7 @@ pub fn close(dir: &str) {
     if let Some(e) = read_state(&file) {
         stop(&e);
     }
+    let _ = std::fs::remove_file(file.with_extension("outline"));
     let _ = std::fs::remove_file(file);
 }
 
@@ -259,6 +260,7 @@ fn reap_in(base: &Path, idle: Duration, now: u64) {
             let _ = std::fs::remove_file(&path);
         } else if now.saturating_sub(e.used) > idle.as_secs() {
             stop(&e);
+            let _ = std::fs::remove_file(path.with_extension("outline"));
             let _ = std::fs::remove_file(&path);
         }
     }

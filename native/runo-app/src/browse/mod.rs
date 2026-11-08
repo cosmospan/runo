@@ -4,6 +4,7 @@
 
 pub mod bot;
 pub mod cdp;
+pub mod cli;
 pub mod host;
 pub mod tools;
 pub mod view;

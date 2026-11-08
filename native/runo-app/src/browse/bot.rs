@@ -44,7 +44,7 @@ impl Log {
 }
 
 /// A page's outline as `page.js` reads it.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Outline {
     pub title: String,
     pub url: String,
@@ -294,12 +294,22 @@ impl Driver {
             cdp,
             session,
             log,
-            last: None,
+            last: read_last(dir),
         })
     }
 
     fn alive(&self) -> bool {
         self.cdp.alive()
+    }
+
+    /// Keeps the outline the bot last saw, here and for the next connection (the
+    /// next turn, or the next `squad browser` command), so it hears only what changed.
+    fn remember(&mut self, now: Outline) {
+        if let Ok(text) = serde_json::to_string(&now) {
+            let _ = std::fs::create_dir_all(host::folder());
+            let _ = std::fs::write(last_file(&self.dir), text);
+        }
+        self.last = Some(now);
     }
 
     fn eval(&self, js: &str) -> Result<Value, String> {
@@ -376,7 +386,7 @@ impl Driver {
             _ => out.push_str(&now.body("", MAX_OUTLINE)),
         }
         out.push_str(&self.errors());
-        self.last = Some(now);
+        self.remember(now);
         Ok(out)
     }
 
@@ -446,7 +456,7 @@ impl Driver {
             now.body(find, max.clamp(500, 40_000)),
             self.errors()
         );
-        self.last = Some(now);
+        self.remember(now);
         Ok(out)
     }
 
@@ -612,6 +622,14 @@ pub fn shrink(data: &str, width: u32) -> Option<String> {
         .encode_image(&img.to_rgb8())
         .ok()?;
     Some(b64.encode(out))
+}
+
+fn last_file(dir: &str) -> std::path::PathBuf {
+    host::folder().join(format!("{}.outline", host::key(dir)))
+}
+
+fn read_last(dir: &str) -> Option<Outline> {
+    serde_json::from_str(&std::fs::read_to_string(last_file(dir)).ok()?).ok()
 }
 
 /// The turn's connection, kept between calls.

@@ -79,8 +79,9 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
   squad approve <id>          approve a job waiting for review
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
-  squad browser <folder>      start the headless browser of the job working
-                             in that folder, and say where it listens
+  squad browser <command>     use the browser of the job working in this
+                             folder: open, look, click, type, press, back,
+                             screenshot, eval (squad browser help)
 
 On a server:
   squad serve [--listen <address>|tailscale]
@@ -252,13 +253,14 @@ pub fn main(args: &[String]) -> i32 {
             }
         }
         "brain" => super::brain::cli::main(&args[1..]),
-        // Where a job's browser listens, started when it isn't running: how the
-        // desktop app reaches a server job's browser, through an SSH tunnel.
-        "browser" => match args.get(1).filter(|d| !d.is_empty()) {
-            None => Err("usage: squad browser <job folder>".into()),
-            Some(dir) => crate::browse::host::ensure(dir)
-                .map(|e| format!("port={}\npath={}", e.port, e.path)),
-        },
+        // The job's browser, from a shell: what engines without MCP use, and how the
+        // desktop app finds a server job's browser (`browser port --dir …`).
+        "browser" => {
+            let cwd = std::env::current_dir()
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            crate::browse::cli::main(&args[1..], &cwd)
+        }
         "approve" => {
             id().and_then(|id| push(&Ask::Approve { id }).map(|_| format!("Approving #{id}.")))
         }
