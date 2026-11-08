@@ -19,6 +19,7 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod filetab;
 mod gitcards;
 mod goal;
 mod history;
@@ -587,6 +588,14 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// The filter over the right sidebar's Files tab.
+    files_input: Entity<InputState>,
+    /// The right sidebar shows its Files tab (beats `list_git`).
+    list_files: bool,
+    /// Folders open in the Files tab, by path from the folder's top.
+    files_open: std::collections::HashSet<String>,
+    /// The files last listed for the Files tab: the folder, when, and its files.
+    files_seen: Option<(String, Instant, std::sync::Arc<Vec<String>>)>,
     /// Settings, My server: the `you@host` box, the connecting in progress and
     /// what it has said so far.
     server_input: Entity<InputState>,
@@ -872,6 +881,7 @@ impl Shell {
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
+        let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
             .global::<crate::settings::AppSettings>()
             .v2_clear
@@ -985,6 +995,11 @@ impl Shell {
                 cx.notify();
             }),
             cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
+            cx.subscribe_in(&files_input, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
                 }
@@ -1141,14 +1156,14 @@ impl Shell {
                 .first()
                 .map(|g| Place::Goal(g.id))
                 .unwrap_or(Place::Today),
-            Ok("jobs") => Place::Today,
+            Ok("jobs" | "files") => Place::Today,
             Ok("race") => store
                 .jobs
                 .iter()
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
-            Ok("review" | "review-jobs") => store
+            Ok("review" | "review-jobs" | "review-files") => store
                 .jobs
                 .iter()
                 .find(|j| j.status == Status::Review && j.race == 0)
@@ -1269,6 +1284,10 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            files_input,
+            list_files: false,
+            files_open: Default::default(),
+            files_seen: None,
             server_input,
             server_setup: None,
             server_log: Vec::new(),
@@ -1355,6 +1374,19 @@ impl Shell {
             Ok("git") => {
                 shell.jobs_open = true;
                 shell.list_git = true;
+            }
+            // The right sidebar open on its Files tab.
+            Ok("files") => {
+                shell.jobs_open = true;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
+            }
+            // A job open with the sidebar on its Files tab.
+            Ok("review-files") => {
+                shell.jobs_open = true;
+                shell.side_job = false;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
             }
             // A job open with the sidebar on its Jobs list.
             Ok("review-jobs") => {

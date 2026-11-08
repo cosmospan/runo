@@ -162,6 +162,8 @@ impl Shell {
         // Which side is up: this job's details (0), the job list (1) or Git (2).
         let side: u8 = if on_job.is_some() && self.side_job {
             0
+        } else if self.list_files {
+            3
         } else if self.list_git {
             2
         } else {
@@ -270,14 +272,14 @@ impl Shell {
             (0u8, IconName::Info, "Details", None),
             (1, IconName::ListTodo, "Jobs", Some(all.len())),
             (2, IconName::GitBranch, "Git", None),
+            (3, IconName::Folder, "Files", None),
         ];
         let mut tab_row = div()
             .flex_none()
             .h(px(44.))
-            .px(px(12.))
+            .px(px(8.))
             .flex()
             .items_end()
-            .gap(px(4.))
             .border_b_1()
             .border_color(c(ui::line2()));
         for (k, icon, label, n) in tabs {
@@ -290,14 +292,19 @@ impl Shell {
                 div()
                     .id(("list-side", k as usize))
                     .relative()
+                    .flex_1()
                     .h(px(44.))
-                    .px(px(10.))
                     .flex()
                     .items_center()
+                    .justify_center()
                     .gap(px(6.))
                     .cursor_pointer()
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
+                    .text_size(px(12.5))
+                    .font_weight(if on {
+                        FontWeight::SEMIBOLD
+                    } else {
+                        FontWeight::MEDIUM
+                    })
                     .text_color(c(if on { ui::ink() } else { ui::muted() }))
                     .when(!on, |d| d.hover(|s| s.text_color(c(ui::ink()))))
                     .child(Icon::new(icon).size(px(14.)))
@@ -305,13 +312,13 @@ impl Shell {
                     .when_some(n.filter(|n| *n > 0), |d, n| {
                         d.child(
                             div()
-                                .px(px(6.))
-                                .h(px(18.))
+                                .px(px(5.))
+                                .h(px(16.))
                                 .flex()
                                 .items_center()
-                                .rounded(px(9.))
+                                .rounded(px(8.))
                                 .bg(c(if on { ui::press() } else { ui::well() }))
-                                .text_size(px(11.))
+                                .text_size(px(10.5))
                                 .text_color(c(ui::muted()))
                                 .child(n.to_string()),
                         )
@@ -324,8 +331,8 @@ impl Shell {
                         d.child(
                             div()
                                 .absolute()
-                                .left(px(8.))
-                                .right(px(8.))
+                                .left(px(12.))
+                                .right(px(12.))
                                 .bottom(px(-1.))
                                 .h(px(2.))
                                 .rounded_t(px(2.))
@@ -338,6 +345,7 @@ impl Shell {
                         } else {
                             this.side_job = false;
                             this.jobs_open = true;
+                            this.list_files = k == 3;
                             this.list_git = git;
                             if git {
                                 this.crew.look_at_git_soon();
@@ -402,24 +410,25 @@ impl Shell {
                         .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
                 )
             });
-        let head = div()
-            .flex_none()
-            .flex()
-            .flex_col()
-            .child(tab_row)
-            .when(side != 0, |d| {
-                d.child(
-                    div()
-                        .px(px(16.))
-                        .pt(px(12.))
-                        .pb(px(if side == 1 { 4. } else { 0. }))
-                        .flex()
-                        .flex_col()
-                        .gap(px(10.))
-                        .child(tools)
-                        .when(side == 1, |d| d.child(filters)),
-                )
-            });
+        let head =
+            div()
+                .flex_none()
+                .flex()
+                .flex_col()
+                .child(tab_row)
+                .when(side == 1 || side == 2, |d| {
+                    d.child(
+                        div()
+                            .px(px(16.))
+                            .pt(px(12.))
+                            .pb(px(if side == 1 { 4. } else { 0. }))
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.))
+                            .child(tools)
+                            .when(side == 1, |d| d.child(filters)),
+                    )
+                });
 
         let mut body = div()
             .id("job-list")
@@ -488,6 +497,44 @@ impl Shell {
                         .child(self.job_details(job, cx)),
                 ),
                 (2, _) => d.child(self.git_side(&folder, &all, cx)),
+                (3, _) => {
+                    // A job's own copy when one is open, else the project's
+                    // folder; changed files carry git's letter.
+                    let (dir, title, marks) = match on_job {
+                        Some(j) => {
+                            let marks = j
+                                .changes
+                                .iter()
+                                .map(|ch| (ch.path.clone(), ch.status.chars().take(1).collect()))
+                                .collect();
+                            let title = if j.branch.is_empty() {
+                                j.folder.name.clone()
+                            } else {
+                                j.branch.clone()
+                            };
+                            (j.dir().to_string(), title, marks)
+                        }
+                        None => {
+                            let marks = self
+                                .crew
+                                .repos
+                                .get(&folder)
+                                .map(|r| {
+                                    r.changes
+                                        .iter()
+                                        .map(|(code, p)| {
+                                            let m = if code == "??" { "U" } else { code.as_str() };
+                                            (p.clone(), m.chars().take(1).collect())
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            let title = folder.rsplit('/').next().unwrap_or(&folder).to_string();
+                            (folder.clone(), title, marks)
+                        }
+                    };
+                    d.child(self.files_side(&dir, title, marks, cx))
+                }
                 _ => d.child(body),
             })
     }
