@@ -436,6 +436,15 @@ pub struct Shell {
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
     history_filter: usize,
     folder_menu: bool,
+    /// The sidebar shows only its icon rail.
+    side_slim: bool,
+    /// The thread on screen and when you last looked at it before opening it,
+    /// for the feed's New line.
+    new_mark: (String, u64, u64),
+    /// A job's own conversation, open beside its thread like a reply pane.
+    reply_open: Option<u64>,
+    /// The sidebar's sections folded open or shut, by name; unset, open.
+    side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
     /// Motion is on (Settings → Animations); off, the crew holds still.
     motion: bool,
@@ -999,7 +1008,13 @@ impl Shell {
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
-                    if let (false, Place::Live(id)) = (text.is_empty(), this.place) {
+                    // The job on its own page, or open beside its thread.
+                    let job = match this.place {
+                        Place::Live(id) => Some(id),
+                        Place::Today => this.reply_open,
+                        _ => None,
+                    };
+                    if let (false, Some(id)) = (text.is_empty(), job) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
                         // To a finished job, Peek's engine reads it first:
                         // "run the app" runs it, "stop" stops it, and the
@@ -1155,6 +1170,10 @@ impl Shell {
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
+            side_slim: false,
+            new_mark: (String::new(), 0, 0),
+            reply_open: None,
+            side_folds: HashMap::new(),
             toast: None,
             entered: Instant::now(),
             motion: true,
@@ -2796,31 +2815,61 @@ impl Shell {
         if self.crew.store.busy(who).is_some() {
             return Mood::Working;
         }
-        if self
-            .crew
-            .store
+        // The face follows the bot's latest update: its last finished job or
+        // its last answer, whichever came later.
+        let store = &self.crew.store;
+        let job = store
             .jobs
             .iter()
-            .any(|j| j.bot == who && j.needs_you())
-        {
-            return Mood::NeedsYou;
-        }
-        let recent = self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .rev()
-            .find(|j| j.bot == who && j.ended.is_some());
-        if let Some(j) = recent {
-            let fresh = store::now().saturating_sub(j.ended.unwrap_or(0)) < 8;
-            match j.status {
-                Status::Done if fresh => return Mood::Done,
-                Status::Failed if !j.seen => return Mood::NeedsYou,
-                _ => {}
+            .filter(|j| j.bot == who && j.ended.is_some())
+            .max_by_key(|j| j.ended);
+        let said = store
+            .chat(who)
+            .into_iter()
+            .filter(|m| !m.mine && !m.note)
+            .map(|m| (m.at, m.text))
+            .chain(store.talks.iter().filter(|t| t.bot == who).filter_map(|t| {
+                t.answer
+                    .as_ref()
+                    .filter(|a| !a.note)
+                    .map(|a| (t.at, a.text.clone()))
+            }))
+            .max_by_key(|(at, _)| *at);
+        let job_at = job.and_then(|j| j.ended).unwrap_or(0);
+        let fresh = |at: u64| store::now().saturating_sub(at) < 30 * 60;
+        match (job, said) {
+            (_, Some((at, text))) if at > job_at => {
+                let mood = text_mood(&text);
+                if fresh(at) {
+                    mood
+                } else {
+                    Mood::Signature
+                }
             }
+            (Some(j), _) => {
+                let mood = job_mood(j);
+                // What waits on you holds its face; good news fades.
+                if j.needs_you() || fresh(job_at) {
+                    mood
+                } else {
+                    Mood::Signature
+                }
+            }
+            _ => Mood::Signature,
         }
-        Mood::Signature
+    }
+
+    /// A bot's face drawn still, in `mood`, for a message.
+    fn face(&mut self, who: Member, mood: Mood, size: f32) -> Img {
+        let image = self.holos.image(
+            mascot::figure(who, mood),
+            size,
+            Framing::Bust,
+            2.0,
+            self.scale,
+            false,
+        );
+        img(image).size(px(size)).flex_none()
     }
 
     /// One word for what a bot is doing, and its colour.
@@ -3526,4 +3575,77 @@ fn mentioned(text: &str) -> Option<(Member, String)> {
         }
     }
     found.map(|m| (m, rest.join(" ")))
+}
+
+/// The face for a job's latest news: busy while it runs, pleased when it
+/// finished well, concerned when it failed or its report reads badly.
+pub(super) fn job_mood(j: &store::Job) -> Mood {
+    match j.status {
+        Status::Running | Status::Shipping => Mood::Working,
+        Status::Failed | Status::Interrupted => Mood::NeedsYou,
+        Status::Review | Status::Done | Status::Shipped => match text_mood(&j.summary) {
+            Mood::NeedsYou => Mood::NeedsYou,
+            _ => Mood::Done,
+        },
+        Status::Stopped | Status::Discarded => Mood::Signature,
+    }
+}
+
+/// The face for what a bot said: pleased at good news, concerned when
+/// something's wrong or it's asking you, else its own look.
+pub(super) fn text_mood(text: &str) -> Mood {
+    let t = text.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
+    if has(&[
+        "good news",
+        "all good",
+        "nothing to fix",
+        "no issues",
+        "looks good",
+    ]) {
+        return Mood::Done;
+    }
+    if has(&[
+        "fail",
+        "broke",
+        "error",
+        "crash",
+        "couldn't",
+        "could not",
+        "found a bug",
+        "problem",
+        "blocked",
+        "went wrong",
+        "doesn't work",
+        "does not work",
+    ]) {
+        return Mood::NeedsYou;
+    }
+    if t.trim_end().ends_with('?') {
+        return Mood::NeedsYou;
+    }
+    if has(&[
+        "done", "fixed", "passes", "passed", "works", "finished", "shipped", "ready",
+    ]) {
+        return Mood::Done;
+    }
+    Mood::Signature
+}
+
+#[cfg(test)]
+mod mood_tests {
+    use super::text_mood;
+    use runo_holo::Mood;
+
+    #[test]
+    fn a_face_matches_the_news() {
+        assert_eq!(
+            text_mood("Good news: the counter can't go negative, so job #8 has nothing to fix."),
+            Mood::Done
+        );
+        assert_eq!(text_mood("The login test fails on Safari."), Mood::NeedsYou);
+        assert_eq!(text_mood("Should I keep the old API?"), Mood::NeedsYou);
+        assert_eq!(text_mood("Fixed it. All tests passed."), Mood::Done);
+        assert_eq!(text_mood("The app has three screens."), Mood::Signature);
+    }
 }
