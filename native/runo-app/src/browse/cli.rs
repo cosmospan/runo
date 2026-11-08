@@ -17,6 +17,7 @@ pub const USAGE: &str = "usage: squad browser <command> [--dir <job folder>]
   back                          go back a page
   screenshot [--full]           save a small JPEG and print where it is
   eval <javascript>             run JavaScript in the page, print its value
+  check [url]                   run design checks on the page (or open url first)
   port                          start the browser and print where it listens";
 
 /// Splits `--flag value` and `--switch` options from the words.
@@ -96,6 +97,7 @@ pub fn parse(args: &[String], cwd: &str) -> Result<(String, Value, String), Stri
             json!({ "full": opt("full").is_some() }),
         ),
         "eval" if words.len() > 1 => ("browser_eval", json!({ "js": rest(1) })),
+        "check" => (super::design::CHECK, json!({ "url": rest(1) })),
         "port" => ("port", json!({})),
         _ => return Err(USAGE.into()),
     };

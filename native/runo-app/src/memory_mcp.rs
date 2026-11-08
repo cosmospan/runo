@@ -70,7 +70,7 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
                 "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
                 "capabilities": { "tools": {}, "prompts": {} },
                 "serverInfo": { "name": "runo", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Runo's session memory and playbooks, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it. Call read_memory to catch up on this task, search_history to find what earlier sessions did, and save_note to keep decisions for whoever works on this next. Playbooks are saved tasks: list_playbooks shows them, get_playbook gives one's instructions to carry out now, and run_playbook starts one as its own session in Runo. When the project has databases in Runo's Data place, data_connections, data_tables and data_query read them, read-only."
+                "instructions": "Runo's session memory and playbooks, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it. For design work, design_theme gives a starting theme from a mood and design_check runs design checks (contrast, tap targets, overflow, values off the theme) on the page in that browser. Call read_memory to catch up on this task, search_history to find what earlier sessions did, and save_note to keep decisions for whoever works on this next. Playbooks are saved tasks: list_playbooks shows them, get_playbook gives one's instructions to carry out now, and run_playbook starts one as its own session in Runo. When the project has databases in Runo's Data place, data_connections, data_tables and data_query read them, read-only."
             }))
         }
         "prompts/list" => Ok(json!({ "prompts": prompt_list(&load_state(), dir) })),
@@ -210,7 +210,8 @@ fn tools() -> Value {
                 "properties": { "note": { "type": "string" } },
                 "required": ["note"]
             }
-        }
+        },
+        crate::browse::design::theme_tool()
     ])
 }
 
@@ -462,6 +463,7 @@ fn call(dir: &str, name: &str, args: &Value) -> Value {
             args,
             crate::approvals::wait(),
         ),
+        crate::browse::design::THEME => crate::browse::design::call_theme(args),
         design if design.starts_with("design_") => crate::designdraw::agentops::call(
             &crate::designdraw::agentops::folder(),
             dir,
@@ -777,9 +779,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|t| !t["name"].as_str().unwrap().starts_with("browser_"))
+            .filter(|t| !crate::browse::tools::TOOLS.contains(&t["name"].as_str().unwrap()))
             .count();
-        assert_eq!(own, 9);
+        assert_eq!(own, 10);
         let call = |name: &str, args: Value| {
             handle(d, &json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":name,"arguments":args}})).unwrap()["result"]["content"][0]["text"]
                 .as_str()
@@ -819,7 +821,7 @@ mod tests {
                 .iter()
                 .map(|t| t["name"].as_str().unwrap().to_string())
                 // The browser tools come and go with a browser on this machine.
-                .filter(|n| !n.starts_with("browser_"))
+                .filter(|n| !crate::browse::tools::TOOLS.contains(&n.as_str()))
                 .collect()
         };
         // An ordinary session's tools are exactly what they were before Crew.
@@ -835,7 +837,8 @@ mod tests {
                 "list_connections",
                 "run_on",
                 crate::approvals::TOOL,
-                "save_note"
+                "save_note",
+                crate::browse::design::THEME
             ]
         );
         let thread = names(Some(7));

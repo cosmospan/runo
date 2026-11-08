@@ -18,7 +18,7 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The commands the composer knows, with what each does.
-pub(super) const COMMANDS: [(&str, &str); 8] = [
+pub(super) const COMMANDS: [(&str, &str); 9] = [
     ("/plan", "Peek plans it first, you press Start"),
     ("/race", "Try it on two engines, keep the best"),
     (

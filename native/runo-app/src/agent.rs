@@ -344,6 +344,7 @@ fn unasked_tools(spec: &RunSpec) -> Vec<&'static str> {
         "list_playbooks",
         "get_playbook",
         "list_connections",
+        crate::browse::design::THEME,
     ];
     // The job's own headless browser, inside Squad: nothing outside it changes.
     tools.extend(crate::browse::tools::TOOLS);
