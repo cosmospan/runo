@@ -802,12 +802,11 @@ pub(super) const DOCK_ROOM: f32 = 16.;
 /// How tall the bar across the top is, the sidebar's top strip included.
 pub(super) const TOP_H: f32 = 54.;
 /// Where the Mac window buttons sit: their left edge, and the top of their
-/// frames (16pt tall), so they centre on the top bar's row.
-pub(super) const LIGHTS_X: f32 = 16.;
+/// frames (16pt tall), so they centre on the top bar's row. The three are
+/// 14pt wide and 20pt apart, 54pt in all, so from here they centre over the
+/// icon rail and the Peek logo under them.
+pub(super) const LIGHTS_X: f32 = (sidebar::RAIL - 54.) / 2.;
 pub(super) const LIGHTS_Y: f32 = (TOP_H - 16.) / 2.;
-/// Where the sidebar's top strip starts its content on a Mac, clear of the
-/// window buttons (three 14pt buttons, 20pt apart, from `LIGHTS_X`).
-pub(super) const LIGHTS_ROOM: f32 = 96.;
 
 /// Whether the window has Mac window buttons in its top-left corner. Off a
 /// Mac, `SQUADCODE_FAKE_LIGHTS` draws stand-ins, for screenshots taken on Linux.

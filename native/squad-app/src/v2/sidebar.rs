@@ -18,7 +18,8 @@ use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The icon rail's width, the labelled panel's beside it, and the two together.
-pub(super) const RAIL: f32 = 60.;
+/// The rail is wide enough to hold the Mac window buttons above it, centred.
+pub(super) const RAIL: f32 = 72.;
 pub(super) const PANEL: f32 = 236.;
 pub(super) const WIDTH: f32 = RAIL + PANEL;
 
@@ -386,11 +387,9 @@ impl Shell {
             .flex()
             .items_center()
             .relative()
-            .pl(px(if super::has_lights() {
-                super::LIGHTS_ROOM
-            } else {
-                RAIL + 10.
-            }))
+            // The window buttons sit over the rail, so the name lines up with
+            // the panel below it either way.
+            .pl(px(RAIL + 10.))
             .pr(px(10.))
             .border_b_1()
             .border_color(c(ui::line2()))
