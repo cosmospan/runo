@@ -499,13 +499,27 @@ impl Shell {
         let status = action_row(
             host.clone(),
             link.line(),
-            ui::ghost("server-disconnect", "Disconnect").on_click(cx.listener(|this, _, _, cx| {
-                remote::forget();
-                this.crew.link = None;
-                this.server_brain_log.clear();
-                this.say("Disconnected. The server keeps running; connect again any time.");
-                cx.notify();
-            })),
+            div()
+                .flex()
+                .gap(px(8.))
+                .child(
+                    ui::ghost_i("server-open-page", IconName::Activity, "See and control it")
+                        .on_click(cx.listener(|this, _, _, cx| this.go(super::Place::Server, cx))),
+                )
+                .child(
+                    ui::ghost("server-disconnect", "Disconnect").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            remote::forget();
+                            this.crew.link = None;
+                            this.server_brain_log.clear();
+                            this.server_look = None;
+                            this.say(
+                                "Disconnected. The server keeps running; connect again any time.",
+                            );
+                            cx.notify();
+                        },
+                    )),
+                ),
         );
         let names = if projects.is_empty() {
             "None yet. Jobs only run there on projects it has.".to_string()
@@ -702,11 +716,13 @@ impl Shell {
                     .child(log(&self.server_brain_log, self.server_brain_failed)),
             );
         }
+        let desktop = self.desktop_card(cx);
         div()
             .flex()
             .flex_col()
             .gap(px(space::M))
             .child(card("YOUR SERVER").child(status).child(projects_row).child(run_row))
+            .children(desktop)
             .child(brain)
             .child(card("HOW JOBS PICK A SIDE").child(line_row(
                 format!("Here or on {label}"),
