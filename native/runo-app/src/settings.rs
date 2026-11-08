@@ -501,6 +501,42 @@ fn settings_path() -> PathBuf {
     crate::store::data_dir().join("settings.json")
 }
 
+/// When settings.json last changed as this process knows it: when it read or
+/// wrote the file. A later time means another process wrote it, such as
+/// `squad brain install` in a terminal.
+static KNOWN_AT: std::sync::Mutex<Option<std::time::SystemTime>> = std::sync::Mutex::new(None);
+
+fn modified() -> Option<std::time::SystemTime> {
+    std::fs::metadata(settings_path())
+        .and_then(|m| m.modified())
+        .ok()
+}
+
+fn mark_known() {
+    *KNOWN_AT.lock().unwrap_or_else(|e| e.into_inner()) = modified();
+}
+
+/// The settings as saved, when another process changed settings.json since
+/// this one last read or wrote it; None otherwise. The window takes them
+/// instead of saving its older copy over the change. Looks at the file at
+/// most every two seconds.
+pub fn changed_elsewhere() -> Option<AppSettings> {
+    static LOOKED: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+    {
+        let mut looked = LOOKED.lock().unwrap_or_else(|e| e.into_inner());
+        if looked.is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(2)) {
+            return None;
+        }
+        *looked = Some(std::time::Instant::now());
+    }
+    let now = modified()?;
+    let known = *KNOWN_AT.lock().unwrap_or_else(|e| e.into_inner());
+    if known == Some(now) {
+        return None;
+    }
+    Some(AppSettings::load())
+}
+
 impl AppSettings {
     pub fn agent(&self, id: &str) -> AgentOptions {
         self.agents.get(id).cloned().unwrap_or_default()
@@ -518,6 +554,7 @@ impl AppSettings {
 
     pub fn load() -> Self {
         let mut settings: Self = crate::store::read_json_or_backup(&settings_path());
+        mark_known();
         settings.migrate();
         settings
     }
@@ -564,6 +601,7 @@ impl AppSettings {
 
     pub fn save(&self) {
         crate::store::write_json(&settings_path(), self);
+        mark_known();
     }
 
     /// Push the values that hot paths read (colours, animation switch…) into statics.
