@@ -153,6 +153,11 @@ pub struct Ask {
     rx: Receiver<Event>,
 }
 
+/// How a bot answers: about the code it reads the code first, but not every
+/// message is about the code, and in a discussion it takes part instead of
+/// describing the project's files.
+const TALK_RULE: &str = " Never change any files. When the person asks about this project's code, read the code to be sure. When they're discussing, planning or asking about something else (people, teams, process, ideas), take part as a thoughtful teammate: respond to what they said, using what you know, and don't list or describe the project's files unless they ask.";
+
 /// How a bot says an ask is real work. It can only read here, so when the
 /// person wants the code changed it offers a job, which the person starts.
 const JOB_RULE: &str = " If, and only if, the person wants you to change, add, fix or build something in the code (not just to explain it), end with one more line on its own: \"JOB: <the change, as a short instruction>\". For questions, greetings and explanations, never add that line.";
@@ -211,7 +216,7 @@ impl Ask {
         }
         let (project, dir) = (&folder.name, &folder.path);
         let mut prompt = format!(
-            "{} Read the code to be sure, and never change it.\n\nThe project is \"{project}\", in the current folder.\n",
+            "{}{TALK_RULE}\n\nThe project is \"{project}\", in the current folder.\n",
             super::setup::brief(who)
         );
         let recent: Vec<_> = history.iter().rev().take(6).collect();

@@ -313,13 +313,6 @@ pub struct Screen {
     pub pass: String,
 }
 
-impl Screen {
-    /// What a VNC viewer opens: `vnc://:pass@127.0.0.1:port`.
-    pub fn url(&self) -> String {
-        format!("vnc://:{}@127.0.0.1:{}", self.pass, self.tunnel.port())
-    }
-}
-
 /// Reads the port and password the desktop script printed last.
 pub fn parse_desktop(out: &str) -> Option<(u16, String)> {
     let mut port = None;

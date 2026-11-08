@@ -31,6 +31,7 @@ pub mod model;
 pub mod permit;
 pub mod place;
 pub mod route;
+pub mod summary;
 pub mod talk;
 pub mod tasks;
 pub mod think;

@@ -1180,29 +1180,113 @@ impl Shell {
                 cx,
             )],
         );
-        let alerts = group(
-            "ALERTS",
-            vec![
-                toggle(
-                    "set-notify",
-                    "Desktop notifications",
-                    "A notification when a job finishes or a bot needs you.",
-                    st.notifications,
-                    |s, v| s.notifications = v,
-                    cx,
-                ),
-                number(
-                    "set-stuck",
-                    "Flag a stuck bot after",
-                    "A bot quiet this long is marked as maybe stuck, so you can look in.",
-                    minutes(st.stuck_after_mins),
-                    |s| s.stuck_after_mins,
-                    |s, v| s.stuck_after_mins = v,
-                    5,
-                    cx,
-                ),
-            ],
-        );
+        // A sound's switch plays it when turned on, so you hear what you picked.
+        let sound = |id: &'static str,
+                     title: &'static str,
+                     line: &'static str,
+                     cue: crate::sounds::Cue,
+                     on: bool,
+                     set: fn(&mut AppSettings, bool),
+                     cx: &mut Context<Self>| {
+            row(
+                title,
+                line,
+                div()
+                    .id(id)
+                    .cursor_pointer()
+                    .child(switch(on))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        save(cx, |st| set(st, !on));
+                        if !on {
+                            let style = cx.global::<AppSettings>().sound_style.clone();
+                            crate::sounds::preview(crate::sounds::Style::parse(&style), cue);
+                        }
+                        cx.notify();
+                    })),
+            )
+        };
+        let mut alert_rows = vec![
+            toggle(
+                "set-notify",
+                "Desktop notifications",
+                "A notification when a job finishes or a bot needs you.",
+                st.notifications,
+                |s, v| s.notifications = v,
+                cx,
+            ),
+            sound(
+                "set-sounds",
+                "Sounds",
+                "A short sound when something needs you. Quiet for the job or thread you're looking at.",
+                crate::sounds::Cue::NeedsYou,
+                st.sounds,
+                |s, v| s.sounds = v,
+                cx,
+            ),
+        ];
+        if st.sounds {
+            let picked = crate::sounds::Style::parse(&st.sound_style);
+            let mut styles = div().flex_none().flex().gap(px(6.));
+            for (i, style) in crate::sounds::Style::ALL.into_iter().enumerate() {
+                styles = styles.child(
+                    ui::pill(("sound-style", i), style.label(), style == picked).on_click(
+                        cx.listener(move |_, _, _, cx| {
+                            save(cx, |st| st.sound_style = style.id().to_string());
+                            crate::sounds::preview(style, crate::sounds::Cue::NeedsYou);
+                            cx.notify();
+                        }),
+                    ),
+                );
+            }
+            alert_rows.push(row(
+                "Sound",
+                match picked {
+                    crate::sounds::Style::Bubble => "Quick blips that slide in pitch.",
+                    crate::sounds::Style::Marimba => "Warm, woody notes.",
+                    crate::sounds::Style::Pluck => "A soft plucked string.",
+                    crate::sounds::Style::Glass => "Airy bells with a shimmer.",
+                },
+                styles,
+            ));
+            alert_rows.push(sound(
+                "set-sound-ask",
+                "When a bot needs you",
+                "A bot asks for your OK or asks you to choose.",
+                crate::sounds::Cue::NeedsYou,
+                st.sound_needs_you,
+                |s, v| s.sound_needs_you = v,
+                cx,
+            ));
+            alert_rows.push(sound(
+                "set-sound-done",
+                "When a job is done",
+                "A job finishes, or its changes are ready to review.",
+                crate::sounds::Cue::Done,
+                st.sound_done,
+                |s, v| s.sound_done = v,
+                cx,
+            ));
+            alert_rows.push(sound(
+                "set-sound-failed",
+                "When a job fails",
+                "A job stops with a problem.",
+                crate::sounds::Cue::Failed,
+                st.sound_failed,
+                |s, v| s.sound_failed = v,
+                cx,
+            ));
+        }
+        alert_rows.push(number(
+            "set-stuck",
+            "Flag a stuck bot after",
+            "A bot quiet this long is marked as maybe stuck, so you can look in.",
+            minutes(st.stuck_after_mins),
+            |s| s.stuck_after_mins,
+            |s, v| s.stuck_after_mins = v,
+            5,
+            cx,
+        ));
+        let alerts = group("ALERTS", alert_rows);
         let work = group(
             "WHILE THE CREW WORKS",
             vec![
