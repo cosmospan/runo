@@ -127,6 +127,10 @@ pub fn pr_body(job: &Job) -> String {
         }
         body.push('\n');
     }
+    if !job.issue.is_empty() {
+        body.push_str(&job.issue);
+        body.push_str("\n\n");
+    }
     let (a, r) = job.lines();
     body.push_str(&format!(
         "{} files changed, +{a} \u{2212}{r}. Made by {} and opened by Shipper in Squad Code.\n",
@@ -210,6 +214,39 @@ fn ship(job: &Job, tx: &Sender<Step>) -> Result<(), Step> {
         git::open_pull_request(dir, &job.branch, &job.base, &title, &pr_body(job)).map_err(fail)?;
     let _ = tx.send(Step::Opened(url));
     Ok(())
+}
+
+/// Pushes a job's new work to its open pull request, on another thread: its
+/// uncommitted changes in one commit, then a push to the same branch. Ends
+/// with `Opened` (the same address) when it's up.
+pub fn push_update(job: Job) -> Receiver<Step> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let dir = job.worktree.as_str();
+        let step = (|| -> Result<(), Step> {
+            let fail = |e: String| Step::Failed(e);
+            if dir.is_empty() {
+                return Err(Step::Failed("its worktree is gone".into()));
+            }
+            if git::has_uncommitted(dir) == Some(true) {
+                git::commit(dir, "Address review feedback").map_err(fail)?;
+                let _ = tx.send(Step::Did("Committed the fix".into()));
+            }
+            let remote = git::remote_name(dir);
+            if remote.is_empty() {
+                return Err(Step::Failed(
+                    "This project has no remote to push to.".into(),
+                ));
+            }
+            git::push(dir, &remote).map_err(fail)?;
+            let _ = tx.send(Step::Opened(job.pr.clone()));
+            Ok(())
+        })();
+        if let Err(step) = step {
+            let _ = tx.send(step);
+        }
+    });
+    rx
 }
 
 /// The pull request's state, checks and review, read on another thread.
@@ -312,6 +349,11 @@ mod tests {
         assert!(body.contains("Added the button."));
         assert!(body.contains("`cargo test`: pass (12s)"));
         assert!(body.contains("opened by Shipper"));
+        let closing = Job {
+            issue: "Closes #12".into(),
+            ..Default::default()
+        };
+        assert!(pr_body(&closing).contains("Closes #12"));
     }
 
     #[test]
