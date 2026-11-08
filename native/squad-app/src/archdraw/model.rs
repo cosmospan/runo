@@ -14,7 +14,9 @@ const VIEWS: &str = "views";
 const README_FILE: &str = "README.md";
 /// The guide to the format written next to the files.
 pub(crate) const README: &str = include_str!("README.md");
-const README_MARK: &str = "<!-- Written by Runo.";
+const README_MARK: &str = "<!-- Written by Squad Code.";
+/// The mark as builds from before the rename wrote it.
+const OLD_README_MARK: &str = "<!-- Written by Runo.";
 
 /// What an element is. Decides its default shape, colour and size.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -745,7 +747,9 @@ pub(crate) fn save(root: &Path, doc: &Doc) -> std::io::Result<()> {
     // The guide to these files, for people and agents; kept current unless it's been
     // replaced by one of the project's own.
     let readme = dir.join(README_FILE);
-    let ours = std::fs::read_to_string(&readme).map_or(true, |t| t.starts_with(README_MARK));
+    let ours = std::fs::read_to_string(&readme).map_or(true, |t| {
+        t.starts_with(README_MARK) || t.starts_with(OLD_README_MARK)
+    });
     if ours {
         write_if_changed(&readme, README)?;
     }
@@ -1058,7 +1062,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-archdraw-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-archdraw-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1264,7 +1269,7 @@ mod tests {
 
     #[test]
     fn saving_writes_the_guide_but_keeps_a_projects_own() {
-        let dir = std::env::temp_dir().join(format!("runo-guide-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-guide-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         save(&dir, &sample()).unwrap();
         let readme = folder(&dir).join(README_FILE);
@@ -1272,12 +1277,16 @@ mod tests {
         std::fs::write(&readme, "# Our notes").unwrap();
         save(&dir, &sample()).unwrap();
         assert_eq!(std::fs::read_to_string(&readme).unwrap(), "# Our notes");
+        // A guide an older build wrote, under the app's old name, is still ours to update.
+        std::fs::write(&readme, "<!-- Written by Runo. An old guide. -->\n").unwrap();
+        save(&dir, &sample()).unwrap();
+        assert_eq!(std::fs::read_to_string(&readme).unwrap(), README);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn restore_puts_files_back_exactly() {
-        let dir = std::env::temp_dir().join(format!("runo-restore-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-restore-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         save(&dir, &sample()).unwrap();
         let model = folder(&dir).join(MODEL);

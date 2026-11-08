@@ -9,7 +9,7 @@
 //! The server listens on 127.0.0.1 unless told otherwise, so nothing is open
 //! to the internet: devices reach it over an SSH tunnel or Tailscale. Every
 //! request but pairing needs `Authorization: Bearer <token>`. Each device has
-//! its own token, kept in `~/.runo/server.json`; `squad pair` prints a
+//! its own token, kept in `~/.squadcode/server.json`; `squad pair` prints a
 //! one-time code that a device trades for one, and `squad unpair <name>`
 //! revokes one.
 //!
@@ -1027,6 +1027,8 @@ fn path_with_local_bin(home: &Path) -> String {
     let path = std::env::var("PATH").unwrap_or_default();
     let mut dirs: Vec<String> = [
         ".local/bin",
+        ".local/squadcode-node/bin",
+        // Where builds from before the rename installed Node.
         ".local/runo-node/bin",
         ".opencode/bin",
         ".factory/bin",

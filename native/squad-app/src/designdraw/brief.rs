@@ -46,7 +46,7 @@ pub(crate) fn context(c: &Canvas) -> String {
          The design is in {FOLDER}/. Each screen is a standalone HTML file, \
          {FOLDER}/screens/<id>.html, that links ../tokens.css, ../components.css and \
          ../prototype.js (copy the <head> of an existing screen). Name a screen with <title>, \
-         set its device with <meta name=\"runo:device\" content=\"phone\"> (or tablet, \
+         set its device with <meta name=\"squadcode:device\" content=\"phone\"> (or tablet, \
          desktop), and link screens for the prototype with data-goto=\"<other screen id>\" on \
          what's clicked (add data-transition=\"sheet\" for a screen that opens as a modal \
          sheet; push, fade, axis and none also work, and the platform's own is used \
@@ -309,7 +309,7 @@ pub(crate) fn describe_task(what: &str, device: Device) -> String {
     let device = device.label().to_lowercase();
     format!(
         "Design a new {device} screen: {what}\n\nAdd it as a new file in {FOLDER}/screens/ with \
-         a short id, a <title> naming it and <meta name=\"runo:device\" content=\"{device}\">. \
+         a short id, a <title> naming it and <meta name=\"squadcode:device\" content=\"{device}\">. \
          Make it complete and realistic, finished to the standard in \"How to design well\". \
          If this describes an app or a flow rather than one screen, design its key screens, \
          each its own file. Link it to the screens it naturally leads to and from with \
@@ -365,7 +365,7 @@ pub(crate) fn adapt_task(id: &str, name: &str, from: Device, to: Device) -> Stri
     format!(
         "Make a {to_label} version of the {from} screen {name} ({FOLDER}/screens/{id}.html) \
          as a new screen {FOLDER}/screens/{id}-{to_label}.html, titled \"{name} · \
-         {to_label}\" with <meta name=\"runo:device\" content=\"{to_label}\">. Keep its \
+         {to_label}\" with <meta name=\"squadcode:device\" content=\"{to_label}\">. Keep its \
          purpose, content, components and links, but lay it out the way people expect on a \
          {to_label}, not a stretched copy. {how} Don't change {id}.html itself."
     )

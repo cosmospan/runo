@@ -210,7 +210,8 @@ mod tests {
 
     #[test]
     fn pictures_go_into_a_standalone_page() {
-        let dir = std::env::temp_dir().join(format!("runo-export-pics-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-export-pics-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("assets")).unwrap();
         std::fs::write(dir.join("assets/cat.png"), b"png").unwrap();
         let html = "<div style=\"background-image: url(&quot;../assets/cat.png&quot;)\"></div><img src=\"../assets/gone.jpg\">";
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn a_standalone_page_carries_its_styles() {
-        let dir = std::env::temp_dir().join(format!("runo-export-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-export-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("tokens.css"), ":root { --primary: red; }").unwrap();
         let html = "<html><head><link rel=\"stylesheet\" href=\"../tokens.css\">\

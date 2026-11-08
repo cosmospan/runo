@@ -43,14 +43,25 @@ pub(crate) fn owner_app(real: &Path) -> Option<String> {
         .or_else(|| after("/AppData/Local/Programs/"))?;
     // Squad Code itself and generic tool folders aren't "another app".
     let lower = app.to_lowercase();
-    (!app.is_empty() && !["runo", "npm", "node", "nvm", "fnm", "volta"].contains(&lower.as_str()))
-        .then(|| {
-            let mut chars = app.chars();
-            chars
-                .next()
-                .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
-                .unwrap_or_default()
-        })
+    (!app.is_empty()
+        && ![
+            "squad code",
+            "squadcode",
+            "runo",
+            "npm",
+            "node",
+            "nvm",
+            "fnm",
+            "volta",
+        ]
+        .contains(&lower.as_str()))
+    .then(|| {
+        let mut chars = app.chars();
+        chars
+            .next()
+            .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+            .unwrap_or_default()
+    })
 }
 
 /// The version a CLI reports, or "" when it doesn't run.

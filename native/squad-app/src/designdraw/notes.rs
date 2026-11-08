@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn comments_are_kept_with_the_design() {
-        let root = std::env::temp_dir().join(format!("runo-notes-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-notes-{}", std::process::id()));
         assert!(load(&root).is_empty());
         let c = Comment {
             id: 1,

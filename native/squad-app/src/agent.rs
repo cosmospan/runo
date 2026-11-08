@@ -919,7 +919,7 @@ fn cove_server() -> Option<String> {
 }
 
 /// Name of Squad Code's memory MCP server in the agents' config.
-pub const MEMORY_SERVER: &str = "runo";
+pub const MEMORY_SERVER: &str = "squadcode";
 
 /// The prompt with attached image paths listed, for CLIs that read images from disk.
 /// The prompt as a command-line argument. Most agent CLIs take it as a positional
@@ -1979,7 +1979,7 @@ mod arg_tests {
     #[test]
     fn agent_gets_env_args_and_reports_failure() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("runo-agent-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-agent-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let script = dir.join("fake-agent");
         std::fs::write(
@@ -2037,7 +2037,7 @@ mod arg_tests {
         let (tx, _rx) = std::sync::mpsc::channel();
         let sel = HashMap::new();
         let o = AgentOptions {
-            binary: "/definitely/not/a/runo/binary".into(),
+            binary: "/definitely/not/a/squadcode/binary".into(),
             ..Default::default()
         };
         let spec = RunSpec {

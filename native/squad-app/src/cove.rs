@@ -2,7 +2,7 @@
 //!
 //! Cove is a separate product. Squad Code only talks to it through the `cove` command:
 //! every process a Cove session starts (the agent, the setup command, terminal tabs)
-//! is wrapped as `cove exec runo-<id> --create … -- <program>`, which creates or
+//! is wrapped as `cove exec <name> --create … -- <program>`, which creates or
 //! starts the VM on first use. The worktree is shared into the VM at the same path,
 //! so git, diffs and commits keep running on the Mac against the same files.
 
@@ -70,10 +70,10 @@ pub fn available() -> bool {
 
 /// Shell helpers for installers: apt with sudo when not root, curl, and npm with a
 /// private Node.js when the machine has none. Nothing here needs a password.
-const INSTALL_HELPERS: &str = r#"runo_apt() { command -v apt-get >/dev/null 2>&1 || return 1; if [ "$(id -u)" = 0 ]; then apt-get update -qq && apt-get install -y -qq "$@"; else sudo -n apt-get update -qq && sudo -n apt-get install -y -qq "$@"; fi; }
-runo_curl() { command -v curl >/dev/null 2>&1 || runo_apt curl ca-certificates; }
-runo_npm() {
-  runo_curl || return 1
+const INSTALL_HELPERS: &str = r#"squadcode_apt() { command -v apt-get >/dev/null 2>&1 || return 1; if [ "$(id -u)" = 0 ]; then apt-get update -qq && apt-get install -y -qq "$@"; else sudo -n apt-get update -qq && sudo -n apt-get install -y -qq "$@"; fi; }
+squadcode_curl() { command -v curl >/dev/null 2>&1 || squadcode_apt curl ca-certificates; }
+squadcode_npm() {
+  squadcode_curl || return 1
   if ! command -v npm >/dev/null 2>&1; then
     case "$(uname -s)" in Linux) os=linux ;; Darwin) os=darwin ;; *) return 1 ;; esac
     case "$(uname -m)" in x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;; *) return 1 ;; esac
@@ -81,7 +81,7 @@ runo_npm() {
     f="$(curl -fsSL "$base/SHASUMS256.txt" | awk '{print $2}' | grep -E "^node-v[0-9.]+-$os-$arch\.tar\.gz$" | head -n1)"
     [ -n "$f" ] || return 1
     echo "Installing Node.js for npm…"
-    mkdir -p "$HOME/.local/runo-node" && curl -fsSL "$base/$f" | tar -xzf - -C "$HOME/.local/runo-node" --strip-components=1 || return 1
+    mkdir -p "$HOME/.local/squadcode-node" && curl -fsSL "$base/$f" | tar -xzf - -C "$HOME/.local/squadcode-node" --strip-components=1 || return 1
   fi
   npm install -g --prefix "$HOME/.local" "$1@${want:-latest}"
 }"#;
@@ -94,13 +94,13 @@ fn install_command(program: &str) -> Option<String> {
         .find(|p| p.bin == program || (p.id == "cursor" && program == "agent"))?;
     Some(match provider.id {
         "claude" => {
-            r#"runo_curl && curl -fsSL https://claude.ai/install.sh | bash -s "${want:-latest}""#
+            r#"squadcode_curl && curl -fsSL https://claude.ai/install.sh | bash -s "${want:-latest}""#
                 .to_string()
         }
         id => match crate::alerts::npm_package(id) {
-            Some(package) => format!("runo_npm {package}"),
+            Some(package) => format!("squadcode_npm {package}"),
             None => format!(
-                "runo_curl && {}",
+                "squadcode_curl && {}",
                 crate::registry::spec(id)?.install.unix.as_deref()?
             ),
         },
@@ -116,7 +116,7 @@ pub(crate) fn install_script(provider: &str) -> Option<String> {
         .bin;
     let install = install_command(bin)?;
     Some(format!(
-        r#"export PATH="$HOME/.local/bin:$HOME/.local/runo-node/bin:$HOME/.opencode/bin:$HOME/.factory/bin:$HOME/.grok/bin:$PATH"
+        r#"export PATH="$HOME/.local/bin:$HOME/.local/squadcode-node/bin:$HOME/.local/runo-node/bin:$HOME/.opencode/bin:$HOME/.factory/bin:$HOME/.grok/bin:$PATH"
 {INSTALL_HELPERS}
 want=""
 if command -v {bin} >/dev/null 2>&1; then exit 0; fi

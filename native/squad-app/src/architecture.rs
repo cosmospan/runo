@@ -70,7 +70,7 @@ pub(crate) struct ProjectMap {
     /// The file limit was reached; the map covers part of the project.
     pub partial: bool,
     /// Folders holding Squad Code's own design screens and diagrams, left out of the code.
-    pub runo: Vec<String>,
+    pub own: Vec<String>,
     /// What the project runs, from Docker Compose, Terraform, ECS and Copilot files.
     pub infra: crate::archdraw::infra::Infra,
 }
@@ -809,13 +809,13 @@ pub(crate) fn scan(root: &Path) -> ProjectMap {
         (crate::archdraw::model::FOLDER, "model.toml"),
     ] {
         if root.join(folder).join(marker).is_file() {
-            map.runo.push(folder.to_string());
+            map.own.push(folder.to_string());
         }
     }
-    let runo = |file: &Path| {
+    let own = |file: &Path| {
         file.components().count() > 1
             && file.components().next().is_some_and(|c| {
-                map.runo
+                map.own
                     .iter()
                     .any(|r| *r == c.as_os_str().to_string_lossy())
             })
@@ -823,7 +823,7 @@ pub(crate) fn scan(root: &Path) -> ProjectMap {
     let mut languages: BTreeMap<&str, usize> = BTreeMap::new();
     let mut folders: BTreeMap<String, usize> = BTreeMap::new();
     for file in &files {
-        if let Some(lang) = language(file).filter(|_| !runo(file)) {
+        if let Some(lang) = language(file).filter(|_| !own(file)) {
             *languages.entry(lang).or_default() += 1;
         }
         let top = match file.components().count() {
@@ -944,7 +944,7 @@ pub(crate) fn scan(root: &Path) -> ProjectMap {
     if map.packages.is_empty() {
         let theirs: Vec<&PathBuf> = files
             .iter()
-            .filter(|f| language(f).is_some() && !runo(f))
+            .filter(|f| language(f).is_some() && !own(f))
             .collect();
         if !theirs.is_empty() {
             let kind = if theirs.iter().any(|f| language(f) == Some("HTML")) {
@@ -1237,7 +1237,8 @@ mod tests {
     use std::prelude::v1::test;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-arch-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-arch-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

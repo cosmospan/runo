@@ -147,7 +147,7 @@ pub fn current_branch(dir: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Where an isolated session's worktree lives: `<repo-parent>/.runo-worktrees/<repo>/<branch>`.
+/// Where an isolated session's worktree lives: `<repo-parent>/.squadcode-worktrees/<repo>/<branch>`.
 /// A branch with slashes gets nested folders, so `a/b` and `a-b` never share one.
 pub fn worktree_path(repo: &str, branch: &str) -> std::path::PathBuf {
     let repo_path = Path::new(repo);
@@ -158,7 +158,7 @@ pub fn worktree_path(repo: &str, branch: &str) -> std::path::PathBuf {
     let mut path = repo_path
         .parent()
         .unwrap_or(repo_path)
-        .join(".runo-worktrees")
+        .join(".squadcode-worktrees")
         .join(name);
     for part in branch.split('/').filter(|p| !p.is_empty() && *p != "..") {
         path.push(part);
@@ -166,7 +166,7 @@ pub fn worktree_path(repo: &str, branch: &str) -> std::path::PathBuf {
     path
 }
 
-/// A branch name drawn from a task, such as `runo/fix-login-redirect` for "Fix the login
+/// A branch name drawn from a task, such as `squad/fix-login-redirect` for "Fix the login
 /// redirect". Uses the first line's first few words; empty when it has no usable words.
 pub fn branch_slug(task: &str) -> String {
     const SKIP: &[&str] = &[
@@ -193,7 +193,7 @@ pub fn branch_slug(task: &str) -> String {
     if slug.is_empty() {
         slug
     } else {
-        format!("runo/{slug}")
+        format!("squad/{slug}")
     }
 }
 
@@ -591,7 +591,7 @@ pub fn merge_into(repo: &str, branch: &str, base: &str) -> Result<String, String
                 .unwrap_or(0);
             let dir = Path::new(repo)
                 .join(common.trim())
-                .join(format!("runo-merge-{nanos}"))
+                .join(format!("squadcode-merge-{nanos}"))
                 .to_string_lossy()
                 .into_owned();
             git(repo, &["worktree", "add", "--quiet", &dir, base])?;
@@ -963,7 +963,10 @@ fn temp_index_in(git_dir: &str) -> std::path::PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    Path::new(git_dir).join(format!("runo-index-{}-{nanos}-{n}", std::process::id()))
+    Path::new(git_dir).join(format!(
+        "squadcode-index-{}-{nanos}-{n}",
+        std::process::id()
+    ))
 }
 
 /// A private index to snapshot from, removed when dropped.
@@ -1156,7 +1159,7 @@ pub fn tracked_files(dir: &str) -> Vec<String> {
 
 /// Snapshot the working tree as a commit that no branch points at, so a turn can be
 /// undone (or an undo redone). Its first parent is HEAD at the time and its second a
-/// commit of the index, so both come back too. Kept alive by a ref under `refs/runo/`.
+/// commit of the index, so both come back too. Kept alive by a ref under `refs/squadcode/`.
 pub fn checkpoint(dir: &str) -> Result<String, String> {
     // One copy of the index gives both the staging (before `add`) and the folder.
     let (copy, staged) = index_copy(dir)?;
@@ -1164,15 +1167,15 @@ pub fn checkpoint(dir: &str) -> Result<String, String> {
     drop(copy);
     let head = rev(dir, "HEAD");
     let index = staged
-        .map(|t| commit_tree(dir, &t, &[], "runo index"))
+        .map(|t| commit_tree(dir, &t, &[], "squadcode index"))
         .transpose()?;
     let mut parents: Vec<&str> = Vec::new();
     let message = match &head {
         Some(head) => {
             parents.push(head);
-            "runo checkpoint"
+            "squadcode checkpoint"
         }
-        None => "runo checkpoint\n\nno-head",
+        None => "squadcode checkpoint\n\nno-head",
     };
     if let Some(index) = &index {
         parents.push(index);
@@ -1182,7 +1185,7 @@ pub fn checkpoint(dir: &str) -> Result<String, String> {
         dir,
         &[
             "update-ref",
-            &format!("refs/runo/checkpoints/{commit}"),
+            &format!("refs/squadcode/checkpoints/{commit}"),
             &commit,
         ],
     );
@@ -1332,10 +1335,10 @@ fn commit_tree(dir: &str, tree: &str, parents: &[&str], message: &str) -> Result
         args.extend(["-p", p]);
     }
     let who = [
-        ("GIT_AUTHOR_NAME", "Runo"),
-        ("GIT_AUTHOR_EMAIL", "runo@localhost"),
-        ("GIT_COMMITTER_NAME", "Runo"),
-        ("GIT_COMMITTER_EMAIL", "runo@localhost"),
+        ("GIT_AUTHOR_NAME", "Squad Code"),
+        ("GIT_AUTHOR_EMAIL", "squadcode@localhost"),
+        ("GIT_COMMITTER_NAME", "Squad Code"),
+        ("GIT_COMMITTER_EMAIL", "squadcode@localhost"),
     ];
     git_with(dir, &args, &who, None).map(|s| s.trim().to_string())
 }
@@ -1385,7 +1388,8 @@ mod tests {
     }
 
     fn repo(name: &str) -> std::path::PathBuf {
-        let repo = std::env::temp_dir().join(format!("runo-git-{name}-{}", std::process::id()));
+        let repo =
+            std::env::temp_dir().join(format!("squadcode-git-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&repo);
         std::fs::create_dir_all(&repo).unwrap();
         sh(&repo, &["init", "-q"]);
@@ -1398,7 +1402,7 @@ mod tests {
     #[test]
     fn worktree_paths_sit_beside_the_repository() {
         let p = worktree_path("/code/app", "feature/nav");
-        assert_eq!(p, Path::new("/code/.runo-worktrees/app/feature/nav"));
+        assert_eq!(p, Path::new("/code/.squadcode-worktrees/app/feature/nav"));
         // `a/b` and `a-b` are different branches, so they get different folders.
         assert_ne!(
             worktree_path("/code/app", "a/b"),
@@ -1406,7 +1410,7 @@ mod tests {
         );
         assert_eq!(
             worktree_path("/code/app", "../x"),
-            Path::new("/code/.runo-worktrees/app/x")
+            Path::new("/code/.squadcode-worktrees/app/x")
         );
     }
 
@@ -1420,12 +1424,12 @@ mod tests {
         let r = repo.to_str().unwrap();
         let dir = add_worktree(r, "topic", None).unwrap();
         assert_eq!(current_branch(&dir), "topic");
-        assert!(dir.contains(".runo-worktrees"));
+        assert!(dir.contains(".squadcode-worktrees"));
         remove_worktree(r, &dir).unwrap();
         let _ = std::fs::remove_dir_all(
             repo.parent()
                 .unwrap()
-                .join(".runo-worktrees")
+                .join(".squadcode-worktrees")
                 .join(repo.file_name().unwrap()),
         );
         let _ = std::fs::remove_dir_all(repo);
@@ -1433,7 +1437,7 @@ mod tests {
 
     #[test]
     fn worktree_changes_and_diff() {
-        let root = std::env::temp_dir().join(format!("runo-test-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-test-{}", std::process::id()));
         let repo = root.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         let repo = repo.canonicalize().unwrap();
@@ -1446,9 +1450,9 @@ mod tests {
 
         let repo_str = repo.to_str().unwrap();
         assert!(is_repo(repo_str));
-        let dir = add_worktree(repo_str, "runo/test", None).unwrap();
-        assert!(add_worktree(repo_str, "runo/test", None).is_err());
-        assert_eq!(current_branch(&dir), "runo/test");
+        let dir = add_worktree(repo_str, "squad/test", None).unwrap();
+        assert!(add_worktree(repo_str, "squad/test", None).is_err());
+        assert_eq!(current_branch(&dir), "squad/test");
 
         std::fs::write(Path::new(&dir).join("a.txt"), "one\nTWO\nthree\n").unwrap();
         std::fs::write(Path::new(&dir).join("new.txt"), "x\ny\n").unwrap();
@@ -1574,18 +1578,21 @@ mod tests {
     fn branch_names_come_from_the_task() {
         assert_eq!(
             branch_slug("Fix the login redirect\nmore detail"),
-            "runo/fix-login-redirect"
+            "squad/fix-login-redirect"
         );
         assert_eq!(
             branch_slug("\n  Please add a dark-mode toggle to the Settings page"),
-            "runo/add-dark-mode-toggle-settings"
+            "squad/add-dark-mode-toggle-settings"
         );
-        assert_eq!(branch_slug("修复 bug"), "runo/bug");
+        assert_eq!(branch_slug("修复 bug"), "squad/bug");
         assert_eq!(branch_slug("!!! ???"), "");
-        assert!(branch_slug(&"x".repeat(80)).len() <= "runo/".len() + 40);
-        let taken = ["runo/a", "runo/a-2"];
-        assert_eq!(unique_branch("runo/a", |b| taken.contains(&b)), "runo/a-3");
-        assert_eq!(unique_branch("runo/b", |b| taken.contains(&b)), "runo/b");
+        assert!(branch_slug(&"x".repeat(80)).len() <= "squad/".len() + 40);
+        let taken = ["squad/a", "squad/a-2"];
+        assert_eq!(
+            unique_branch("squad/a", |b| taken.contains(&b)),
+            "squad/a-3"
+        );
+        assert_eq!(unique_branch("squad/b", |b| taken.contains(&b)), "squad/b");
     }
 
     #[test]

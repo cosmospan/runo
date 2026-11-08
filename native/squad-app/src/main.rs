@@ -313,7 +313,7 @@ fn main() {
         _ => {}
     }
     startup::begin();
-    // `runo --mcp-memory <folder> [--thread <id>]`: serve the memory tools to an agent,
+    // `SquadCode --mcp-memory <folder> [--thread <id>]`: serve the memory tools to an agent,
     // without a window; a Crew thread also gets the tools it reports through.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("--mcp-memory") {
@@ -332,16 +332,16 @@ fn main() {
     store::adopt_runo_data();
     approvals::init_key();
     store::tighten_data_dir();
-    // `runo --agent-host runo-turn <turn folder> <agent> <args…>`: a live turn's agent,
+    // `SquadCode --agent-host squadcode-turn <turn folder> <agent> <args…>`: a live turn's agent,
     // detached from the window (see harness::host).
-    // `runo v2 <command>`: the v2 crew from a terminal (`runo help`).
+    // `SquadCode v2 <command>`: the v2 crew from a terminal (`SquadCode help`).
     if args.get(1).map(String::as_str) == Some("v2") {
         std::process::exit(v2::cli::main(&args[2..]));
     }
     if args.get(1).map(String::as_str) == Some("--agent-host") {
         std::process::exit(harness::host::main(&args[2..]));
     }
-    // `runo --check-agents [--report <file>] [--since <file>]`: how the installed agent
+    // `SquadCode --check-agents [--report <file>] [--since <file>]`: how the installed agent
     // CLIs match the manifest, for the nightly compatibility check (see compat).
     if args.get(1).map(String::as_str) == Some("--check-agents") {
         std::process::exit(compat::main(&args[2..]));

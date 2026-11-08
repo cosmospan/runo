@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn the_library_is_read_from_the_design() {
-        let root = std::env::temp_dir().join(format!("runo-library-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-library-{}", std::process::id()));
         let c = Component {
             id: "chip".into(),
             name: "Chip".into(),

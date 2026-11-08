@@ -146,7 +146,7 @@ impl Page {
     ) -> bool {
         self.resize(w, h);
         // Mark the page shown now, so the new one is told apart from it.
-        self.eval("window.__runoOld = true");
+        self.eval("window.__squadcodeOld = true");
         let (file, folder) = (file.to_path_buf(), folder.to_path_buf());
         let started = on_main(self.id, move |v, _, tx| {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&file.to_string_lossy()));
@@ -161,7 +161,7 @@ impl Page {
         let start = Instant::now();
         while start.elapsed() < wait {
             let done = self.eval(
-                "!window.__runoOld && document.readyState === 'complete' \
+                "!window.__squadcodeOld && document.readyState === 'complete' \
                  ? document.fonts.ready.then(() => true) : false",
             );
             if done.and_then(|v| v.as_bool()) == Some(true) {

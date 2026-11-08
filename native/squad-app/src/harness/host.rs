@@ -1,4 +1,4 @@
-//! The agent host: `Squad Code --agent-host runo-turn <turn folder> <agent> <args…>`. It runs
+//! The agent host: `Squad Code --agent-host squadcode-turn <turn folder> <agent> <args…>`. It runs
 //! an agent that takes its prompts on stdin (Claude Code's `--input-format stream-json`)
 //! as a detached turn. Like the plain turn wrapper, it outlives Squad Code: the agent's output
 //! goes to `out` and `err` in the turn folder, and `exit` holds its exit code once it
@@ -25,7 +25,7 @@ const IDLE: Duration = Duration::from_secs(10);
 pub fn main(args: &[String]) -> i32 {
     // args[0] is the mark that names Squad Code's turns in the process list.
     let (Some(turn), Some(program)) = (args.get(1), args.get(2)) else {
-        eprintln!("usage: Squad Code --agent-host runo-turn <turn folder> <agent> [args…]");
+        eprintln!("usage: Squad Code --agent-host squadcode-turn <turn folder> <agent> [args…]");
         return 2;
     };
     // An agent that speaks ACP, with its command in the turn folder.
@@ -253,7 +253,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-host-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-host-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

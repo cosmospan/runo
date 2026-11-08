@@ -1,8 +1,8 @@
 //! Squad Code's own log file, crash reports, and the check for a newer Squad Code release.
 //!
-//! Each launch writes what used to go to stderr into `~/.runo/logs/runo-<time>.log`,
+//! Each launch writes what used to go to stderr into `~/.squadcode/logs/squadcode-<time>.log`,
 //! keeping the latest few. A log that grows past `LOG_LIMIT` (a Squad Code left open for weeks)
-//! moves to `runo-<time>.log.1` and a fresh file starts, keeping `PARTS_KEPT` pieces. A
+//! moves to `squadcode-<time>.log.1` and a fresh file starts, keeping `PARTS_KEPT` pieces. A
 //! panic writes `crash-<time>.txt` there too, which the next launch offers to show.
 
 use std::io::Write;
@@ -286,7 +286,7 @@ pub fn init() {
     let dir = logs_dir();
     let _ = std::fs::create_dir_all(&dir);
     prune_launches(&dir, LOGS_KEPT - 1);
-    let path = dir.join(format!("runo-{}.log", stamp()));
+    let path = dir.join(format!("squadcode-{}.log", stamp()));
     if let Ok(mut file) = std::fs::File::create(&path) {
         let _ = START.set(now());
         let _ = writeln!(
@@ -324,7 +324,8 @@ fn prune_launches(dir: &Path, keep: usize) {
     let names: Vec<String> = entries
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.starts_with("runo-"))
+        // `runo-` is how builds from before the rename named theirs.
+        .filter(|n| n.starts_with("squadcode-") || n.starts_with("runo-"))
         .collect();
     let mut launches: Vec<&str> = names
         .iter()
@@ -374,7 +375,7 @@ fn watch_size(path: PathBuf, sink: Sink) {
         return;
     }
     let _ = std::thread::Builder::new()
-        .name("runo-log-size".into())
+        .name("squadcode-log-size".into())
         .spawn(move || loop {
             std::thread::sleep(SIZE_CHECK_EVERY);
             if std::fs::metadata(&path).map_or(0, |m| m.len()) < LOG_LIMIT {
@@ -574,7 +575,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-applog-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-applog-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -661,10 +663,10 @@ mod tests {
     fn old_logs_are_pruned() {
         let dir = temp("prune");
         for n in 0..5 {
-            std::fs::write(dir.join(format!("runo-2026100{n}.log")), "").unwrap();
+            std::fs::write(dir.join(format!("squadcode-2026100{n}.log")), "").unwrap();
         }
         std::fs::write(dir.join("crash-1.txt"), "").unwrap();
-        prune(&dir, "runo-", 2);
+        prune(&dir, "squadcode-", 2);
         let mut left: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
             .flatten()
@@ -673,13 +675,18 @@ mod tests {
         left.sort();
         assert_eq!(
             left,
-            ["crash-1.txt", "runo-20261003.log", "runo-20261004.log"]
+            [
+                "crash-1.txt",
+                "squadcode-20261003.log",
+                "squadcode-20261004.log"
+            ]
         );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     fn logs_temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-applog-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-applog-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -698,7 +705,7 @@ mod tests {
     #[test]
     fn a_full_log_moves_aside_keeping_a_few_pieces() {
         let dir = logs_temp("parts");
-        let path = dir.join("runo-20261025-100000.log");
+        let path = dir.join("squadcode-20261025-100000.log");
         for n in 0..5 {
             std::fs::write(&path, format!("piece {n}")).unwrap();
             shift_parts(&path, 3);
@@ -707,14 +714,14 @@ mod tests {
         assert_eq!(
             names_in(&dir),
             [
-                "runo-20261025-100000.log",
-                "runo-20261025-100000.log.1",
-                "runo-20261025-100000.log.2"
+                "squadcode-20261025-100000.log",
+                "squadcode-20261025-100000.log.1",
+                "squadcode-20261025-100000.log.2"
             ]
         );
         let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap();
-        assert_eq!(read("runo-20261025-100000.log.1"), "piece 4");
-        assert_eq!(read("runo-20261025-100000.log.2"), "piece 3");
+        assert_eq!(read("squadcode-20261025-100000.log.1"), "piece 4");
+        assert_eq!(read("squadcode-20261025-100000.log.2"), "piece 3");
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -722,12 +729,12 @@ mod tests {
     fn old_launches_go_with_all_their_pieces() {
         let dir = logs_temp("launches");
         for name in [
-            "runo-20261023-090000.log",
-            "runo-20261023-090000.log.1",
-            "runo-20261024-090000.log",
-            "runo-20261025-090000.log",
-            "runo-20261025-090000.log.1",
-            "runo-20261025-090000.log.2",
+            "squadcode-20261023-090000.log",
+            "squadcode-20261023-090000.log.1",
+            "squadcode-20261024-090000.log",
+            "squadcode-20261025-090000.log",
+            "squadcode-20261025-090000.log.1",
+            "squadcode-20261025-090000.log.2",
             "crash-20261023-090000.txt",
         ] {
             std::fs::write(dir.join(name), "x").unwrap();
@@ -737,10 +744,10 @@ mod tests {
             names_in(&dir),
             [
                 "crash-20261023-090000.txt",
-                "runo-20261024-090000.log",
-                "runo-20261025-090000.log",
-                "runo-20261025-090000.log.1",
-                "runo-20261025-090000.log.2"
+                "squadcode-20261024-090000.log",
+                "squadcode-20261025-090000.log",
+                "squadcode-20261025-090000.log.1",
+                "squadcode-20261025-090000.log.2"
             ]
         );
         let _ = std::fs::remove_dir_all(dir);

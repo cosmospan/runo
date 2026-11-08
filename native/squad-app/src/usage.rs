@@ -529,7 +529,7 @@ mod tests {
 
     #[test]
     fn codex_uses_the_newest_log_and_clears_past_windows() {
-        let dir = std::env::temp_dir().join(format!("runo-usage-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-usage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let day = dir.join("2026/10/14");
         std::fs::create_dir_all(&day).unwrap();

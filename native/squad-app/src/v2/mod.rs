@@ -330,7 +330,7 @@ fn painter() -> (Painters, std::sync::mpsc::Receiver<Painted>) {
         let (ask, asks) = std::sync::mpsc::channel::<Paint>();
         let done = done.clone();
         let _ = std::thread::Builder::new()
-            .name(format!("runo-bots-{i}"))
+            .name(format!("squadcode-bots-{i}"))
             .spawn(move || {
                 let mut renderers: HashMap<u16, CrewRenderer> = HashMap::new();
                 while let Ok(first) = asks.recv() {
@@ -3979,7 +3979,7 @@ mod drop_tests {
 
     #[test]
     fn dropped_files_mean_their_folder() {
-        let dir = std::env::temp_dir().join(format!("runo-drop-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-drop-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::write(dir.join("a.txt"), "x").unwrap();
         let got = folders_from(&[

@@ -62,7 +62,7 @@ fn trust_in(file: &Path, dir: &Path) -> Option<()> {
         std::fs::create_dir_all(parent).ok()?;
     }
     let text = serde_json::to_string_pretty(&Value::Object(folders)).ok()?;
-    let tmp = file.with_extension("json.runo-tmp");
+    let tmp = file.with_extension("json.squadcode-tmp");
     std::fs::write(&tmp, text).ok()?;
     std::fs::rename(&tmp, file).ok()
 }
@@ -73,7 +73,8 @@ mod tests {
 
     #[test]
     fn folders_are_trusted_once_and_distrust_is_kept() {
-        let root = std::env::temp_dir().join(format!("runo-gemini-trust-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("squadcode-gemini-trust-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("wt");
         std::fs::create_dir_all(&dir).unwrap();

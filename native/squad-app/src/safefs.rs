@@ -130,7 +130,7 @@ mod imp {
 
     pub fn write(root: &Path, parts: &[String], name: &str, data: &[u8]) -> io::Result<()> {
         let dir = open_dirs(root, parts, true)?;
-        let tmp = format!(".{name}.runo-tmp");
+        let tmp = format!(".{name}.squadcode-tmp");
         let _ = remove_in(&dir, &tmp);
         let mut file = open_file(&dir, &tmp, libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL)?;
         file.write_all(data)?;
@@ -198,7 +198,7 @@ mod imp {
 
     pub fn write(root: &Path, parts: &[String], name: &str, data: &[u8]) -> io::Result<()> {
         let dir = open_dirs(root, parts, true)?;
-        let tmp = dir.join(format!(".{name}.runo-tmp"));
+        let tmp = dir.join(format!(".{name}.squadcode-tmp"));
         let _ = std::fs::remove_file(&tmp);
         let mut file = std::fs::OpenOptions::new()
             .write(true)

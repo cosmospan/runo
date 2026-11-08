@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 
 /// What's at the top of every file written from the tokens.
 const HEADER: &str =
-    "Written by Runo from design/tokens.css. Don't edit it: hand off again to update it.";
+    "Written by Squad Code from design/tokens.css. Don't edit it: hand off again to update it.";
 
 /// A token's worked-out value.
 #[derive(Clone, Debug, PartialEq)]
@@ -703,7 +703,7 @@ pub(crate) fn dtcg(tokens: &[Token]) -> String {
         if let Some(d) = &t.dark {
             entry.insert(
                 "$extensions".into(),
-                serde_json::json!({ "com.runo.modes": { "dark": dtcg_value(d) } }),
+                serde_json::json!({ "com.squadcode.modes": { "dark": dtcg_value(d) } }),
             );
         }
         let group = root
@@ -1139,7 +1139,7 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&dtcg(&t)).unwrap();
         assert_eq!(json["color"]["primary"]["$value"], "#2563eb");
         assert_eq!(
-            json["color"]["primary"]["$extensions"]["com.runo.modes"]["dark"],
+            json["color"]["primary"]["$extensions"]["com.squadcode.modes"]["dark"],
             "#f97316"
         );
         assert_eq!(json["radius"]["sm"]["$value"]["value"], 6.0);

@@ -156,7 +156,7 @@ fn codex(dir: &Path, bin: &str, args: &[String], unknown: &mut Vec<String>) -> R
     let id = agent.request(
         "initialize",
         json!({
-            "clientInfo": { "name": "runo", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "squadcode", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
             "capabilities": null,
         }),
     );
@@ -207,7 +207,8 @@ fn pi(dir: &Path, bin: &str, args: &[String], unknown: &mut Vec<String>) -> Resu
 
 /// Every agent in the manifest, checked here.
 pub fn report() -> Report {
-    let scratch = std::env::temp_dir().join(format!("runo-check-agents-{}", std::process::id()));
+    let scratch =
+        std::env::temp_dir().join(format!("squadcode-check-agents-{}", std::process::id()));
     let agents = crate::agent::PROVIDERS
         .iter()
         .map(|p| check(p, &scratch))
@@ -458,7 +459,7 @@ mod tests {
         {
             return;
         }
-        let dir = std::env::temp_dir().join(format!("runo-compat-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-compat-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let acp_agent = dir.join("acp.py");

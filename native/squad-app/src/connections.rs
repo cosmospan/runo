@@ -5,7 +5,7 @@
 //!
 //! - **Local Cove** shares the session folder into the VM, so nothing needs copying.
 //! - **Remote connections** (SSH, or a Cove server elsewhere) keep their own copy of the
-//!   session folder. Every agent turn runs through `runo --connection-run`, which
+//!   session folder. Every agent turn runs through `SquadCode --connection-run`, which
 //!   syncs the folder up with git (uncommitted changes included), runs the agent
 //!   there, and syncs the result back. The agent's own conversation file travels too,
 //!   so a session can move between machines and resume the same conversation.
@@ -185,7 +185,7 @@ impl Default for Connection {
             host: String::new(),
             port: 0,
             identity: String::new(),
-            workdir: "runo-work".into(),
+            workdir: "squadcode-work".into(),
             keys: DEFAULT_KEYS.into(),
             github: false,
             agents: true,

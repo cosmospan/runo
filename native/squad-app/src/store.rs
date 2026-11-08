@@ -1,4 +1,4 @@
-//! Persistent projects and sessions, stored as JSON under `~/.runo` (see `persist`).
+//! Persistent projects and sessions, stored as JSON under `~/.squadcode` (see `persist`).
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -945,7 +945,8 @@ pub(crate) mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-store-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-store-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

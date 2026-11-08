@@ -266,7 +266,7 @@ impl Default for AppSettings {
         Self {
             agents: HashMap::new(),
             theme: "dark".into(),
-            color_theme: "runo".into(),
+            color_theme: "squadcode".into(),
             accent: "indigo".into(),
             pattern: "off".into(),
             pattern_content: true,
@@ -1213,7 +1213,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-settings-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-settings-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

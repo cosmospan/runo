@@ -610,7 +610,7 @@ mod tests {
         if std::env::var_os("SQUADCODE_BROWSER_TESTS").is_none() {
             return;
         }
-        let root = std::env::temp_dir().join(format!("runo-render-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-render-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         super::super::model::seed(&root).unwrap();
         let html = super::super::model::template("Sign in", "Sign in", Device::Phone).replace(
@@ -646,7 +646,7 @@ mod tests {
         assert!(saved.contains(">Log in</button>"));
 
         // Another project's canvas draws while this one's browser is still running.
-        let other = std::env::temp_dir().join(format!("runo-render-b-{}", std::process::id()));
+        let other = std::env::temp_dir().join(format!("squadcode-render-b-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&other);
         super::super::model::seed(&other).unwrap();
         std::fs::write(

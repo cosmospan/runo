@@ -1,4 +1,4 @@
-<!-- Written by Runo. It describes the files next to it; edit them, not this. -->
+<!-- Written by Squad Code. It describes the files next to it; edit them, not this. -->
 # Architecture diagrams
 
 This folder holds the project's architecture as plain TOML, drawn and edited in Squad Code's

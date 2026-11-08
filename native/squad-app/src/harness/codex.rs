@@ -1,6 +1,6 @@
 //! The Codex app-server driver. Codex turns run under Squad Code's agent host as
 //! `codex app-server`, the JSON-RPC server Codex's own apps use, instead of
-//! `codex exec`: `Squad Code --agent-host runo-turn <turn folder> --codex` reads `codex.json`
+//! `codex exec`: `Squad Code --agent-host squadcode-turn <turn folder> --codex` reads `codex.json`
 //! from the turn folder, starts or resumes the thread and runs each prompt from `in` as a
 //! turn. A message sent while a turn runs steers it (`turn/steer`), so Codex reads it
 //! before its next step.
@@ -260,7 +260,7 @@ fn open(agent: &mut Agent, h: &Handler) -> Result<String, String> {
     let id = agent.request(
         "initialize",
         json!({
-            "clientInfo": { "name": "runo", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": "squadcode", "title": "Squad Code", "version": env!("CARGO_PKG_VERSION") },
             "capabilities": null,
         }),
     );
@@ -524,7 +524,8 @@ mod host_tests {
     use std::path::PathBuf;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-codex-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-codex-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

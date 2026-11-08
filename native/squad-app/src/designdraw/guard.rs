@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn libraries_and_mapped_variants_are_put_back() {
-        let dir = std::env::temp_dir().join(format!("runo-guard-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-guard-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let comps = library::folder(&dir);
         let lib = comps.join("brand");

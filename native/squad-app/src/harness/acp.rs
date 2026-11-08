@@ -1,7 +1,7 @@
 //! The Agent Client Protocol (ACP) driver. Agents that speak ACP (OpenCode's `acp`,
 //! Gemini CLI and Qwen Code's `--acp`, Copilot's `--acp --stdio`, Cursor's `acp`) run
 //! under Squad Code's agent host as one live session per turn instead of a print-mode run:
-//! `Squad Code --agent-host runo-turn <turn folder> --acp` reads `acp.json` from the turn
+//! `Squad Code --agent-host squadcode-turn <turn folder> --acp` reads `acp.json` from the turn
 //! folder, starts the agent, opens or reloads the conversation and sends it each prompt
 //! from `in`, one after another.
 //!
@@ -11,7 +11,7 @@
 //! servers go in `session/new`, so nothing is merged into the agent's project files.
 //!
 //! The agent's `session/update` notifications go to `out` as they are, with the host's
-//! own lines (`{"runo": …}`) for what only it knows: the conversation id, the end of a
+//! own lines (`{"squadcode": …}`) for what only it knows: the conversation id, the end of a
 //! prompt, an error. `AcpStream` turns those into `AgentEvent`s. When the agent can't
 //! start a session at all (an older release without ACP, a crash at start), the host
 //! runs the turn's print-mode command instead and says so in `out`, so the turn still
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn writes_stay_inside_the_session_folder() {
-        let dir = std::env::temp_dir().join(format!("runo-acp-fs-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-acp-fs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         let cwd = dir.to_string_lossy().to_string();
@@ -566,7 +566,7 @@ mod tests {
         );
         let outside = dir.join("../escape.txt");
         assert!(write_file(&cwd, &json!({ "path": outside, "content": "x" })).is_err());
-        assert!(write_file(&cwd, &json!({ "path": "/etc/runo-x", "content": "x" })).is_err());
+        assert!(write_file(&cwd, &json!({ "path": "/etc/squadcode-x", "content": "x" })).is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 }
