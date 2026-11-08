@@ -224,14 +224,14 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<String> {
-        let (term, dir) = match job.and_then(|id| self.crew.store.job(id)) {
-            Some(j) => (j.id, j.dir().to_string()),
+        let (term, dir, jid) = match job.and_then(|id| self.crew.store.job(id)) {
+            Some(j) => (j.id, j.dir().to_string(), j.id),
             None => {
                 let f = self.crew.store.folder()?;
-                (project_id(self.crew.store.current), f.path.clone())
+                (project_id(self.crew.store.current), f.path.clone(), 0)
             }
         };
-        let (cmd, url) = super::work::start_command(&dir)?;
+        let (cmd, url) = super::work::start_command(&dir, jid)?;
         self.term_run(term, &cmd, window, cx);
         if !self.serving.contains(&term) {
             self.serving.push(term);

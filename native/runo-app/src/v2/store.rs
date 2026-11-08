@@ -55,10 +55,20 @@ pub struct Store {
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<Talk>,
+    /// Each thread's running summary, which bots read (`brain::summary`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub summaries: Vec<super::brain::summary::Summary>,
     /// What each bot can do beyond its kind of work (instructions, skill files,
     /// connected apps, permissions, memory), by `engine::bot_key`.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub setups: HashMap<String, super::setup::Setup>,
+    /// Jobs waiting to start: at a time you picked (the night shift), or
+    /// once their bot is free.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<super::shift::Later>,
+    /// What bots learned from your send-backs, each for one project.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lessons: Vec<super::learn::Lesson>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
@@ -330,6 +340,31 @@ pub struct Job {
     /// Other jobs in the same project whose work clashes with this one's:
     /// their id and where ("total.ts around line 40").
     pub clash_with: Vec<(u64, String)>,
+    /// Where its files stood before each turn, so it can be rewound to any of
+    /// them (see `rewind`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<super::rewind::Mark>,
+    /// It was rewound and its engine's conversation dropped: the next turn is
+    /// told what's still true.
+    pub rewound: bool,
+    /// When it carries on by itself after its engine's plan resets; 0 when
+    /// it isn't waiting.
+    pub resume_at: u64,
+    /// Times it was picked up again after running out of plan.
+    pub resumes: u8,
+    /// It started on the night shift: when its engine runs out, another
+    /// engine may take over rather than waiting.
+    pub shift: bool,
+    /// The issue it's for, as the line its pull request closes it with
+    /// ("Closes #12", "Fixes ENG-42"), and the issue's address.
+    pub issue: String,
+    pub issue_url: String,
+    /// The newest review feedback on its pull request already handed to its
+    /// bot, as GitHub's time.
+    pub pr_seen: String,
+    /// Its bot is answering review comments on the open pull request: when
+    /// the turn ends, Shipper pushes the fix to the same pull request.
+    pub answering: bool,
 }
 
 /// One file a job changed.
@@ -413,6 +448,15 @@ impl Default for Job {
             ahead: 0,
             behind: 0,
             clash_with: Vec::new(),
+            marks: Vec::new(),
+            rewound: false,
+            resume_at: 0,
+            resumes: 0,
+            shift: false,
+            issue: String::new(),
+            issue_url: String::new(),
+            pr_seen: String::new(),
+            answering: false,
         }
     }
 }
@@ -684,6 +728,7 @@ impl Store {
         }
         super::data::set_made(&s.made);
         super::setup::set_all(&s.setups);
+        super::learn::set_all(&s.lessons);
         super::data::set_removed(&s.removed);
         if s.current >= s.folders.len() {
             s.current = 0;
@@ -829,6 +874,16 @@ impl Store {
     /// A thread's conversation so far, oldest first, as (who, words): what you
     /// asked and what came back, for Peek to read a follow-up by.
     pub fn recent(&self, folder: &str, thread: u64) -> Vec<(String, String)> {
+        let said = self.said_in(folder, thread);
+        let n = said.len();
+        said.into_iter()
+            .skip(n.saturating_sub(12))
+            .map(|(_, who, words)| (who, words))
+            .collect()
+    }
+
+    /// Everything said in a thread, oldest first, with when: (at, who, words).
+    pub fn said_in(&self, folder: &str, thread: u64) -> Vec<(u64, String, String)> {
         let mut said: Vec<(u64, String, String)> = Vec::new();
         for t in &self.talks {
             if t.folder == folder && self.thread_for(folder, t.thread) == thread {
@@ -848,11 +903,78 @@ impl Store {
             }
         }
         said.sort_by_key(|s| s.0);
-        let n = said.len();
-        said.into_iter()
-            .skip(n.saturating_sub(12))
-            .map(|(_, who, words)| (who, words))
-            .collect()
+        said
+    }
+
+    /// A thread's summary, if it has one.
+    pub fn summary(&self, folder: &str, thread: u64) -> Option<&super::brain::summary::Summary> {
+        let thread = self.thread_for(folder, thread);
+        self.summaries
+            .iter()
+            .find(|s| s.folder == folder && s.thread == thread)
+    }
+
+    /// A thread's notes and summary, for Peek as it reads a message there.
+    pub fn summary_brief(&self, folder: &str, thread: u64) -> String {
+        let label = self.thread_label(self.thread_for(folder, thread));
+        super::brain::summary::context(&label, self.summary(folder, thread), &[], &[])
+    }
+
+    /// A thread's summary, made empty when it has none yet.
+    pub fn summary_mut(
+        &mut self,
+        folder: &str,
+        thread: u64,
+    ) -> &mut super::brain::summary::Summary {
+        let thread = self.thread_for(folder, thread);
+        let at = self
+            .summaries
+            .iter()
+            .position(|s| s.folder == folder && s.thread == thread);
+        let i = match at {
+            Some(i) => i,
+            None => {
+                self.summaries.push(super::brain::summary::Summary {
+                    folder: folder.to_string(),
+                    thread,
+                    ..Default::default()
+                });
+                self.summaries.len() - 1
+            }
+        };
+        &mut self.summaries[i]
+    }
+
+    /// What a bot reads about a thread before it answers or works there: the
+    /// person's notes, the summary, the thread's jobs, and the latest
+    /// messages word for word. `skip` leaves out the ask itself.
+    pub fn thread_context(&self, folder: &str, thread: u64, skip: &str) -> String {
+        let label = self.thread_label(self.thread_for(folder, thread));
+        let recent: Vec<(String, String)> = self
+            .recent(folder, thread)
+            .into_iter()
+            .filter(|(_, w)| w.trim() != skip.trim())
+            .collect();
+        let jobs: Vec<String> = self
+            .jobs_in(folder, thread)
+            .into_iter()
+            .filter(|j| j.race == 0 || j.race == j.id)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .take(8)
+            .rev()
+            .map(|j| {
+                format!(
+                    "- #{} {}: {} ({})",
+                    j.id,
+                    j.bot.name(),
+                    j.label(),
+                    j.status.label()
+                )
+            })
+            .collect();
+        super::brain::summary::context(&label, self.summary(folder, thread), &jobs, &recent)
     }
 
     /// Deletes a thread and what was said in it. Its jobs and plans hold real
@@ -1476,5 +1598,33 @@ mod tests {
         let back: Store = serde_json::from_str(old).unwrap();
         assert_eq!(back.chat(Member::Explainer)[0].text, "hi");
         assert_eq!(back.next_id, 4);
+    }
+
+    #[test]
+    fn bots_read_a_threads_notes_summary_and_latest_words() {
+        let mut s = Store::default();
+        let f = "/tmp/shop";
+        for i in 0..9u64 {
+            s.talks.push(Talk {
+                id: i + 1,
+                folder: f.into(),
+                thread: 0,
+                bot: Member::Fin,
+                question: format!("question {i}"),
+                answer: Some(Said::bot(format!("answer {i}"), String::new())),
+                at: 100 + i,
+                choices: Vec::new(),
+            });
+        }
+        assert_eq!(s.said_in(f, 0).len(), 18);
+        let sum = s.summary_mut(f, 0);
+        sum.text = "For:\n- Discussion about research teams\nDecided:\n- none".into();
+        sum.notes.push("No new vendors".into());
+        let c = s.thread_context(f, 0, "question 8");
+        assert!(c.contains("No new vendors") && c.contains("research teams"));
+        assert!(c.contains("answer 8") && !c.contains("question 8") && !c.contains("answer 4"));
+        // One summary per thread, found again rather than made twice.
+        s.summary_mut(f, 0);
+        assert_eq!(s.summaries.len(), 1);
     }
 }

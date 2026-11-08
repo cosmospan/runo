@@ -420,6 +420,38 @@ pub fn seed() -> Store {
     };
     Store {
         setups,
+        // The night shift: one job waiting for tonight, one for its bot.
+        later: vec![
+            super::shift::Later {
+                id: 900,
+                bot: Member::Keeper,
+                mode: Mode::Tidy,
+                text: "Update the dependencies and fix what breaks".into(),
+                folder: folder.clone(),
+                thread: 0,
+                at: t + 6 * 3600,
+                made: t - 600,
+                ..Default::default()
+            },
+            super::shift::Later {
+                id: 901,
+                bot: Member::Builder,
+                mode: Mode::Build,
+                text: "Add a receipt email after checkout".into(),
+                folder: folder.clone(),
+                thread: 1,
+                at: 0,
+                made: t - 120,
+                ..Default::default()
+            },
+        ],
+        lessons: vec![super::learn::Lesson {
+            bot: Member::Builder,
+            folder: folder.path.clone(),
+            text: "Use the money helpers in src/lib/money.ts, never floats, for prices.".into(),
+            job: 1,
+            at: t - 3_000,
+        }],
         threads: vec![
             thread(
                 1,
@@ -440,6 +472,20 @@ pub fn seed() -> Store {
             .into_iter()
             .map(|(id, at)| (format!("{}#{id}", folder.path), at))
             .collect(),
+        summaries: vec![super::brain::summary::Summary {
+            folder: folder.path.clone(),
+            thread: 1,
+            text: "For:\n- Building gift cards and coupons into checkout\n\
+                   Decided:\n- Discounts come off before tax\n- Gift cards can't buy other gift cards\n\
+                   Open:\n- Should a coupon and a gift card stack?\n\
+                   Preferences:\n- Keep checkout to one page"
+                .into(),
+            notes: vec!["Launch is Friday: no new payment providers".into()],
+            covers: 9,
+            upto: t - 1_500,
+            updates: 2,
+            at: t - 1_400,
+        }],
         talks: vec![super::store::Talk {
             id: 1,
             folder: folder.path.clone(),
@@ -568,8 +614,26 @@ pub fn repos() -> std::collections::HashMap<String, super::runtime::RepoLine> {
     std::iter::once((
         path,
         super::runtime::RepoLine {
+            is_repo: true,
             state,
-            dirty: false,
+            dirty: true,
+            changes: vec![
+                ("M".into(), "src/checkout/tax.ts".into()),
+                ("??".into(), "notes/launch.md".into()),
+            ],
+            changed: 2,
+            commits: [
+                ("a41c9e2", "Merge #6: order history page", "2 hours ago"),
+                (
+                    "7d03b11",
+                    "Show the delivery date on the receipt",
+                    "5 hours ago",
+                ),
+                ("e19f2a0", "Round tax per line, not per order", "yesterday"),
+                ("3b8c6d4", "Move cart totals into one module", "2 days ago"),
+            ]
+            .map(|(h, s, t)| (h.to_string(), s.to_string(), t.to_string()))
+            .to_vec(),
         },
     ))
     .collect()

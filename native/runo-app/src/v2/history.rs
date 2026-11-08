@@ -126,6 +126,10 @@ impl Shell {
                                     .child(super::home::pill(&word, tone)),
                             ),
                     )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        self.on_menu(super::menu::Ctx::Job(id), cx),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.inbox_pick = Some(id);
                         cx.notify();
@@ -750,6 +754,10 @@ impl Shell {
                             .child(store::plain_step(&j.doing(), true)),
                     ),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                self.on_menu(super::menu::Ctx::Job(id), cx),
+            )
             .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
     }
 
@@ -849,6 +857,10 @@ impl Shell {
                         "just now" => "now".to_string(),
                         a => a.to_string(),
                     }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                self.on_menu(super::menu::Ctx::Job(id), cx),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
     }
