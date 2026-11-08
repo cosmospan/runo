@@ -149,19 +149,6 @@ fn small_btn(id: impl Into<ElementId>, icon: IconName) -> Stateful<Div> {
         .child(Icon::new(icon).size(px(14.)))
 }
 
-/// A dot in a rail button's corner: something needs you there.
-fn badge(color: u32) -> Div {
-    div()
-        .absolute()
-        .top(px(2.))
-        .right(px(2.))
-        .size(px(9.))
-        .rounded_full()
-        .bg(c(color))
-        .border_2()
-        .border_color(c(ui::ground()))
-}
-
 /// A tooltip saying `text`.
 fn tip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
     let text: SharedString = text.into();
@@ -191,10 +178,6 @@ const TINTS: [u32; 6] = [
     ui::RED,
 ];
 
-fn project_tint(i: usize) -> u32 {
-    TINTS[i % TINTS.len()]
-}
-
 /// #general is grey; every other thread takes a colour of its own.
 fn thread_tint(id: u64) -> u32 {
     if id == 0 {
@@ -204,26 +187,129 @@ fn thread_tint(id: u64) -> u32 {
     }
 }
 
-/// A project's first letter on a coloured tile.
-fn tile(name: &str, tint: u32, size: f32) -> Div {
+/// A project's colour, the same wherever it sits in the list.
+fn path_tint(path: &str) -> u32 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut h);
+    TINTS[(h.finish() % TINTS.len() as u64) as usize]
+}
+
+/// Up to two letters for a project: the first of its first two words
+/// ("squad-code" is SC, "myApp" is MA), else its first two ("shop" is Sh).
+fn initials(name: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    let mut word = String::new();
+    let mut prev_lower = false;
+    for ch in name.chars() {
+        if !ch.is_alphanumeric() {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+            prev_lower = false;
+            continue;
+        }
+        if ch.is_uppercase() && prev_lower && !word.is_empty() {
+            words.push(std::mem::take(&mut word));
+        }
+        prev_lower = ch.is_lowercase();
+        word.push(ch);
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    match words.as_slice() {
+        [] => "?".into(),
+        [one] => {
+            let mut cs = one.chars();
+            let a: String = cs
+                .next()
+                .map(|c| c.to_uppercase().collect())
+                .unwrap_or_default();
+            let b: String = cs
+                .next()
+                .map(|c| c.to_lowercase().collect())
+                .unwrap_or_default();
+            format!("{a}{b}")
+        }
+        [a, b, ..] => [a, b]
+            .iter()
+            .filter_map(|w| w.chars().next())
+            .flat_map(|c| c.to_uppercase())
+            .collect(),
+    }
+}
+
+/// A project's tile: its letters on a soft wash of its colour, filled in
+/// solid for the project you're in.
+fn monogram(name: &str, tint: u32, on: bool) -> Div {
     div()
-        .size(px(size))
+        .size(px(38.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(size * 0.28))
-        .bg(c(tint))
-        .text_color(c(0xFFFFFF))
-        .text_size(px(size * 0.56))
+        .rounded(px(12.))
+        .text_size(px(14.))
         .font_weight(FontWeight::BOLD)
-        .child(
-            name.chars()
-                .next()
-                .unwrap_or('?')
-                .to_uppercase()
-                .to_string(),
-        )
+        .map(|d| {
+            if on {
+                d.bg(c(tint))
+                    .text_color(c(0xFFFFFF))
+                    .shadow(vec![BoxShadow {
+                        color: hsla(0., 0., 0., 0.18),
+                        offset: point(px(0.), px(2.)),
+                        blur_radius: px(6.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+            } else {
+                d.bg(c(super::theme::mix(ui::raised(), tint, 0.16)))
+                    .border_1()
+                    .border_color(c(super::theme::mix(ui::raised(), tint, 0.32)))
+                    .text_color(c(super::theme::mix(tint, ui::ink(), 0.3)))
+            }
+        })
+        .child(initials(name))
+}
+
+/// How many things in a project wait on you, on the tile's corner.
+fn count_badge(n: usize) -> Div {
+    div()
+        .absolute()
+        .top(px(-5.))
+        .right(px(-6.))
+        .min_w(px(18.))
+        .h(px(18.))
+        .px(px(4.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .bg(c(ui::RED))
+        .border_2()
+        .border_color(c(ui::ground()))
+        .text_size(px(10.))
+        .font_weight(FontWeight::BOLD)
+        .text_color(c(0xFFFFFF))
+        .child(if n > 9 {
+            "9+".to_string()
+        } else {
+            n.to_string()
+        })
+}
+
+/// A blue dot on the tile's foot while the crew works in the project.
+fn busy_dot() -> Div {
+    div()
+        .absolute()
+        .bottom(px(-3.))
+        .right(px(-3.))
+        .size(px(11.))
+        .rounded_full()
+        .bg(c(ui::BLUE))
+        .border_2()
+        .border_color(c(ui::ground()))
 }
 
 /// What a section's + does.
@@ -269,7 +355,7 @@ impl Shell {
     pub(super) fn sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let rail = self.rail(inbox, cx);
+        let rail = self.rail(cx);
         let panel = (!self.side_slim).then(|| self.panel(inbox, cx));
         div()
             .id("sidebar")
@@ -288,7 +374,7 @@ impl Shell {
 
     /// The icon rail: Peek on top, the places, your projects as tiles, and
     /// Settings at the foot.
-    fn rail(&mut self, inbox: usize, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn rail(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let place = self.place;
 
         // Peek, the lead, as the app's mark: a click opens Peek's chat.
@@ -301,41 +387,6 @@ impl Shell {
             .tooltip(tip("Peek, your lead"))
             .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_bot(Member::Fin, *on, cx)))
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Chat(Member::Fin), cx)));
-
-        let places = div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(4.))
-            .child(
-                rail_btn(
-                    "rail-threads",
-                    matches!(
-                        place,
-                        Place::Today | Place::Live(_) | Place::Race(_) | Place::Goal(_)
-                    ),
-                )
-                .child(Icon::new(IconName::Hash).size(px(18.)))
-                .tooltip(tip("Threads"))
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Today, cx))),
-            )
-            .child(
-                rail_btn("rail-inbox", place == Place::Inbox)
-                    .child(Icon::new(IconName::Inbox).size(px(18.)))
-                    .when(inbox > 0, |d| d.child(badge(ui::RED)))
-                    .tooltip(tip(if inbox > 0 {
-                        format!("Needs you: {inbox}")
-                    } else {
-                        "Needs you".into()
-                    }))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
-            )
-            .child(
-                rail_btn("rail-crew", place == Place::Crew)
-                    .child(Icon::new(IconName::Users).size(px(18.)))
-                    .tooltip(tip("Your crew"))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
-            );
 
         // Your projects as tiles, the one you're in ringed: a dot when
         // something in it needs you, blue while the crew works there.
@@ -364,36 +415,57 @@ impl Shell {
             let busy: usize = rows.iter().map(|r| r.2).sum();
             let asks: usize = rows.iter().map(|r| r.3).sum();
             let on = i == current;
+            let unread = !on && rows.iter().any(|r| self.crew.store.unread(&path, r.0));
             let mut say = format!("{name}\n{}", short_path(&path));
             if asks > 0 {
                 say.push_str(&format!("\n{asks} waiting on you"));
-            } else if busy > 0 {
+            }
+            if busy > 0 {
                 say.push_str(&format!("\n{busy} running"));
             }
+            if unread {
+                say.push_str("\nNew messages");
+            }
+            let group: SharedString = format!("rail-p-{i}").into();
+            let tint = path_tint(&path);
+            // A pill on the rail's edge: tall for the project you're in,
+            // short for one with something new, a nub on hover.
+            let pill = div()
+                .absolute()
+                .left(px(0.))
+                .top_0()
+                .bottom_0()
+                .flex()
+                .items_center()
+                .child(div().w(px(4.)).rounded_r(px(3.)).bg(c(ui::ink())).map(|d| {
+                    if on {
+                        d.h(px(28.))
+                    } else if unread {
+                        d.h(px(8.)).group_hover(group.clone(), |s| s.h(px(16.)))
+                    } else {
+                        d.h(px(0.)).group_hover(group.clone(), |s| s.h(px(14.)))
+                    }
+                }));
             list = list.child(
                 div()
                     .id(("rail-project", i))
-                    .size(px(40.))
+                    .group(group.clone())
+                    .w_full()
+                    .h(px(44.))
                     .flex_none()
                     .flex()
                     .items_center()
                     .justify_center()
                     .relative()
-                    .rounded(px(12.))
-                    .border_2()
                     .cursor_pointer()
-                    .map(|d| {
-                        if on {
-                            d.border_color(c(ui::ink()))
-                        } else {
-                            d.border_color(transparent_black())
-                                .opacity(0.85)
-                                .hover(|s| s.opacity(1.).border_color(c(ui::line_hi())))
-                        }
-                    })
-                    .child(tile(&name, project_tint(i), 32.))
-                    .when(asks > 0, |d| d.child(badge(ui::AMBER)))
-                    .when(asks == 0 && busy > 0, |d| d.child(badge(ui::BLUE)))
+                    .child(pill)
+                    .child(
+                        div()
+                            .relative()
+                            .child(monogram(&name, tint, on))
+                            .when(asks > 0, |d| d.child(count_badge(asks)))
+                            .when(busy > 0, |d| d.child(busy_dot())),
+                    )
                     .tooltip(tip(say))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if this.crew.store.current != i {
@@ -405,14 +477,34 @@ impl Shell {
             );
         }
         list = list.child(
-            rail_btn("rail-add-project", false)
-                .size(px(32.))
-                .rounded(px(9.))
-                .border_dashed()
-                .border_color(c(ui::line_hi()))
-                .child(Icon::new(IconName::Plus).size(px(15.)))
-                .tooltip(tip("Add a project folder"))
-                .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+            div()
+                .w_full()
+                .h(px(44.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    div()
+                        .id("rail-add-project")
+                        .size(px(38.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(12.))
+                        .border_1()
+                        .border_dashed()
+                        .border_color(c(ui::line_hi()))
+                        .text_color(c(ui::muted()))
+                        .cursor_pointer()
+                        .hover(|s| {
+                            s.border_color(ui::ca(ui::VIOLET, 0.6))
+                                .bg(ui::ca(ui::VIOLET, 0.08))
+                                .text_color(c(ui::t_violet()))
+                        })
+                        .child(Icon::new(IconName::Plus).size(px(16.)))
+                        .tooltip(tip("Add a project folder"))
+                        .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
+                ),
         );
 
         let slim = self.side_slim;
@@ -458,7 +550,6 @@ impl Shell {
             .bg(ui::ca(ui::ink(), 0.03))
             .when(!slim, |d| d.border_r_1().border_color(c(ui::line2())))
             .child(logo)
-            .child(places)
             .child(div().w(px(22.)).h(px(1.)).my(px(6.)).bg(c(ui::line())))
             .child(list)
             .child(foot)
@@ -558,6 +649,12 @@ impl Shell {
                     .child(Icon::new(IconName::ChartColumn).size(px(16.)))
                     .child("Usage")
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
+            )
+            .child(
+                row("side-crew", place == Place::Crew)
+                    .child(Icon::new(IconName::Users).size(px(16.)))
+                    .child("Your crew")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             );
 
         let threads = self.thread_list(cx);
@@ -1320,5 +1417,19 @@ impl Shell {
                 .child(deferred(card).with_priority(6))
                 .into_any_element(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::initials;
+
+    #[test]
+    fn a_project_gets_up_to_two_letters() {
+        assert_eq!(initials("squad-code"), "SC");
+        assert_eq!(initials("myApp"), "MA");
+        assert_eq!(initials("shop"), "Sh");
+        assert_eq!(initials("x"), "X");
+        assert_eq!(initials("--"), "?");
     }
 }
