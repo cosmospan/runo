@@ -4,6 +4,16 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- The night shift. Start a job later with `/later tonight`, `/later 2am`, `/later in 2h` or `/later tomorrow at 7am` (or `squad later`), and it waits in a Waiting list over the thread's box, with Start now and Cancel. A job for a bot that's busy waits there too and starts when the bot is free. When an engine says its plan ran out, the job picks up again on its own when the limit resets; on the night shift it switches to another engine instead of waiting.
+- Rewind a job to any message. "Rewind to before this" over a message you sent puts the job's files back the way they were then and drops what came after, so you can say it differently (`squad rewind <id> [n]` too).
+- Issues in, pull requests out. Name a GitHub issue ("issue 12", a link) or a Linear one (ENG-42, a link) and the job reads it first; its pull request says "Closes" it, so merging closes the issue. Review comments on a job's pull request go back to its bot, which answers them and pushes again. `squad issue` and `squad linear key` set it up.
+- A project file. `squad.toml` at the top of a repository says how every job sets up (`setup`), which ignored files it copies (`copy`), how to run the app and on which port (`run`, `url`, `port`, so two jobs never fight over 3000) and which checks Checker runs. `squad project init` writes a starting one from what Squad finds.
+- Point and change in the browser. "Point at it" in a job's browser lets you click any part of the page and say what to change; the bot gets the element, its selector and your words.
+- Bots learn from send-backs. When you send work back, Squad asks whether there's a lasting rule in what you said, and the bot keeps it for that project ("Builder will remember this in checkout: …"). `squad lessons` lists them, and `squad lessons forget` drops one.
+- Line comments in review. Click a line of a job's diff to leave a comment on it; "Send back with N comments" sends them all to the bot at once.
+
 ## [2.0.0-alpha.7] - 2026-11-08
 
 ### Added
