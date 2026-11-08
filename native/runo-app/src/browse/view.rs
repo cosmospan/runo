@@ -42,6 +42,9 @@ pub struct Picked {
     pub text: String,
     pub html: String,
     pub url: String,
+    /// Where it sits, when that helps find it: its table row or heading, and
+    /// the frame or shadow DOM it's inside.
+    pub where_: String,
 }
 
 impl Picked {
@@ -53,6 +56,7 @@ impl Picked {
             text: s("text"),
             html: s("html"),
             url: s("url"),
+            where_: s("where"),
         }
     }
 
@@ -79,9 +83,14 @@ impl Picked {
     /// What the bot is told: where it is and what the person wants.
     pub fn ask(&self, words: &str) -> String {
         format!(
-            "On the page {url}, change {short}: {words}\n\nThe element: `{sel}`\n```html\n{html}\n```\nFind it in the code, make the change, and check it in the job's browser.",
+            "On the page {url}, change {short}{where_}: {words}\n\nThe element: `{sel}`\n```html\n{html}\n```\nFind it in the code, make the change, and check it in the job's browser.",
             url = self.url,
             short = self.short(),
+            where_ = if self.where_.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", self.where_)
+            },
             words = words.trim(),
             sel = self.selector,
             html = self.html,
@@ -90,29 +99,95 @@ impl Picked {
 }
 
 /// Finds and describes the element at __X__, __Y__, outlining it briefly.
-const PICK_JS: &str = r#"(() => {
-  const el = document.elementFromPoint(__X__, __Y__);
-  if (!el) return null;
+const PICK_JS: &str = r##"(() => {
+  let x = __X__, y = __Y__, doc = document, el = doc.elementFromPoint(x, y);
+  const inside = [];
+  const esc = (v) => (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/[^\w-]/g, '\\$&');
   const sel = (e) => {
+    const root = e.getRootNode();
+    const one = (s) => { try { return root.querySelectorAll(s).length === 1; } catch (_) { return false; } };
     const parts = [];
-    while (e && e.nodeType === 1 && parts.length < 4) {
-      let s = e.tagName.toLowerCase();
-      if (e.id) { parts.unshift(s + '#' + e.id); break; }
-      const cls = [...e.classList].slice(0, 2).join('.');
-      if (cls) s += '.' + cls;
-      parts.unshift(s);
+    while (e && e.nodeType === 1) {
+      const tag = e.tagName.toLowerCase();
+      if (e.id && !/^\d/.test(e.id) && e.id.length < 40) {
+        parts.unshift('#' + esc(e.id));
+        if (one(parts.join(' > '))) break;
+      } else {
+        let s = tag;
+        const attr = ['data-testid', 'data-test', 'data-cy', 'name', 'aria-label']
+          .find((a) => e.getAttribute(a));
+        if (attr) {
+          s += '[' + attr + '="' + e.getAttribute(attr).replace(/"/g, '\\"').slice(0, 60) + '"]';
+        } else {
+          const cls = [...e.classList].filter((c) => c.length < 30 && !/^\d/.test(c)).slice(0, 2);
+          if (cls.length) s += '.' + cls.map(esc).join('.');
+        }
+        const p = e.parentElement || (e.parentNode && e.parentNode.host ? null : e.parentNode);
+        if (p && p.children) {
+          const same = [...p.children].filter((c) => c.tagName === e.tagName);
+          if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(e) + 1) + ')';
+        }
+        parts.unshift(s);
+        // A bare tag alone says too little to find it in the code.
+        if (one(parts.join(' > ')) && (parts.length > 1 || s !== tag)) break;
+      }
+      if (parts.length >= 8) break;
       e = e.parentElement;
     }
     return parts.join(' > ');
   };
-  const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('alt') || '')
-    .trim().replace(/\s+/g, ' ').slice(0, 80);
+  // Into same-origin frames and open shadow roots, to the element really there.
+  for (let i = 0; el && i < 10; i++) {
+    if (el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (inner && inner !== el) {
+        inside.push('the shadow DOM of `' + sel(el) + '`');
+        el = inner;
+        continue;
+      }
+    }
+    if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
+      let d = null;
+      try { d = el.contentDocument; } catch (_) {}
+      if (d) {
+        const r = el.getBoundingClientRect();
+        x -= r.left + el.clientLeft; y -= r.top + el.clientTop;
+        inside.push('the frame `' + sel(el) + '`' + (el.src ? ' (' + el.src + ')' : ''));
+        doc = d; el = d.elementFromPoint(x, y);
+        continue;
+      }
+    }
+    break;
+  }
+  if (!el) return null;
+  // A click on an icon or a word inside a button means the button.
+  if (el instanceof (doc.defaultView || window).SVGElement && el.ownerSVGElement) el = el.closest('svg') || el;
+  const act = el.closest && el.closest('a,button,label,summary,select,textarea,input,[role=button],[role=link],[role=tab],[role=menuitem]');
+  if (act && act !== el && act.contains(el)) {
+    let depth = 0;
+    for (let e = el; e && e !== act; e = e.parentElement) depth++;
+    if (depth <= 4) el = act;
+  }
+  const clean = (t) => (t || '').trim().replace(/\s+/g, ' ');
+  const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') ||
+    el.getAttribute('alt') || el.getAttribute('placeholder')).slice(0, 80);
+  // Where it sits: the row it's in, or the nearest heading of the box around it.
+  let near = '';
+  const row = el.closest('tr');
+  if (row && row !== el) near = 'in the table row “' + clean(row.innerText).slice(0, 80) + '”';
+  for (let a = el.parentElement, i = 0; !near && a && a !== doc.body && i < 6; a = a.parentElement, i++) {
+    const hs = [...a.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading],legend,caption')]
+      .filter((h) => !el.contains(h) && (h.compareDocumentPosition(el) & 4) && clean(h.innerText));
+    const h = hs[hs.length - 1];
+    if (h) near = 'under “' + clean(h.innerText).slice(0, 60) + '”';
+  }
   const html = el.outerHTML.slice(0, 400);
   const was = el.style.outline;
   el.style.outline = '3px solid #f59e0b';
   setTimeout(() => { el.style.outline = was; }, 1600);
-  return { tag: el.tagName.toLowerCase(), sel: sel(el), text, html, url: location.href };
-})()"#;
+  const where = [near, ...inside.reverse().map((s) => 'inside ' + s)].filter(Boolean).join(', ');
+  return { tag: el.tagName.toLowerCase(), sel: sel(el), text, html, url: location.href, where };
+})()"##;
 
 /// A point in the view (from its top-left) as page CSS pixels, when it's on the page.
 /// The page is fitted into `area` keeping its shape, and centred.
@@ -437,6 +512,23 @@ mod pick_tests {
                 && ask.contains("make it green")
                 && ask.contains("form > button.pay")
         );
+    }
+
+    #[test]
+    fn where_it_sits_goes_into_the_ask() {
+        let p = Picked::from_json(
+            &json!({"tag": "button", "sel": "button.cta", "text": "Claim offer",
+            "where": "inside the shadow DOM of `main > promo-banner`"}),
+        );
+        assert!(p
+            .ask("make it bigger")
+            .contains("the button \u{201c}Claim offer\u{201d} (inside the shadow DOM of `main > promo-banner`): make it bigger"));
+    }
+
+    #[test]
+    fn the_pick_script_has_its_placeholders() {
+        assert!(PICK_JS.contains("__X__") && PICK_JS.contains("__Y__"));
+        assert!(PICK_JS.contains("shadowRoot") && PICK_JS.contains("contentDocument"));
     }
 }
 
