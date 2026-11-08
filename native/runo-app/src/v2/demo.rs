@@ -579,6 +579,7 @@ pub fn seed() -> Store {
             },
         ],
         demo: true,
+        ..Default::default()
     }
 }
 

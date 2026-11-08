@@ -24,6 +24,8 @@ All notable changes to Runo are documented here.
 - Point and change in the browser. "Point at it" in a job's browser lets you click any part of the page and say what to change; the bot gets the element, its selector and your words.
 - Bots learn from send-backs. When you send work back, Squad asks whether there's a lasting rule in what you said, and the bot keeps it for that project ("Builder will remember this in checkout: …"). `squad lessons` lists them, and `squad lessons forget` drops one.
 - Line comments in review. Click a line of a job's diff to leave a comment on it; "Send back with N comments" sends them all to the bot at once.
+- Saving jobs costs less as history grows. Each job's feed is kept in its own file (`jobs/<id>.json`) and written only when it changed, so `v2.json` holds just the jobs, threads and chats. The window writes saves on its next tick, at most about once a second, instead of at each of the 90 places that asked, and writes what's left when Squad Code quits. Feeds saved inside `v2.json` by earlier builds still load and move out on the next save.
+
 ### Fixed
 
 - Saved jobs, threads and chats are no longer lost when `v2.json` can't be read. A file cut off by a crash, or saved by a newer Squad Code, used to be replaced by an empty store on the next save. Now a job or feed line this build can't read is left out on its own, the file is copied or moved aside first, Squad Code says so once, and a copy from before each launch (`v2.json.prev`) is used when the file is cut off. Saves are flushed to disk before they replace the old file.
