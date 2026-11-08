@@ -100,6 +100,31 @@ pub struct Runtime {
     /// Tool uses running jobs wait on your yes for, oldest first.
     pub asks: Vec<crate::approvals::Request>,
     asks_at: Instant,
+    /// The git look at jobs' branches running now, and when the last one began:
+    /// commits ahead and behind, and jobs whose work clashes.
+    git_look: Option<Receiver<GitLook>>,
+    git_looked: Instant,
+    /// Each project folder's git state, from the last look.
+    pub repos: HashMap<String, RepoLine>,
+    /// Fetches from the remote running now.
+    fetching: Vec<Receiver<()>>,
+}
+
+/// What one git look found: each job's commits ahead and behind, and the
+/// pairs of jobs that change the same lines.
+struct GitLook {
+    counts: Vec<(u64, usize, usize)>,
+    clashes: Vec<(u64, u64, String)>,
+    repos: Vec<(String, RepoLine)>,
+}
+
+/// Where a project folder stands, for the Git side of the Jobs panel: its
+/// branch against the remote's copy as of the last fetch, and whether it has
+/// uncommitted work.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RepoLine {
+    pub state: crate::git::RepoState,
+    pub dirty: bool,
 }
 
 impl Runtime {
@@ -133,6 +158,10 @@ impl Runtime {
             skilled: None,
             asks: Vec::new(),
             asks_at: Instant::now(),
+            git_look: None,
+            git_looked: Instant::now() - Duration::from_secs(3600),
+            repos: HashMap::new(),
+            fetching: Vec::new(),
         }
     }
 
@@ -1325,7 +1354,11 @@ impl Runtime {
         if job.status != Status::Review {
             return;
         }
-        if self.way(&job) == ship::Way::PullRequest {
+        let way = self.way(&job);
+        if !self.belt_lets_through(&job, way) {
+            return;
+        }
+        if way == ship::Way::PullRequest {
             if let Some(j) = self.store.job_mut(id) {
                 j.status = Status::Shipping;
                 j.shipping = true;
@@ -1370,6 +1403,265 @@ impl Runtime {
             }
         }
         self.store.save();
+    }
+
+    /// The seatbelt, before anything is pushed or merged: secrets, key files
+    /// and clash markers hold the job until the person decides; debugging
+    /// leftovers are only pointed out. Whether Approve can go on.
+    fn belt_lets_through(&mut self, job: &store::Job, way: ship::Way) -> bool {
+        if job.belt_ok {
+            return true;
+        }
+        let found = work::seatbelt(job);
+        let Some(j) = self.store.job_mut(job.id) else {
+            return false;
+        };
+        j.held.clear();
+        if found.is_empty() {
+            return true;
+        }
+        let lines = work::held_lines(&found);
+        if !work::holds(&found) {
+            j.feed.push(store::Item::By(
+                Member::Shipper,
+                format!(
+                    "Heads up, left in from debugging: {}. Going ahead.",
+                    lines.join("; ")
+                ),
+            ));
+            return true;
+        }
+        let what = match way {
+            ship::Way::PullRequest => "pushing",
+            ship::Way::Merge => "merging",
+        };
+        j.feed.push(store::Item::By(
+            Member::Shipper,
+            format!(
+                "I stopped before {what}. Something in this change shouldn't leave your computer: {}",
+                crate::seatbelt::summary(&found)
+            ),
+        ));
+        j.held = lines;
+        j.seen = false;
+        self.say("Shipper held it back: the seatbelt found something. It's on the job.");
+        self.store.save();
+        false
+    }
+
+    /// Approves a job the seatbelt held, as it is.
+    pub fn approve_anyway(&mut self, id: u64) {
+        if self.on_server(id, "approve-anyway", serde_json::Value::Null) {
+            return;
+        }
+        if let Some(j) = self.store.job_mut(id) {
+            j.belt_ok = true;
+            j.held.clear();
+            j.feed.push(store::Item::Note(
+                "You said to go ahead in spite of the seatbelt.".into(),
+            ));
+        }
+        self.approve(id);
+    }
+
+    /// Hands what the seatbelt found back to the job's bot to take out; it
+    /// comes back for review when it's done.
+    pub fn take_out(&mut self, st: &AppSettings, id: u64) {
+        if self.on_server(id, "take-out", serde_json::Value::Null) {
+            return;
+        }
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.held.is_empty() {
+            return;
+        }
+        let text = format!(
+            "Before this can be pushed, take these out of the change: {}. Move secrets to environment variables or a file git ignores, keep an example file with placeholder values if the project needs one, and remove debugging leftovers. Then run the project's checks and commit.",
+            job.held.join("; ")
+        );
+        if let Some(j) = self.store.job_mut(id) {
+            j.held.clear();
+        }
+        self.send_on(
+            st,
+            id,
+            text,
+            Some("Sent back to take out what the seatbelt found.".into()),
+        );
+    }
+
+    /// Every 45 seconds, off the window's thread: how far each job's branch is
+    /// ahead of where it started and how far its base moved, and which jobs in
+    /// the same project change the same lines. A new clash is told once, by
+    /// Peek, on both jobs.
+    fn poll_git(&mut self) {
+        let before = self.fetching.len();
+        self.fetching
+            .retain(|rx| matches!(rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        if self.fetching.len() < before && self.git_look.is_none() {
+            self.look_at_git_soon();
+        }
+        if let Some(rx) = &self.git_look {
+            match rx.try_recv() {
+                Ok(look) => {
+                    self.git_look = None;
+                    self.took_git_look(look);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.git_look = None,
+            }
+        }
+        // A demo store's folders aren't real projects.
+        if self.store.demo || self.git_looked.elapsed() < Duration::from_secs(45) {
+            return;
+        }
+        self.git_looked = Instant::now();
+        let live: Vec<store::Job> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| {
+                !j.worktree.is_empty()
+                    && j.remote_on.is_empty()
+                    && matches!(j.status, Status::Running | Status::Done | Status::Review)
+            })
+            .cloned()
+            .collect();
+        let mut folders: Vec<String> = live.iter().map(|j| j.folder.path.clone()).collect();
+        if let Some(f) = self.store.folder() {
+            folders.push(f.path.clone());
+        }
+        folders.sort();
+        folders.dedup();
+        folders.retain(|f| !f.is_empty());
+        if live.is_empty() && folders.is_empty() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let repos = folders
+                .into_iter()
+                .filter(|f| crate::git::is_repo(f))
+                .map(|f| {
+                    let line = RepoLine {
+                        state: crate::git::repo_state(&f),
+                        dirty: crate::git::has_uncommitted(&f) == Some(true),
+                    };
+                    (f, line)
+                })
+                .collect();
+            let counts = live
+                .iter()
+                .map(|j| {
+                    let (ahead, behind) = work::counts(j);
+                    (j.id, ahead, behind)
+                })
+                .collect();
+            let lanes: Vec<work::Lane> = live
+                .iter()
+                .map(|j| work::Lane {
+                    id: j.id,
+                    repo: j.folder.path.clone(),
+                    worktree: j.worktree.clone(),
+                })
+                .collect();
+            let _ = tx.send(GitLook {
+                counts,
+                clashes: work::clashes(&lanes),
+                repos,
+            });
+        });
+        self.git_look = Some(rx);
+    }
+
+    /// Asks the folder's remote what's new, off the window's thread, then looks
+    /// again. Nothing in the folder changes.
+    pub fn fetch(&mut self, folder: &str) {
+        let folder = folder.to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = crate::git::fetch(&folder);
+            let _ = tx.send(());
+        });
+        self.fetching.push(rx);
+    }
+
+    /// Looks at git on the next poll rather than waiting for the next round.
+    pub fn look_at_git_soon(&mut self) {
+        self.git_looked = Instant::now() - Duration::from_secs(3600);
+    }
+
+    fn took_git_look(&mut self, look: GitLook) {
+        let looked: Vec<u64> = look.counts.iter().map(|(id, ..)| *id).collect();
+        for (folder, line) in look.repos {
+            self.repos.insert(folder, line);
+        }
+        let mut changed = false;
+        for (id, ahead, behind) in look.counts {
+            if let Some(j) = self.store.job_mut(id) {
+                if (j.ahead, j.behind) != (ahead, behind) {
+                    (j.ahead, j.behind) = (ahead, behind);
+                    changed = true;
+                }
+            }
+        }
+        // Clashes that went away are dropped; new ones are told. Only the jobs
+        // this look covered: the others keep what they had.
+        let pairs: Vec<(u64, u64, String)> = look.clashes;
+        for id in looked {
+            let now: Vec<(u64, String)> = pairs
+                .iter()
+                .filter_map(|(a, b, w)| {
+                    if *a == id {
+                        Some((*b, w.clone()))
+                    } else if *b == id {
+                        Some((*a, w.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let titles: Vec<(u64, String)> = now
+                .iter()
+                .map(|(other, _)| {
+                    let t = self
+                        .store
+                        .job(*other)
+                        .map(|o| o.label().to_string())
+                        .unwrap_or_default();
+                    (*other, t)
+                })
+                .collect();
+            let Some(j) = self.store.job_mut(id) else {
+                continue;
+            };
+            if j.clash_with == now {
+                continue;
+            }
+            for (other, words) in &now {
+                if j.clash_with.iter().any(|(o, _)| o == other) {
+                    continue;
+                }
+                let title = titles
+                    .iter()
+                    .find(|(o, _)| o == other)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_default();
+                j.feed.push(store::Item::By(
+                    Member::Fin,
+                    format!(
+                        "Heads up: #{other} {title} changes the same lines, in {words}. Whichever is approved second will need its branch brought up to date."
+                    ),
+                ));
+                j.seen = false;
+            }
+            j.clash_with = now;
+            changed = true;
+        }
+        if changed {
+            self.store.save();
+        }
     }
 
     /// Throws a job's changes away, with its branch and worktree.
@@ -1895,6 +2187,7 @@ impl Runtime {
             self.store.save();
         }
         self.poll_ship();
+        self.poll_git();
         // Checker's runs of the checks coming back.
         let mut back = Vec::new();
         self.checking.retain(|(id, rx)| match rx.try_recv() {

@@ -12,6 +12,10 @@ All notable changes to Runo are documented here.
 - You choose where jobs run once a server is connected. A switch next to Send, and Where jobs run in My server, offer Squad picks, Always your server or Always this computer, and every job's feed says where it runs. With Always your server, a project the server doesn't have yet is copied there first.
 - Your server and this computer stay in step through git, the way cloud coding tools do it. Before a job runs on the server, Squad sends it your latest commits. When you approve a job that ran there, its branch comes back here and merges like any job (or becomes a pull request), and the server drops its copy. It all goes over Squad's SSH connection, so the server needs no GitHub login.
 - "Copy <project> there" in My server copies the open project to your server over SSH, with its git history. It no longer needs a git remote or a login to one; folders a project rebuilds (like node_modules and target) are left out.
+- Git in the thread. Every job card shows the branch it works on, the commits it made there and how far its base moved since it started ("squad/apple-pay · 3 commits · 2 behind main").
+- The seatbelt now runs before Shipper pushes a job and before a job is merged here. A secret, a key file or a leftover clash marker in the change holds it with a card that says what and where, with "Ask <bot> to take them out" or "Push anyway". Debugging leftovers are pointed out but don't hold it. It works the same for jobs on your server.
+- Clash ahead: every 45 seconds Squad test-merges the work of jobs in the same project, uncommitted work included, without touching any folder. When two change the same lines, Peek says so on both jobs, with where, before either is approved.
+- The Jobs panel has a Git side: the project's branch against GitHub (with Refresh), the branches the crew is working on with their commits, clashes and how far behind they are, and the watch-outs to sort out before approving.
 
 ### Changed
 

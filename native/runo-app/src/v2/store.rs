@@ -314,6 +314,18 @@ pub struct Job {
     pub remote: u64,
     /// Its worktree on the server, so its work can be brought home.
     pub remote_dir: String,
+    /// What the seatbelt found when Approve was pressed, one line each
+    /// ("src/config.ts:14 · Looks like a Stripe key"). Approving is held while
+    /// any of them is serious, until the person says to go ahead anyway.
+    pub held: Vec<String>,
+    /// The person said to push or merge in spite of the seatbelt.
+    pub belt_ok: bool,
+    /// Commits on its branch since it started, and commits its base got since.
+    pub ahead: usize,
+    pub behind: usize,
+    /// Other jobs in the same project whose work clashes with this one's:
+    /// their id and where ("total.ts around line 40").
+    pub clash_with: Vec<(u64, String)>,
 }
 
 /// One file a job changed.
@@ -390,6 +402,11 @@ impl Default for Job {
             remote_on: String::new(),
             remote: 0,
             remote_dir: String::new(),
+            held: Vec::new(),
+            belt_ok: false,
+            ahead: 0,
+            behind: 0,
+            clash_with: Vec::new(),
         }
     }
 }
