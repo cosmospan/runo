@@ -1795,11 +1795,15 @@ impl Shell {
         let id = g.id;
         let mood = match g.state {
             State::Planning => Mood::Thinking,
-            State::Ready | State::Paused => Mood::NeedsYou,
-            State::Done => Mood::Idle,
-            _ => Mood::Idle,
+            // A plan ready to start is good news, not a worry.
+            State::Ready | State::Done => Mood::Done,
+            State::Paused | State::Failed => Mood::NeedsYou,
+            State::Running => Mood::Working,
         };
-        let face = self.bot(Member::Fin, mood, 34., Framing::Bust);
+        // Drawn still: an eased face here shared its slot with Peek on the
+        // rail, which is the same size, so the two moods swapped every frame
+        // and the face flickered.
+        let face = self.face(Member::Fin, mood, 34.);
         let said = match g.state {
             State::Planning => "Reading the code to plan this.".to_string(),
             State::Ready => "Here's my plan. Start it when it looks right.".to_string(),
