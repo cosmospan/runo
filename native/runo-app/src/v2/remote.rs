@@ -55,6 +55,10 @@ pub struct Config {
     /// The SSH key the app made for this server when you connected with a
     /// password; empty when your own SSH setup reaches it.
     pub key: String,
+    /// Where jobs run: "" lets Squad pick, "server" or "here" is the person's choice.
+    pub run: String,
+    /// The person said "Not now" to installing a desktop for its screen.
+    pub no_desktop: bool,
 }
 
 impl Config {
@@ -89,6 +93,22 @@ fn save(c: &Config) -> Result<(), String> {
         let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
     }
     Ok(())
+}
+
+/// Keeps where jobs run ("", "server" or "here") for next time.
+pub fn set_run(run: &str) {
+    if let Some(mut c) = load() {
+        c.run = run.to_string();
+        let _ = save(&c);
+    }
+}
+
+/// Keeps whether the person turned down a desktop on the server.
+pub fn set_no_desktop(no: bool) {
+    if let Some(mut c) = load() {
+        c.no_desktop = no;
+        let _ = save(&c);
+    }
 }
 
 /// Forgets the server here. The server keeps running; `squad unpair` there
@@ -518,10 +538,17 @@ struct Tunnel {
 
 impl Tunnel {
     fn open(host: &str, key: &str) -> Result<Tunnel, String> {
+        Tunnel::to(host, key, PORT)
+    }
+
+    /// A tunnel to `there`, a port on the server's own 127.0.0.1.
+    fn to(host: &str, key: &str, there: u16) -> Result<Tunnel, String> {
         let port = free_port().ok_or("no free port on this computer")?;
         let mut cmd = ssh_base(host, key);
+        // Not `-N`: the server waits on our end of a pipe instead, so when
+        // Squad Code quits, however it quits, the pipe closes and ssh ends
+        // with it rather than holding the tunnel open on its own.
         cmd.args([
-            "-N",
             "-o",
             "ExitOnForwardFailure=yes",
             "-o",
@@ -529,9 +556,10 @@ impl Tunnel {
             "-o",
             "ServerAliveCountMax=3",
             "-L",
-            &format!("127.0.0.1:{port}:127.0.0.1:{PORT}"),
+            &format!("127.0.0.1:{port}:127.0.0.1:{there}"),
+            "cat >/dev/null",
         ])
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
         let mut child = cmd.spawn().map_err(|e| e.to_string())?;
@@ -815,6 +843,8 @@ fn setup(
         name: v["name"].as_str().unwrap_or(device).to_string(),
         token: v["token"].as_str().unwrap_or("").to_string(),
         key,
+        run: String::new(),
+        no_desktop: false,
     };
     if cfg.token.is_empty() {
         return Err("Pairing failed: the server sent no token.".into());
@@ -877,13 +907,19 @@ struct Seen {
     sent: Vec<(u64, Result<u64, String>)>,
     /// Notes for the person.
     notes: Vec<String>,
+    /// Notes for one job's feed, by its local id.
+    job_notes: Vec<(u64, String)>,
 }
 
 enum Ask {
-    Send(u64, Value),
+    /// A job (its local id), and its project here to send the latest
+    /// commits from ("" for none).
+    Send(u64, Value, String),
     Act(u64, String, Value),
     Watch(Vec<u64>),
-    AddProject(String, String),
+    /// Copies a project from this computer (name, path here), then starts
+    /// a job on it there when one is given.
+    Copy(String, String, Option<(u64, Value)>),
 }
 
 /// A connection to the server, kept up on its own thread.
@@ -976,8 +1012,9 @@ impl Link {
     }
 
     /// Starts a job there; [`Link::sent`] gives back its id there.
-    pub fn send(&self, local: u64, body: Value) {
-        let _ = self.tx.send(Ask::Send(local, body));
+    /// `here` is the project on this computer, whose latest commits go first.
+    pub fn send(&self, local: u64, body: Value, here: &str) {
+        let _ = self.tx.send(Ask::Send(local, body, here.to_string()));
     }
 
     /// `POST /v1/jobs/{id}/{action}` there.
@@ -991,10 +1028,24 @@ impl Link {
     }
 
     /// Clones `url` into ~/squad/<name> there and adds it as a project.
-    pub fn add_project(&self, name: &str, url: &str) {
+    /// Copies the project at `path` here to the server.
+    pub fn copy_project(&self, name: &str, path: &str) {
         let _ = self
             .tx
-            .send(Ask::AddProject(name.to_string(), url.to_string()));
+            .send(Ask::Copy(name.to_string(), path.to_string(), None));
+    }
+
+    /// Copies the project to the server, then starts the job on it there.
+    pub fn copy_then_send(&self, local: u64, folder: &store::Folder, body: Value) {
+        let _ = self.tx.send(Ask::Copy(
+            folder.name.clone(),
+            folder.path.clone(),
+            Some((local, body)),
+        ));
+    }
+
+    pub fn take_job_notes(&self) -> Vec<(u64, String)> {
+        std::mem::take(&mut self.seen().job_notes)
     }
 
     pub fn sent(&self) -> Vec<(u64, Result<u64, String>)> {
@@ -1050,7 +1101,7 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
             }
         }
         let Some(port) = tunnel.as_ref().map(|t| t.port) else {
-            if let Some(Ask::Send(local, _)) = ask {
+            if let Some(Ask::Send(local, ..) | Ask::Copy(_, _, Some((local, _)))) = ask {
                 lock()
                     .sent
                     .push((local, Err(format!("{label} isn't reachable right now"))));
@@ -1061,7 +1112,38 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
             http(port, method, path, &cfg.token, body)
         };
         match ask {
-            Some(Ask::Send(local, body)) => {
+            Some(Ask::Copy(name, path, then)) => {
+                let copied = copy_project(&cfg, port, &name, &path);
+                match (copied, then) {
+                    (Ok(there), None) => lock().notes.push(format!(
+                        "{name} is on {label} now, in {there}. Jobs on it can run there."
+                    )),
+                    (Err(why), None) => lock().notes.push(why),
+                    (Err(why), Some((local, _))) => lock().sent.push((local, Err(why))),
+                    (Ok(there), Some((local, mut body))) => {
+                        body["folder"] = json!(there);
+                        let result = match call("POST", "/v1/jobs", Some(&body)) {
+                            Ok((200, v)) => v["job"]
+                                .as_u64()
+                                .ok_or_else(|| "it didn't start a job".to_string()),
+                            Ok((_, v)) => Err(error_of(&v)),
+                            Err(e) => Err(e),
+                        };
+                        if let Ok(id) = result {
+                            if !watching.contains(&id) {
+                                watching.push(id);
+                            }
+                        }
+                        lock().sent.push((local, result));
+                    }
+                }
+                read_at = Instant::now() - REFRESH;
+            }
+            Some(Ask::Send(local, body, here)) => {
+                if let (false, Some(there)) = (here.is_empty(), body["folder"].as_str()) {
+                    let note = push_latest(&cfg, &here, there);
+                    lock().job_notes.push((local, note));
+                }
                 let result = match call("POST", "/v1/jobs", Some(&body)) {
                     Ok((200, v)) => v["job"]
                         .as_u64()
@@ -1084,11 +1166,6 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                     Ok((_, v)) => lock().notes.push(format!("{label}: {}", error_of(&v))),
                     Err(e) => lock().notes.push(format!("Couldn't reach {label}: {e}")),
                 }
-                read_at = Instant::now() - REFRESH;
-            }
-            Some(Ask::AddProject(name, url)) => {
-                let note = add_project(&cfg, port, &name, &url);
-                lock().notes.push(note);
                 read_at = Instant::now() - REFRESH;
             }
             Some(Ask::Watch(_)) | None => {}
@@ -1171,28 +1248,72 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
 }
 
 /// Clones a project onto the server and adds it there.
-fn add_project(cfg: &Config, port: u16, name: &str, url: &str) -> String {
+/// Folders a copy to the server leaves out: things the project rebuilds.
+const COPY_SKIPS: &[&str] = &[
+    "node_modules",
+    "target",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    ".turbo",
+];
+
+/// Copies the project at `local` (this computer) into `~/squad` on the server,
+/// over SSH, and adds it there. Needs no git remote and no login to one: it's
+/// the files as they are here, with their git history. Gives back its path there.
+fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<String, String> {
     let label = cfg.label();
-    let safe: String = name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || "-_.".contains(c) {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let dir = format!("squad/{safe}");
-    let script = format!(
-        "set -e; mkdir -p squad; if [ ! -d {d}/.git ]; then git clone --quiet {u} {d}; fi; cd {d} && pwd",
-        d = quote(&dir),
-        u = quote(url)
-    );
-    let path = match ssh(&cfg.host, &cfg.key, &script, None) {
-        Ok(out) => out.lines().last().unwrap_or("").trim().to_string(),
-        Err(why) => return format!("Couldn't copy {name} to {label}: {why}"),
+    let local = std::path::Path::new(local);
+    let (Some(parent), Some(base)) = (local.parent(), local.file_name()) else {
+        return Err(format!("{name} isn't a folder Squad can copy"));
     };
+    let base = base.to_string_lossy().to_string();
+    let mut tar = Command::new("tar");
+    tar.arg("-C").arg(parent).arg("-czf").arg("-");
+    for skip in COPY_SKIPS {
+        tar.arg(format!("--exclude={skip}"));
+    }
+    let mut pack = tar
+        .arg(&base)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("tar isn't available here: {e}"))?;
+    let packed = pack.stdout.take().ok_or("tar gave no output")?;
+    let script = format!(
+        "set -e; mkdir -p squad; tar -xzf - -C squad; cd squad/{} && {{ git config receive.denyCurrentBranch updateInstead 2>/dev/null || true; }}; pwd",
+        quote(&base)
+    );
+    let unpack = ssh_base(&cfg.host, &cfg.key)
+        .arg(script)
+        .stdin(Stdio::from(packed))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| e.to_string())?;
+    let packed_ok = pack.wait().map(|s| s.success()).unwrap_or(false);
+    if !unpack.status.success() {
+        let err = String::from_utf8_lossy(&unpack.stderr);
+        return Err(format!(
+            "Couldn't copy {name} to {label}: {}",
+            err.lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("ssh stopped")
+                .trim()
+        ));
+    }
+    if !packed_ok {
+        return Err(format!("Couldn't pack {name} up to copy it"));
+    }
+    let path = String::from_utf8_lossy(&unpack.stdout)
+        .lines()
+        .last()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     match http(
         port,
         "POST",
@@ -1200,10 +1321,170 @@ fn add_project(cfg: &Config, port: u16, name: &str, url: &str) -> String {
         &cfg.token,
         Some(&json!({ "path": path })),
     ) {
-        Ok((200, _)) => format!("{name} is on {label} now, in {path}. Jobs on it can run there."),
-        Ok((_, v)) => format!("{label} wouldn't add {name}: {}", error_of(&v)),
-        Err(e) => format!("Couldn't reach {label}: {e}"),
+        Ok((200, _)) => Ok(path),
+        Ok((_, v)) => Err(format!("{label} wouldn't add {name}: {}", error_of(&v))),
+        Err(e) => Err(format!("Couldn't reach {label}: {e}")),
     }
+}
+
+// ---------- keeping this computer and the server in step ----------
+//
+// Like the cloud coding tools, Squad syncs through git rather than copying
+// files back and forth: before a job runs there, the server gets your latest
+// commits; when you approve it, its branch comes back here and merges like a
+// job that ran here. Git goes over the same SSH as everything else, so it
+// needs no GitHub and no login to one.
+
+/// How git reaches the server: Squad's key and Squad's trusted host keys.
+fn git_ssh(key: &str) -> String {
+    let mut cmd = format!(
+        "ssh -o UserKnownHostsFile={} -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=15",
+        quote(&known_hosts().to_string_lossy())
+    );
+    if !key.is_empty() {
+        cmd.push_str(&format!(" -i {} -o IdentitiesOnly=yes", quote(key)));
+    }
+    cmd
+}
+
+/// `git` in `dir` here, able to reach the server.
+fn git_here(cfg: &Config, dir: &str, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .env("GIT_SSH_COMMAND", git_ssh(&cfg.key))
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("git isn't available: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err
+            .lines()
+            .rev()
+            .map(str::trim)
+            .find(|l| !l.is_empty() && !l.starts_with("hint:"))
+            .unwrap_or("git stopped")
+            .to_string())
+    }
+}
+
+/// The server's copy of a project as a git address.
+fn git_url(cfg: &Config, there: &str) -> String {
+    format!("{}:{there}", cfg.host)
+}
+
+/// Lets a push update the branch the server's copy has checked out, the way
+/// a pull there would, as long as nothing there is uncommitted.
+fn accept_pushes(cfg: &Config, there: &str) -> Result<String, String> {
+    ssh(
+        &cfg.host,
+        &cfg.key,
+        &format!(
+            "git -C {} config receive.denyCurrentBranch updateInstead",
+            quote(there)
+        ),
+        None,
+    )
+}
+
+/// Sends the commits of the branch you're on here to the server's copy, so a
+/// job there starts from your latest work. Says what it did, for the job.
+fn push_latest(cfg: &Config, here: &str, there: &str) -> String {
+    let label = cfg.label();
+    let branch = crate::git::current_branch(here);
+    if branch.is_empty() || branch == "HEAD" {
+        return format!(
+            "This project isn't on a branch here, so the job on {label} starts from what's there."
+        );
+    }
+    let pushed = accept_pushes(cfg, there).and_then(|_| {
+        git_here(
+            cfg,
+            here,
+            &[
+                "push",
+                "--quiet",
+                &git_url(cfg, there),
+                &format!("HEAD:refs/heads/{branch}"),
+            ],
+        )
+    });
+    let short = crate::git::head(here)
+        .map(|h| h.chars().take(7).collect::<String>())
+        .unwrap_or_default();
+    let uncommitted = if crate::git::has_uncommitted(here) == Some(true) {
+        " Changes you haven't committed stay here."
+    } else {
+        ""
+    };
+    match pushed {
+        Ok(_) => format!("Sent your latest commit on {branch} ({short}) to {label}, so it starts from there.{uncommitted}"),
+        Err(why) => format!(
+            "Couldn't send your latest commits to {label} ({why}), so it starts from what {label} has."
+        ),
+    }
+}
+
+/// Brings a job's work home from the server: commits it there on its branch,
+/// fetches that branch here, and checks it out in a worktree of its own,
+/// as if the job had run here. Gives back that worktree.
+fn bring_home(cfg: &Config, job: &store::Job, there: &str) -> Result<String, String> {
+    let here = job.folder.path.as_str();
+    let branch = job.branch.as_str();
+    if branch.is_empty() {
+        return Err("it didn't work on a branch of its own".into());
+    }
+    // Your name on the commit, as when a job here commits.
+    let who = |key: &str, or: &str| {
+        git_here(cfg, here, &["config", "--get", key])
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| or.to_string())
+    };
+    let (name, email) = (
+        who("user.name", "Squad Code"),
+        who("user.email", "squad@localhost"),
+    );
+    if !job.remote_dir.is_empty() {
+        let commit = format!(
+            "cd {dir} && git add -A && (git diff --cached --quiet || GIT_AUTHOR_NAME={n} GIT_AUTHOR_EMAIL={e} GIT_COMMITTER_NAME={n} GIT_COMMITTER_EMAIL={e} git commit -q -m {m})",
+            dir = quote(&job.remote_dir),
+            n = quote(&name),
+            e = quote(&email),
+            m = quote(&super::work::message(job)),
+        );
+        ssh(&cfg.host, &cfg.key, &commit, None)
+            .map_err(|why| format!("couldn't save its work there: {why}"))?;
+    }
+    git_here(
+        cfg,
+        here,
+        &[
+            "fetch",
+            "--quiet",
+            &git_url(cfg, there),
+            &format!("+refs/heads/{branch}:refs/heads/{branch}"),
+        ],
+    )
+    .map_err(|why| format!("couldn't fetch {branch}: {why}"))?;
+    crate::git::add_worktree(here, branch, None)
+}
+
+/// [`bring_home`] on a thread of its own.
+pub fn bring_home_later(
+    cfg: Config,
+    job: store::Job,
+    there: String,
+) -> Receiver<Result<String, String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(bring_home(&cfg, &job, &there));
+    });
+    rx
 }
 
 // ---------- the server's brain ----------
@@ -1606,6 +1887,78 @@ fn find_token(text: &str) -> Option<String> {
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
     (token.len() > 40).then_some(token)
+}
+
+// ---------- looking at the machine ----------
+
+/// Runs `command` on the server with the app's key, and gives back what it
+/// printed. It blocks, so it belongs off the window's thread.
+pub fn run_there(cfg: &Config, command: &str) -> Result<String, String> {
+    ssh(&cfg.host, &cfg.key, command, None)
+}
+
+/// What a terminal runs to open a shell on the server: ssh with Squad's own
+/// known_hosts and key, and a terminal of its own there. `cd` starts it in
+/// that folder.
+pub fn shell_program(cfg: &Config, cd: Option<&str>) -> (String, Vec<String>) {
+    let mut args = vec![
+        "-o".to_string(),
+        format!("UserKnownHostsFile={}", known_hosts().display()),
+        "-o".into(),
+        "StrictHostKeyChecking=accept-new".into(),
+    ];
+    if !cfg.key.is_empty() {
+        args.extend([
+            "-i".into(),
+            cfg.key.clone(),
+            "-o".into(),
+            "IdentitiesOnly=yes".into(),
+        ]);
+    }
+    args.extend([
+        "-o".into(),
+        "ConnectTimeout=10".into(),
+        "-o".into(),
+        "ServerAliveInterval=20".into(),
+        "-t".into(),
+        cfg.host.clone(),
+    ]);
+    if let Some(dir) = cd {
+        args.push(format!(
+            "cd {} && exec \"${{SHELL:-/bin/sh}}\" -l",
+            quote(dir)
+        ));
+    }
+    ("ssh".into(), args)
+}
+
+/// Runs a script on the server (fed to `sh -s`) and gives back what it printed.
+pub fn run_script(cfg: &Config, script: &str) -> Result<String, String> {
+    ssh(&cfg.host, &cfg.key, "sh -s", Some(script))
+}
+
+/// A port on the server's own 127.0.0.1, reached from this computer.
+pub struct Forward(Tunnel);
+
+impl Forward {
+    /// The port on this computer.
+    pub fn port(&self) -> u16 {
+        self.0.port
+    }
+
+    pub fn alive(&mut self) -> bool {
+        self.0.alive()
+    }
+}
+
+/// Opens an SSH tunnel to `there` on the server; it closes when dropped.
+pub fn forward(cfg: &Config, there: u16) -> Result<Forward, String> {
+    Tunnel::to(&cfg.host, &cfg.key, there).map(Forward)
+}
+
+/// Shell-quotes `s` for a command run on the server.
+pub fn quoted(s: &str) -> String {
+    quote(s)
 }
 
 #[cfg(test)]

@@ -24,6 +24,7 @@ mod history;
 mod home;
 mod jobs;
 mod live;
+mod machine;
 mod mascot;
 mod myserver;
 mod palette;
@@ -31,9 +32,12 @@ mod prefs;
 mod race;
 mod remote;
 mod review;
+mod rfb;
 mod rich;
 mod runtime;
+mod screenview;
 pub mod server;
+mod serverpage;
 mod setup;
 mod ship;
 mod sidebar;
@@ -85,6 +89,10 @@ pub enum Place {
     Settings(Pane),
     /// What the crew cost and did lately.
     Usage,
+    /// Your server: how it's doing, and its controls.
+    Server,
+    /// Your server's screen, live.
+    Screen,
     /// The first-run walkthrough.
     Welcome,
 }
@@ -523,6 +531,22 @@ pub struct Shell {
     /// A message Peek's engine is reading: Peek's message showing it, the
     /// words, the conversation before them, and the decision to come.
     reading: Option<Reading>,
+    /// When Peek's engine started reading it.
+    reading_since: Option<std::time::Instant>,
+    /// Terminals running an app Squad Code started for the person.
+    serving: Vec<u64>,
+    /// When Peek's engine was last made sure of being warm.
+    warmed_at: Option<std::time::Instant>,
+    /// "run the app", read by Peek: started on the next draw, which has the
+    /// window the terminal needs. The words, and Peek's reading message.
+    /// and the finished job it was said to, if any.
+    run_wanted: Option<(String, Option<u64>, Option<u64>)>,
+    /// A message to a finished job that Peek's engine is reading: the job,
+    /// the words, and the decision to come.
+    follow_reading: Option<(u64, String, std::sync::mpsc::Receiver<crate::agent::Event>)>,
+    /// Peek's message saying its engine couldn't read a message, and the
+    /// words, for "Try again".
+    retry: Option<(u64, String)>,
     list_filter: u8,
     setup_crew: Vec<Member>,
     /// A job Fin held back because nobody on the crew does its kind of work,
@@ -567,6 +591,50 @@ pub struct Shell {
     server_sign_in: Option<remote::SignIn>,
     server_brain_log: Vec<String>,
     server_brain_failed: bool,
+    /// The Your server page: the server read every few seconds while it's
+    /// open, what it looked like last, and why it couldn't be read.
+    server_watch: Option<machine::Watch>,
+    server_look: Option<machine::Look>,
+    server_look_err: String,
+    /// Things being done there, what they said (what, output, failed), the
+    /// button waiting for a second click, and processes asked to stop.
+    server_acts: Vec<(
+        machine::Act,
+        std::sync::mpsc::Receiver<Result<String, String>>,
+    )>,
+    server_out: Vec<(String, String, bool)>,
+    server_arm: Option<(String, Instant)>,
+    server_stopped: std::collections::HashSet<u32>,
+    server_cmd: Entity<InputState>,
+    /// The server's screen: being set up, and once it's shared, the tunnel
+    /// that keeps it reachable.
+    server_screen_rx: Option<std::sync::mpsc::Receiver<Result<machine::Screen, String>>>,
+    server_screen: Option<machine::Screen>,
+    /// What the server has for showing its screen, read once it answers:
+    /// for which server, the reading or install under way, whether that's an
+    /// install, why it failed, and whether the person asked for the screen
+    /// (so it opens once the desktop is in).
+    server_desktop: Option<machine::Desktop>,
+    server_desktop_host: String,
+    server_desktop_rx: Option<std::sync::mpsc::Receiver<Result<machine::Desktop, String>>>,
+    server_desktop_installing: bool,
+    server_desktop_err: String,
+    server_desktop_want: bool,
+    /// While a server job's words are laid out: its folder on the server, so
+    /// what they offer (a local port, a command) is done there.
+    rich_there: Option<String>,
+    /// Tunnels to ports on the server that a job's links opened, by port there.
+    forwards: HashMap<u16, remote::Forward>,
+    /// Watching that screen in Squad: the connection, the picture and the
+    /// frame it was made from, pictures to let go of, where it's drawn and
+    /// the focus that sends keys to it.
+    screen_view: Option<rfb::Viewer>,
+    screen_img: Option<Arc<RenderImage>>,
+    screen_seen: u64,
+    screen_built: Instant,
+    screen_retired: Vec<Arc<RenderImage>>,
+    screen_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    screen_focus: FocusHandle,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -627,6 +695,10 @@ struct Offer {
     goal: bool,
     /// How many engines it was going to race on.
     race: usize,
+    /// Peek's line on why this bot is taking it, for the job's card.
+    handoff: String,
+    /// Where Peek said it runs ("server", "here"), or empty for the usual.
+    site: String,
 }
 
 /// "A", "A and B", "A, B and C".
@@ -677,7 +749,9 @@ fn nav_slot(place: Place) -> Option<f32> {
         Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Settings(_) | Place::Usage | Place::Welcome => return None,
+        Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
+            return None
+        }
     };
     Some(i as f32 * 46.)
 }
@@ -760,6 +834,9 @@ impl Shell {
             InputState::new(window, cx)
                 .placeholder("New password for the server")
                 .masked(true)
+        });
+        let server_cmd = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("df -h, docker ps, systemctl status nginx…")
         });
         let server_code =
             cx.new(|cx| InputState::new(window, cx).placeholder("Paste the code from Claude"));
@@ -921,6 +998,13 @@ impl Shell {
                     }
                 }
             }),
+            cx.subscribe_in(&server_cmd, window, |this, _, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    if this.place == Place::Server {
+                        this.run_server_command(window, cx);
+                    }
+                }
+            }),
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
@@ -932,7 +1016,17 @@ impl Shell {
                     };
                     if let (false, Some(id)) = (text.is_empty(), job) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.follow_up(id, text, cx);
+                        // To a finished job, Peek's engine reads it first:
+                        // "run the app" runs it, "stop" stops it, and the
+                        // rest goes to the bot.
+                        let idle = this
+                            .crew
+                            .store
+                            .job(id)
+                            .is_some_and(|j| j.status != Status::Running);
+                        if !(idle && this.read_follow_up(id, text.clone(), cx)) {
+                            this.follow_up(id, text, cx);
+                        }
                     }
                 }
             }),
@@ -957,7 +1051,13 @@ impl Shell {
                     continue;
                 }
                 slept = 0;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                if this
+                    .update(cx, |this, cx| {
+                        this.poll(cx);
+                        cx.notify()
+                    })
+                    .is_err()
+                {
                     break;
                 }
                 continue;
@@ -975,7 +1075,16 @@ impl Shell {
             cx.background_executor()
                 .timer(Duration::from_millis(wait as u64))
                 .await;
-            if this.update(cx, |_, cx| cx.notify()).is_err() {
+            // Move the crew along here too, not only when a frame is drawn:
+            // macOS draws nothing for a window that's hidden or covered, and
+            // jobs, the server page and notices should keep up all the same.
+            if this
+                .update(cx, |this, cx| {
+                    this.poll(cx);
+                    cx.notify()
+                })
+                .is_err()
+            {
                 break;
             }
         });
@@ -1000,6 +1109,7 @@ impl Shell {
             Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("appearance") => Place::Settings(Pane::Appearance),
             Ok("usage") => Place::Usage,
+            Ok("machine") => Place::Server,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
                 .goals
@@ -1093,6 +1203,12 @@ impl Shell {
             raw_open: Default::default(),
             confirming: None,
             reading: None,
+            reading_since: None,
+            serving: Vec::new(),
+            warmed_at: None,
+            run_wanted: None,
+            follow_reading: None,
+            retry: None,
             setup_crew: data::STARTER_CREW.to_vec(),
             offer: None,
             sampling: false,
@@ -1133,6 +1249,31 @@ impl Shell {
             server_sign_in: None,
             server_brain_log: Vec::new(),
             server_brain_failed: false,
+            server_watch: None,
+            server_look: None,
+            server_look_err: String::new(),
+            server_acts: Vec::new(),
+            server_out: Vec::new(),
+            server_arm: None,
+            server_stopped: Default::default(),
+            server_cmd,
+            server_screen_rx: None,
+            server_screen: None,
+            server_desktop: None,
+            server_desktop_host: String::new(),
+            server_desktop_rx: None,
+            server_desktop_installing: false,
+            server_desktop_err: String::new(),
+            server_desktop_want: false,
+            rich_there: None,
+            forwards: HashMap::new(),
+            screen_view: None,
+            screen_img: None,
+            screen_seen: u64::MAX,
+            screen_built: Instant::now(),
+            screen_retired: Vec::new(),
+            screen_bounds: Default::default(),
+            screen_focus: cx.focus_handle(),
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -1373,6 +1514,11 @@ impl Shell {
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
     fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+        // The person spoke here: the bots may talk among themselves again.
+        if let Some(f) = self.crew.store.folder().map(|f| f.path.clone()) {
+            let here = self.crew.store.thread_here();
+            self.crew.person_spoke(&f, here);
+        }
         // "@Builder do this": that bot joins the thread and takes the ask,
         // whatever its words would otherwise suggest.
         let mention = (!text.starts_with('/')).then(|| mentioned(&text)).flatten();
@@ -1403,14 +1549,6 @@ impl Shell {
     /// ask gets a question back, and real work goes to the bot it's for. A
     /// slash command, a picked bot or a pinned kind of work skips the read.
     fn read_first(&mut self, text: String, cx: &mut Context<Self>) {
-        // "stop app" stops what's running here, whoever it's said to.
-        if !text.starts_with('/')
-            && self.place == Place::Today
-            && self.crew.store.folder().is_some()
-            && brain::front::wants_stop(&text)
-        {
-            return self.stop_here(text, cx);
-        }
         let skip = text.starts_with('/')
             || self.place != Place::Today
             || self.target.is_some()
@@ -1441,9 +1579,12 @@ impl Shell {
             recent.extend(self.crew.store.recent(&folder, *other));
         }
         recent.extend(self.crew.store.recent(&folder, here));
-        // Peek reads it with the person's own engine when one is signed in;
-        // the rules decide while none is, or when its reply makes no sense.
-        if brain::think::on(&st) && !self.sampling {
+        // Peek reads it with the person's own engine. Nothing guesses when
+        // the engine can't: Peek says so, and offers to try again.
+        if self.sampling {
+            return self.hand_over_inner(text, cx);
+        }
+        {
             let project = self
                 .crew
                 .store
@@ -1459,41 +1600,189 @@ impl Shell {
                 .filter(|j| j.status == Status::Running && j.folder.path == folder)
                 .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
                 .collect();
+            let (worked, in_thread) = self.bots_here();
+            let server = self.server_note(&folder);
             let seen = brain::think::Seen {
                 project: &project,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
+                worked: &worked,
+                in_thread: &in_thread,
+                server: &server,
             };
-            if let Ok(rx) = brain::think::ask(&st, &folder, &text, &seen) {
-                // Peek's message shows as reading until the decision lands.
-                let talk = self.crew.peek_reading(text.clone());
-                self.reading = Some((talk, text, recent, rx));
-                cx.notify();
-                return;
+            match brain::think::ask(&st, &folder, &text, &seen) {
+                Ok(rx) => {
+                    // Peek's message shows as reading until the decision lands.
+                    let talk = self.crew.peek_reading(text.clone());
+                    self.reading = Some((talk, text, recent, rx));
+                    self.reading_since = Some(std::time::Instant::now());
+                    cx.notify();
+                }
+                Err(why) => self.engine_missed(&st, text, &why, None, cx),
             }
         }
-        // No engine: what it decided before about words like these, else
-        // the rules.
-        let (front, line) = Self::without_engine(&st, &text, &recent);
-        self.act_on(front, text, line, None, cx);
     }
 
-    /// Peek's decision when its engine can't help: the closest thing the
-    /// engine decided before, else the rules. Instant commands ("stop app")
-    /// and the rules' sure answers come first.
-    fn without_engine(
-        st: &crate::settings::AppSettings,
-        text: &str,
-        recent: &[(String, String)],
-    ) -> (brain::front::Front, Option<String>) {
-        if !brain::front::wants_stop(text) {
-            let learned = brain::learn::load();
-            if let Some((f, say)) = brain::learn::recall(text, &learned, &Member::all()) {
-                return (f, Some(say).filter(|s| !s.is_empty()));
-            }
+    /// A message to a finished job, read by Peek's engine before the bot
+    /// gets it. False when the engine can't read it; it goes to the bot then.
+    fn read_follow_up(&mut self, job: u64, text: String, cx: &mut Context<Self>) -> bool {
+        if self.sampling || self.reading.is_some() || self.follow_reading.is_some() {
+            return false;
         }
-        (brain::front::read(st, text, recent), None)
+        let st = Self::app_settings(cx);
+        let Some(j) = self.crew.store.job(job) else {
+            return false;
+        };
+        let (project, folder) = (j.folder.name.clone(), j.folder.path.clone());
+        let recent = vec![
+            ("You".to_string(), j.title.clone()),
+            (j.bot.name().to_string(), j.label().to_string()),
+        ];
+        let crew = Member::all();
+        let (worked, in_thread) = self.bots_here();
+        let server = self.server_note(&folder);
+        let seen = brain::think::Seen {
+            project: &project,
+            recent: &recent,
+            crew: &crew,
+            running: &[],
+            worked: &worked,
+            in_thread: &in_thread,
+            server: &server,
+        };
+        match brain::think::ask(&st, &folder, &text, &seen) {
+            Ok(rx) => {
+                self.follow_reading = Some((job, text, rx));
+                cx.notify();
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// What Peek's engine made of a message to a finished job, once it has.
+    fn poll_follow_reading(&mut self, cx: &mut Context<Self>) {
+        let Some((_, _, rx)) = &self.follow_reading else {
+            return;
+        };
+        let reply = match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        let Some((job, text, _)) = self.follow_reading.take() else {
+            return;
+        };
+        let decided = reply
+            .as_deref()
+            .map(crate::agent::strip_ansi)
+            .and_then(|r| brain::think::parse(&r, &text, &Member::all()))
+            .map(|(f, _)| f);
+        match decided {
+            Some(brain::front::Front::RunApp) => {
+                self.run_wanted = Some((text, None, Some(job)));
+                cx.notify();
+            }
+            Some(brain::front::Front::Stop) => self.stop_here(text, cx),
+            // Anything else is the bot's to answer.
+            _ => self.follow_up(job, text, cx),
+        }
+    }
+
+    /// "run the app" in a thread: runs the app of this thread's latest job
+    /// (its branch), else the project's. False when there's none to run.
+    fn run_latest_app(
+        &mut self,
+        text: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.crew.store.folder().is_none() || self.sampling {
+            return false;
+        }
+        let here = self.crew.store.thread_here();
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let job = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .rev()
+            .find(|j| {
+                j.thread == here
+                    && j.folder.path == folder
+                    && j.status != Status::Running
+                    && j.mode.writes()
+            })
+            .map(|j| j.id);
+        match self.run_app(job, window, cx) {
+            Some(line) => {
+                self.crew.peek_says(text, line, Vec::new());
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Peek's message that shows it reading, while its engine reads.
+    pub(super) fn reading_talk(&self) -> Option<u64> {
+        self.reading.as_ref().map(|r| r.0)
+    }
+
+    /// Peek's engine couldn't read `text` (`why` says what went wrong). Peek
+    /// doesn't guess: it says so in its message (`pending`, if it showed one)
+    /// and offers to try again, or to pick a bot with @.
+    fn engine_missed(
+        &mut self,
+        st: &crate::settings::AppSettings,
+        text: String,
+        why: &str,
+        pending: Option<u64>,
+        cx: &mut Context<Self>,
+    ) {
+        let engine = brain::think::engine_name(st);
+        let why = why.trim().lines().next().unwrap_or("").trim();
+        let why = if why.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", why.chars().take(120).collect::<String>())
+        };
+        let reply = format!(
+            "I couldn't reach {engine} to read that{why}, so I haven't started anything. Try again, or pick a bot yourself with @, like @Builder."
+        );
+        let front = brain::front::Front::AskBack {
+            question: reply,
+            choices: vec!["Try again".into()],
+        };
+        self.act_on(
+            front,
+            text.clone(),
+            None,
+            pending,
+            Some("Peek, offline".into()),
+            cx,
+        );
+        let id = self.crew.store.talks.last().map(|t| t.id).unwrap_or(0);
+        let id = pending.unwrap_or(id);
+        self.retry = Some((id, text));
+    }
+
+    /// Keeps Peek's engine warm for the project open now, checked every few
+    /// seconds, so a message reads in a second or two.
+    fn keep_warm(&mut self, st: &crate::settings::AppSettings) {
+        if self.sampling || self.warmed_at.is_some_and(|at| at.elapsed().as_secs() < 5) {
+            return;
+        }
+        self.warmed_at = Some(std::time::Instant::now());
+        if let Some(f) = self.crew.store.folder() {
+            brain::think::prepare(st, &f.path);
+        }
     }
 
     /// What Peek's engine decided, once it has: acted on, or the rules'
@@ -1502,10 +1791,11 @@ impl Shell {
         let Some((_, _, _, rx)) = &self.reading else {
             return;
         };
-        let reply = match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+        let (reply, err) = match rx.try_recv() {
+            Ok(crate::agent::Event::Output(_, Ok(r))) => (Some(r), None),
+            Ok(crate::agent::Event::Output(_, Err(e))) => (None, Some(e)),
             Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => (None, None),
         };
         let Some((talk, text, recent, _)) = self.reading.take() else {
             return;
@@ -1516,15 +1806,32 @@ impl Shell {
             .map(crate::agent::strip_ansi)
             .and_then(|r| brain::think::parse(&r, &text, &crew));
         let st = Self::app_settings(cx);
-        let (front, line) = match decided {
+        let failed = err.is_some();
+        let took = self
+            .reading_since
+            .map(|at| at.elapsed().as_secs_f32())
+            .unwrap_or(0.);
+        let _ = recent;
+        match decided {
             Some((f, say)) => {
-                // Kept, small, so Peek decides alike when the engine can't.
-                brain::learn::keep(&st, &text, &f, &say);
-                (f, Some(say).filter(|s| !s.is_empty()))
+                let via = format!("{} \u{b7} {took:.1}s", brain::think::engine_name(&st));
+                self.act_on(
+                    f,
+                    text,
+                    Some(say).filter(|s| !s.is_empty()),
+                    Some(talk),
+                    Some(via),
+                    cx,
+                );
             }
-            None => Self::without_engine(&st, &text, &recent),
-        };
-        self.act_on(front, text, line, Some(talk), cx);
+            None => {
+                let why = match (failed, err) {
+                    (true, Some(e)) => e,
+                    _ => "its answer didn't make sense".to_string(),
+                };
+                self.engine_missed(&st, text, &why, Some(talk), cx);
+            }
+        }
     }
 
     /// Does what Peek decided about `text`. `line` is Peek's own words for a
@@ -1536,17 +1843,25 @@ impl Shell {
         text: String,
         line: Option<String>,
         pending: Option<u64>,
+        via: Option<String>,
         cx: &mut Context<Self>,
     ) {
         let st = Self::app_settings(cx);
         let says = |this: &mut Self, reply: String, choices: Vec<String>| -> u64 {
-            match pending {
+            let id = match pending {
                 Some(id) if this.crew.fill_talk(id, reply.clone(), choices.clone()) => id,
                 _ => {
                     this.crew.peek_says(text.clone(), reply, choices);
                     this.crew.store.talks.last().map(|t| t.id).unwrap_or(0)
                 }
+            };
+            // Who decided, so Peek's word is honest about it.
+            if let Some(t) = this.crew.store.talks.iter_mut().find(|t| t.id == id) {
+                if let Some(a) = t.answer.as_mut() {
+                    a.via = via.clone();
+                }
             }
+            id
         };
         let drop_pending = |this: &mut Self| {
             if let Some(id) = pending {
@@ -1579,16 +1894,16 @@ impl Shell {
                 drop_pending(self);
                 self.stop_here(text, cx)
             }
+            brain::front::Front::RunApp => {
+                self.run_wanted = Some((text, pending, None));
+                cx.notify();
+            }
             brain::front::Front::Hand(route) => {
                 drop_pending(self);
-                // Peek says who it brought in, on the job's card.
-                let line = line.unwrap_or_else(|| route.handoff());
-                let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
-                self.hand_to(route, text, cx);
-                for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
-                    j.handoff = line.clone();
-                }
-                self.crew.store.save();
+                // Peek says why, and whether it's onboarding the bot or
+                // inviting it back, on the job's card.
+                let line = self.handoff_line(&route, line);
+                self.hand_with_line(route, text, line, cx);
             }
         }
     }
@@ -1596,10 +1911,22 @@ impl Shell {
     /// A choice under one of Peek's messages: the answer to a risky ask it
     /// held, or else a reply in its own right.
     pub(super) fn pick_choice(&mut self, talk: u64, choice: String, cx: &mut Context<Self>) {
+        if choice == "Try again" {
+            if let Some((id, text)) = self.retry.take() {
+                if id == talk {
+                    self.crew.store.talks.retain(|t| t.id != id);
+                    return self.read_first(text, cx);
+                }
+                self.retry = Some((id, text));
+            }
+        }
         match self.confirming.take() {
             Some((id, text, route)) if id == talk => {
                 if choice == "Go ahead" {
-                    self.hand_to(route, text, cx);
+                    let said = matches!(route.by.as_str(), "engine" | "learned")
+                        .then(|| route.why.clone());
+                    let line = self.handoff_line(&route, said);
+                    self.hand_with_line(route, text, line, cx);
                 } else {
                     self.say("Okay, nothing started.");
                     cx.notify();
@@ -1610,6 +1937,132 @@ impl Shell {
                 self.hand_over(choice, cx);
             }
         }
+    }
+
+    /// Where jobs on the project at `folder` can run besides here, for Peek's
+    /// engine: the server, whether it answers and is signed in, whether it
+    /// has the project, and the person's usual choice. Empty with no server.
+    fn server_note(&self, folder: &str) -> String {
+        let Some(link) = self.crew.link.as_ref() else {
+            return String::new();
+        };
+        let s = link.server();
+        let name = s.name.clone();
+        let state = if !s.reachable {
+            "not answering right now, so jobs run here until it is".to_string()
+        } else if s.engines.is_empty() {
+            "connected, but nothing is signed in there yet".to_string()
+        } else {
+            format!("connected, with {} signed in", s.engines.join(", "))
+        };
+        let f = self
+            .crew
+            .store
+            .folders
+            .iter()
+            .find(|f| f.path == folder)
+            .cloned()
+            .unwrap_or_default();
+        let remote = ship::remote_url(folder).unwrap_or_default();
+        let has = if link.path_for(&f, &remote).is_some() {
+            "It has this project.".to_string()
+        } else {
+            "It doesn't have this project yet; Squad Code copies it there first, by itself."
+                .to_string()
+        };
+        let usual = match link.cfg.run.as_str() {
+            "server" => format!("Jobs usually run on {name}."),
+            "here" => "Jobs usually run on this computer.".to_string(),
+            _ => "Squad Code picks where each job runs.".to_string(),
+        };
+        format!("this computer, or the person's server {name} ({state}). {has} {usual}")
+    }
+
+    /// The bots that have worked on the open project, and those in this
+    /// thread.
+    fn bots_here(&self) -> (Vec<Member>, Vec<Member>) {
+        let folder = self
+            .crew
+            .store
+            .folder()
+            .map(|f| f.path.clone())
+            .unwrap_or_default();
+        let here = self.crew.store.thread_here();
+        let mut worked = Vec::new();
+        let mut in_thread = Vec::new();
+        for j in self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.folder.path == folder)
+        {
+            if !worked.contains(&j.bot) {
+                worked.push(j.bot);
+            }
+            if j.thread == here && !in_thread.contains(&j.bot) {
+                in_thread.push(j.bot);
+            }
+        }
+        (worked, in_thread)
+    }
+
+    /// Peek's line on a hand-off: its reason (the engine's, unless that
+    /// already names who's coming in), then whether it's onboarding the bot,
+    /// inviting it, or it's already here.
+    fn handoff_line(&self, route: &brain::route::Route, said: Option<String>) -> String {
+        let (worked, in_thread) = self.bots_here();
+        let joins = brain::route::Joins::of(route.bot, &worked, &in_thread);
+        let reason = said
+            .map(|s| s.trim().to_string())
+            .filter(|s| {
+                !s.is_empty() && !s.to_lowercase().contains(&route.bot.name().to_lowercase())
+            })
+            .unwrap_or_else(|| route.reason());
+        let place = match (route.site.as_str(), self.crew.link.as_ref()) {
+            ("server", Some(l)) => format!(" It runs on {}.", l.cfg.label()),
+            ("here", _) => " It runs on this computer.".to_string(),
+            _ => String::new(),
+        };
+        format!("{reason} {}{place}", joins.line(route.bot))
+    }
+
+    /// Starts an ask the way Peek routed it, with Peek's line on the new
+    /// job's card. When the bot isn't on the crew yet, the line waits on
+    /// the offer to add it, and goes on the job once that's taken.
+    fn hand_with_line(
+        &mut self,
+        route: brain::route::Route,
+        text: String,
+        line: String,
+        cx: &mut Context<Self>,
+    ) {
+        let before = self.last_job();
+        self.hand_to(route, text, cx);
+        if !self.mark_new_jobs(before, &line) {
+            if let Some(o) = self.offer.as_mut() {
+                o.handoff = line;
+            }
+        }
+    }
+
+    /// The newest job's id, or 0.
+    fn last_job(&self) -> u64 {
+        self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0)
+    }
+
+    /// Puts Peek's hand-off line on the jobs started after `before`; false
+    /// when none started.
+    fn mark_new_jobs(&mut self, before: u64, line: &str) -> bool {
+        let mut any = false;
+        for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
+            j.handoff = line.to_string();
+            any = true;
+        }
+        if any {
+            self.crew.store.save();
+        }
+        any
     }
 
     /// Starts an ask the way Peek routed it, without reading it again.
@@ -1624,7 +2077,10 @@ impl Shell {
         self.target = crew.contains(&route.bot).then_some(route.bot);
         self.mode = route.mode;
         self.mode_pinned = true;
+        // "do it on the VPS": this job runs there, whatever the usual choice.
+        self.crew.where_next = (!route.site.is_empty()).then(|| route.site.clone());
         self.hand_over_inner(text, cx);
+        self.crew.where_next = None;
         self.target = target;
         self.mode = mode;
         self.mode_pinned = pinned;
@@ -1744,6 +2200,8 @@ impl Shell {
                 text,
                 goal: plan && self.mode.writes(),
                 race: if self.mode.writes() { racing } else { 0 },
+                handoff: String::new(),
+                site: self.crew.where_next.clone().unwrap_or_default(),
             });
             cx.notify();
             return;
@@ -1844,7 +2302,14 @@ impl Shell {
         self.racing = o.race;
         self.set_mode(o.mode, window, cx);
         let added = self.toast.clone();
+        let before = self.last_job();
+        // Peek's choice of where it runs still holds once the bot is added.
+        self.crew.where_next = (!o.site.is_empty()).then(|| o.site.clone());
         self.hand_over(o.text, cx);
+        self.crew.where_next = None;
+        if !o.handoff.is_empty() {
+            self.mark_new_jobs(before, &o.handoff);
+        }
         self.unpin_mode(window, cx);
         // Keep "Added Fixer" showing unless starting the job had more to say.
         if self.toast.is_none() {
@@ -2261,7 +2726,9 @@ impl Shell {
         for id in &pick {
             self.crew.stop(*id);
         }
+        let apps = self.stop_apps();
         let reply = match names.len() {
+            0 if apps > 0 => "Stopped the app.".to_string(),
             0 => "Nothing's running here right now, so there's nothing to stop.".to_string(),
             _ => format!("Stopped {}, and anything it had running.", names.join(", ")),
         };
@@ -2301,8 +2768,11 @@ impl Shell {
             _ => None,
         };
         self.poll_server_setup(cx);
+        self.poll_machine(cx);
         let finished = self.crew.poll(&st, viewing);
         self.poll_reading(cx);
+        self.poll_follow_reading(cx);
+        self.keep_warm(&st);
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);
         }
@@ -2559,6 +3029,22 @@ impl Render for Shell {
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
+        if let Some((text, pending, job)) = self.run_wanted.take() {
+            if let Some(id) = pending {
+                self.crew.store.talks.retain(|t| t.id != id);
+            }
+            let started = match job {
+                Some(job) => self.run_app(Some(job), window, cx).is_some(),
+                None => self.run_latest_app(text.clone(), window, cx),
+            };
+            if !started {
+                self.crew.peek_says(
+                    text,
+                    "There's nothing here I know how to start yet. Want me to have Builder make it runnable?".into(),
+                    vec!["Yes, make it runnable".into(), "Not now".into()],
+                );
+            }
+        }
         if self.term_open.is_some() && window.is_window_active() {
             // The shell's output arrives on its own thread: keep drawing it.
             window.request_animation_frame();
@@ -2636,6 +3122,9 @@ impl Render for Shell {
             && idle > doze_after()
             && !working
             && !self.palette
+            // The server's page and its screen keep reading the server: their
+            // news only shows on a redraw, so they keep the app awake.
+            && !matches!(self.place, Place::Server | Place::Screen)
             && self
                 .toast
                 .as_ref()
@@ -2659,6 +3148,8 @@ impl Render for Shell {
             Place::History => self.history(cx),
             Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
+            Place::Server => self.server_page(cx),
+            Place::Screen => self.screen_page(window, cx),
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
@@ -2742,8 +3233,11 @@ impl Render for Shell {
                 // the project's everywhere else (or when that one is open).
                 if m.control && key == "`" && this.place != Place::Welcome {
                     match this.place {
-                        Place::Live(id) if !this.term_open.is_some_and(term::is_project) => {
+                        Place::Live(id) if !this.term_open.is_some_and(term::is_shared) => {
                             this.toggle_term(id, window, cx)
+                        }
+                        Place::Server if this.crew.link.is_some() => {
+                            this.toggle_server_term(window, cx)
                         }
                         _ => this.toggle_project_term(window, cx),
                     }

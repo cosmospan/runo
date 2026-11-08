@@ -307,6 +307,8 @@ pub struct Job {
     /// and its id there (0 while it's on its way).
     pub remote_on: String,
     pub remote: u64,
+    /// Its worktree on the server, so its work can be brought home.
+    pub remote_dir: String,
 }
 
 /// One file a job changed.
@@ -380,6 +382,7 @@ impl Default for Job {
             context: String::new(),
             remote_on: String::new(),
             remote: 0,
+            remote_dir: String::new(),
         }
     }
 }
@@ -755,7 +758,10 @@ impl Store {
         let mut said: Vec<(u64, String, String)> = Vec::new();
         for t in &self.talks {
             if t.folder == folder && self.thread_for(folder, t.thread) == thread {
-                said.push((t.at, "you".into(), t.question.clone()));
+                // A bot speaking up on its own has no question of yours.
+                if !t.question.is_empty() {
+                    said.push((t.at, "you".into(), t.question.clone()));
+                }
                 if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
                     said.push((t.at, t.bot.name().to_lowercase(), a.text.clone()));
                 }

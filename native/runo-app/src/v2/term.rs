@@ -102,6 +102,27 @@ pub fn is_project(id: u64) -> bool {
     id > PROJECT_BASE
 }
 
+/// The shell on your server, over SSH: just under the projects' ids.
+pub const SERVER: u64 = PROJECT_BASE;
+
+/// Whether a terminal belongs to no job: a project's, or the server's.
+pub fn is_shared(id: u64) -> bool {
+    is_project(id) || id == SERVER
+}
+
+/// Quick commands over the server's drawer.
+fn server_quick() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "Squad's log",
+            "journalctl --user -u squad -n 40 --no-pager".to_string(),
+        ),
+        ("Disk", "df -h".to_string()),
+        ("Busiest", "top -bn1 | head -20".to_string()),
+        ("Home", "cd ~ && ls".to_string()),
+    ]
+}
+
 /// Quick commands over a project's drawer.
 fn project_quick(dir: &str) -> Vec<(&'static str, String)> {
     let mut v = vec![("Status", "git status --short".to_string())];
@@ -134,7 +155,22 @@ impl Shell {
             cx.notify();
             return;
         }
-        let dir = if is_project(id) {
+        let mut prog = program();
+        let dir = if id == SERVER {
+            let Some(link) = &self.crew.link else {
+                self.say("Connect a server first, in Settings, My server.".to_string());
+                cx.notify();
+                return;
+            };
+            let (bin, args) = super::remote::shell_program(&link.cfg, None);
+            prog = Some(pty::Program {
+                bin,
+                args,
+                env: Vec::new(),
+                unset: Vec::new(),
+            });
+            std::env::var("HOME").unwrap_or_else(|_| "/".into())
+        } else if is_project(id) {
             let index = (u64::MAX - id) as usize;
             match self.crew.store.folders.get(index) {
                 Some(f) => f.path.clone(),
@@ -156,7 +192,7 @@ impl Shell {
         }
         if !self.terms.contains_key(&id) {
             let cols = self.term_cols;
-            match pty::Shell::spawn_program(id, id, &dir, ROWS, cols, program(), |_| {}) {
+            match pty::Shell::spawn_program(id, id, &dir, ROWS, cols, prog, |_| {}) {
                 Ok(sh) => {
                     self.terms.insert(id, sh);
                 }
@@ -176,6 +212,58 @@ impl Shell {
         let h = self.term_focus.clone();
         window.on_next_frame(move |window, cx| window.focus(&h, cx));
         cx.notify();
+    }
+
+    /// Runs the app the crew made, and keeps it running: in job `id`'s own
+    /// terminal when given (its branch), else the project's. Says how to
+    /// open and stop it, on the job's card, and returns those words. None
+    /// when Squad Code can't tell how to start it.
+    pub(super) fn run_app(
+        &mut self,
+        job: Option<u64>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<String> {
+        let (term, dir) = match job.and_then(|id| self.crew.store.job(id)) {
+            Some(j) => (j.id, j.dir().to_string()),
+            None => {
+                let f = self.crew.store.folder()?;
+                (project_id(self.crew.store.current), f.path.clone())
+            }
+        };
+        let (cmd, url) = super::work::start_command(&dir)?;
+        self.term_run(term, &cmd, window, cx);
+        if !self.serving.contains(&term) {
+            self.serving.push(term);
+        }
+        let open = match &url {
+            Some(u) => format!(" Open {u} once it says it's ready."),
+            None => " It prints its address when it's ready.".to_string(),
+        };
+        let line = format!(
+            "Started `{cmd}` in the terminal below, and it keeps running.{open} Say \u{201c}stop app\u{201d} to stop it."
+        );
+        if let Some(j) = job.and_then(|id| self.crew.store.job_mut(id)) {
+            j.feed.push(super::store::Item::Note(line.clone()));
+        }
+        self.crew.store.save();
+        cx.notify();
+        Some(line)
+    }
+
+    /// Stops the apps `run_app` started, as Ctrl-C in their terminals.
+    /// Returns how many it stopped.
+    pub(super) fn stop_apps(&mut self) -> usize {
+        let mut n = 0;
+        for id in std::mem::take(&mut self.serving) {
+            if let Some(t) = self.terms.get(&id) {
+                if !t.exited() {
+                    t.write(b"\x03");
+                    n += 1;
+                }
+            }
+        }
+        n
     }
 
     /// Types a command into the drawer's shell and runs it.
@@ -226,6 +314,11 @@ impl Shell {
 
     /// The project's drawer, under whatever page is showing, when it's open.
     pub(super) fn project_drawer(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        if self.term_open == Some(SERVER) {
+            let host = self.crew.link.as_ref()?.cfg.host.clone();
+            let width = self.view_w - super::sidebar::WIDTH - 24.;
+            return self.drawer(SERVER, format!("ssh {host}"), server_quick(), width, cx);
+        }
         let id = self.term_open.filter(|id| is_project(*id))?;
         let dir = self
             .crew

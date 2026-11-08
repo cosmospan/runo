@@ -1113,7 +1113,9 @@ impl Shell {
             Some(a) => self.face(t.bot, super::text_mood(&a.text), 34.),
             None => self.avatar(t.bot, 34.),
         };
-        let waiting = t.answer.is_none() && self.crew.asking_talk == Some(t.id);
+        // Peek reading a message with its engine shows as thinking too.
+        let reading = self.reading_talk() == Some(t.id);
+        let waiting = t.answer.is_none() && (self.crew.asking_talk == Some(t.id) || reading);
         let accent = t.bot.accent();
         let answer: Div = match &t.answer {
             Some(a) if a.note => super::live::note_line(&a.text),
@@ -1142,12 +1144,15 @@ impl Shell {
                     )
                 }),
             None if waiting => {
-                let secs = self
-                    .crew
-                    .asking
-                    .as_ref()
-                    .map(|a| a.started.elapsed().as_secs())
-                    .unwrap_or(0);
+                let secs = if reading {
+                    self.reading_since.map(|at| at.elapsed().as_secs())
+                } else {
+                    self.crew
+                        .asking
+                        .as_ref()
+                        .map(|a| a.started.elapsed().as_secs())
+                }
+                .unwrap_or(0);
                 div()
                     .flex()
                     .items_center()
@@ -2456,6 +2461,10 @@ impl Shell {
                             .text_color(c(ui::faint()))
                             .child(placeholder_hint),
                     )
+                    // Where a job from here runs, once there's a server.
+                    .when(self.mode != Mode::Ask && !value.starts_with('/'), |d| {
+                        d.children(self.run_on_pill(cx))
+                    })
                     .child(
                         div()
                             .id("thread-goes-to")
