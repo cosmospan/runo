@@ -19,7 +19,11 @@ use super::data::{Member, Mode};
 use super::store::{self, Said, Status, Store, Talk};
 use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 
+mod more;
+
 type Landing = Receiver<Result<(), String>>;
+/// A pull request read again, with its review feedback.
+type Reviewed = (crate::github::PrStatus, Vec<crate::github::Feedback>);
 
 /// What starting something opened, so a client can go and show it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +32,9 @@ pub enum Opened {
     Race(u64),
     /// The bot is still on another job, which this one waits for.
     Busy(u64),
+    /// It waits to start (for its bot, a time, or its issue to be read), by
+    /// its id in `Store::later`.
+    Waiting(u64),
 }
 
 /// One bot's message to another, on its way.
@@ -128,6 +135,19 @@ pub struct Runtime {
     pub repos: HashMap<String, RepoLine>,
     /// Fetches from the remote running now.
     fetching: Vec<Receiver<()>>,
+    /// When the night shift last looked at the jobs waiting to start.
+    shift_at: Instant,
+    /// Issues being read for waiting jobs, by their id in `Store::later`.
+    reading: Vec<(u64, Receiver<Result<super::issues::Issue, String>>)>,
+    /// Review feedback being read from open pull requests, by job.
+    feedback: Vec<(u64, Receiver<Reviewed>)>,
+    /// Pull requests whose new review feedback is waiting to be read, by job.
+    feedback_due: Vec<(u64, crate::github::PrStatus)>,
+    /// Lessons the engine is looking for in a send-back: the job and what
+    /// the person said.
+    learning: Vec<(u64, Receiver<crate::agent::Event>)>,
+    /// Shipper pushing a review fix to an open pull request, by job.
+    updating: Vec<(u64, Receiver<ship::Step>)>,
 }
 
 /// What one git look found: each job's commits ahead and behind, and the
@@ -193,6 +213,12 @@ impl Runtime {
             git_looked: Instant::now() - Duration::from_secs(3600),
             repos: HashMap::new(),
             fetching: Vec::new(),
+            shift_at: Instant::now() - Duration::from_secs(3600),
+            reading: Vec::new(),
+            feedback: Vec::new(),
+            feedback_due: Vec::new(),
+            learning: Vec::new(),
+            updating: Vec::new(),
         }
     }
 
@@ -271,10 +297,21 @@ impl Runtime {
         text: String,
         folder: store::Folder,
     ) -> Opened {
+        // An issue it names is read first; the job starts once it's in.
+        if let Some(r) = super::issues::find(&text) {
+            let id = self.queue_later(bot, mode, text, folder, 0);
+            self.say(format!(
+                "Reading {} first. {} starts as soon as it's read.",
+                r.label(),
+                bot.name()
+            ));
+            return Opened::Waiting(id);
+        }
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
+            self.queue_later(bot, mode, text, folder, 0);
             self.say(format!(
-                "{} is still on \u{201c}{title}\u{201d}. This one waits for you to try again.",
+                "{} is still on \u{201c}{title}\u{201d}. This one is next in line and starts as soon as it's free.",
                 bot.name()
             ));
             return Opened::Busy(id);
@@ -836,6 +873,9 @@ impl Runtime {
         let Some(job) = self.store.job_mut(id) else {
             return;
         };
+        // Sent back from review in the person's own words: there may be a
+        // lesson in it for the bot.
+        let sent_back = note.is_none() && job.status == Status::Review;
         match note {
             None => job.feed.push(store::Item::You(text.clone())),
             Some(n) if !n.is_empty() => job.feed.push(store::Item::Note(n)),
@@ -843,6 +883,28 @@ impl Runtime {
         }
         // The last turn's recap no longer tells how it ends.
         job.recap.clear();
+        job.resume_at = 0;
+        // After a rewind the engine starts fresh: tell it what still stands.
+        let text = if job.rewound {
+            job.rewound = false;
+            super::rewind::context(job, &text)
+        } else {
+            text
+        };
+        if sent_back {
+            let said = job
+                .feed
+                .last()
+                .and_then(|i| match i {
+                    store::Item::You(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            self.learn_from(st, id, &said);
+        }
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
         let text = if refs.is_empty() {
             text
         } else {
@@ -1126,6 +1188,14 @@ impl Runtime {
                 } else {
                     text
                 };
+                if super::issues::find(&text).is_some() || self.store.busy(who).is_some() {
+                    self.queue_later(who, mode, text.clone(), folder, 0);
+                    self.say(format!(
+                        "{} has a job from the terminal in line: \u{201c}{text}\u{201d}.",
+                        who.name()
+                    ));
+                    return;
+                }
                 let job = self.make_job(st, who, mode, &text, folder, None, None);
                 self.say(format!(
                     "{} took a job from the terminal: \u{201c}{}\u{201d}.",
@@ -1138,6 +1208,42 @@ impl Runtime {
             cli::Ask::Approve { id } => self.approve(id),
             cli::Ask::Discard { id } => self.discard(id),
             cli::Ask::Stop { id } => self.stop(id),
+            cli::Ask::Later {
+                text,
+                mode,
+                bot,
+                dir,
+                at,
+            } => {
+                let folder = self.folder_for(&dir);
+                let who = Member::all()
+                    .into_iter()
+                    .find(|m| m.name() == bot)
+                    .or_else(|| Member::doer_for(mode))
+                    .unwrap_or(Member::for_mode(mode));
+                let when = super::shift::when_words(at, store::now());
+                self.queue_later(who, mode, text.clone(), folder, at);
+                self.say(format!(
+                    "{} starts \u{201c}{text}\u{201d} {when}, from the terminal.",
+                    who.name()
+                ));
+            }
+            cli::Ask::Cancel { id } => {
+                self.cancel_later(id);
+            }
+            cli::Ask::Rewind { id, to } => {
+                if let Err(why) = self.rewind(id, to) {
+                    self.say(why);
+                }
+            }
+            cli::Ask::Forget { bot, dir, n } => {
+                if let Some(who) = Member::all()
+                    .into_iter()
+                    .find(|m| m.name().eq_ignore_ascii_case(&bot))
+                {
+                    self.forget_lesson(who, &dir, n.saturating_sub(1));
+                }
+            }
         }
     }
 
@@ -1879,6 +1985,7 @@ impl Runtime {
         });
         let mut merge_now = Vec::new();
         let mut landed = Vec::new();
+        let mut due_feedback = Vec::new();
         for (id, pr) in seen {
             let Some(pr) = pr else { continue };
             let busy = self.landing.iter().any(|(j, ..)| *j == id);
@@ -1888,6 +1995,24 @@ impl Runtime {
             j.pr_number = pr.number;
             j.pr_line = ship::checks_line(&pr);
             j.pr_state = pr.state.clone();
+            // New review feedback from the repository's people goes to the
+            // job's bot. What was there before Squad started watching for it
+            // stays with you.
+            if pr.state == "OPEN" {
+                if j.pr_seen.is_empty() {
+                    j.pr_seen = pr
+                        .voices
+                        .iter()
+                        .map(|v| v.at.clone())
+                        .max()
+                        .unwrap_or_else(|| "0".into());
+                } else if let Some(at) = crate::prwatch::new_feedback(&pr, &j.pr_seen) {
+                    if !j.answering && !busy {
+                        j.pr_seen = at;
+                        due_feedback.push((id, pr.clone()));
+                    }
+                }
+            }
             for name in &pr.failed {
                 if !j.pr_failed.contains(name) {
                     j.pr_failed.push(name.clone());
@@ -1903,12 +2028,18 @@ impl Runtime {
                 "CLOSED" => landed.push((id, false)),
                 _ => {
                     let green = pr.failed.is_empty() && pr.pending == 0;
-                    if j.auto_merge && green && pr.mergeable != "CONFLICTING" && !busy {
+                    if j.auto_merge
+                        && green
+                        && pr.mergeable != "CONFLICTING"
+                        && !busy
+                        && !j.answering
+                    {
                         merge_now.push(id);
                     }
                 }
             }
         }
+        self.feedback_due.extend(due_feedback);
         for id in merge_now {
             if let Some(j) = self.store.job_mut(id) {
                 j.feed.push(store::Item::By(
@@ -2426,6 +2557,12 @@ impl Runtime {
         if !finished.is_empty() {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
+                // A fix for review comments goes to its pull request; a turn
+                // that ran out of plan waits for it, or moves engines.
+                if self.after_answering(*id) || self.after_running_out(st, *id) {
+                    self.peek(st, *id, true);
+                    continue;
+                }
                 self.begin_review(*id);
                 self.peek(st, *id, true);
                 self.post_turn(*id);
@@ -2440,6 +2577,9 @@ impl Runtime {
         self.poll_draft();
         self.poll_goals(st);
         self.poll_queue(st);
+        self.poll_shift(st);
+        self.poll_feedback(st);
+        self.poll_learning();
         self.poll_bringing();
         finished.extend(self.poll_remote(st));
         finished

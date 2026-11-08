@@ -719,10 +719,9 @@ fn new_job(hub: &mut Hub, st: &AppSettings, body: &Value) -> Reply {
     match opened {
         Opened::Job(id) => (200, json!({ "job": id })),
         Opened::Race(id) => (200, json!({ "race": id })),
-        Opened::Busy(id) => (
-            409,
-            json!({ "error": "That bot is still on another job.", "busy": id }),
-        ),
+        // Next in line: it starts once the bot is free.
+        Opened::Busy(id) => (202, json!({ "queued": true, "busy": id })),
+        Opened::Waiting(id) => (202, json!({ "queued": true, "waiting": id })),
     }
 }
 
