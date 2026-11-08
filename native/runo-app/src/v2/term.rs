@@ -402,8 +402,9 @@ impl Shell {
                     cx.notify();
                 })),
         );
-        // Rises from the bottom edge when opened.
-        Some(super::motion::panel(
+        // Rises out of its own slot when opened, opaque the whole way, so the
+        // translucent status bar under it never shows through mid-motion.
+        Some(super::motion::drawer(
             div()
                 .flex_none()
                 .mx(px(8.))
@@ -439,7 +440,6 @@ impl Shell {
                         }),
                 ),
             super::motion::key(("drawer", id)),
-            0.,
             24.,
         ))
     }
