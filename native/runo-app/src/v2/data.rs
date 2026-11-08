@@ -29,6 +29,9 @@ pub struct Made {
     /// stop").
     #[serde(default)]
     pub rules: Vec<String>,
+    /// The project folder it's only for; empty for a bot on every project's crew.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project: String,
 }
 
 /// Made bots with their words kept for the life of the app, so `Member` stays a
@@ -42,9 +45,30 @@ struct Kept {
     like: Member,
     tint: Tint,
     outfit: Outfit,
+    project: String,
 }
 
 static MADE: RwLock<Vec<Kept>> = RwLock::new(Vec::new());
+
+/// The project open now, by folder: bots made for another project stay off the
+/// crew here. Empty (no window, or no project open) shows every bot.
+static HERE: RwLock<String> = RwLock::new(String::new());
+
+/// Sets the project open now (see [`HERE`]).
+pub fn set_here(folder: &str) {
+    let mut here = HERE.write().unwrap_or_else(|e| e.into_inner());
+    if *here != folder {
+        *here = folder.to_string();
+    }
+}
+
+/// The project a made bot is only for; empty for every project.
+pub fn project_of(who: Member) -> String {
+    match who {
+        Member::Made(id) => made(id, |k| k.project.clone()).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
 
 /// Built-in bots the person removed from their crew (or didn't add).
 static REMOVED: RwLock<Vec<Member>> = RwLock::new(Vec::new());
@@ -101,6 +125,7 @@ pub fn set_made(made: &[Made]) {
                 like: m.like,
                 tint: super::mascot::colour_at(m.look[0]),
                 outfit: Fin::outfit_from_code(&m.outfit),
+                project: m.project.clone(),
             }
         })
         .collect();
@@ -155,9 +180,14 @@ impl Member {
     /// made.
     pub fn all() -> Vec<Member> {
         let removed = REMOVED.read().unwrap_or_else(|e| e.into_inner());
+        let here = HERE.read().unwrap_or_else(|e| e.into_inner()).clone();
         Member::everyone()
             .into_iter()
             .filter(|m| !removed.contains(m))
+            .filter(|m| {
+                let only = project_of(*m);
+                here.is_empty() || only.is_empty() || only == here
+            })
             .collect()
     }
 
@@ -579,6 +609,9 @@ impl Mode {
 
 #[cfg(test)]
 mod tests {
+    /// The made bots are one list for the app: tests that set it take turns.
+    static CREW_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     use super::*;
 
     #[test]
@@ -603,7 +636,35 @@ mod tests {
     }
 
     #[test]
+    fn a_bot_for_one_project_stays_there() {
+        let _g = CREW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let bot = |id: u16, project: &str| Made {
+            id,
+            name: format!("Bot{id}"),
+            role: "Helps".into(),
+            like: Member::Builder,
+            look: [0; 4],
+            outfit: String::new(),
+            skills: Vec::new(),
+            rules: Vec::new(),
+            project: project.into(),
+        };
+        set_made(&[bot(7, ""), bot(8, "/work/shop")]);
+        set_here("/work/blog");
+        assert!(Member::all().contains(&Member::Made(7)));
+        assert!(!Member::all().contains(&Member::Made(8)));
+        set_here("/work/shop");
+        assert!(Member::all().contains(&Member::Made(8)));
+        assert_eq!(project_of(Member::Made(8)), "/work/shop");
+        // No project open: every bot.
+        set_here("");
+        assert!(Member::all().contains(&Member::Made(8)));
+        set_made(&[]);
+    }
+
+    #[test]
     fn made_bots_join_the_crew() {
+        let _g = CREW_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         set_made(&[Made {
             id: 1,
             name: "Scout".into(),
@@ -613,6 +674,7 @@ mod tests {
             outfit: String::new(),
             skills: Vec::new(),
             rules: Vec::new(),
+            project: String::new(),
         }]);
         let all = Member::all();
         assert_eq!(all.len(), Member::CREW.len() + 2);
@@ -632,6 +694,7 @@ mod tests {
             outfit: String::new(),
             skills: Vec::new(),
             rules: Vec::new(),
+            project: String::new(),
         }]);
         assert_eq!(Member::Made(1).name(), "Scout 2");
         // Removing Checker: Scout takes its Test jobs.

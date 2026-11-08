@@ -479,6 +479,8 @@ pub struct Shell {
     maker_skills: Entity<InputState>,
     maker_rules: Entity<TextareaState>,
     maker_like: Option<Member>,
+    /// The bot being made is tied to one project, not every project.
+    maker_here: bool,
     /// What the bot is for, in the person's words: the engine drafts from it.
     maker_about: Entity<TextareaState>,
     /// Its instructions, memory (one a line) and what it reads first.
@@ -1218,6 +1220,7 @@ impl Shell {
             maker_skills,
             maker_rules,
             maker_like: None,
+            maker_here: false,
             maker_about,
             maker_instr,
             maker_memory,
@@ -3052,6 +3055,7 @@ impl Render for Shell {
         }
         self.poll(cx);
         self.poll_maker(window, cx);
+        data::set_here(self.crew.store.folder().map_or("", |f| f.path.as_str()));
         if self.applied_theme != look() {
             self.applied_theme = look();
             apply_theme(window, cx);
