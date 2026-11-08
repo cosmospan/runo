@@ -4,7 +4,7 @@ use super::bot::{self, MAX_OUTLINE};
 use serde_json::{json, Value};
 
 /// Every browser tool's name.
-pub const TOOLS: [&str; 8] = [
+pub const TOOLS: [&str; 9] = [
     "browser_open",
     "browser_look",
     "browser_click",
@@ -13,6 +13,7 @@ pub const TOOLS: [&str; 8] = [
     "browser_back",
     "browser_screenshot",
     "browser_eval",
+    super::design::CHECK,
 ];
 
 /// Whether there's a browser on this machine to drive.
@@ -107,6 +108,7 @@ pub fn list() -> Vec<Value> {
                 "required": ["js"]
             }
         }),
+        super::design::check_tool(),
     ]
 }
 
@@ -156,6 +158,7 @@ pub fn call(dir: &str, name: &str, args: &Value) -> Value {
         "browser_press" => bot::with(dir, |d| d.press(&s("key"))),
         "browser_back" => bot::with(dir, |d| d.back()),
         "browser_eval" => bot::with(dir, |d| d.eval_js(&s("js"))),
+        super::design::CHECK => return super::design::call_check(dir, args),
         "browser_screenshot" => {
             let full = args["full"].as_bool().unwrap_or(false);
             return match bot::with(dir, |d| d.screenshot(full)) {

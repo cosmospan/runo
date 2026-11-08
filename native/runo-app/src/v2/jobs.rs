@@ -88,7 +88,7 @@ fn browser_rule(exe: Option<&str>) -> String {
         Some(exe) => {
             let cmd = format!("{} v2 browser", shell_quote(exe));
             format!(
-                "run Squad Code's browser commands from this folder: `{cmd} open http://localhost:3000`, `{cmd} look` (add --find <words> to search it), `{cmd} click <number or words>`, `{cmd} type <number or label> <text> [--submit]`, `{cmd} press Enter`, `{cmd} back`, and `{cmd} screenshot`, which saves a small picture and prints where"
+                "run Squad Code's browser commands from this folder: `{cmd} open http://localhost:3000`, `{cmd} look` (add --find <words> to search it), `{cmd} click <number or words>`, `{cmd} type <number or label> <text> [--submit]`, `{cmd} press Enter`, `{cmd} back`, `{cmd} check` (design checks on the page), and `{cmd} screenshot`, which saves a small picture and prints where"
             )
         }
     };
@@ -238,6 +238,12 @@ pub fn start(
         (true, true) => browser_rule(None),
         (true, false) if !exe.is_empty() => browser_rule(Some(&exe)),
         (true, false) => String::new(),
+    };
+    // Design work gets Design's craft, with its theme and check tools.
+    let browser = if job.mode.writes() && !resume && crate::browse::design::is_design_work(text) {
+        format!("{browser}\n\n{}\n\n", crate::browse::design::SKILL)
+    } else {
+        browser
     };
     let sent = prompt(job, text, resume, &checks, &browser);
     let spec = agent::RunSpec {
