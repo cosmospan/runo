@@ -3090,6 +3090,12 @@ impl Shell {
         };
         // Saves asked for since the last tick, at most about once a second.
         self.crew.store.flush(false);
+        // Settings changed from a terminal (`squad brain install`): take them,
+        // so the next save here doesn't put the old ones back.
+        if let Some(st) = crate::settings::changed_elsewhere() {
+            st.apply();
+            cx.set_global(st);
+        }
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
