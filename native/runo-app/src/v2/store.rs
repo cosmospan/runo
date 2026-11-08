@@ -12,9 +12,15 @@ use super::data::{Member, Mode};
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Store {
+    /// The shape this file was saved in ([`FORMAT`]). A file from a newer Squad
+    /// Code is copied aside before this one saves over it.
+    pub format: u32,
     pub folders: Vec<Folder>,
     /// The folder new jobs and questions go to, by index into `folders`.
     pub current: usize,
+    /// A job this build can't read (saved by a newer one) is left out, and the
+    /// file is copied aside first: see [`lenient`].
+    #[serde(deserialize_with = "lenient")]
     pub jobs: Vec<Job>,
     /// Saved as a list of pairs: a made bot can't be a JSON object key.
     #[serde(with = "chat_list")]
@@ -54,6 +60,7 @@ pub struct Store {
     pub reactions: HashMap<String, Vec<String>>,
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(deserialize_with = "lenient")]
     pub talks: Vec<Talk>,
     /// What each bot can do beyond its kind of work (instructions, skill files,
     /// connected apps, permissions, memory), by `engine::bot_key`.
@@ -258,6 +265,7 @@ pub struct Job {
     /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
     pub reads: Vec<String>,
     pub status: Status,
+    #[serde(deserialize_with = "lenient")]
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
     pub plan: Vec<(String, u8)>,
@@ -623,6 +631,106 @@ fn path() -> PathBuf {
     crate::store::data_dir().join("v2.json")
 }
 
+/// The copy of the store kept from before this launch's first save.
+fn prev_path() -> PathBuf {
+    crate::store::data_dir().join("v2.json.prev")
+}
+
+/// The shape of `v2.json` this build writes. Raise it when a change means an
+/// older build would misread the file.
+pub const FORMAT: u32 = 1;
+
+/// Entries [`lenient`] left out since it was last asked.
+static SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// What happened to the saved store at load, for the person to hear once.
+static LOAD_NOTE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The previous copy is taken once a launch, before the first save.
+static PREV_TAKEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A list read entry by entry: one this build can't read (a job state or feed
+/// line from a newer Squad Code) is left out instead of failing the whole file.
+fn lenient<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let raw = Vec::<serde_json::Value>::deserialize(d)?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        match serde_json::from_value(v) {
+            Ok(t) => out.push(t),
+            Err(_) => {
+                SKIPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// What happened to the saved jobs and chats when they were loaded, once:
+/// a file that couldn't be read in full, and where its copy is.
+pub fn take_load_note() -> Option<String> {
+    LOAD_NOTE.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+fn set_load_note(note: String) {
+    crate::applog::error("load", note.clone());
+    *LOAD_NOTE.lock().unwrap_or_else(|e| e.into_inner()) = Some(note);
+}
+
+/// The store in `text`, read as fully as it can be. As the owner, a file that
+/// can't be read in full is kept: moved aside when it can't be read at all,
+/// copied aside when only parts of it were left out, so a save never loses it.
+fn parse(text: &str, owner: bool) -> Option<Store> {
+    SKIPPED.store(0, std::sync::atomic::Ordering::Relaxed);
+    match serde_json::from_str::<Store>(text) {
+        Ok(s) => {
+            let skipped = SKIPPED.swap(0, std::sync::atomic::Ordering::Relaxed);
+            if owner && (skipped > 0 || s.format > FORMAT) {
+                let why = if s.format > FORMAT {
+                    "saved by a newer Squad Code"
+                } else {
+                    "some entries couldn't be read"
+                };
+                crate::store::keep_aside(&path(), why);
+                set_load_note(format!(
+                    "Some saved jobs or chats were {}. A copy of the file is kept next to v2.json in {}.",
+                    if s.format > FORMAT {
+                        "saved by a newer Squad Code and may be missing here"
+                    } else {
+                        "left out because they couldn't be read"
+                    },
+                    crate::store::data_dir().display()
+                ));
+            }
+            Some(s)
+        }
+        Err(e) => {
+            if owner {
+                crate::store::move_aside(&path(), &e.to_string());
+            }
+            // Whatever fields still read; None when it isn't JSON at all.
+            let salvaged = serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .and_then(crate::store::salvage::<Store>);
+            if owner {
+                set_load_note(format!(
+                    "Your saved jobs and chats couldn't be read in full, so Squad Code {}. The file is kept as it was in {}.",
+                    if salvaged.is_some() {
+                        "kept what it could"
+                    } else {
+                        "started from the copy before your last launch"
+                    },
+                    crate::store::data_dir().display()
+                ));
+            }
+            salvaged
+        }
+    }
+}
+
 impl Store {
     /// The saved store, or a fresh one that starts from v1's projects.
     pub fn load() -> Store {
@@ -638,26 +746,35 @@ impl Store {
     /// `owner`: this process runs the jobs, so a job still marked running was
     /// cut off when Squad Code last closed.
     fn load_as(owner: bool) -> Store {
-        let mut s: Store = std::fs::read_to_string(path())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_else(|| {
-                let v1 = crate::store::State::load();
-                Store {
-                    folders: v1
-                        .projects
-                        .iter()
-                        .rev()
-                        .filter(|p| std::path::Path::new(&p.path).is_dir())
-                        .map(|p| Folder {
-                            name: p.name.clone(),
-                            path: p.path.clone(),
-                            ship: String::new(),
-                        })
-                        .collect(),
-                    ..Default::default()
-                }
-            });
+        let saved = std::fs::read_to_string(path()).ok();
+        let read = match &saved {
+            Some(text) => parse(text, owner).or_else(|| {
+                // Not readable at all (cut off mid-write): the copy from before
+                // the last launch is the best there is.
+                std::fs::read_to_string(prev_path())
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<Store>(&t).ok())
+            }),
+            None => None,
+        };
+        let mut s = read.unwrap_or_else(|| {
+            let v1 = crate::store::State::load();
+            Store {
+                folders: v1
+                    .projects
+                    .iter()
+                    .rev()
+                    .filter(|p| std::path::Path::new(&p.path).is_dir())
+                    .map(|p| Folder {
+                        name: p.name.clone(),
+                        path: p.path.clone(),
+                        ship: String::new(),
+                    })
+                    .collect(),
+                ..Default::default()
+            }
+        });
+        s.format = FORMAT;
         for j in &mut s.jobs {
             if owner && j.status == Status::Running {
                 j.status = Status::Interrupted;
@@ -717,13 +834,22 @@ impl Store {
             return;
         }
         let p = path();
-        if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        // Once a launch, keep the file as it was before this launch changed it:
+        // what a load falls back to when the file is found cut off.
+        if !PREV_TAKEN.swap(true, std::sync::atomic::Ordering::Relaxed) && p.exists() {
+            let _ = std::fs::copy(&p, prev_path());
         }
-        if let Ok(text) = serde_json::to_string(self) {
-            let tmp = p.with_extension("json.tmp");
-            if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(tmp, p);
+        match serde_json::to_string(self) {
+            Ok(text) => {
+                if let Err(e) = crate::store::write_private(&p, text.as_bytes()) {
+                    crate::applog::error_once(
+                        "save",
+                        format!("could not save {}: {e}", p.display()),
+                    );
+                }
+            }
+            Err(e) => {
+                crate::applog::error_once("save", format!("could not save {}: {e}", p.display()))
             }
         }
     }
@@ -1250,6 +1376,57 @@ pub fn span(s: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn saved_with(jobs: serde_json::Value) -> String {
+        serde_json::json!({ "format": 1, "jobs": jobs, "next_id": 9 }).to_string()
+    }
+
+    #[test]
+    fn a_job_this_build_cant_read_costs_that_job_not_the_file() {
+        let good = serde_json::to_value(Job {
+            id: 1,
+            title: "fix login".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let mut newer = good.clone();
+        newer["id"] = 2.into();
+        newer["status"] = "Waiting".into();
+        let s = parse(&saved_with(serde_json::json!([good, newer])), false).unwrap();
+        assert_eq!(s.jobs.len(), 1);
+        assert_eq!(s.jobs[0].title, "fix login");
+        assert_eq!(s.next_id, 9);
+    }
+
+    #[test]
+    fn a_feed_line_this_build_cant_read_costs_that_line() {
+        let mut job = serde_json::to_value(Job {
+            id: 1,
+            feed: vec![Item::Text("hi".into())],
+            ..Default::default()
+        })
+        .unwrap();
+        job["feed"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({ "Picture": "a.png" }));
+        let s = parse(&saved_with(serde_json::json!([job])), false).unwrap();
+        assert_eq!(s.jobs[0].feed, vec![Item::Text("hi".into())]);
+    }
+
+    #[test]
+    fn a_file_cut_off_mid_write_reads_as_nothing() {
+        let text = saved_with(serde_json::json!([]));
+        assert!(parse(&text[..text.len() / 2], false).is_none());
+    }
+
+    #[test]
+    fn one_field_in_a_shape_this_build_doesnt_know_keeps_the_rest() {
+        let text = serde_json::json!({ "next_id": 9, "set_up": "maybe" }).to_string();
+        let s = parse(&text, false).unwrap();
+        assert_eq!(s.next_id, 9);
+        assert!(!s.set_up);
+    }
 
     #[test]
     fn time_waiting_for_a_follow_up_is_not_time_at_work() {

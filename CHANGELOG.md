@@ -4,6 +4,10 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Saved jobs, threads and chats are no longer lost when `v2.json` can't be read. A file cut off by a crash, or saved by a newer Squad Code, used to be replaced by an empty store on the next save. Now a job or feed line this build can't read is left out on its own, the file is copied or moved aside first, Squad Code says so once, and a copy from before each launch (`v2.json.prev`) is used when the file is cut off. Saves are flushed to disk before they replace the old file.
+
 ## [2.0.0-alpha.7] - 2026-11-08
 
 ### Added

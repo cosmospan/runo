@@ -419,6 +419,7 @@ pub fn seed() -> Store {
         ship: String::new(),
     };
     Store {
+        format: super::store::FORMAT,
         setups,
         threads: vec![
             thread(
