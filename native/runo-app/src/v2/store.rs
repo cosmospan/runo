@@ -69,6 +69,15 @@ pub struct Store {
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+    /// Saves wait for the window's next [`Store::flush`] instead of writing
+    /// right away: set by the window, which flushes on every tick and on quit.
+    #[serde(skip)]
+    pub deferred: bool,
+    /// A save was asked for and hasn't been written yet.
+    #[serde(skip)]
+    pub dirty: std::cell::Cell<bool>,
+    #[serde(skip)]
+    pub flushed_at: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 /// A question asked in a thread and the bot's answer, kept in the thread.
@@ -265,7 +274,9 @@ pub struct Job {
     /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
     pub reads: Vec<String>,
     pub status: Status,
-    #[serde(deserialize_with = "lenient")]
+    /// Saved in its own file (`jobs/<id>.json`), not in v2.json: see
+    /// [`Store::save`]. Read from v2.json too, where builds before that kept it.
+    #[serde(deserialize_with = "lenient", skip_serializing_if = "feeds_apart")]
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
     pub plan: Vec<(String, u8)>,
@@ -638,7 +649,39 @@ fn prev_path() -> PathBuf {
 
 /// The shape of `v2.json` this build writes. Raise it when a change means an
 /// older build would misread the file.
-pub const FORMAT: u32 = 1;
+/// 2: job feeds are kept in `jobs/<id>.json`.
+pub const FORMAT: u32 = 2;
+
+/// The folder each job's feed is saved in, one file per job.
+fn feeds_dir() -> PathBuf {
+    crate::store::data_dir().join("jobs")
+}
+
+fn feed_path(id: u64) -> PathBuf {
+    feeds_dir().join(format!("{id}.json"))
+}
+
+thread_local! {
+    /// Set while v2.json is written, so feeds stay out of it; anywhere else a
+    /// job is written out (the server's API) it keeps its feed.
+    static FEEDS_APART: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn feeds_apart(_: &Vec<Item>) -> bool {
+    FEEDS_APART.with(|f| f.get())
+}
+
+/// What was last written to (or read from) each job's feed file: its length
+/// and a hash of its last line. A feed that matches isn't written again.
+static FEEDS_WRITTEN: std::sync::Mutex<Option<HashMap<u64, (usize, u64)>>> =
+    std::sync::Mutex::new(None);
+
+fn feed_mark(feed: &[Item]) -> (usize, u64) {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    format!("{:?}", feed.last()).hash(&mut h);
+    (feed.len(), h.finish())
+}
 
 /// Entries [`lenient`] left out since it was last asked.
 static SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -775,6 +818,7 @@ impl Store {
             }
         });
         s.format = FORMAT;
+        s.read_feeds(owner);
         for j in &mut s.jobs {
             if owner && j.status == Status::Running {
                 j.status = Status::Interrupted;
@@ -829,17 +873,112 @@ impl Store {
         }
     }
 
+    /// Saves now, or at the window's next flush when saves are deferred.
     pub fn save(&self) {
         if self.demo {
             return;
         }
+        if self.deferred {
+            self.dirty.set(true);
+            return;
+        }
+        self.write();
+    }
+
+    /// Writes what a deferred save asked for: at most about once a second,
+    /// or right away with `now` (on quit).
+    pub fn flush(&self, now: bool) {
+        if !self.dirty.get() {
+            return;
+        }
+        let due = self
+            .flushed_at
+            .get()
+            .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(1));
+        if now || due {
+            self.dirty.set(false);
+            self.flushed_at.set(Some(std::time::Instant::now()));
+            self.write();
+        }
+    }
+
+    /// Each job's feed from its own file, for jobs whose feed v2.json didn't
+    /// hold. As the owner, feed files of jobs that are gone are removed.
+    fn read_feeds(&mut self, owner: bool) {
+        let mut written = FEEDS_WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+        let written = written.get_or_insert_with(HashMap::new);
+        for j in &mut self.jobs {
+            if !j.feed.is_empty() {
+                // Saved inside v2.json by an older build: written apart on the next save.
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(feed_path(j.id)) else {
+                continue;
+            };
+            #[derive(Deserialize)]
+            struct Feed(#[serde(deserialize_with = "lenient")] Vec<Item>);
+            if let Ok(Feed(feed)) = serde_json::from_str(&text) {
+                j.feed = feed;
+                written.insert(j.id, feed_mark(&j.feed));
+            }
+        }
+        if owner && !self.demo {
+            let ids: std::collections::HashSet<u64> = self.jobs.iter().map(|j| j.id).collect();
+            for entry in std::fs::read_dir(feeds_dir())
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let id = name
+                    .strip_suffix(".json")
+                    .and_then(|n| n.parse::<u64>().ok());
+                if id.is_some_and(|id| !ids.contains(&id)) {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    /// The feeds that changed since they were last written, each in its own
+    /// file. A running job's feed changes in place (a step finishing), so it
+    /// is always written.
+    fn write_feeds(&self) {
+        let mut written = FEEDS_WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+        let written = written.get_or_insert_with(HashMap::new);
+        for j in &self.jobs {
+            let mark = feed_mark(&j.feed);
+            if j.status != Status::Running && written.get(&j.id) == Some(&mark) {
+                continue;
+            }
+            match serde_json::to_string(&j.feed) {
+                Ok(text) => match crate::store::write_private(&feed_path(j.id), text.as_bytes()) {
+                    Ok(()) => {
+                        written.insert(j.id, mark);
+                    }
+                    Err(e) => crate::applog::error_once(
+                        "save",
+                        format!("could not save the feed of job {}: {e}", j.id),
+                    ),
+                },
+                Err(e) => crate::applog::error_once("save", format!("could not save a feed: {e}")),
+            }
+        }
+    }
+
+    fn write(&self) {
+        // Feeds first: v2.json never lists a job whose feed isn't on disk.
+        self.write_feeds();
         let p = path();
         // Once a launch, keep the file as it was before this launch changed it:
         // what a load falls back to when the file is found cut off.
         if !PREV_TAKEN.swap(true, std::sync::atomic::Ordering::Relaxed) && p.exists() {
             let _ = std::fs::copy(&p, prev_path());
         }
-        match serde_json::to_string(self) {
+        FEEDS_APART.with(|f| f.set(true));
+        let text = serde_json::to_string(self);
+        FEEDS_APART.with(|f| f.set(false));
+        match text {
             Ok(text) => {
                 if let Err(e) = crate::store::write_private(&p, text.as_bytes()) {
                     crate::applog::error_once(
@@ -1376,6 +1515,90 @@ pub fn span(s: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feeds_stay_out_of_v2_json_but_not_out_of_the_api() {
+        let s = Store {
+            jobs: vec![Job {
+                id: 1,
+                feed: vec![Item::Text("long output".into())],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        FEEDS_APART.with(|f| f.set(true));
+        let saved = serde_json::to_string(&s).unwrap();
+        FEEDS_APART.with(|f| f.set(false));
+        assert!(!saved.contains("long output"));
+        // A job sent anywhere else, such as the server's API, keeps its feed.
+        assert!(serde_json::to_string(&s.jobs[0])
+            .unwrap()
+            .contains("long output"));
+        // And a v2.json from before, with feeds inside, still reads them.
+        let old = serde_json::to_string(&s).unwrap();
+        assert_eq!(parse(&old, false).unwrap().jobs[0].feed.len(), 1);
+    }
+
+    #[test]
+    fn feeds_are_saved_apart_and_read_back() {
+        let _lock = crate::store::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let old = std::env::var_os("SQUADCODE_HOME");
+        let home = std::env::temp_dir().join(format!("squad-feeds-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::env::set_var("SQUADCODE_HOME", &home);
+        let s = Store {
+            format: FORMAT,
+            jobs: vec![Job {
+                id: 7,
+                feed: vec![Item::Text("ran the tests".into())],
+                ..Default::default()
+            }],
+            next_id: 8,
+            ..Default::default()
+        };
+        s.save();
+        let index = std::fs::read_to_string(home.join("v2.json")).unwrap();
+        assert!(!index.contains("ran the tests"));
+        assert!(std::fs::read_to_string(home.join("jobs/7.json"))
+            .unwrap()
+            .contains("ran the tests"));
+        // A feed file whose job is gone is cleared away by the next load.
+        std::fs::write(home.join("jobs/3.json"), "[]").unwrap();
+        let back = Store::load();
+        assert_eq!(back.jobs[0].feed, vec![Item::Text("ran the tests".into())]);
+        assert!(!home.join("jobs/3.json").exists());
+        match old {
+            Some(v) => std::env::set_var("SQUADCODE_HOME", v),
+            None => std::env::remove_var("SQUADCODE_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_feed_is_written_again_only_when_its_end_changed() {
+        let mut feed = vec![Item::Text("a".into())];
+        let before = feed_mark(&feed);
+        assert_eq!(before, feed_mark(&feed.clone()));
+        feed.push(Item::Note("b".into()));
+        assert_ne!(before, feed_mark(&feed));
+        let grown = feed_mark(&feed);
+        feed[1] = Item::Note("c".into());
+        assert_ne!(grown, feed_mark(&feed));
+    }
+
+    #[test]
+    fn a_deferred_save_waits_for_a_flush() {
+        let s = Store {
+            deferred: true,
+            demo: false,
+            ..Default::default()
+        };
+        assert!(!s.dirty.get());
+        s.save();
+        assert!(s.dirty.get());
+    }
 
     fn saved_with(jobs: serde_json::Value) -> String {
         serde_json::json!({ "format": 1, "jobs": jobs, "next_id": 9 }).to_string()

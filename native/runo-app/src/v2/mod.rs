@@ -1062,6 +1062,12 @@ impl Shell {
         let dozing = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let asleep = dozing.clone();
         let mut slept = 0u32;
+        // Saves still waiting for a tick are written before Squad Code quits.
+        cx.on_app_quit(|this, _| {
+            this.crew.store.flush(true);
+            async {}
+        })
+        .detach();
         let pump = cx.spawn(async move |this, cx| loop {
             // Dozing (nobody around, nothing running): no redraws at all, apart from
             // one every half minute so times like "4m ago" stay true.
@@ -1071,6 +1077,13 @@ impl Shell {
                     .await;
                 slept += 1;
                 if slept < 60 {
+                    // No redraw, but a save asked for still gets written.
+                    if this
+                        .update(cx, |this, _| this.crew.store.flush(false))
+                        .is_err()
+                    {
+                        break;
+                    }
                     continue;
                 }
                 slept = 0;
@@ -1118,7 +1131,10 @@ impl Shell {
             demo::usage(&mut s);
             s
         } else {
-            Store::load()
+            // The window writes saves on its ticks, not as each change asks.
+            let mut s = Store::load();
+            s.deferred = true;
+            s
         };
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
@@ -2904,6 +2920,8 @@ impl Shell {
             Place::Live(id) => Some(id),
             _ => None,
         };
+        // Saves asked for since the last tick, at most about once a second.
+        self.crew.store.flush(false);
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
