@@ -243,6 +243,8 @@ impl Hub {
 
     /// Moves the crew along and tells every listener what changed.
     pub fn tick(&mut self) {
+        // Jobs' browsers nobody has used for a while are closed.
+        crate::browse::host::reap_now_and_then();
         let finished = self.rt.poll(&self.st, None);
         for id in finished {
             self.send(json!({ "kind": "ended", "id": id }));

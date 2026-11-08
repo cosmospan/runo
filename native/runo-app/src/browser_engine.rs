@@ -350,7 +350,7 @@ const MAX_CONSOLE: usize = 50;
 
 /// Run in every page before its own scripts: links and `window.open` that would open
 /// a new tab or window load in the same page instead, since the panel shows one page.
-const IN_PLACE_JS: &str = r#"(() => {
+pub(crate) const IN_PLACE_JS: &str = r#"(() => {
   const go = (url) => {
     if (!url) return;
     const href = new URL(String(url), location.href).href;
@@ -368,7 +368,6 @@ const IN_PLACE_JS: &str = r#"(() => {
 })();"#;
 
 /// A console error or uncaught exception from a CDP event, as one line of text.
-#[cfg(unix)]
 pub fn console_error(method: &str, params: &Value) -> Option<String> {
     match method {
         "Runtime.consoleAPICalled" => {
@@ -1214,7 +1213,7 @@ fn decode_frame(data: &str) -> Option<Arc<RenderImage>> {
 }
 
 /// A base64 image as a BGRA image GPUI can draw.
-fn decode_image(data: &str, format: image::ImageFormat) -> Option<Arc<RenderImage>> {
+pub(crate) fn decode_image(data: &str, format: image::ImageFormat) -> Option<Arc<RenderImage>> {
     use base64::Engine as _;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)

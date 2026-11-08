@@ -80,11 +80,40 @@ fn add_rules(list: &str, more: &[String]) -> String {
     rules.join(",")
 }
 
-/// What the bot is told, around the person's words.
-fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
+/// What a bot is told about trying web pages in the job's own browser inside Squad
+/// Code: with the MCP tools, or (`exe` set, for engines without MCP) as commands.
+fn browser_rule(exe: Option<&str>) -> String {
+    let how = match exe {
+        None => "use Squad Code's browser tools (browser_open, browser_look, browser_click, browser_type, browser_press)".to_string(),
+        Some(exe) => {
+            let cmd = format!("{} v2 browser", shell_quote(exe));
+            format!(
+                "run Squad Code's browser commands from this folder: `{cmd} open http://localhost:3000`, `{cmd} look` (add --find <words> to search it), `{cmd} click <number or words>`, `{cmd} type <number or label> <text> [--submit]`, `{cmd} press Enter`, `{cmd} back`, and `{cmd} screenshot`, which saves a small picture and prints where"
+            )
+        }
+    };
+    format!(
+        " To try a web page, such as the app you started on localhost, {how}. They drive this job's own browser inside Squad Code, where the person can watch and step in. A page comes back as a short text outline with a [number] on each control, and each step tells you only what changed, so prefer it to screenshots unless how the page looks matters. Don't open an outside browser or install Playwright or Puppeteer for this."
+    )
+}
+
+fn shell_quote(s: &str) -> String {
+    if s.chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/._-".contains(c))
+    {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
+/// What the bot is told, around the person's words. `browser` is how it reaches
+/// the job's browser, when it can.
+fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String], browser: &str) -> String {
     if follow_up {
         return text.to_string();
     }
+    let browser_rule = browser;
     let rules = match job.mode {
         Mode::Ask | Mode::Review => {
             "Read the code to be sure, and don't change any files.".to_string()
@@ -101,7 +130,7 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String]) -> String {
     };
     let crew = super::brain::talk::crew_rule(job.bot, &Member::all());
     format!(
-        "{}\n\n{part}{rules}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
+        "{}\n\n{part}{rules}{browser_rule}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         super::setup::brief(job.bot)
     )
 }
@@ -193,7 +222,10 @@ pub fn start(
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let memory = (!exe.is_empty() && p.id == "claude").then_some((exe.as_str(), dir.as_str()));
+    // Squad Code's own MCP server (memory, playbooks, the job's browser) goes to
+    // every engine that takes MCP servers; the rest get the browser as commands.
+    let memory =
+        (!exe.is_empty() && agent::takes_mcp(p.id)).then_some((exe.as_str(), dir.as_str()));
     if job.mode.writes() {
         let may: Vec<String> = MAY_RUN.iter().map(|t| t.to_string()).collect();
         opts.allowed_tools = add_rules(&opts.allowed_tools, &may);
@@ -201,7 +233,13 @@ pub fn start(
             opts.disallowed_tools = add_rules(&opts.disallowed_tools, &never_run());
         }
     }
-    let sent = prompt(job, text, resume, &checks);
+    let browser = match (crate::browse::tools::offered(), memory.is_some()) {
+        (false, _) => String::new(),
+        (true, true) => browser_rule(None),
+        (true, false) if !exe.is_empty() => browser_rule(Some(&exe)),
+        (true, false) => String::new(),
+    };
+    let sent = prompt(job, text, resume, &checks, &browser);
     let spec = agent::RunSpec {
         provider: p.id,
         prompt: &sent,
@@ -449,6 +487,18 @@ fn is_result(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_engine_is_told_how_to_reach_the_browser() {
+        // Engines with MCP get the tools; Grok and the like, the commands.
+        assert!(browser_rule(None).contains("browser_open"));
+        let cmd = browser_rule(Some(
+            "/Applications/Squad Code.app/Contents/MacOS/SquadCode",
+        ));
+        assert!(cmd.contains("`'/Applications/Squad Code.app/Contents/MacOS/SquadCode' v2 browser open http://localhost:3000`"));
+        assert!(!cmd.contains("browser_open"));
+        assert!(crate::agent::takes_mcp("codex") && crate::agent::takes_mcp("gemini"));
+    }
 
     #[test]
     fn the_engines_last_word_is_spotted() {

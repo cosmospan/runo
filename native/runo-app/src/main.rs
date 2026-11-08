@@ -17,6 +17,7 @@ mod assistant_mem;
 mod assistant_ref;
 mod bench;
 mod branches;
+mod browse;
 mod browser;
 mod browser_engine;
 mod buildclean;

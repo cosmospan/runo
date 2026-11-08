@@ -35,7 +35,26 @@ pub fn serve(dir: &str, thread: Option<u64>) {
 /// The reply to one request, or `None` for notifications. Requests relayed from a
 /// connection come through here, so threads there don't get the thread tools yet.
 pub fn handle(dir: &str, request: &Value) -> Option<Value> {
-    handle_thread(dir, None, request)
+    // The browser tools drive a browser on this computer, where the connection's
+    // localhost isn't: they're left out for a session elsewhere.
+    let name = request["params"]["name"].as_str().unwrap_or_default();
+    if request["method"] == "tools/call" && crate::browse::tools::TOOLS.contains(&name) {
+        let id = request.get("id")?.clone();
+        return Some(json!({ "jsonrpc": "2.0", "id": id, "result": failure(
+            "The browser tools work only for sessions on this computer."
+        ) }));
+    }
+    let mut reply = handle_thread(dir, None, request)?;
+    if let Some(list) = reply
+        .get_mut("result")
+        .and_then(|r| r.get_mut("tools"))
+        .and_then(Value::as_array_mut)
+    {
+        list.retain(|t| {
+            !crate::browse::tools::TOOLS.contains(&t["name"].as_str().unwrap_or_default())
+        });
+    }
+    Some(reply)
 }
 
 /// The reply to one request from the session in `dir`, a Crew thread when `thread` is set.
@@ -51,7 +70,7 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
                 "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
                 "capabilities": { "tools": {}, "prompts": {} },
                 "serverInfo": { "name": "runo", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Runo's session memory and playbooks. Call read_memory to catch up on this task, search_history to find what earlier sessions did, and save_note to keep decisions for whoever works on this next. Playbooks are saved tasks: list_playbooks shows them, get_playbook gives one's instructions to carry out now, and run_playbook starts one as its own session in Runo. When the project has databases in Runo's Data place, data_connections, data_tables and data_query read them, read-only."
+                "instructions": "Runo's session memory and playbooks, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it. Call read_memory to catch up on this task, search_history to find what earlier sessions did, and save_note to keep decisions for whoever works on this next. Playbooks are saved tasks: list_playbooks shows them, get_playbook gives one's instructions to carry out now, and run_playbook starts one as its own session in Runo. When the project has databases in Runo's Data place, data_connections, data_tables and data_query read them, read-only."
             }))
         }
         "prompts/list" => Ok(json!({ "prompts": prompt_list(&load_state(), dir) })),
@@ -74,6 +93,11 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
                     list.extend(crate::db::agent::tools());
                 }
             }
+            if crate::browse::tools::offered() {
+                if let Some(list) = all.as_array_mut() {
+                    list.extend(crate::browse::tools::list());
+                }
+            }
             Ok(json!({ "tools": all }))
         }
         "tools/call" => {
@@ -92,6 +116,9 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
                     }
                     None => failure("This folder isn't one of Runo's projects."),
                 }),
+                None if crate::browse::tools::TOOLS.contains(&name) => {
+                    Ok(crate::browse::tools::call(dir, name, &params["arguments"]))
+                }
                 None => Ok(call(dir, name, &params["arguments"])),
             }
         }
@@ -745,7 +772,14 @@ mod tests {
         )
         .is_none());
         let list = handle(d, &json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).unwrap();
-        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 9);
+        // Besides the browser tools, offered when this machine has a browser.
+        let own = list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| !t["name"].as_str().unwrap().starts_with("browser_"))
+            .count();
+        assert_eq!(own, 9);
         let call = |name: &str, args: Value| {
             handle(d, &json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":name,"arguments":args}})).unwrap()["result"]["content"][0]["text"]
                 .as_str()
@@ -784,6 +818,8 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|t| t["name"].as_str().unwrap().to_string())
+                // The browser tools come and go with a browser on this machine.
+                .filter(|n| !n.starts_with("browser_"))
                 .collect()
         };
         // An ordinary session's tools are exactly what they were before Crew.

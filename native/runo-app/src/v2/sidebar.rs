@@ -1079,13 +1079,19 @@ impl Shell {
             Place::Usage => "Usage".into(),
             Place::Server => "Your server".into(),
             Place::Screen => "Your server / Screen".into(),
+            Place::Browser(id) => match self.crew.store.job(id) {
+                Some(j) => format!("{} / {} / Browser", self.thread_crumb(j.thread), j.label()),
+                None => "Jobs / Browser".into(),
+            },
             Place::Welcome => "Welcome".into(),
         };
         // Settings apply to every project, so they get a plain title, not a path.
         let global = matches!(self.place, Place::Settings(_));
         // The thread a job or plan sits in: its crumb takes you back there.
         let back_to = match self.place {
-            Place::Live(id) | Place::Race(id) => self.crew.store.job(id).map(|j| j.thread),
+            Place::Live(id) | Place::Race(id) | Place::Browser(id) => {
+                self.crew.store.job(id).map(|j| j.thread)
+            }
             Place::Goal(id) => self
                 .crew
                 .store

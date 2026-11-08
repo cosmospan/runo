@@ -205,6 +205,10 @@ pub fn discard(job: &Job) {
 /// Removes the job's worktree, and its branch once it's merged.
 fn cleanup(job: &Job) {
     let repo = job.folder.path.as_str();
+    // The job's browser goes with its worktree.
+    if !job.worktree.is_empty() {
+        crate::browse::host::close(&job.worktree);
+    }
     if !job.worktree.is_empty() && Path::new(&job.worktree).exists() {
         let _ = git::remove_worktree(repo, &job.worktree);
     }

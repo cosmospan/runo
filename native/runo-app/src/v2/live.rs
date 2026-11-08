@@ -193,6 +193,22 @@ impl Shell {
             )
             // A job on your server: its screen, where anything the bot
             // opens (a browser, the app it's testing) shows up.
+            // The job's own browser, where its bot tries pages and you can too.
+            .when(!matches!(job.status, Status::Shipped), |d| {
+                let id = job.id;
+                d.child(
+                    ui::ghost_i("job-browser", IconName::Globe, "Browser")
+                        .tooltip(|window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(
+                                "This job's own browser, inside Squad: watch the bot try pages, or open one yourself.",
+                            )
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.open_job_browser(id, None, cx)
+                        })),
+                )
+            })
             .when(running && !job.remote_on.is_empty(), |d| {
                 d.child(self.screen_button("job-screen", "Watch its screen", cx))
             })

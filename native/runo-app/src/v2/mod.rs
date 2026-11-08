@@ -54,6 +54,7 @@ mod trouble;
 mod ui;
 mod usage;
 mod wallpaper;
+mod webpage;
 mod welcome;
 mod work;
 
@@ -95,6 +96,8 @@ pub enum Place {
     Server,
     /// Your server's screen, live.
     Screen,
+    /// A job's own browser, live, by the job's id.
+    Browser(u64),
     /// The first-run walkthrough.
     Welcome,
 }
@@ -652,6 +655,8 @@ pub struct Shell {
     screen_retired: Vec<Arc<RenderImage>>,
     screen_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
     screen_focus: FocusHandle,
+    /// A job's browser, watched in Squad.
+    web: webpage::Web,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -763,7 +768,7 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
+        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
@@ -908,7 +913,8 @@ impl Shell {
             SliderEvent::Change(v) => (v.end().round().clamp(0., 100.) as u8, false),
             SliderEvent::Release(v) => (v.end().round().clamp(0., 100.) as u8, true),
         };
-        let subs = vec![
+        let (web, web_sub) = webpage::Web::new(window, cx);
+        let mut subs = vec![
             // The background image's dim and show-through preview as you drag; its
             // blur needs a new copy made, so that waits until you let go.
             cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
@@ -1301,6 +1307,7 @@ impl Shell {
             screen_retired: Vec::new(),
             screen_bounds: Default::default(),
             screen_focus: cx.focus_handle(),
+            web,
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -1329,7 +1336,10 @@ impl Shell {
             bg_blur_slider,
             bg_dim_slider,
             bg_show_slider,
-            _subs: subs,
+            _subs: {
+                subs.push(web_sub);
+                subs
+            },
             _pump: pump,
         };
         // The maker, for looking at it: empty, with a draft, or a bot's setup.
@@ -1348,6 +1358,13 @@ impl Shell {
             Ok("review-jobs") => {
                 shell.jobs_open = true;
                 shell.side_job = false;
+            }
+            // A job's browser, on RUNO_V2_URL when it's set.
+            Ok("browser") => {
+                if let Some(id) = shell.crew.store.jobs.last().map(|j| j.id) {
+                    let url = std::env::var("RUNO_V2_URL").ok();
+                    shell.open_job_browser(id, url, cx);
+                }
             }
             Ok("setup") => {
                 let who = Member::all()
@@ -2888,6 +2905,7 @@ impl Shell {
         };
         self.poll_server_setup(cx);
         self.poll_machine(cx);
+        self.poll_web(cx);
         let finished = self.crew.poll(&st, viewing);
         self.poll_reading(cx);
         self.poll_follow_reading(cx);
@@ -3245,7 +3263,7 @@ impl Render for Shell {
             && !self.palette
             // The server's page and its screen keep reading the server: their
             // news only shows on a redraw, so they keep the app awake.
-            && !matches!(self.place, Place::Server | Place::Screen)
+            && !matches!(self.place, Place::Server | Place::Screen | Place::Browser(_))
             && self
                 .toast
                 .as_ref()
@@ -3274,6 +3292,7 @@ impl Render for Shell {
             Place::Usage => self.usage(cx),
             Place::Server => self.server_page(cx),
             Place::Screen => self.screen_page(window, cx),
+            Place::Browser(_) => self.web_page(window, cx),
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.

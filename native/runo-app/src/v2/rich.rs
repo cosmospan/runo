@@ -10,7 +10,7 @@ use gpui_kit::component::Icon;
 use gpui_kit::*;
 
 use super::ui::{self, c, ca};
-use super::Shell;
+use super::{Place, Shell};
 
 /// Something in a message you can act on.
 #[derive(Clone, Debug, PartialEq)]
@@ -372,6 +372,13 @@ impl Shell {
         if !there {
             return self.act(a, dir, window, cx);
         }
+        // The app on the server opens in the job's browser there, in Squad.
+        if let (Act::Link(u), Some(id)) = (a, self.job_in_view()) {
+            if local_port(u).is_some() {
+                self.open_job_browser(id, Some(u.clone()), cx);
+                return;
+            }
+        }
         let Some(cfg) = self.crew.link.as_ref().map(|l| l.cfg.clone()) else {
             self.say("The server isn't connected, so this can't be opened from here.");
             cx.notify();
@@ -475,7 +482,11 @@ impl Shell {
     /// Does what a message offered.
     pub(super) fn act(&mut self, a: &Act, dir: &str, window: &mut Window, cx: &mut Context<Self>) {
         match a {
-            Act::Link(u) => cx.open_url(u),
+            // The app a job made opens in that job's browser, inside Squad.
+            Act::Link(u) => match self.job_in_view().filter(|_| local_port(u).is_some()) {
+                Some(id) => self.open_job_browser(id, Some(u.clone()), cx),
+                None => cx.open_url(u),
+            },
             Act::Run(cmd) => {
                 if self.crew.store.folder().is_some() {
                     let id = super::term::project_id(self.crew.store.current);
@@ -500,6 +511,16 @@ impl Shell {
             }
         }
         cx.notify();
+    }
+}
+
+impl Shell {
+    /// The job on screen, whose links open in its browser.
+    fn job_in_view(&self) -> Option<u64> {
+        match self.place {
+            Place::Live(id) | Place::Browser(id) => Some(id),
+            _ => None,
+        }
     }
 }
 
