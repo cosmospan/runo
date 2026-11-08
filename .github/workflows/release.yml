@@ -75,7 +75,7 @@ jobs:
         run: cargo install cargo-bundle --locked
 
       - name: Build Squad Code.app
-        working-directory: native/runo-app
+        working-directory: native/squad-app
         run: cargo bundle --release --target ${{ matrix.target }}
 
       - name: Find the app
@@ -115,9 +115,9 @@ jobs:
         run: |
           keychain="$RUNNER_TEMP/runo.keychain-db"
           echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security create-keychain -p runo "$keychain"
+          security create-keychain -p squadcode "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p runo "$keychain"
+          security unlock-keychain -p squadcode "$keychain"
           security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
           security set-key-partition-list -S apple-tool:,apple: -s -k runo "$keychain"
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
@@ -233,7 +233,7 @@ jobs:
         run: cargo install cargo-bundle --locked
 
       - name: Build Squad Code
-        working-directory: native/runo-app
+        working-directory: native/squad-app
         run: cargo bundle --release --format deb
 
       - name: Name the build
@@ -265,8 +265,8 @@ jobs:
           dir="$RUNNER_TEMP/${{ steps.build.outputs.name }}"
           mkdir -p "$dir"
           cp target/release/SquadCode "$dir/"
-          cp native/runo-app/assets/linux/runo.desktop "$dir/"
-          cp native/runo-app/assets/icon/png/runo-512.png "$dir/runo.png"
+          cp native/squad-app/assets/linux/runo.desktop "$dir/"
+          cp native/squad-app/assets/icon/png/runo-512.png "$dir/runo.png"
           cp LICENSE "$dir/"
           tar -C "$RUNNER_TEMP" -czf "dist/${{ steps.build.outputs.name }}.tar.gz" "${{ steps.build.outputs.name }}"
 
@@ -314,7 +314,7 @@ jobs:
           key: windows-x86_64
 
       - name: Build SquadCode.exe
-        run: cargo build --release -p runo
+        run: cargo build --release -p squadcode
 
       - name: Name the build
         id: build
@@ -378,7 +378,7 @@ jobs:
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
-          pub=$(tr -d '[:space:]' < native/runo-app/src/update.pub)
+          pub=$(tr -d '[:space:]' < native/squad-app/src/update.pub)
           if [ -z "$UPDATE_SIGNING_KEY" ]; then
             if [ -n "$pub" ]; then
               echo "::error::update.pub is set but UPDATE_SIGNING_KEY isn't, so Squad Code would refuse this release."

@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      MANIFEST: native/runo-app/src/agents.json
+      MANIFEST: native/squad-app/src/agents.json
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +44,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build Squad Code
-        run: cargo build -p runo
+        run: cargo build -p squadcode
 
       - uses: actions/setup-node@v4
         with:

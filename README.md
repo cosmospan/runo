@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
+<img src="native/squad-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
 
 <h1>Squad Code</h1>
 
@@ -326,7 +326,7 @@ A two-step welcome checks which coding agents are installed and asks for a folde
 ```bash
 git clone https://github.com/hyperhale/squadcode
 cd squadcode
-cargo run -p runo --release
+cargo run -p squadcode --release
 ```
 
 Set `SQUADCODE_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
@@ -337,7 +337,7 @@ To build `Squad Code.app` and a disk image with its icon, use [cargo-bundle](htt
 
 ```bash
 cargo install cargo-bundle
-cd native/runo-app && cargo bundle --release
+cd native/squad-app && cargo bundle --release
 ```
 
 On Linux the same command makes a `.deb`, and on Windows the icon is built into `SquadCode.exe`. To publish a release, see [docs/releasing.md](docs/releasing.md).
@@ -368,7 +368,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up,
 <br />
 
 <div align="center">
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="40" alt="" />
+<img src="native/squad-app/assets/icon/png/runo-256.png" width="40" alt="" />
 <br />
 <sub>Built in Rust for people who'd rather hand out the jobs than juggle the agents.</sub>
 </div>

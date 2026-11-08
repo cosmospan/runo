@@ -5933,58 +5933,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "runo"
-version = "2.0.0-alpha.7"
-dependencies = [
- "anyhow",
- "async-channel",
- "base64",
- "block2 0.6.2",
- "chrono",
- "dispatch2",
- "embed-resource",
- "flate2",
- "gpui-kit",
- "i_overlay",
- "image",
- "libc",
- "lsp-types",
- "markdown",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "objc2-web-kit",
- "percent-encoding",
- "portable-pty",
- "postgres",
- "qrcode",
- "raw-window-handle",
- "resvg 0.45.1",
- "ring",
- "roxmltree 0.21.1",
- "runo-holo",
- "rusqlite",
- "rustls",
- "rustls-native-certs",
- "security-framework",
- "serde",
- "serde_json",
- "tokio-postgres-rustls",
- "toml 0.8.23",
- "url",
- "vt100",
-]
-
-[[package]]
-name = "runo-holo"
-version = "2.0.0-alpha.7"
-dependencies = [
- "png 0.17.16",
- "vello_cpu",
-]
-
-[[package]]
 name = "rusqlite"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6709,6 +6657,58 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
+]
+
+[[package]]
+name = "squad-holo"
+version = "2.0.0-alpha.7"
+dependencies = [
+ "png 0.17.16",
+ "vello_cpu",
+]
+
+[[package]]
+name = "squadcode"
+version = "2.0.0-alpha.7"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "base64",
+ "block2 0.6.2",
+ "chrono",
+ "dispatch2",
+ "embed-resource",
+ "flate2",
+ "gpui-kit",
+ "i_overlay",
+ "image",
+ "libc",
+ "lsp-types",
+ "markdown",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "objc2-web-kit",
+ "percent-encoding",
+ "portable-pty",
+ "postgres",
+ "qrcode",
+ "raw-window-handle",
+ "resvg 0.45.1",
+ "ring",
+ "roxmltree 0.21.1",
+ "rusqlite",
+ "rustls",
+ "rustls-native-certs",
+ "security-framework",
+ "serde",
+ "serde_json",
+ "squad-holo",
+ "tokio-postgres-rustls",
+ "toml 0.8.23",
+ "url",
+ "vt100",
 ]
 
 [[package]]
