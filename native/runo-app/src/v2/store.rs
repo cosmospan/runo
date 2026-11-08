@@ -12,9 +12,15 @@ use super::data::{Member, Mode};
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Store {
+    /// The shape this file was saved in ([`FORMAT`]). A file from a newer Squad
+    /// Code is copied aside before this one saves over it.
+    pub format: u32,
     pub folders: Vec<Folder>,
     /// The folder new jobs and questions go to, by index into `folders`.
     pub current: usize,
+    /// A job this build can't read (saved by a newer one) is left out, and the
+    /// file is copied aside first: see [`lenient`].
+    #[serde(deserialize_with = "lenient")]
     pub jobs: Vec<Job>,
     /// Saved as a list of pairs: a made bot can't be a JSON object key.
     #[serde(with = "chat_list")]
@@ -54,14 +60,34 @@ pub struct Store {
     pub reactions: HashMap<String, Vec<String>>,
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(deserialize_with = "lenient")]
     pub talks: Vec<Talk>,
+    /// Each thread's running summary, which bots read (`brain::summary`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub summaries: Vec<super::brain::summary::Summary>,
     /// What each bot can do beyond its kind of work (instructions, skill files,
     /// connected apps, permissions, memory), by `engine::bot_key`.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub setups: HashMap<String, super::setup::Setup>,
+    /// Jobs waiting to start: at a time you picked (the night shift), or
+    /// once their bot is free.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<super::shift::Later>,
+    /// What bots learned from your send-backs, each for one project.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lessons: Vec<super::learn::Lesson>,
     /// A made-up store for looking at every screen (RUNO_V2_DEMO): never saved.
     #[serde(skip)]
     pub demo: bool,
+    /// Saves wait for the window's next [`Store::flush`] instead of writing
+    /// right away: set by the window, which flushes on every tick and on quit.
+    #[serde(skip)]
+    pub deferred: bool,
+    /// A save was asked for and hasn't been written yet.
+    #[serde(skip)]
+    pub dirty: std::cell::Cell<bool>,
+    #[serde(skip)]
+    pub flushed_at: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 /// A question asked in a thread and the bot's answer, kept in the thread.
@@ -258,6 +284,9 @@ pub struct Job {
     /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
     pub reads: Vec<String>,
     pub status: Status,
+    /// Saved in its own file (`jobs/<id>.json`), not in v2.json: see
+    /// [`Store::save`]. Read from v2.json too, where builds before that kept it.
+    #[serde(deserialize_with = "lenient", skip_serializing_if = "feeds_apart")]
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
     pub plan: Vec<(String, u8)>,
@@ -330,6 +359,31 @@ pub struct Job {
     /// Other jobs in the same project whose work clashes with this one's:
     /// their id and where ("total.ts around line 40").
     pub clash_with: Vec<(u64, String)>,
+    /// Where its files stood before each turn, so it can be rewound to any of
+    /// them (see `rewind`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<super::rewind::Mark>,
+    /// It was rewound and its engine's conversation dropped: the next turn is
+    /// told what's still true.
+    pub rewound: bool,
+    /// When it carries on by itself after its engine's plan resets; 0 when
+    /// it isn't waiting.
+    pub resume_at: u64,
+    /// Times it was picked up again after running out of plan.
+    pub resumes: u8,
+    /// It started on the night shift: when its engine runs out, another
+    /// engine may take over rather than waiting.
+    pub shift: bool,
+    /// The issue it's for, as the line its pull request closes it with
+    /// ("Closes #12", "Fixes ENG-42"), and the issue's address.
+    pub issue: String,
+    pub issue_url: String,
+    /// The newest review feedback on its pull request already handed to its
+    /// bot, as GitHub's time.
+    pub pr_seen: String,
+    /// Its bot is answering review comments on the open pull request: when
+    /// the turn ends, Shipper pushes the fix to the same pull request.
+    pub answering: bool,
 }
 
 /// One file a job changed.
@@ -413,6 +467,15 @@ impl Default for Job {
             ahead: 0,
             behind: 0,
             clash_with: Vec::new(),
+            marks: Vec::new(),
+            rewound: false,
+            resume_at: 0,
+            resumes: 0,
+            shift: false,
+            issue: String::new(),
+            issue_url: String::new(),
+            pr_seen: String::new(),
+            answering: false,
         }
     }
 }
@@ -623,6 +686,138 @@ fn path() -> PathBuf {
     crate::store::data_dir().join("v2.json")
 }
 
+/// The copy of the store kept from before this launch's first save.
+fn prev_path() -> PathBuf {
+    crate::store::data_dir().join("v2.json.prev")
+}
+
+/// The shape of `v2.json` this build writes. Raise it when a change means an
+/// older build would misread the file.
+/// 2: job feeds are kept in `jobs/<id>.json`.
+pub const FORMAT: u32 = 2;
+
+/// The folder each job's feed is saved in, one file per job.
+fn feeds_dir() -> PathBuf {
+    crate::store::data_dir().join("jobs")
+}
+
+fn feed_path(id: u64) -> PathBuf {
+    feeds_dir().join(format!("{id}.json"))
+}
+
+thread_local! {
+    /// Set while v2.json is written, so feeds stay out of it; anywhere else a
+    /// job is written out (the server's API) it keeps its feed.
+    static FEEDS_APART: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn feeds_apart(_: &Vec<Item>) -> bool {
+    FEEDS_APART.with(|f| f.get())
+}
+
+/// What was last written to (or read from) each job's feed file: its length
+/// and a hash of its last line. A feed that matches isn't written again.
+static FEEDS_WRITTEN: std::sync::Mutex<Option<HashMap<u64, (usize, u64)>>> =
+    std::sync::Mutex::new(None);
+
+fn feed_mark(feed: &[Item]) -> (usize, u64) {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    format!("{:?}", feed.last()).hash(&mut h);
+    (feed.len(), h.finish())
+}
+
+/// Entries [`lenient`] left out since it was last asked.
+static SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// What happened to the saved store at load, for the person to hear once.
+static LOAD_NOTE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The previous copy is taken once a launch, before the first save.
+static PREV_TAKEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A list read entry by entry: one this build can't read (a job state or feed
+/// line from a newer Squad Code) is left out instead of failing the whole file.
+fn lenient<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let raw = Vec::<serde_json::Value>::deserialize(d)?;
+    let mut out = Vec::with_capacity(raw.len());
+    for v in raw {
+        match serde_json::from_value(v) {
+            Ok(t) => out.push(t),
+            Err(_) => {
+                SKIPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// What happened to the saved jobs and chats when they were loaded, once:
+/// a file that couldn't be read in full, and where its copy is.
+pub fn take_load_note() -> Option<String> {
+    LOAD_NOTE.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+fn set_load_note(note: String) {
+    crate::applog::error("load", note.clone());
+    *LOAD_NOTE.lock().unwrap_or_else(|e| e.into_inner()) = Some(note);
+}
+
+/// The store in `text`, read as fully as it can be. As the owner, a file that
+/// can't be read in full is kept: moved aside when it can't be read at all,
+/// copied aside when only parts of it were left out, so a save never loses it.
+fn parse(text: &str, owner: bool) -> Option<Store> {
+    SKIPPED.store(0, std::sync::atomic::Ordering::Relaxed);
+    match serde_json::from_str::<Store>(text) {
+        Ok(s) => {
+            let skipped = SKIPPED.swap(0, std::sync::atomic::Ordering::Relaxed);
+            if owner && (skipped > 0 || s.format > FORMAT) {
+                let why = if s.format > FORMAT {
+                    "saved by a newer Squad Code"
+                } else {
+                    "some entries couldn't be read"
+                };
+                crate::store::keep_aside(&path(), why);
+                set_load_note(format!(
+                    "Some saved jobs or chats were {}. A copy of the file is kept next to v2.json in {}.",
+                    if s.format > FORMAT {
+                        "saved by a newer Squad Code and may be missing here"
+                    } else {
+                        "left out because they couldn't be read"
+                    },
+                    crate::store::data_dir().display()
+                ));
+            }
+            Some(s)
+        }
+        Err(e) => {
+            if owner {
+                crate::store::move_aside(&path(), &e.to_string());
+            }
+            // Whatever fields still read; None when it isn't JSON at all.
+            let salvaged = serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .and_then(crate::store::salvage::<Store>);
+            if owner {
+                set_load_note(format!(
+                    "Your saved jobs and chats couldn't be read in full, so Squad Code {}. The file is kept as it was in {}.",
+                    if salvaged.is_some() {
+                        "kept what it could"
+                    } else {
+                        "started from the copy before your last launch"
+                    },
+                    crate::store::data_dir().display()
+                ));
+            }
+            salvaged
+        }
+    }
+}
+
 impl Store {
     /// The saved store, or a fresh one that starts from v1's projects.
     pub fn load() -> Store {
@@ -638,26 +833,36 @@ impl Store {
     /// `owner`: this process runs the jobs, so a job still marked running was
     /// cut off when Squad Code last closed.
     fn load_as(owner: bool) -> Store {
-        let mut s: Store = std::fs::read_to_string(path())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_else(|| {
-                let v1 = crate::store::State::load();
-                Store {
-                    folders: v1
-                        .projects
-                        .iter()
-                        .rev()
-                        .filter(|p| std::path::Path::new(&p.path).is_dir())
-                        .map(|p| Folder {
-                            name: p.name.clone(),
-                            path: p.path.clone(),
-                            ship: String::new(),
-                        })
-                        .collect(),
-                    ..Default::default()
-                }
-            });
+        let saved = std::fs::read_to_string(path()).ok();
+        let read = match &saved {
+            Some(text) => parse(text, owner).or_else(|| {
+                // Not readable at all (cut off mid-write): the copy from before
+                // the last launch is the best there is.
+                std::fs::read_to_string(prev_path())
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<Store>(&t).ok())
+            }),
+            None => None,
+        };
+        let mut s = read.unwrap_or_else(|| {
+            let v1 = crate::store::State::load();
+            Store {
+                folders: v1
+                    .projects
+                    .iter()
+                    .rev()
+                    .filter(|p| std::path::Path::new(&p.path).is_dir())
+                    .map(|p| Folder {
+                        name: p.name.clone(),
+                        path: p.path.clone(),
+                        ship: String::new(),
+                    })
+                    .collect(),
+                ..Default::default()
+            }
+        });
+        s.format = FORMAT;
+        s.read_feeds(owner);
         for j in &mut s.jobs {
             if owner && j.status == Status::Running {
                 j.status = Status::Interrupted;
@@ -684,6 +889,7 @@ impl Store {
         }
         super::data::set_made(&s.made);
         super::setup::set_all(&s.setups);
+        super::learn::set_all(&s.lessons);
         super::data::set_removed(&s.removed);
         if s.current >= s.folders.len() {
             s.current = 0;
@@ -712,18 +918,122 @@ impl Store {
         }
     }
 
+    /// Saves now, or at the window's next flush when saves are deferred.
     pub fn save(&self) {
         if self.demo {
             return;
         }
-        let p = path();
-        if let Some(dir) = p.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        if self.deferred {
+            self.dirty.set(true);
+            return;
         }
-        if let Ok(text) = serde_json::to_string(self) {
-            let tmp = p.with_extension("json.tmp");
-            if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(tmp, p);
+        self.write();
+    }
+
+    /// Writes what a deferred save asked for: at most about once a second,
+    /// or right away with `now` (on quit).
+    pub fn flush(&self, now: bool) {
+        if !self.dirty.get() {
+            return;
+        }
+        let due = self
+            .flushed_at
+            .get()
+            .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(1));
+        if now || due {
+            self.dirty.set(false);
+            self.flushed_at.set(Some(std::time::Instant::now()));
+            self.write();
+        }
+    }
+
+    /// Each job's feed from its own file, for jobs whose feed v2.json didn't
+    /// hold. As the owner, feed files of jobs that are gone are removed.
+    fn read_feeds(&mut self, owner: bool) {
+        let mut written = FEEDS_WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+        let written = written.get_or_insert_with(HashMap::new);
+        for j in &mut self.jobs {
+            if !j.feed.is_empty() {
+                // Saved inside v2.json by an older build: written apart on the next save.
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(feed_path(j.id)) else {
+                continue;
+            };
+            #[derive(Deserialize)]
+            struct Feed(#[serde(deserialize_with = "lenient")] Vec<Item>);
+            if let Ok(Feed(feed)) = serde_json::from_str(&text) {
+                j.feed = feed;
+                written.insert(j.id, feed_mark(&j.feed));
+            }
+        }
+        if owner && !self.demo {
+            let ids: std::collections::HashSet<u64> = self.jobs.iter().map(|j| j.id).collect();
+            for entry in std::fs::read_dir(feeds_dir())
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let id = name
+                    .strip_suffix(".json")
+                    .and_then(|n| n.parse::<u64>().ok());
+                if id.is_some_and(|id| !ids.contains(&id)) {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    /// The feeds that changed since they were last written, each in its own
+    /// file. A running job's feed changes in place (a step finishing), so it
+    /// is always written.
+    fn write_feeds(&self) {
+        let mut written = FEEDS_WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
+        let written = written.get_or_insert_with(HashMap::new);
+        for j in &self.jobs {
+            let mark = feed_mark(&j.feed);
+            if j.status != Status::Running && written.get(&j.id) == Some(&mark) {
+                continue;
+            }
+            match serde_json::to_string(&j.feed) {
+                Ok(text) => match crate::store::write_private(&feed_path(j.id), text.as_bytes()) {
+                    Ok(()) => {
+                        written.insert(j.id, mark);
+                    }
+                    Err(e) => crate::applog::error_once(
+                        "save",
+                        format!("could not save the feed of job {}: {e}", j.id),
+                    ),
+                },
+                Err(e) => crate::applog::error_once("save", format!("could not save a feed: {e}")),
+            }
+        }
+    }
+
+    fn write(&self) {
+        // Feeds first: v2.json never lists a job whose feed isn't on disk.
+        self.write_feeds();
+        let p = path();
+        // Once a launch, keep the file as it was before this launch changed it:
+        // what a load falls back to when the file is found cut off.
+        if !PREV_TAKEN.swap(true, std::sync::atomic::Ordering::Relaxed) && p.exists() {
+            let _ = std::fs::copy(&p, prev_path());
+        }
+        FEEDS_APART.with(|f| f.set(true));
+        let text = serde_json::to_string(self);
+        FEEDS_APART.with(|f| f.set(false));
+        match text {
+            Ok(text) => {
+                if let Err(e) = crate::store::write_private(&p, text.as_bytes()) {
+                    crate::applog::error_once(
+                        "save",
+                        format!("could not save {}: {e}", p.display()),
+                    );
+                }
+            }
+            Err(e) => {
+                crate::applog::error_once("save", format!("could not save {}: {e}", p.display()))
             }
         }
     }
@@ -829,6 +1139,16 @@ impl Store {
     /// A thread's conversation so far, oldest first, as (who, words): what you
     /// asked and what came back, for Peek to read a follow-up by.
     pub fn recent(&self, folder: &str, thread: u64) -> Vec<(String, String)> {
+        let said = self.said_in(folder, thread);
+        let n = said.len();
+        said.into_iter()
+            .skip(n.saturating_sub(12))
+            .map(|(_, who, words)| (who, words))
+            .collect()
+    }
+
+    /// Everything said in a thread, oldest first, with when: (at, who, words).
+    pub fn said_in(&self, folder: &str, thread: u64) -> Vec<(u64, String, String)> {
         let mut said: Vec<(u64, String, String)> = Vec::new();
         for t in &self.talks {
             if t.folder == folder && self.thread_for(folder, t.thread) == thread {
@@ -848,11 +1168,78 @@ impl Store {
             }
         }
         said.sort_by_key(|s| s.0);
-        let n = said.len();
-        said.into_iter()
-            .skip(n.saturating_sub(12))
-            .map(|(_, who, words)| (who, words))
-            .collect()
+        said
+    }
+
+    /// A thread's summary, if it has one.
+    pub fn summary(&self, folder: &str, thread: u64) -> Option<&super::brain::summary::Summary> {
+        let thread = self.thread_for(folder, thread);
+        self.summaries
+            .iter()
+            .find(|s| s.folder == folder && s.thread == thread)
+    }
+
+    /// A thread's notes and summary, for Peek as it reads a message there.
+    pub fn summary_brief(&self, folder: &str, thread: u64) -> String {
+        let label = self.thread_label(self.thread_for(folder, thread));
+        super::brain::summary::context(&label, self.summary(folder, thread), &[], &[])
+    }
+
+    /// A thread's summary, made empty when it has none yet.
+    pub fn summary_mut(
+        &mut self,
+        folder: &str,
+        thread: u64,
+    ) -> &mut super::brain::summary::Summary {
+        let thread = self.thread_for(folder, thread);
+        let at = self
+            .summaries
+            .iter()
+            .position(|s| s.folder == folder && s.thread == thread);
+        let i = match at {
+            Some(i) => i,
+            None => {
+                self.summaries.push(super::brain::summary::Summary {
+                    folder: folder.to_string(),
+                    thread,
+                    ..Default::default()
+                });
+                self.summaries.len() - 1
+            }
+        };
+        &mut self.summaries[i]
+    }
+
+    /// What a bot reads about a thread before it answers or works there: the
+    /// person's notes, the summary, the thread's jobs, and the latest
+    /// messages word for word. `skip` leaves out the ask itself.
+    pub fn thread_context(&self, folder: &str, thread: u64, skip: &str) -> String {
+        let label = self.thread_label(self.thread_for(folder, thread));
+        let recent: Vec<(String, String)> = self
+            .recent(folder, thread)
+            .into_iter()
+            .filter(|(_, w)| w.trim() != skip.trim())
+            .collect();
+        let jobs: Vec<String> = self
+            .jobs_in(folder, thread)
+            .into_iter()
+            .filter(|j| j.race == 0 || j.race == j.id)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .take(8)
+            .rev()
+            .map(|j| {
+                format!(
+                    "- #{} {}: {} ({})",
+                    j.id,
+                    j.bot.name(),
+                    j.label(),
+                    j.status.label()
+                )
+            })
+            .collect();
+        super::brain::summary::context(&label, self.summary(folder, thread), &jobs, &recent)
     }
 
     /// Deletes a thread and what was said in it. Its jobs and plans hold real
@@ -1252,6 +1639,141 @@ mod tests {
     use super::*;
 
     #[test]
+    fn feeds_stay_out_of_v2_json_but_not_out_of_the_api() {
+        let s = Store {
+            jobs: vec![Job {
+                id: 1,
+                feed: vec![Item::Text("long output".into())],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        FEEDS_APART.with(|f| f.set(true));
+        let saved = serde_json::to_string(&s).unwrap();
+        FEEDS_APART.with(|f| f.set(false));
+        assert!(!saved.contains("long output"));
+        // A job sent anywhere else, such as the server's API, keeps its feed.
+        assert!(serde_json::to_string(&s.jobs[0])
+            .unwrap()
+            .contains("long output"));
+        // And a v2.json from before, with feeds inside, still reads them.
+        let old = serde_json::to_string(&s).unwrap();
+        assert_eq!(parse(&old, false).unwrap().jobs[0].feed.len(), 1);
+    }
+
+    #[test]
+    fn feeds_are_saved_apart_and_read_back() {
+        let _lock = crate::store::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let old = std::env::var_os("SQUADCODE_HOME");
+        let home = std::env::temp_dir().join(format!("squad-feeds-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::env::set_var("SQUADCODE_HOME", &home);
+        let s = Store {
+            format: FORMAT,
+            jobs: vec![Job {
+                id: 7,
+                feed: vec![Item::Text("ran the tests".into())],
+                ..Default::default()
+            }],
+            next_id: 8,
+            ..Default::default()
+        };
+        s.save();
+        let index = std::fs::read_to_string(home.join("v2.json")).unwrap();
+        assert!(!index.contains("ran the tests"));
+        assert!(std::fs::read_to_string(home.join("jobs/7.json"))
+            .unwrap()
+            .contains("ran the tests"));
+        // A feed file whose job is gone is cleared away by the next load.
+        std::fs::write(home.join("jobs/3.json"), "[]").unwrap();
+        let back = Store::load();
+        assert_eq!(back.jobs[0].feed, vec![Item::Text("ran the tests".into())]);
+        assert!(!home.join("jobs/3.json").exists());
+        match old {
+            Some(v) => std::env::set_var("SQUADCODE_HOME", v),
+            None => std::env::remove_var("SQUADCODE_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn a_feed_is_written_again_only_when_its_end_changed() {
+        let mut feed = vec![Item::Text("a".into())];
+        let before = feed_mark(&feed);
+        assert_eq!(before, feed_mark(&feed.clone()));
+        feed.push(Item::Note("b".into()));
+        assert_ne!(before, feed_mark(&feed));
+        let grown = feed_mark(&feed);
+        feed[1] = Item::Note("c".into());
+        assert_ne!(grown, feed_mark(&feed));
+    }
+
+    #[test]
+    fn a_deferred_save_waits_for_a_flush() {
+        let s = Store {
+            deferred: true,
+            demo: false,
+            ..Default::default()
+        };
+        assert!(!s.dirty.get());
+        s.save();
+        assert!(s.dirty.get());
+    }
+
+    fn saved_with(jobs: serde_json::Value) -> String {
+        serde_json::json!({ "format": 1, "jobs": jobs, "next_id": 9 }).to_string()
+    }
+
+    #[test]
+    fn a_job_this_build_cant_read_costs_that_job_not_the_file() {
+        let good = serde_json::to_value(Job {
+            id: 1,
+            title: "fix login".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let mut newer = good.clone();
+        newer["id"] = 2.into();
+        newer["status"] = "Waiting".into();
+        let s = parse(&saved_with(serde_json::json!([good, newer])), false).unwrap();
+        assert_eq!(s.jobs.len(), 1);
+        assert_eq!(s.jobs[0].title, "fix login");
+        assert_eq!(s.next_id, 9);
+    }
+
+    #[test]
+    fn a_feed_line_this_build_cant_read_costs_that_line() {
+        let mut job = serde_json::to_value(Job {
+            id: 1,
+            feed: vec![Item::Text("hi".into())],
+            ..Default::default()
+        })
+        .unwrap();
+        job["feed"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({ "Picture": "a.png" }));
+        let s = parse(&saved_with(serde_json::json!([job])), false).unwrap();
+        assert_eq!(s.jobs[0].feed, vec![Item::Text("hi".into())]);
+    }
+
+    #[test]
+    fn a_file_cut_off_mid_write_reads_as_nothing() {
+        let text = saved_with(serde_json::json!([]));
+        assert!(parse(&text[..text.len() / 2], false).is_none());
+    }
+
+    #[test]
+    fn one_field_in_a_shape_this_build_doesnt_know_keeps_the_rest() {
+        let text = serde_json::json!({ "next_id": 9, "set_up": "maybe" }).to_string();
+        let s = parse(&text, false).unwrap();
+        assert_eq!(s.next_id, 9);
+        assert!(!s.set_up);
+    }
+
+    #[test]
     fn time_waiting_for_a_follow_up_is_not_time_at_work() {
         let t = now();
         // Ran 6 seconds, sat for hours, then a 4 second follow-up.
@@ -1476,5 +1998,33 @@ mod tests {
         let back: Store = serde_json::from_str(old).unwrap();
         assert_eq!(back.chat(Member::Explainer)[0].text, "hi");
         assert_eq!(back.next_id, 4);
+    }
+
+    #[test]
+    fn bots_read_a_threads_notes_summary_and_latest_words() {
+        let mut s = Store::default();
+        let f = "/tmp/shop";
+        for i in 0..9u64 {
+            s.talks.push(Talk {
+                id: i + 1,
+                folder: f.into(),
+                thread: 0,
+                bot: Member::Fin,
+                question: format!("question {i}"),
+                answer: Some(Said::bot(format!("answer {i}"), String::new())),
+                at: 100 + i,
+                choices: Vec::new(),
+            });
+        }
+        assert_eq!(s.said_in(f, 0).len(), 18);
+        let sum = s.summary_mut(f, 0);
+        sum.text = "For:\n- Discussion about research teams\nDecided:\n- none".into();
+        sum.notes.push("No new vendors".into());
+        let c = s.thread_context(f, 0, "question 8");
+        assert!(c.contains("No new vendors") && c.contains("research teams"));
+        assert!(c.contains("answer 8") && !c.contains("question 8") && !c.contains("answer 4"));
+        // One summary per thread, found again rather than made twice.
+        s.summary_mut(f, 0);
+        assert_eq!(s.summaries.len(), 1);
     }
 }

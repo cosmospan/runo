@@ -25,6 +25,11 @@ pub const LIMIT: Duration = Duration::from_secs(40);
 pub struct Seen<'a> {
     /// The project's name.
     pub project: &'a str,
+    /// The thread's name, like "tech-discussion"; empty when there is none.
+    pub thread: &'a str,
+    /// The thread's running summary and the person's notes on it; empty
+    /// when it has none yet.
+    pub summary: &'a str,
     /// The conversation so far, oldest first, as (who, words).
     pub recent: &'a [(String, String)],
     /// The bots on the crew.
@@ -52,20 +57,25 @@ fn clip(s: &str, n: usize) -> String {
 /// gets it once, as its system prompt; a cold read puts it before the turn.
 pub const RULES: &str = "You are Peek, who leads a crew of AI bots in Squad Code, an app for developers and for people who don't code. \
 You read every message the person sends before anyone works on it, and decide what happens. Don't use any tools; just reply.\n\n\
-Each message to you gives the project, the crew, what's running, where jobs run, the conversation, and what the person just wrote. \
+Each message to you gives the project, the thread and its summary, the crew, what's running, where jobs run, the conversation, and what the person just wrote. \
 Decide, reading it the way a sharp colleague would: typos, slang and half sentences are normal (\"whoa re you\" is \"who are you\"). \
 Never start work on a guess.\n\
+Not every message is about the code. A thread can be for discussion, planning or talk among the team, and its name often says so. \
+When the person is discussing, planning, brainstorming, or talking about people, teams, process or ideas rather than this project's files, \
+use \"reply\" and take part as a thoughtful teammate: respond to what they said, add a useful point, or ask one follow-up about the topic itself. \
+Don't steer a discussion toward building something in the app, and don't offer code work as choices unless they asked for it. \
+If they say it's a discussion, believe them.\n\
 - \"reply\": chat, greetings, thanks, questions about you or the crew, and general questions you can answer well yourself. Write the reply.\n\
-- \"ask\": you can't tell what they want, or real work is too vague to start. Write one short question, with up to 3 choices if they help.\n\
+- \"ask\": you can't tell what they want, or real work is too vague to start. Write one short question, with up to 3 choices if they help. In a discussion, prefer \"reply\".\n\
 - \"stop\": they want what's running stopped or cancelled.\n\
 - \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
-- \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything.\n\
+- \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything. Not for discussion or general talk.\n\
 - \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back. \
 If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
 If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
 Reply with JSON only, on one line:\n\
 {\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}\n\
-Keep \"say\" warm, plain and short: two sentences at most, no markdown.";
+Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to four when you're taking part in a discussion.";
 
 /// The conversation as the engine reads it: the last few messages, each
 /// clipped, oldest first.
@@ -103,6 +113,8 @@ pub fn turn(text: &str, seen: &Seen, heading: &str, conversation: &[String]) -> 
     };
     format!(
         "Project: {project}\n\
+Thread: {thread}\n\
+{summary}\
 The crew:\n{crew}\n\
 Running right now: {running}\n\
 Where jobs run: {server}\n\
@@ -110,6 +122,16 @@ Where jobs run: {server}\n\
 The person just wrote: \"{text}\"\n\
 Reply with the JSON decision only.",
         project = seen.project,
+        summary = if seen.summary.trim().is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", seen.summary.trim())
+        },
+        thread = if seen.thread.is_empty() {
+            "(none)".to_string()
+        } else {
+            format!("#{}", seen.thread)
+        },
         server = if seen.server.is_empty() {
             "only this computer: no server is connected."
         } else {
@@ -303,6 +325,27 @@ mod tests {
     }
 
     #[test]
+    fn the_prompt_names_the_thread_so_a_discussion_reads_as_one() {
+        let c = crew();
+        let p = prompt(
+            "lets onboard a few research teams",
+            &Seen {
+                project: "shop",
+                thread: "tech-discussion",
+                summary: "",
+                recent: &[],
+                crew: &c,
+                running: &[],
+                worked: &[],
+                in_thread: &[],
+                server: "",
+            },
+        );
+        assert!(p.contains("Thread: #tech-discussion"));
+        assert!(p.contains("Don't steer a discussion toward building something"));
+    }
+
+    #[test]
     fn the_prompt_carries_the_crew_and_what_is_running() {
         let recent = vec![("You".to_string(), "add a login page".to_string())];
         let running = vec!["#4 Builder: add a login page".to_string()];
@@ -311,6 +354,8 @@ mod tests {
             "whoa re you",
             &Seen {
                 project: "shop",
+                thread: "",
+                summary: "",
                 recent: &recent,
                 crew: &c,
                 running: &running,
@@ -328,6 +373,7 @@ mod tests {
             "has worked on this project",
             "never worked on this project",
             "vps: connected",
+            "Not every message is about the code",
         ] {
             assert!(p.contains(want), "{want}");
         }

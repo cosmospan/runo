@@ -476,6 +476,8 @@ fn real_reads() {
         let crew = crate::v2::data::Member::CREW.to_vec();
         let seen = super::think::Seen {
                 project: "shop",
+                thread: "",
+                summary: "",
                 recent: &[],
                 crew: &crew,
                 running: &[],
