@@ -253,6 +253,10 @@ pub struct Job {
     pub worked: u64,
     /// When the turn running now began; 0 when none is.
     pub turn: u64,
+    /// Where the latest turn's items start in the feed.
+    pub turn_from: usize,
+    /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
+    pub reads: Vec<String>,
     pub status: Status,
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
@@ -370,6 +374,8 @@ impl Default for Job {
             ended: None,
             worked: 0,
             turn: 0,
+            turn_from: 0,
+            reads: Vec::new(),
             status: Status::Done,
             feed: Vec::new(),
             plan: Vec::new(),
@@ -430,6 +436,7 @@ impl Job {
     /// A turn starts: the first run or a follow-up.
     pub fn turn_began(&mut self) {
         self.turn = now();
+        self.turn_from = self.feed.len();
     }
 
     /// The running turn ended; its time goes on the job.
