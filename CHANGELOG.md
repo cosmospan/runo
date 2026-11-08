@@ -4,6 +4,10 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Your server's screen now opens only in Squad's own viewer, the same on macOS, Linux and Windows, with nothing else to install. The Mac-only Open in Screen Sharing button is gone. Keys follow your computer: on a Mac ⌘ acts as Ctrl and ⌘V pastes; elsewhere Ctrl is Ctrl, Ctrl+V puts this computer's clipboard on the server first, and the Windows key stays on your computer.
+
 ## [2.0.0-alpha.7] - 2026-11-08
 
 ### Added
