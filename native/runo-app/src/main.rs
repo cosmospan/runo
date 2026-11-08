@@ -117,6 +117,7 @@ mod shellenv;
 mod ship;
 mod signin;
 mod signinrun;
+mod sounds;
 mod space_ui;
 mod stall;
 mod startup;

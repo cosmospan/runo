@@ -117,6 +117,12 @@ pub struct AppSettings {
     pub diff_colors: String,
     pub animations: bool,
     pub notifications: bool,
+    /// Play a short chime when something needs the person (see `sounds`), and which
+    /// kinds of thing.
+    pub sounds: bool,
+    pub sound_needs_you: bool,
+    pub sound_failed: bool,
+    pub sound_done: bool,
     pub confirm_delete: bool,
     pub remove_worktree_on_delete: bool,
     /// Delete a worktree's build output once its thread is done or merged.
@@ -391,6 +397,10 @@ impl Default for AppSettings {
             diff_colors: "default".into(),
             animations: true,
             notifications: true,
+            sounds: true,
+            sound_needs_you: true,
+            sound_failed: true,
+            sound_done: true,
             confirm_delete: true,
             remove_worktree_on_delete: true,
             remove_build_output: true,
