@@ -115,6 +115,7 @@ pub fn seed() -> Store {
     j.pr_number = 482;
     j.pr_state = "OPEN".into();
     j.pr_line = "Checks running: 3 of 5 done".into();
+    j.ahead = 1;
     j.changes = vec![
         change("src/orders/page.tsx", "A", 148, 0),
         change("src/orders/api.ts", "A", 61, 0),
@@ -148,6 +149,14 @@ pub fn seed() -> Store {
         change("src/checkout/pay.test.ts", "M", 34, 0),
     ];
     j.checks = vec![check("npm test", true, 44), check("npm run lint", true, 8)];
+    j.ahead = 2;
+    j.behind = 1;
+    // The seatbelt held it when it was approved.
+    j.held = vec![
+        "src/checkout/pay.ts:41 \u{b7} Looks like a Stripe secret key".into(),
+        "src/checkout/pay.ts:58 \u{b7} console.log left in from debugging".into(),
+    ];
+    j.clash_with = vec![(9, "pay.ts around line 22".into())];
     j.plan = vec![
         ("Find where retries charge again".into(), 2),
         ("Send an idempotency key".into(), 2),
@@ -159,6 +168,8 @@ pub fn seed() -> Store {
         tool("Edit src/checkout/pay.ts", "edit", 1),
         tool("Run npm test", "bash", 1),
         Item::Text("A retry after a timeout sent the charge again. Each charge now carries a key, so the payment service ignores the repeat. I added a test that retries twice and checks there's one charge.".into()),
+        Item::By(Member::Fin, "Heads up: #9 Add gift cards changes the same lines, in pay.ts around line 22. Whichever is approved second will need its branch brought up to date.".into()),
+        Item::By(Member::Shipper, "I stopped before pushing. Something in this change shouldn't leave your computer: Looks like a Stripe secret key (src/checkout/pay.ts:41), and 1 more.".into()),
     ];
     jobs.push(j);
 
@@ -250,6 +261,9 @@ pub fn seed() -> Store {
         change("src/cart/summary.tsx", "M", 25, 2),
     ];
     j.checks = vec![check("npm test", true, 40)];
+    j.ahead = 3;
+    j.behind = 4;
+    j.clash_with = vec![(4, "pay.ts around line 22".into())];
     j.conflict = vec![
         "src/checkout/total.ts".into(),
         "src/cart/summary.tsx".into(),
@@ -537,4 +551,26 @@ pub(super) fn usage(store: &mut Store) {
     crate::usage::note_live("claude", &window("five_hour", 42., 2 * 3600 + 900), now);
     crate::usage::note_live("claude", &window("seven_day", 18., 4 * 86_400), now);
     crate::usage::note_live("codex", &window("five_hour", 86., 47 * 60), now);
+}
+
+/// The demo project's git state for the Jobs panel's Git side.
+pub fn repos() -> std::collections::HashMap<String, super::runtime::RepoLine> {
+    let state = crate::git::RepoState {
+        branch: "main".into(),
+        upstream: "origin/main".into(),
+        remote: "origin".into(),
+        host: "GitHub".into(),
+        ahead: 0,
+        behind: 2,
+        branches: Vec::new(),
+    };
+    let path = std::env::temp_dir().to_string_lossy().into_owned();
+    std::iter::once((
+        path,
+        super::runtime::RepoLine {
+            state,
+            dirty: false,
+        },
+    ))
+    .collect()
 }
