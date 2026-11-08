@@ -261,8 +261,27 @@ pub fn decide(ask: &JobAsk, f: &Facts, sites: &Sites) -> Placement {
     )
 }
 
-/// The folder's git remote, or "".
+/// The folder's git remote, or "". Asked of git at most every few minutes
+/// per folder: this runs as each job starts, on the window's thread.
 pub fn remote_of(path: &str) -> String {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static KNOWN: Mutex<Option<HashMap<String, (String, Instant)>>> = Mutex::new(None);
+    const FRESH: Duration = Duration::from_secs(300);
+    let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    let known = known.get_or_insert_with(HashMap::new);
+    if let Some((remote, at)) = known.get(path) {
+        if at.elapsed() < FRESH {
+            return remote.clone();
+        }
+    }
+    let remote = ask_git_remote(path);
+    known.insert(path.to_string(), (remote.clone(), Instant::now()));
+    remote
+}
+
+fn ask_git_remote(path: &str) -> String {
     std::process::Command::new("git")
         .args(["-C", path, "remote", "get-url", "origin"])
         .output()

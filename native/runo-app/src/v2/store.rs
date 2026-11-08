@@ -1054,16 +1054,18 @@ impl Store {
     /// Your DM with `who` in the project you're in: one conversation per bot
     /// per project.
     pub fn chat(&self, who: Member) -> Vec<Said> {
+        self.chat_lines(who).cloned().collect()
+    }
+
+    /// The DM with `who` in the project you're in, oldest first, without
+    /// copying it: for what's drawn every frame.
+    pub fn chat_lines(&self, who: Member) -> impl DoubleEndedIterator<Item = &Said> {
         let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
         self.chats
             .get(&who)
-            .map(|log| {
-                log.iter()
-                    .filter(|m| m.folder.is_empty() || m.folder == here)
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default()
+            .into_iter()
+            .flatten()
+            .filter(move |m| m.folder.is_empty() || m.folder == here)
     }
 
     /// Adds a line to the DM with `who` in the project you're in.
