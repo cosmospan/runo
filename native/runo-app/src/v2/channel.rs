@@ -1254,8 +1254,7 @@ impl Shell {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .border_b_1()
-            .border_color(c(ui::line2()))
+            // No rule under the intro: the first day's line follows it.
             .child(
                 div()
                     .flex()

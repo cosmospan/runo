@@ -357,8 +357,6 @@ impl Shell {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .border_b_1()
-            .border_color(c(ui::line2()))
             .child(
                 div().flex().items_center().gap(px(14.)).child(hero).child(
                     div()
