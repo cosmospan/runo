@@ -308,6 +308,28 @@ impl Runtime {
             job.goal = goal;
             job.context = context;
         }
+        // What was said in the thread before the ask, so the bot works with
+        // the thread's context, not the one line alone. A plan's parts carry
+        // the plan instead.
+        if job.goal == 0 {
+            let said: Vec<String> = self
+                .store
+                .recent(&job.folder.path, job.thread)
+                .into_iter()
+                .filter(|(_, w)| w.trim() != text.trim())
+                .map(|(who, w)| format!("{who}: {}", w.chars().take(400).collect::<String>()))
+                .collect();
+            if !said.is_empty() {
+                job.context = format!(
+                    "What was said in #{} before this job, oldest first, for context:\n{}\n\n{}",
+                    self.store.thread_label(job.thread),
+                    said.join("\n"),
+                    job.context
+                )
+                .trim()
+                .to_string();
+            }
+        }
         // Threads the person points at with #, as a short digest each.
         let refs = brain::digest::context_for(text, &self.store.jobs);
         if !refs.is_empty() {
@@ -3109,6 +3131,52 @@ mod tests {
         assert!(matches!(job.feed.last(), Some(store::Item::Error(_))));
         assert!(rt.runners.is_empty());
         assert!(rt.poll(&st, None).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_job_reads_what_was_said_in_its_thread() {
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = "/nonexistent/squad-test-agent".into();
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let dir = std::env::temp_dir().join(format!("squad-ctx-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut rt = Runtime::new(quiet_store());
+        let folder = store::Folder {
+            name: "t".into(),
+            path: dir.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let thread = rt.store.thread_here();
+        rt.store.talks.push(Talk {
+            id: 1,
+            folder: folder.path.clone(),
+            thread,
+            bot: Member::Fin,
+            question: "research teams sign up with a university email".into(),
+            answer: Some(Said::bot(
+                "Got it, .edu addresses only.".into(),
+                String::new(),
+            )),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        let opened = rt.start_job(
+            &st,
+            Member::Builder,
+            Mode::Build,
+            "add the sign-up page".into(),
+            folder,
+        );
+        let Opened::Job(id) = opened else {
+            panic!("expected a job, got {opened:?}");
+        };
+        let ctx = &rt.store.job(id).unwrap().context;
+        assert!(ctx.contains("university email") && ctx.contains(".edu addresses"));
+        assert!(!ctx.contains("add the sign-up page"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
