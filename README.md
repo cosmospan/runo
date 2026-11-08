@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
+<img src="docs/images/icon.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
 
 <h1>Squad Code</h1>
 
@@ -51,7 +51,7 @@ and you approve, send it back or throw it away right in the thread.
 <br />
 
 > [!NOTE]
-> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.7`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
+> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.7`). Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
 
 ## How it works
 
@@ -344,10 +344,8 @@ A two-step welcome checks which coding agents are installed and asks for a folde
 ```bash
 git clone https://github.com/hyperhale/squadcode
 cd squadcode
-cargo run -p runo --release
+cargo run --release --bin SquadCode
 ```
-
-Set `RUNO_V2_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
 
 ### Build the app
 
@@ -362,11 +360,7 @@ On Linux the same command makes a `.deb`, and on Windows the icon is built into 
 
 ### Where Squad Code keeps its data
 
-Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. The first time Squad Code opens it copies what Runo had saved in `~/.runo`. Set `SQUADCODE_HOME` to move it all.
-
-## The classic window
-
-Squad Code grew out of Runo, a session-by-session app for running coding agents, with a Design canvas, Architecture diagrams, a Git place, Cove VMs, playbooks and a phone bridge. That window is still in the code for development (`RUNO_V1=1`), and its [guide](docs/guide) describes it, but the crew is the app now and those parts are being brought over one at a time.
+Everything lives in `~/.squadcode`: the crew's folders, jobs and chats in `v2.json`, settings in `settings.json`, logs and crash reports in `logs/`, and the `squad` command in `bin/`. Set `SQUADCODE_HOME` to move it all.
 
 ## Learn more
 
@@ -386,7 +380,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up,
 <br />
 
 <div align="center">
-<img src="native/runo-app/assets/icon/png/runo-256.png" width="40" alt="" />
+<img src="docs/images/icon.png" width="40" alt="" />
 <br />
 <sub>Built in Rust for people who'd rather hand out the jobs than juggle the agents.</sub>
 </div>
