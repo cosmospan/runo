@@ -433,6 +433,9 @@ pub struct Shell {
     chat_len: usize,
     thread_scroll: ScrollHandle,
     thread_key: u64,
+    /// Who spoke last in the chat being drawn, and when: a run of messages
+    /// from one author shows their face and name once.
+    streak: Option<(String, u64)>,
     /// The Fin in the "make your own" playground on Crew: its colour and outfit.
     maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
@@ -1185,6 +1188,7 @@ impl Shell {
             chat_len: 0,
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
+            streak: None,
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
