@@ -556,7 +556,12 @@ impl Shell {
                             .when(asks > 0, |d| d.child(count_badge(asks)))
                             .when(busy > 0, |d| d.child(busy_dot())),
                     )
-                    .tooltip(tip(say))
+                    // No name card over its own right-click menu.
+                    .when(self.menu.is_none(), |d| d.tooltip(tip(say)))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        self.on_menu(super::menu::Ctx::Project(path.clone()), cx),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if this.crew.store.current != i {
                             this.crew.store.current = i;
@@ -846,6 +851,10 @@ impl Shell {
                                 })),
                         )
                     })
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        self.on_menu(super::menu::Ctx::Thread(path.clone(), id), cx),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.crew.store.thread_now = id;
                         this.crew.store.save();
@@ -932,6 +941,10 @@ impl Shell {
                     })
                     .on_hover(
                         cx.listener(move |this, on: &bool, _, cx| this.hover_bot(who, *on, cx)),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        self.on_menu(super::menu::Ctx::Bot(who), cx),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
             );

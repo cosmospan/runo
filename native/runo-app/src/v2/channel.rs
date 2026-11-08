@@ -18,10 +18,11 @@ use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The commands the composer knows, with what each does.
-pub(super) const COMMANDS: [(&str, &str); 7] = [
+pub(super) const COMMANDS: [(&str, &str); 8] = [
     ("/plan", "Peek plans it first, you press Start"),
     ("/race", "Try it on two engines, keep the best"),
     ("/ask", "A question, no code changes"),
+    ("/note", "Pin a note every bot in this thread reads"),
     ("/thread", "Start a new thread: /thread gift cards @Builder"),
     ("/rename", "Rename this thread"),
     (
@@ -54,7 +55,7 @@ impl Entry {
 /// Who a reply to a message goes to: the job's own conversation, or a bot
 /// asked in the thread.
 #[derive(Clone, Copy)]
-enum Reply {
+pub(super) enum Reply {
     Job(u64),
     Bot(Member),
 }
@@ -269,7 +270,7 @@ impl Shell {
     }
 
     /// Puts words in the box you type in here: the DM's, or the thread's.
-    fn put_in_box(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn put_in_box(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.dm().is_some() {
             self.chat_input.update(cx, |i, cx| {
                 i.set_value(text, window, cx);
@@ -353,6 +354,18 @@ impl Shell {
             Msg::Mine(text) => Some(text.clone()),
             _ => None,
         };
+        let right = self.on_menu(
+            super::menu::Ctx::Message {
+                copy: copy.clone(),
+                reply,
+                edit: edit.clone(),
+                job: match &what {
+                    Msg::Job(id, ..) => Some(*id),
+                    _ => None,
+                },
+            },
+            cx,
+        );
         bar = bar
             .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(c(ui::line())))
             .when_some(reply, |d, reply| {
@@ -449,6 +462,7 @@ impl Shell {
             .px(px(10.))
             .rounded(px(8.))
             .hover(|s| s.bg(ca(ui::ink(), 0.03)))
+            .on_mouse_down(MouseButton::Right, right)
             .child(body)
             .children(marks)
             .children(stamp)
@@ -470,6 +484,52 @@ impl Shell {
 
 /// How long a pause still reads as one run of messages from the same author.
 const RUN_SECS: u64 = 5 * 60;
+
+/// A thread summary as it reads: each heading ("Decided:") in small bold
+/// with its lines under it, and headings with nothing under them left out.
+fn summary_lines(text: &str) -> Div {
+    let mut out = div().flex().flex_col().gap(px(2.));
+    if !text.lines().any(|l| l.trim().ends_with(':')) {
+        return out.child(
+            div()
+                .text_size(px(13.))
+                .text_color(c(ui::muted()))
+                .child(text.to_string()),
+        );
+    }
+    let mut heading: Option<String> = None;
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let item = line.trim_start_matches(['-', '\u{2022}']).trim();
+        if line.ends_with(':') && !line.starts_with('-') {
+            heading = Some(match line.trim_end_matches(':') {
+                "For" => "What it's for".to_string(),
+                h => h.to_string(),
+            });
+            continue;
+        }
+        if item.eq_ignore_ascii_case("none") {
+            continue;
+        }
+        if let Some(h) = heading.take() {
+            out = out.child(
+                div()
+                    .pt(px(4.))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(h),
+            );
+        }
+        out = out.child(
+            div()
+                .text_size(px(13.))
+                .line_height(px(19.))
+                .text_color(c(ui::body()))
+                .child(format!("\u{2022} {item}")),
+        );
+    }
+    out
+}
 
 /// "Today", "Yesterday", or the day's name or date, for the line between days.
 pub(super) fn day_label(at: u64) -> String {
@@ -850,6 +910,7 @@ impl Shell {
             .flex()
             .flex_col()
             .child(head)
+            .children(self.about_thread(&folder.path, thread, cx))
             .child(chat)
             .child(
                 div()
@@ -1110,6 +1171,224 @@ impl Shell {
 
     /// The bar over a thread, like a channel's: its name, who's in it as a
     /// row of faces, and Add a bot, which starts an @ in the box.
+    /// "About this thread": what the thread is for in one line, opening to
+    /// the whole summary bots read, the person's pinned notes (each can go),
+    /// and Rewrite now. Nothing until the thread has something in it.
+    fn about_thread(&mut self, folder: &str, thread: u64, cx: &mut Context<Self>) -> Option<Div> {
+        let sum = self.crew.store.summary(folder, thread).cloned();
+        let said = self.crew.store.said_in(folder, thread).len();
+        let writing = self.crew.summing(folder, thread);
+        if said == 0 && sum.as_ref().is_none_or(|s| s.notes.is_empty()) {
+            return None;
+        }
+        let sum = sum.unwrap_or_default();
+        let open = self.about_open;
+        let headline = super::brain::summary::headline(&sum.text);
+        let line = if !headline.is_empty() {
+            headline
+        } else if writing {
+            "Peek is writing a summary\u{2026}".to_string()
+        } else if let Some(n) = sum.notes.first() {
+            n.clone()
+        } else {
+            format!(
+                "Peek sums this thread up after {} messages, so every bot knows what it's about.",
+                super::brain::summary::EVERY
+            )
+        };
+        let bar = div()
+            .id("about-thread")
+            .w_full()
+            .h(px(34.))
+            .px(px(28.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .border_b_1()
+            .border_color(c(ui::line()))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(ui::hover())))
+            .child(
+                Icon::new(if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                })
+                .size(px(14.))
+                .text_color(c(ui::faint())),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::muted()))
+                    .child("About this thread"),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::body()))
+                    .child(line),
+            )
+            .when(!sum.notes.is_empty(), |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(match sum.notes.len() {
+                            1 => "1 note".to_string(),
+                            n => format!("{n} notes"),
+                        }),
+                )
+            })
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.about_open = !this.about_open;
+                cx.notify();
+            }));
+        if !open {
+            return Some(div().w_full().child(bar));
+        }
+        let mut body = div()
+            .w_full()
+            .max_w(px(COLUMN))
+            .mx_auto()
+            .px(px(28.))
+            .py(px(12.))
+            .flex()
+            .flex_col()
+            .gap(px(10.));
+        let label = |t: &str| {
+            div()
+                .text_size(px(11.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::faint()))
+                .child(t.to_string())
+        };
+        let mut notes = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(label("YOUR NOTES (THESE WIN)"));
+        if sum.notes.is_empty() {
+            notes = notes.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .child("None yet. Type /note and what bots should always know here, like \u{201c}this thread is for discussion, not building.\u{201d}"),
+            );
+        }
+        for (i, n) in sum.notes.iter().enumerate() {
+            let folder = folder.to_string();
+            notes = notes.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(13.))
+                            .text_color(c(ui::ink()))
+                            .child(format!("\u{2022} {n}")),
+                    )
+                    .child(
+                        ui::icon_btn(("about-note-off", i), IconName::X)
+                            .size(px(24.))
+                            .tooltip(|window, cx| {
+                                gpui_kit::component::tooltip::Tooltip::new("Remove this note")
+                                    .build(window, cx)
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                let s = this.crew.store.summary_mut(&folder, thread);
+                                if i < s.notes.len() {
+                                    s.notes.remove(i);
+                                }
+                                this.crew.store.save();
+                                cx.notify();
+                            })),
+                    ),
+            );
+        }
+        body = body.child(notes);
+        let text = if sum.text.trim().is_empty() {
+            if writing {
+                "Peek is writing it now.".to_string()
+            } else {
+                format!(
+                    "Not written yet. Peek writes it after {} messages, or press Rewrite now.",
+                    super::brain::summary::EVERY
+                )
+            }
+        } else {
+            sum.text.clone()
+        };
+        let when = if sum.at > 0 {
+            format!(
+                "Written {} \u{b7} covers {} messages \u{b7} bots read it with the last {} word for word",
+                store::ago(sum.at),
+                sum.covers,
+                super::brain::summary::RECENT
+            )
+        } else {
+            String::new()
+        };
+        let path = folder.to_string();
+        body = body.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(label("SUMMARY BY PEEK"))
+                .child(summary_lines(&text))
+                .child(
+                    div()
+                        .pt(px(4.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_size(px(11.5))
+                                .text_color(c(ui::faint()))
+                                .child(when),
+                        )
+                        .when(said > 0 && !writing, |d| {
+                            d.child(
+                                ui::ghost("about-rewrite", "Rewrite now")
+                                    .h(px(26.))
+                                    .tooltip(|window, cx| {
+                                        gpui_kit::component::tooltip::Tooltip::new(
+                                            "Peek writes it afresh from this thread. Notes stay as they are.",
+                                        )
+                                        .build(window, cx)
+                                    })
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.crew.summary_now = Some((path.clone(), thread));
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
+                ),
+        );
+        Some(
+            div().w_full().flex().flex_col().child(bar).child(
+                div()
+                    .w_full()
+                    .bg(c(ui::well()))
+                    .border_b_1()
+                    .border_color(c(ui::line()))
+                    .child(body),
+            ),
+        )
+    }
+
     fn channel_head(&mut self, thread: u64, name: &str, cx: &mut Context<Self>) -> Div {
         let here = self
             .crew
@@ -2575,6 +2854,8 @@ impl Shell {
             "Makes a new thread".to_string()
         } else if value.starts_with("/rename") {
             "Renames this thread".to_string()
+        } else if value.starts_with("/note") {
+            "Pins a note to this thread".to_string()
         } else if value.starts_with("/archive") {
             "Archives this thread".to_string()
         } else if value.starts_with("/delete") {
