@@ -634,6 +634,10 @@ struct Offer {
     goal: bool,
     /// How many engines it was going to race on.
     race: usize,
+    /// Peek's line on why this bot is taking it, for the job's card.
+    handoff: String,
+    /// Where Peek said it runs ("server", "here"), or empty for the usual.
+    site: String,
 }
 
 /// "A", "A and B", "A, B and C".
@@ -1775,12 +1779,7 @@ impl Shell {
                 // Peek says why, and whether it's onboarding the bot or
                 // inviting it back, on the job's card.
                 let line = self.handoff_line(&route, line);
-                let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
-                self.hand_to(route, text, cx);
-                for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
-                    j.handoff = line.clone();
-                }
-                self.crew.store.save();
+                self.hand_with_line(route, text, line, cx);
             }
         }
     }
@@ -1803,12 +1802,7 @@ impl Shell {
                     let said = matches!(route.by.as_str(), "engine" | "learned")
                         .then(|| route.why.clone());
                     let line = self.handoff_line(&route, said);
-                    let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
-                    self.hand_to(route, text, cx);
-                    for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
-                        j.handoff = line.clone();
-                    }
-                    self.crew.store.save();
+                    self.hand_with_line(route, text, line, cx);
                 } else {
                     self.say("Okay, nothing started.");
                     cx.notify();
@@ -1907,6 +1901,44 @@ impl Shell {
             _ => String::new(),
         };
         format!("{reason} {}{place}", joins.line(route.bot))
+    }
+
+    /// Starts an ask the way Peek routed it, with Peek's line on the new
+    /// job's card. When the bot isn't on the crew yet, the line waits on
+    /// the offer to add it, and goes on the job once that's taken.
+    fn hand_with_line(
+        &mut self,
+        route: brain::route::Route,
+        text: String,
+        line: String,
+        cx: &mut Context<Self>,
+    ) {
+        let before = self.last_job();
+        self.hand_to(route, text, cx);
+        if !self.mark_new_jobs(before, &line) {
+            if let Some(o) = self.offer.as_mut() {
+                o.handoff = line;
+            }
+        }
+    }
+
+    /// The newest job's id, or 0.
+    fn last_job(&self) -> u64 {
+        self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0)
+    }
+
+    /// Puts Peek's hand-off line on the jobs started after `before`; false
+    /// when none started.
+    fn mark_new_jobs(&mut self, before: u64, line: &str) -> bool {
+        let mut any = false;
+        for j in self.crew.store.jobs.iter_mut().filter(|j| j.id > before) {
+            j.handoff = line.to_string();
+            any = true;
+        }
+        if any {
+            self.crew.store.save();
+        }
+        any
     }
 
     /// Starts an ask the way Peek routed it, without reading it again.
@@ -2044,6 +2076,8 @@ impl Shell {
                 text,
                 goal: plan && self.mode.writes(),
                 race: if self.mode.writes() { racing } else { 0 },
+                handoff: String::new(),
+                site: self.crew.where_next.clone().unwrap_or_default(),
             });
             cx.notify();
             return;
@@ -2144,7 +2178,14 @@ impl Shell {
         self.racing = o.race;
         self.set_mode(o.mode, window, cx);
         let added = self.toast.clone();
+        let before = self.last_job();
+        // Peek's choice of where it runs still holds once the bot is added.
+        self.crew.where_next = (!o.site.is_empty()).then(|| o.site.clone());
         self.hand_over(o.text, cx);
+        self.crew.where_next = None;
+        if !o.handoff.is_empty() {
+            self.mark_new_jobs(before, &o.handoff);
+        }
         self.unpin_mode(window, cx);
         // Keep "Added Fixer" showing unless starting the job had more to say.
         if self.toast.is_none() {
