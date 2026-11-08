@@ -460,17 +460,6 @@ pub fn left(at: i64, now: i64) -> String {
     }
 }
 
-/// How long ago `at` was, as "just now", "12m ago", "3h ago" or "2d ago".
-pub fn ago(at: i64, now: i64) -> String {
-    let secs = (now - at).max(0);
-    match secs {
-        s if s < 60 => "just now".into(),
-        s if s < 3600 => format!("{}m ago", s / 60),
-        s if s < 86_400 => format!("{}h ago", s / 3600),
-        s => format!("{}d ago", s / 86_400),
-    }
-}
-
 /// Seconds since the epoch now, for formatting.
 pub fn now_secs() -> i64 {
     now()
@@ -560,14 +549,6 @@ mod tests {
         let empty = codex(&dir.join("missing"), 0);
         assert!(matches!(empty.reading, Reading::Problem { .. }));
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn formats_time_left() {
-        assert_eq!(left(5 * 86_400 + 10 * 3600 + 59, 0), "5d 10h");
-        assert_eq!(left(3 * 3600 + 12 * 60, 0), "3h 12m");
-        assert_eq!(left(30, 0), "1m");
-        assert_eq!(ago(0, 7200), "2h ago");
     }
 
     #[test]

@@ -228,7 +228,7 @@ impl Shell {
         let brains = self.bot_brains(&st, &ready, default_i, cx);
 
         // Squad Code's own thinking: shaping jobs, and a second opinion.
-        let brain_i = crate::assistant::assistant_provider(&st);
+        let brain_i = crate::settings::assistant_provider(&st);
         let mut brain_agents = div().flex().flex_wrap().gap(px(6.));
         for &j in &ready {
             let id = agent::PROVIDERS[j].id;

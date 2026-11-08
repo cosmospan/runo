@@ -55,56 +55,7 @@ pub struct AgentOptions {
     pub bot_servers: Vec<(String, crate::mcp::McpSpec)>,
 }
 
-impl AgentOptions {
-    /// These options with the project's own default model, when it has one.
-    pub fn for_project(&self, project: u64) -> AgentOptions {
-        let mut opts = self.clone();
-        if let Some(model) = self
-            .project_models
-            .get(&project.to_string())
-            .filter(|m| !m.trim().is_empty())
-        {
-            opts.model_override = model.trim().to_string();
-        }
-        if let Some(rules) = self
-            .project_tools
-            .get(&project.to_string())
-            .filter(|r| !r.trim().is_empty())
-        {
-            opts.allowed_tools = [opts.allowed_tools.trim(), rules.trim()]
-                .into_iter()
-                .filter(|r| !r.is_empty())
-                .collect::<Vec<_>>()
-                .join(",");
-        }
-        opts
-    }
-
-    /// Whether these options let the agent run any shell command without asking: a
-    /// bare `Bash` in the allowed tools, as "Always allow" saved before it was narrowed.
-    pub fn allows_any_shell(&self) -> bool {
-        std::iter::once(&self.allowed_tools)
-            .chain(self.project_tools.values())
-            .flat_map(|list| list.split(','))
-            .any(crate::approvals::is_bare_bash)
-    }
-
-    /// Take every bare `Bash` out of the allowed tools.
-    pub fn drop_any_shell(&mut self) {
-        let strip = |list: &str| {
-            list.split(',')
-                .map(str::trim)
-                .filter(|t| !t.is_empty() && !crate::approvals::is_bare_bash(t))
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        self.allowed_tools = strip(&self.allowed_tools);
-        for list in self.project_tools.values_mut() {
-            *list = strip(list);
-        }
-        self.project_tools.retain(|_, list| !list.is_empty());
-    }
-}
+impl AgentOptions {}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -123,27 +74,11 @@ pub struct AppSettings {
     pub remove_build_output: bool,
     pub send_on_enter: bool,
     pub autoscroll: bool,
-    pub default_mode: String,
-    /// The person was asked about a bare `Bash` an earlier "Always allow" saved, which
-    /// lets an agent run any command in every project (see `AgentOptions::allows_any_shell`).
-    pub any_shell_asked: bool,
     pub default_provider: String,
-    /// Shell command run in every new worktree, e.g. `npm install`.
-    pub worktree_setup: String,
     /// Stop the computer from sleeping while an agent runs.
     pub keep_awake: bool,
     /// Add a line crediting the agent to commits made from Runo.
     pub attribution: bool,
-    /// Saved shell commands shown as buttons over the terminal, one `Name = command` per line.
-    pub quick_commands: String,
-    /// Group the sidebar by status (Needs you, Running, Ready to review, Done) instead of project.
-    pub group_by_status: bool,
-    /// Crew's chat keeps a line for each thread that was deleted.
-    pub show_deleted_threads: bool,
-    /// A thread number in Crew's chat, such as "#34", shows the thread's title beside it.
-    pub thread_ref_titles: bool,
-    /// Places pinned out on the rail beside the main ones, by label, such as "Notes".
-    pub rail_pins: Vec<String>,
     /// How Peek's outline is drawn, as `weight.ink.eyes` (see
     /// `runo_holo::fin::Line`), such as `bold.pastel.dots`. Empty is the default.
     pub fin_line: String,
@@ -199,24 +134,12 @@ pub struct AppSettings {
     pub v2_bg_show: u8,
     /// Interface font: "bundled" (Runo's own, tuned for sharp small text) or "system".
     pub font: String,
-    /// The status bar's Usage popover shows every limit window, not just the closest one.
-    pub usage_detailed: bool,
     /// macOS font smoothing, which thickens text strokes. Off keeps text crisp and light.
     pub font_smoothing: bool,
     /// Pass Runo's memory MCP server to agents that accept one per run.
     pub memory_server: bool,
-    /// The first-run tour was finished or skipped.
-    pub tour_seen: bool,
-    /// The "What's new" card about the Workbench layout was read.
-    pub whats_new_seen: bool,
-    /// How new sessions open: "chat" or "cli" (the agent's own CLI, where supported).
-    pub default_view: String,
-    /// How wide the conversation runs: "comfortable", "wide" or "full".
-    pub content_width: String,
     /// Terminal text size in points.
     pub term_font_size: u32,
-    /// Terminal font family; empty uses the theme's monospace font.
-    pub term_font: String,
     /// Mouse-wheel speed in the terminal: "normal", "fast" or "faster".
     pub term_scroll: String,
     /// Right-click in the terminal: "menu" or "paste".
@@ -225,17 +148,11 @@ pub struct AppSettings {
     pub term_history: u32,
     /// MCP servers (`<app>/<name>`) handed to every agent that doesn't load them itself.
     pub mcp_shared: Vec<String>,
-    /// Show pages in the Browser tab with a headless Chromium.
-    pub browser_enabled: bool,
     /// The browser the Browser tab and Design canvas drive: a path, or "auto" for the
     /// default browser when it's Chromium-based, else the first one found.
     pub browser: String,
-    /// The built-in browser card was answered.
-    pub browser_asked: bool,
     /// A Figma personal access token, for importing frames into Design.
     pub figma_token: String,
-    /// Shortcuts changed in Settings > Keybindings: shortcut id → keys ("cmd-shift-k").
-    pub keybindings: HashMap<String, String>,
     /// Places sessions can run besides this machine (Cove servers, SSH servers).
     pub connections: Vec<crate::connections::Connection>,
     /// Back up each remote session checkpoint to the project's GitHub remote.
@@ -250,11 +167,6 @@ pub struct AppSettings {
     pub playbook_keep_runs: u32,
     /// Run a scheduled playbook once on launch when it came due while Runo was closed.
     pub playbook_catch_up: bool,
-    /// Run scheduled playbooks while Runo is closed, from a background job: launchd on
-    /// macOS, a systemd user timer on Linux, Task Scheduler on Windows.
-    pub playbooks_while_closed: bool,
-    /// Ask before a playbook an agent asked for starts.
-    pub confirm_agent_playbooks: bool,
     /// Give agents Cove's own tools (`cove mcp`): scratch VMs, commands, files, ports.
     pub cove_tools: bool,
     /// Minutes without output before a running agent is flagged as maybe stuck; 0 never.
@@ -298,27 +210,12 @@ pub struct AppSettings {
     /// Percent of an agent plan's usage window past which threads Crew starts and
     /// playbook runs wait; 0 for never. What you start yourself always goes.
     pub plan_hold_percent: u32,
-    /// Look for a newer Runo on GitHub now and then.
-    pub check_runo_updates: bool,
-    /// Serve the phone bridge from the app while it is open.
-    pub phone_bridge: bool,
-    /// Let the phone bridge listen on every network, over plain HTTP, instead of only
-    /// Tailscale or this computer.
-    pub phone_everywhere: bool,
-    /// Show the Runo assistant in the corner of the window. Off until turned on.
-    pub assistant: bool,
-    /// Who writes its answers: "agent" (the agent below) or "guide".
-    pub assistant_answers: String,
     /// The agent that answers, by id; empty answers with the default agent.
     pub assistant_agent: String,
     /// Its model; empty is a fast one where Runo knows it, else the agent's default.
     pub assistant_model: String,
-    /// The mark offers the next step when a run finishes, a race is ready or a clash shows.
-    pub assistant_nudges: bool,
     /// Show Runo in the macOS menu bar with what agents are doing.
     pub menu_bar: bool,
-    /// Count what needs the person on the Dock icon.
-    pub dock_badge: bool,
     /// With the menu bar on, ⌘Q and closing the window hide Runo to it instead of quitting.
     pub run_in_background: bool,
     /// The person was told once that Runo kept running in the menu bar.
@@ -356,26 +253,10 @@ pub struct BotEngine {
     pub model: String,
 }
 
-/// `Name = command` lines; a line without `=` uses the command as its name.
-pub fn parse_quick_commands(text: &str) -> Vec<(String, String)> {
-    text.lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(|l| match l.split_once('=') {
-            Some((name, cmd)) if !name.trim().is_empty() && !cmd.trim().is_empty() => {
-                (name.trim().to_string(), cmd.trim().to_string())
-            }
-            _ => (l.to_string(), l.to_string()),
-        })
-        .collect()
-}
-
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             agents: HashMap::new(),
-            any_shell_asked: false,
-            usage_detailed: false,
             theme: "dark".into(),
             color_theme: "runo".into(),
             accent: "indigo".into(),
@@ -396,17 +277,9 @@ impl Default for AppSettings {
             remove_build_output: true,
             send_on_enter: true,
             autoscroll: true,
-            default_mode: "edit".into(),
             default_provider: "claude".into(),
-            worktree_setup: String::new(),
             keep_awake: true,
             attribution: false,
-            quick_commands: "Test = cargo test\nBuild = cargo build\nStatus = git status --short"
-                .into(),
-            group_by_status: false,
-            show_deleted_threads: false,
-            thread_ref_titles: true,
-            rail_pins: Vec::new(),
             fin_line: String::new(),
             fin_looks: HashMap::new(),
             glass: "off".into(),
@@ -423,21 +296,13 @@ impl Default for AppSettings {
             font: "bundled".into(),
             font_smoothing: false,
             memory_server: true,
-            tour_seen: false,
-            whats_new_seen: false,
-            default_view: "chat".into(),
-            content_width: "full".into(),
             term_font_size: 12,
-            term_font: String::new(),
             term_scroll: "normal".into(),
             term_right_click: "menu".into(),
             term_history: 10_000,
             mcp_shared: Vec::new(),
-            browser_enabled: false,
             browser: "auto".into(),
-            browser_asked: false,
             figma_token: String::new(),
-            keybindings: HashMap::new(),
             connections: Vec::new(),
             sync_backup: false,
             sync_backup_untracked: false,
@@ -445,8 +310,6 @@ impl Default for AppSettings {
             approval_wait_mins: 5,
             playbook_keep_runs: 10,
             playbook_catch_up: true,
-            playbooks_while_closed: false,
-            confirm_agent_playbooks: true,
             cove_tools: true,
             stuck_after_mins: 10,
             stuck_stop_after_mins: 0,
@@ -463,16 +326,9 @@ impl Default for AppSettings {
             crew_running: 3,
             crew_threads: "auto".into(),
             plan_hold_percent: 0,
-            check_runo_updates: true,
-            phone_bridge: false,
-            phone_everywhere: false,
-            assistant: false,
-            assistant_answers: "agent".into(),
             assistant_agent: String::new(),
             assistant_model: String::new(),
-            assistant_nudges: true,
             menu_bar: true,
-            dock_badge: true,
             run_in_background: true,
             background_told: false,
             bot_engines: HashMap::new(),
@@ -506,16 +362,6 @@ impl AppSettings {
         self.agents.get(id).cloned().unwrap_or_default()
     }
 
-    /// The worktree setup command for a project: its own, else the one in Settings.
-    pub fn setup_for(&self, project_setup: &str) -> String {
-        let own = project_setup.trim();
-        if own.is_empty() {
-            self.worktree_setup.trim().to_string()
-        } else {
-            own.to_string()
-        }
-    }
-
     pub fn load() -> Self {
         let mut settings: Self = crate::store::read_json_or_backup(&settings_path());
         settings.migrate();
@@ -544,14 +390,6 @@ impl AppSettings {
                 n => n.to_string(),
             };
         }
-    }
-
-    /// Check sets that may run at once on this computer; 0 for no limit.
-    pub fn checks_limit(&self) -> usize {
-        crate::hardware::resolve(
-            &self.checks_at_once,
-            crate::hardware::checks_auto(crate::hardware::here()),
-        )
     }
 
     /// Crew threads that may run at once on this computer; 0 for no cap.
@@ -624,8 +462,11 @@ impl AppSettings {
         CREW_RUNNING.store(self.crew_limit() as u32, Ordering::Relaxed);
         PLAN_HOLD.store(self.plan_hold_percent, Ordering::Relaxed);
         CATCH_UP.store(self.playbook_catch_up, Ordering::Relaxed);
-        crate::pbrunner::sync_job(self.playbooks_while_closed);
-        crate::phone::sync(self.phone_bridge, self.phone_everywhere);
+        // The old window's playbook job, where it's still installed.
+        static JOB_GONE: std::sync::Once = std::sync::Once::new();
+        JOB_GONE.call_once(|| {
+            std::thread::spawn(crate::pbrunner::remove_job);
+        });
         crate::terminal::configure(
             self.term_font_size,
             match self.term_scroll.as_str() {
@@ -636,28 +477,6 @@ impl AppSettings {
             self.term_right_click == "paste",
         );
         crate::pty::set_scrollback(self.term_history as usize);
-    }
-
-    /// Whether the place with this label is pinned out on the rail.
-    pub fn pinned(&self, label: &str) -> bool {
-        self.rail_pins.iter().any(|p| p == label)
-    }
-
-    /// Pin the place with this label out on the rail, or put it back in the ⋯ menu.
-    pub fn pin(&mut self, label: &str, on: bool) {
-        self.rail_pins.retain(|p| p != label);
-        if on {
-            self.rail_pins.push(label.to_string());
-        }
-    }
-
-    /// The widest the conversation column gets, or None to fill the window.
-    pub fn content_max_width(&self) -> Option<f32> {
-        match self.content_width.as_str() {
-            "comfortable" => Some(780.),
-            "wide" => Some(1120.),
-            _ => None,
-        }
     }
 }
 
@@ -703,90 +522,12 @@ static MAX_RUNNING: AtomicU32 = AtomicU32::new(0);
 static CREW_RUNNING: AtomicU32 = AtomicU32::new(3);
 static PLAN_HOLD: AtomicU32 = AtomicU32::new(0);
 
-/// Minutes of silence before an agent is flagged as maybe stuck; 0 never.
-pub fn stuck_after_mins() -> u32 {
-    STUCK_AFTER.load(Ordering::Relaxed)
-}
-
-/// Minutes of silence after which an agent is stopped on its own; 0 never.
-pub fn stuck_stop_after_mins() -> u32 {
-    STUCK_STOP.load(Ordering::Relaxed)
-}
-
-/// The limits that hold new turns; 0 for none.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Limits {
-    /// What a session's agents may cost, in US cents.
-    pub session_cents: f64,
-    /// What agents may cost per day, in US cents.
-    pub day_cents: f64,
-    /// Turns per session.
-    pub session_turns: u32,
-    /// Turns per day, across every session.
-    pub day_turns: u32,
-    /// Tokens agents may report per day.
-    pub day_tokens: u64,
-}
-
-/// The limits set under Settings > General > Limits.
-pub fn limits() -> Limits {
-    Limits {
-        session_cents: SESSION_LIMIT.load(Ordering::Relaxed) as f64 * 100.,
-        day_cents: DAILY_LIMIT.load(Ordering::Relaxed) as f64 * 100.,
-        session_turns: SESSION_TURNS.load(Ordering::Relaxed),
-        day_turns: DAILY_TURNS.load(Ordering::Relaxed),
-        day_tokens: u64::from(DAILY_TOKENS_K.load(Ordering::Relaxed)) * 1000,
-    }
-}
-
-/// Agents allowed to run at once; 0 for no cap.
-pub fn max_running() -> usize {
-    MAX_RUNNING.load(Ordering::Relaxed) as usize
-}
-
-/// Crew threads allowed to run at once, with Auto worked out for this computer; 0 for
-/// no cap.
-pub fn crew_running() -> usize {
-    CREW_RUNNING.load(Ordering::Relaxed) as usize
-}
-
-/// Percent of a plan window past which automatic starts wait; 0 for never.
-pub fn plan_hold_percent() -> u32 {
-    PLAN_HOLD.load(Ordering::Relaxed)
-}
 static CATCH_UP: AtomicBool = AtomicBool::new(true);
 
 pub fn cove_tools() -> bool {
     COVE_TOOLS.load(Ordering::Relaxed)
 }
 
-pub fn sync_backup() -> bool {
-    SYNC_BACKUP.load(Ordering::Relaxed)
-}
-
-pub fn sync_backup_untracked() -> bool {
-    SYNC_BACKUP_UNTRACKED.load(Ordering::Relaxed)
-}
-
-pub fn playbook_keep_runs() -> usize {
-    KEEP_RUNS.load(Ordering::Relaxed) as usize
-}
-
-pub fn playbook_catch_up() -> bool {
-    CATCH_UP.load(Ordering::Relaxed)
-}
-
-pub fn stop_on_denial() -> bool {
-    STOP_ON_DENIAL.load(Ordering::Relaxed)
-}
-
-pub fn keep_awake() -> bool {
-    KEEP_AWAKE.load(Ordering::Relaxed)
-}
-
-pub fn set_dark(dark: bool) {
-    DARK.store(dark, Ordering::Relaxed);
-}
 pub fn is_dark() -> bool {
     DARK.load(Ordering::Relaxed)
 }
@@ -795,18 +536,6 @@ pub fn anim_on() -> bool {
 }
 pub fn notify_on() -> bool {
     NOTIFY.load(Ordering::Relaxed)
-}
-pub fn confirm_delete() -> bool {
-    CONFIRM_DELETE.load(Ordering::Relaxed)
-}
-pub fn remove_worktree() -> bool {
-    REMOVE_WORKTREE.load(Ordering::Relaxed)
-}
-pub fn remove_build_output() -> bool {
-    REMOVE_BUILD_OUTPUT.load(Ordering::Relaxed)
-}
-pub fn autoscroll() -> bool {
-    AUTOSCROLL.load(Ordering::Relaxed)
 }
 
 /// Opacity of the content surface for each glass style. Sidebars and panels are
@@ -818,10 +547,6 @@ pub fn glass_alpha(style: &str) -> u8 {
         "clear" => 180,
         _ => 255,
     }
-}
-
-pub fn memory_server() -> bool {
-    MEMORY_SERVER.load(Ordering::Relaxed)
 }
 
 pub fn glass_on() -> bool {
@@ -928,15 +653,6 @@ pub fn panel(color: u32) -> Rgba {
     }
 }
 
-/// The window behind every surface: clear in glass mode so the desktop shows through.
-pub fn window_fill(color: u32) -> Rgba {
-    if glass_on() {
-        rgba(0)
-    } else {
-        rgb(color)
-    }
-}
-
 /// Dividers between the window's regions: a faint hairline in glass mode instead of a
 /// solid grey line, which looks heavy over the blur.
 pub fn divider() -> Rgba {
@@ -1013,14 +729,6 @@ pub fn float_edge() -> Rgba {
     }
 }
 
-fn pick(light: u32, dark: u32) -> u32 {
-    if is_dark() {
-        dark
-    } else {
-        light
-    }
-}
-
 pub fn mix(a: u32, b: u32, t: f32) -> u32 {
     let ch = |shift: u32| {
         let (x, y) = (((a >> shift) & 0xff) as f32, ((b >> shift) & 0xff) as f32);
@@ -1036,9 +744,6 @@ fn theme() -> &'static crate::themes::Palette {
 
 pub fn c_canvas() -> u32 {
     theme().canvas
-}
-pub fn c_sidebar() -> u32 {
-    theme().sidebar
 }
 /// The mode rail: the deepest layer, so the open place's tab, cut from the sheet beside
 /// it, stands out from it.
@@ -1083,16 +788,6 @@ pub fn c_muted() -> u32 {
 pub fn c_term_bg() -> u32 {
     theme().term_bg
 }
-/// Behind an agent's CLI and other terminal screens: the terminal's own shade on a solid
-/// window, and in glass mode a shade over the glass, so the CLI is part of the window
-/// like the chat it swaps with rather than an opaque block cut into it.
-pub fn term_fill() -> Rgba {
-    if glass_on() {
-        code_wash()
-    } else {
-        rgb(c_term_bg())
-    }
-}
 /// Neutral fill for the selected row, so selection does not compete with status colours.
 pub fn c_active() -> u32 {
     theme().active
@@ -1100,16 +795,6 @@ pub fn c_active() -> u32 {
 /// Raised surfaces such as the composer, menus and cards.
 pub fn c_raised() -> u32 {
     theme().raised
-}
-/// A raised surface set into the page, such as the composer and secondary buttons: solid
-/// on a solid window, and in glass mode a sheet of it over the page, so the desktop
-/// still shows through instead of an opaque block cut into the glass.
-pub fn raised() -> Rgba {
-    if glass_on() {
-        with_alpha(c_raised(), if is_dark() { 0x8c } else { 0x99 })
-    } else {
-        rgb(c_raised())
-    }
 }
 pub fn c_blue() -> u32 {
     let accent = ACCENT.load(Ordering::Relaxed);
@@ -1124,68 +809,11 @@ pub fn c_blue() -> u32 {
 pub fn c_selected() -> u32 {
     c_active()
 }
-pub fn c_green() -> u32 {
-    theme().green
-}
 pub fn c_amber() -> u32 {
     theme().amber
 }
 pub fn c_red() -> u32 {
     theme().red
-}
-
-/// Text colour for added / removed lines, honouring the diff palette.
-pub fn c_add() -> u32 {
-    match DIFF.load(Ordering::Relaxed) {
-        1 => pick(0x1f6feb, 0x58a6ff),
-        2 => pick(0x0a6b2d, 0x5fe08a),
-        _ => c_green(),
-    }
-}
-pub fn c_del() -> u32 {
-    match DIFF.load(Ordering::Relaxed) {
-        1 => pick(0xd9730d, 0xf0883e),
-        2 => pick(0xa40e1a, 0xff7b72),
-        _ => c_red(),
-    }
-}
-fn diff_strength() -> f32 {
-    if DIFF.load(Ordering::Relaxed) == 2 {
-        0.28
-    } else {
-        0.14
-    }
-}
-/// Fill of an added or removed diff line. In glass mode it is a wash of the colour over
-/// the glass, so the diff stays part of the window instead of a solid block over it.
-pub fn diff_fill(color: u32) -> Rgba {
-    if glass_on() {
-        with_alpha(color, (diff_strength() * 1.4 * 255.) as u8)
-    } else {
-        rgb(mix(color, c_canvas(), diff_strength()))
-    }
-}
-
-/// A surface set into a panel, such as the diff under the file list: the content colour,
-/// and in glass mode a sheet of it, since a full content layer stacked on a panel turns
-/// solid and hides the desktop that every other region shows.
-pub fn inset(color: u32) -> Rgba {
-    if glass_on() {
-        // Light layers add up faster: a white sheet over white glass turns opaque.
-        with_alpha(color, if is_dark() { 0x80 } else { 0x40 })
-    } else {
-        rgb(color)
-    }
-}
-
-/// Background of code blocks and the terminal log in glass mode: a shade over the glass
-/// rather than the theme's solid grey.
-pub fn code_wash() -> Rgba {
-    if is_dark() {
-        rgba(0x00000047)
-    } else {
-        rgba(0x0000000d)
-    }
 }
 
 // ---------- desktop notification ----------
@@ -1227,7 +855,6 @@ pub struct McpInfo {
     pub transport: &'static str,
     pub enabled: bool,
     pub detail: String,
-    pub path: PathBuf,
     /// How to start or reach it, for sharing with other agents.
     pub spec: crate::mcp::McpSpec,
 }
@@ -1236,59 +863,9 @@ pub struct McpInfo {
 pub struct Discovered {
     pub skills: Vec<SkillInfo>,
     pub mcp: Vec<McpInfo>,
-    pub hooks: Vec<HookInfo>,
     /// Config files worth editing, as (label, path); they may not exist yet.
     pub files: Vec<(&'static str, PathBuf)>,
     pub provider_paths: Vec<(&'static str, Option<PathBuf>)>,
-}
-
-#[derive(Clone)]
-pub struct HookInfo {
-    pub event: String,
-    pub commands: Vec<String>,
-    pub scope: &'static str,
-    pub path: PathBuf,
-}
-
-/// Claude Code hooks: `{"hooks": {"Event": [{"matcher": .., "hooks": [{"command": ..}]}]}}`.
-fn scan_hooks(path: &Path, scope: &'static str, out: &mut Vec<HookInfo>) {
-    let Some(value) = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-    else {
-        return;
-    };
-    let Some(events) = value.get("hooks").and_then(|v| v.as_object()) else {
-        return;
-    };
-    for (event, groups) in events {
-        let commands = groups
-            .as_array()
-            .into_iter()
-            .flatten()
-            .flat_map(|g| {
-                let matcher = g.get("matcher").and_then(|m| m.as_str()).unwrap_or("");
-                g.get("hooks")
-                    .and_then(|h| h.as_array())
-                    .into_iter()
-                    .flatten()
-                    .filter_map(move |h| {
-                        let cmd = h.get("command").and_then(|c| c.as_str())?;
-                        Some(if matcher.is_empty() || matcher == "*" {
-                            cmd.to_string()
-                        } else {
-                            format!("{matcher}: {cmd}")
-                        })
-                    })
-            })
-            .collect();
-        out.push(HookInfo {
-            event: event.clone(),
-            commands,
-            scope,
-            path: path.to_path_buf(),
-        });
-    }
 }
 
 fn home() -> Option<PathBuf> {
@@ -1315,35 +892,6 @@ fn frontmatter(text: &str, key: &str) -> Option<String> {
         }
     }
     None
-}
-
-/// Start a skill in `dir`: a new folder with a SKILL.md to fill in. Returns the file.
-pub fn new_skill(dir: &Path) -> std::io::Result<PathBuf> {
-    let name = (1..)
-        .map(|n| {
-            if n == 1 {
-                "new-skill".to_string()
-            } else {
-                format!("new-skill-{n}")
-            }
-        })
-        .find(|n| !dir.join(n).exists())
-        .expect("some name is free");
-    let folder = dir.join(&name);
-    std::fs::create_dir_all(&folder)?;
-    let file = folder.join("SKILL.md");
-    std::fs::write(
-        &file,
-        format!(
-            "---\nname: {name}\ndescription: What this skill does and when the agent should use it.\n---\n\nSteps for the agent to follow.\n"
-        ),
-    )?;
-    Ok(file)
-}
-
-/// Where new personal skills go.
-pub fn skills_home() -> Option<PathBuf> {
-    home().map(|h| h.join(".claude").join("skills"))
 }
 
 fn scan_skills(dir: &Path, source: &'static str, out: &mut Vec<SkillInfo>) {
@@ -1382,7 +930,6 @@ fn scan_mcp(home: &Path, out: &mut Vec<McpInfo>) {
                     transport: spec.transport(),
                     enabled: true,
                     detail: spec.detail(),
-                    path: claude.clone(),
                     spec,
                 });
             }
@@ -1421,7 +968,6 @@ fn scan_mcp(home: &Path, out: &mut Vec<McpInfo>) {
                     transport: "stdio",
                     enabled: true,
                     detail: String::new(),
-                    path: codex.clone(),
                     spec: Default::default(),
                 });
             } else if line.starts_with('[') {
@@ -1536,7 +1082,6 @@ pub fn discover(project_dir: Option<&str>) -> Discovered {
     if let Some(home) = home() {
         scan_mcp(&home, &mut found.mcp);
         let user = home.join(".claude").join("settings.json");
-        scan_hooks(&user, "user", &mut found.hooks);
         found.files.extend([
             ("Claude settings and hooks", user),
             ("Claude MCP servers", home.join(".claude.json")),
@@ -1559,7 +1104,6 @@ pub fn discover(project_dir: Option<&str>) -> Discovered {
     crate::mcp::set_found(&found.mcp);
     if let Some(dir) = project_dir {
         let project = Path::new(dir).join(".claude").join("settings.json");
-        scan_hooks(&project, "project", &mut found.hooks);
         found.files.extend([
             ("Project Claude settings and hooks", project),
             ("Project MCP servers", Path::new(dir).join(".mcp.json")),
@@ -1591,44 +1135,8 @@ pub fn discover(project_dir: Option<&str>) -> Discovered {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        frontmatter, mix, new_skill, parse_quick_commands, scan_hooks, scan_mcp, scan_skills,
-        AgentOptions, AppSettings,
-    };
+    use super::{frontmatter, mix, scan_mcp, scan_skills, AppSettings};
     use std::path::PathBuf;
-
-    #[test]
-    fn always_rules_apply_to_their_project_and_a_bare_bash_can_go() {
-        let mut opts = AgentOptions {
-            allowed_tools: "Read,Bash".into(),
-            ..Default::default()
-        };
-        opts.project_tools
-            .insert("7".into(), "Bash(npm test:*)".into());
-        assert_eq!(
-            opts.for_project(7).allowed_tools,
-            "Read,Bash,Bash(npm test:*)"
-        );
-        assert_eq!(opts.for_project(8).allowed_tools, "Read,Bash");
-        assert!(opts.allows_any_shell());
-        opts.drop_any_shell();
-        assert!(!opts.allows_any_shell());
-        assert_eq!(opts.allowed_tools, "Read");
-        assert_eq!(opts.for_project(7).allowed_tools, "Read,Bash(npm test:*)");
-    }
-
-    #[test]
-    fn quick_commands_parse_names() {
-        let parsed = parse_quick_commands("Test = cargo test\n# note\n\nls -la\n= bad");
-        assert_eq!(
-            parsed,
-            [
-                ("Test".to_string(), "cargo test".to_string()),
-                ("ls -la".to_string(), "ls -la".to_string()),
-                ("= bad".to_string(), "= bad".to_string()),
-            ]
-        );
-    }
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("runo-settings-{name}-{}", std::process::id()));
@@ -1647,17 +1155,6 @@ mod tests {
         assert_eq!(back["v2_theme"], "daylight");
         assert_eq!(back["later"]["a"], 1);
         assert!(!s.extra.contains_key("theme"));
-    }
-
-    #[test]
-    fn the_project_setup_command_comes_first() {
-        let s = AppSettings {
-            worktree_setup: " npm ci ".into(),
-            ..Default::default()
-        };
-        assert_eq!(s.setup_for("cargo fetch"), "cargo fetch");
-        assert_eq!(s.setup_for("  "), "npm ci");
-        assert_eq!(AppSettings::default().setup_for(""), "");
     }
 
     #[test]
@@ -1778,38 +1275,6 @@ mod tests {
     }
 
     #[test]
-    fn hooks_are_listed_per_event() {
-        let dir = std::env::temp_dir().join(format!("runo-hooks-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("settings.json");
-        std::fs::write(
-            &path,
-            r#"{"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"cargo fmt"}]}],"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}"#,
-        )
-        .unwrap();
-        let mut out = Vec::new();
-        scan_hooks(&path, "user", &mut out);
-        out.sort_by(|a, b| a.event.cmp(&b.event));
-        assert_eq!(out.len(), 2);
-        assert_eq!(out[0].commands, ["Edit: cargo fmt"]);
-        assert_eq!(out[1].commands, ["say done"]);
-        std::fs::remove_dir_all(dir).ok();
-    }
-
-    #[test]
-    fn a_new_skill_gets_a_folder_of_its_own() {
-        let dir = temp("new-skill");
-        let first = new_skill(&dir).unwrap();
-        let second = new_skill(&dir).unwrap();
-        assert!(first.ends_with("new-skill/SKILL.md"));
-        assert!(second.ends_with("new-skill-2/SKILL.md"));
-        let mut out = Vec::new();
-        scan_skills(&dir, "claude", &mut out);
-        assert_eq!(out.len(), 2);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn cost_controls_default_to_todays_behaviour_but_crew_threads_on_auto() {
         let mut old: AppSettings = serde_json::from_str(r#"{"max_running": 0}"#).unwrap();
         old.migrate();
@@ -1822,57 +1287,32 @@ mod tests {
     }
 
     #[test]
-    fn concurrency_settings_from_0_5_8_still_load_and_carry_over() {
-        let load = |json: &str| {
-            let mut s: AppSettings = serde_json::from_str(json).unwrap();
-            s.migrate();
-            s
-        };
-        // Background checks on: Auto, at low priority.
-        let on = load(r#"{"background_checks":true,"crew_running":3}"#);
-        assert_eq!(on.checks_at_once, "auto");
-        assert!(on.checks_low_priority);
-        assert_eq!(on.crew_threads, "auto");
-        // Off: no limit, normal priority.
-        let off = load(r#"{"background_checks":false,"crew_running":0}"#);
-        assert_eq!(off.checks_at_once, "0");
-        assert!(!off.checks_low_priority);
-        assert_eq!(off.checks_limit(), 0);
-        assert_eq!(off.crew_threads, "0");
-        assert_eq!(off.crew_limit(), 0);
-        // A Crew cap other than the old default stays as chosen.
-        let six = load(r#"{"crew_running":6}"#);
-        assert_eq!(six.crew_threads, "6");
-        assert_eq!(six.crew_limit(), 6);
-        // Missing altogether: the old defaults, so Auto at low priority.
-        let none = load("{}");
-        assert_eq!(
-            (none.checks_at_once.as_str(), none.checks_low_priority),
-            ("auto", true)
-        );
-        // Once saved, the new settings win and the old ones aren't written again.
-        let mut chosen = load(r#"{"background_checks":false}"#);
-        chosen.checks_at_once = "2".into();
-        chosen.checks_low_priority = true;
-        let json = serde_json::to_string(&chosen).unwrap();
-        assert!(!json.contains("background_checks") && !json.contains("crew_running"));
-        let again = load(&json);
-        assert_eq!(again.checks_at_once, "2");
-        assert!(again.checks_low_priority);
-        assert_eq!(again.checks_limit(), 2);
-        // A new install starts on Auto.
-        let fresh = AppSettings::default();
-        assert_eq!(
-            (fresh.checks_at_once.as_str(), fresh.crew_threads.as_str()),
-            ("auto", "auto")
-        );
-        assert!(fresh.checks_limit() >= 1 && fresh.crew_limit() >= 2);
-    }
-
-    #[test]
     fn settings_from_0_5_4_with_the_shared_build_folder_switch_still_load() {
         let old: AppSettings =
             serde_json::from_str(r#"{"theme":"dark","share_cargo_target":false}"#).unwrap();
         assert_eq!(old.theme, "dark");
+    }
+}
+
+/// The engine Peek reads messages with: the one chosen in Settings, or the
+/// default engine.
+pub(crate) fn assistant_provider(st: &AppSettings) -> usize {
+    let id = if st.assistant_agent.is_empty() {
+        &st.default_provider
+    } else {
+        &st.assistant_agent
+    };
+    crate::agent::PROVIDERS
+        .iter()
+        .position(|p| p.id == id)
+        .unwrap_or(0)
+}
+
+/// The model Peek reads on: the one chosen in Settings, or a small, fast one
+/// where Squad Code knows one.
+pub(crate) fn assistant_model(st: &AppSettings, provider: &str) -> String {
+    match st.assistant_model.as_str() {
+        "" if provider == "claude" => "haiku".to_string(),
+        m => m.to_string(),
     }
 }

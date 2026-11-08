@@ -30,20 +30,9 @@ pub enum Status {
     Idle,
 }
 
-impl Status {
-    /// The word shown for a session's status, everywhere it is shown.
-    pub fn label(self) -> &'static str {
-        match self {
-            Status::Idle => "Idle",
-            Status::Working => "Working",
-            Status::Done => "Completed",
-            Status::Failed => "Failed",
-            Status::Stopped => "Stopped",
-        }
-    }
-}
+impl Status {}
 
-pub use crate::harness::{StepState, ToolStep};
+pub use crate::harness::ToolStep;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -126,29 +115,6 @@ impl Usage {
     pub fn is_empty(&self) -> bool {
         self.input == 0 && self.output == 0 && self.cached == 0
     }
-
-    /// Tokens in the context after this turn.
-    pub fn context(&self) -> u64 {
-        self.input + self.cached + self.output
-    }
-
-    /// The context window to measure this against. Claude reports it only with a turn's
-    /// result, so the usage seen mid-turn has none: then the window `known` from the
-    /// session's other turns, else 200k, unless more than that is already in use, which
-    /// only a 1M window holds.
-    pub fn window_or(&self, known: u64) -> u64 {
-        match (self.window, known) {
-            (0, 0) if self.context() > 200_000 => 1_000_000,
-            (0, 0) => 200_000,
-            (0, known) => known,
-            (window, _) => window,
-        }
-    }
-}
-
-/// The largest context window any of `messages` reported, or 0.
-pub fn known_window(messages: &[Message]) -> u64 {
-    messages.iter().map(|m| m.usage.window).max().unwrap_or(0)
 }
 
 /// A multiple-choice question the agent asked (Claude's AskUserQuestion tool).
@@ -158,120 +124,9 @@ pub struct Question {
     pub options: Vec<String>,
 }
 
-impl Session {
-    /// Current selections: model, effort, mode, tier and the rest.
-    pub fn selections(&self) -> HashMap<String, String> {
-        self.opts.clone()
-    }
+impl Session {}
 
-    /// For a session that works in a folder it doesn't have to itself, the files its
-    /// agent changed, turn by turn. Anything else uncommitted there came from somewhere
-    /// else: the person, another session, or Runo's Design and Architecture modes. An
-    /// isolated session owns its whole worktree, so it gets `None`.
-    pub fn touched(&self) -> Option<std::collections::HashSet<String>> {
-        (!self.isolated).then(|| {
-            self.messages
-                .iter()
-                .flat_map(|m| m.changed.iter().cloned())
-                .collect()
-        })
-    }
-}
-
-/// Changes cut down to the files in `touched`, when there is such a set.
-pub fn only_touched(
-    changes: Vec<crate::git::Change>,
-    touched: Option<&std::collections::HashSet<String>>,
-) -> Vec<crate::git::Change> {
-    match touched {
-        Some(t) => changes
-            .into_iter()
-            .filter(|c| t.contains(&c.path))
-            .collect(),
-        None => changes,
-    }
-}
-
-impl Session {
-    /// Whether the current agent already replied, so the next prompt continues its conversation.
-    /// A turn stopped after it ran tools but before it wrote anything still counts: the CLI
-    /// saved that conversation.
-    pub fn has_conversation(&self) -> bool {
-        self.messages.iter().skip(self.conversation_start).any(|m| {
-            (m.role == Role::Agent && (!m.text.is_empty() || !m.steps.is_empty()))
-                || (m.role == Role::System && m.meta.starts_with("cli:"))
-        })
-    }
-
-    /// Pick a model ("" for the agent's default). Effort and speed depend on the model, so
-    /// they reset with it.
-    pub fn set_model(&mut self, model: String) {
-        self.opts.remove("effort");
-        self.opts.remove("tier");
-        self.opts.insert("model".into(), model);
-    }
-
-    /// Switch to another agent CLI. Its options and conversation start fresh.
-    pub fn switch_provider(&mut self, provider: &str) {
-        if self.provider == provider {
-            return;
-        }
-        self.switched_from = None;
-        self.provider = provider.to_string();
-        self.opts.clear();
-        self.agent_session.clear();
-        self.conversation_start = self.messages.len();
-    }
-
-    /// Switch to another agent, remembering the one it replaces so `switch_back` can
-    /// restore it while nothing has been sent yet.
-    pub fn switch_provider_keeping(&mut self, provider: &str) {
-        if self.provider == provider {
-            return;
-        }
-        let from = SwitchedFrom {
-            provider: self.provider.clone(),
-            agent_session: self.agent_session.clone(),
-            opts: self.opts.clone(),
-            conversation_start: self.conversation_start,
-            carried: self.carried.clone(),
-        };
-        self.switch_provider(provider);
-        self.switched_from = Some(from);
-    }
-
-    /// The agent a switch can still be undone to: nothing was sent since the switch.
-    pub fn undoable_switch(&self) -> Option<&SwitchedFrom> {
-        let from = self.switched_from.as_ref()?;
-        let sent = self.messages[self.conversation_start.min(self.messages.len())..]
-            .iter()
-            .any(|m| m.role != Role::System);
-        (!sent).then_some(from)
-    }
-
-    /// Undo the last switch: the earlier agent resumes its own conversation, its settings
-    /// come back, and the pending handoff and switch divider are dropped.
-    pub fn switch_back(&mut self) -> bool {
-        let Some(from) = self.undoable_switch().cloned() else {
-            return false;
-        };
-        let start = self.conversation_start.min(self.messages.len());
-        if let Some(i) = self.messages[start.saturating_sub(1)..]
-            .iter()
-            .rposition(|m| m.role == Role::System && m.meta.starts_with("switch:"))
-        {
-            self.messages.remove(start.saturating_sub(1) + i);
-        }
-        self.provider = from.provider;
-        self.agent_session = from.agent_session;
-        self.opts = from.opts;
-        self.conversation_start = from.conversation_start.min(self.messages.len());
-        self.handoff.clear();
-        self.carried = from.carried;
-        self.switched_from = None;
-        true
-    }
-}
+impl Session {}
 
 /// An optional part of a session, or none when it can't be read (a newer Runo saved it
 /// in a shape this one doesn't know), so the rest of the session still loads.
@@ -320,69 +175,6 @@ impl Message {
             note: String::new(),
             crew: None,
             from_thread: None,
-        }
-    }
-
-    /// The thread that sent this message to Crew, if a thread did. Before `from_thread`
-    /// such messages were saved as a playbook named "From <title>" with the wake's text;
-    /// those count too, unless `is_playbook` knows a playbook by that name.
-    pub fn thread_origin(&self, is_playbook: impl Fn(&str) -> bool) -> Option<u64> {
-        if self.role != Role::User {
-            return None;
-        }
-        if self.from_thread.is_some() {
-            return self.from_thread;
-        }
-        if !self.playbook.starts_with("From ") || is_playbook(&self.playbook) {
-            return None;
-        }
-        crate::crew::parse_wake(&self.text).map(|(thread, _)| thread)
-    }
-
-    /// Where step `i` stands, for its icon: still running (only while the turn is live),
-    /// failed, or done.
-    pub fn step_state(&self, i: usize, live: bool) -> StepState {
-        match self.steps.get(i).map(|s| s.state) {
-            Some(StepState::Running) if !live => StepState::Done,
-            Some(state) => state,
-            None => StepState::Done,
-        }
-    }
-
-    /// A running step's result arrived: it is no longer running, and is marked failed
-    /// when its tool reported an error. Returns false when no running step has that id.
-    pub fn finish_step(&mut self, id: &str, ok: bool) -> bool {
-        let Some(step) = self
-            .steps
-            .iter_mut()
-            .rev()
-            .find(|s| s.state == StepState::Running && s.id == id)
-        else {
-            return false;
-        };
-        step.finish(ok);
-        true
-    }
-
-    /// The turn is over: steps whose result never came are taken as done.
-    pub fn settle_steps(&mut self) {
-        for step in &mut self.steps {
-            if step.state == StepState::Running {
-                step.finish(true);
-            }
-        }
-    }
-
-    /// The steps' labels, oldest first.
-    pub fn step_labels(&self) -> impl Iterator<Item = &str> {
-        self.steps.iter().map(|s| s.label.as_str())
-    }
-
-    /// A message stamped with the current local time, for the conversation header.
-    pub fn now(role: Role, text: impl Into<String>) -> Self {
-        Self {
-            time: chrono::Local::now().format("%-I:%M %p").to_string(),
-            ..Self::new(role, text)
         }
     }
 }
@@ -568,15 +360,7 @@ pub struct Queued {
     pub from_thread: Option<u64>,
 }
 
-impl Queued {
-    pub fn new(text: impl Into<String>, images: Vec<String>) -> Self {
-        Self {
-            text: text.into(),
-            images,
-            from_thread: None,
-        }
-    }
-}
+impl Queued {}
 
 /// What a switch replaced, enough to undo it before anything is sent.
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Debug)]
@@ -588,24 +372,7 @@ pub struct SwitchedFrom {
     pub carried: String,
 }
 
-impl Session {
-    /// How to run things on the session's connection, unless it runs on this machine.
-    pub fn sandbox(&self) -> Option<crate::connections::Sandbox> {
-        let conn = crate::connections::get(self.connection)?;
-        let folder = std::path::Path::new(&self.dir)
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        Some(crate::connections::Sandbox::for_session(
-            &conn, self.id, &folder, &self.dir,
-        ))
-    }
-
-    /// Runs somewhere other than this machine.
-    pub fn elsewhere(&self) -> bool {
-        self.connection != crate::connections::LOCAL
-    }
-}
+impl Session {}
 
 /// A review comment on one line of the session's diff.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -615,29 +382,6 @@ pub struct Note {
     /// The diff line as shown, with its +/− marker, so the agent sees what was meant.
     pub code: String,
     pub text: String,
-}
-
-/// One follow-up prompt that asks the agent to address every note.
-pub fn notes_prompt(notes: &[Note]) -> String {
-    let mut out = String::from("Please address these review notes on your changes:\n");
-    for (i, note) in notes.iter().enumerate() {
-        // Removed lines only exist in the old file, so their number is the old one.
-        let place = if note.code.starts_with('−') {
-            format!(
-                "{}, line {} of the old version (removed)",
-                note.path, note.line
-            )
-        } else {
-            format!("{}:{}", note.path, note.line)
-        };
-        out.push_str(&format!(
-            "\n{}. `{place}`: {}\n   On the line `{}`\n",
-            i + 1,
-            note.text.trim(),
-            note.code.trim()
-        ));
-    }
-    out
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -681,13 +425,6 @@ pub struct DayUse {
     /// Input and output tokens the agents reported, cached ones not counted.
     #[serde(default)]
     pub tokens: u64,
-}
-
-/// Drop the oldest days past a month.
-fn keep_month<V>(days: &mut std::collections::BTreeMap<String, V>) {
-    while days.len() > 31 {
-        days.pop_first();
-    }
 }
 
 /// How a project's notes are kept and used.
@@ -782,9 +519,6 @@ pub struct PlaybookRun {
     pub note: String,
 }
 
-/// Runs kept in a playbook's history.
-const RUNS_KEPT: usize = 20;
-
 fn is_zero(n: &u64) -> bool {
     *n == 0
 }
@@ -794,73 +528,6 @@ fn yes() -> bool {
 }
 
 impl Automation {
-    /// The values it asks for when it runs.
-    pub fn run_inputs(&self) -> Vec<crate::pbfile::Input> {
-        crate::pbfile::inputs_of(&self.inputs, &self.prompt)
-    }
-
-    /// Add a run to the history, dropping the oldest past the limit.
-    pub fn record(&mut self, run: PlaybookRun) {
-        self.runs.push(run);
-        if self.runs.len() > RUNS_KEPT {
-            let extra = self.runs.len() - RUNS_KEPT;
-            self.runs.drain(..extra);
-        }
-    }
-
-    /// What it is, for telling whether it changed: everything a playbook file holds.
-    pub fn fingerprint(&self) -> String {
-        let file = crate::pbfile::PlaybookFile {
-            author: String::new(),
-            version: String::new(),
-            ..self.to_file()
-        };
-        crate::pbfile::render(&file)
-    }
-
-    /// Edited here since it was installed.
-    pub fn edited_here(&self) -> bool {
-        !self.installed.is_empty() && self.installed != self.fingerprint()
-    }
-
-    /// Whether it declared that it may do `what`; undeclared playbooks may do anything.
-    pub fn may(&self, what: &str) -> bool {
-        self.permissions.is_empty() || self.permissions.iter().any(|p| p == what)
-    }
-
-    /// As a shareable file.
-    pub fn to_file(&self) -> crate::pbfile::PlaybookFile {
-        crate::pbfile::PlaybookFile {
-            name: self.name.clone(),
-            description: self.description.clone(),
-            author: self.author.clone(),
-            version: self.version.clone(),
-            agent: self.provider.clone(),
-            permissions: if self.permissions.is_empty() {
-                crate::pbfile::PERMISSIONS
-                    .iter()
-                    .map(|p| p.0.to_string())
-                    .collect()
-            } else {
-                self.permissions.clone()
-            },
-            inputs: self.run_inputs(),
-            prompt: self.prompt.clone(),
-        }
-    }
-
-    /// When it last ran, 0 if never. Older playbooks only have `last_run`,
-    /// which for one run by hand is the same thing.
-    pub fn ran_at(&self) -> u64 {
-        if self.ran > 0 {
-            self.ran
-        } else if self.scheduled() {
-            0
-        } else {
-            self.last_run
-        }
-    }
-
     /// The description, or the prompt's first sentence when there is none.
     pub fn summary(&self) -> String {
         let text = if self.description.trim().is_empty() {
@@ -897,47 +564,6 @@ impl Automation {
         } else {
             out
         }
-    }
-
-    /// Whether the automation should run now.
-    pub fn due(&self, now: u64) -> bool {
-        self.enabled && self.next_run().is_some_and(|at| now >= at)
-    }
-
-    /// When the schedule next runs (Unix seconds), counting from the last run.
-    pub fn next_run(&self) -> Option<u64> {
-        if !self.scheduled() {
-            None
-        } else if self.cron.is_empty() {
-            Some(self.last_run + self.every_minutes * 60)
-        } else {
-            crate::schedule::next_local(&self.cron, self.last_run)
-        }
-    }
-
-    /// How many scheduled runs fell between the last run and `now`, up to 1000.
-    pub fn runs_due(&self, now: u64) -> u64 {
-        if !self.scheduled() || now <= self.last_run {
-            0
-        } else if self.cron.is_empty() {
-            (now - self.last_run) / (self.every_minutes * 60).max(1)
-        } else {
-            crate::schedule::runs_between(&self.cron, self.last_run, now, 1000)
-        }
-    }
-
-    /// "Hourly", "Weekdays at 09:00", "Cron 0 */2 * * *".
-    pub fn schedule_label(&self) -> String {
-        if self.cron.is_empty() {
-            crate::playbooks::every_label(self.every_minutes)
-        } else {
-            crate::schedule::describe(&self.cron)
-        }
-    }
-
-    /// Runs on a timer as well as by hand. A schedule needs a project to run in.
-    pub fn scheduled(&self) -> bool {
-        (self.every_minutes > 0 || !self.cron.is_empty()) && self.project_id != 0
     }
 }
 
@@ -989,84 +615,12 @@ pub struct WindowPlace {
     pub maximized: bool,
 }
 
-/// The saved window place, read before the rest of the state so the window opens there.
-pub fn saved_window() -> Option<WindowPlace> {
-    #[derive(Deserialize, Default)]
-    struct Only {
-        #[serde(default)]
-        layout: Layout,
-    }
-    let text = std::fs::read_to_string(state_path()).ok()?;
-    let only: Only = serde_json::from_str(&text).ok()?;
-    only.layout
-        .window
-        .filter(|w| w.width >= 400. && w.height >= 300.)
-}
-
 /// Today's date as the spend log keys it.
 pub fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-impl State {
-    /// Add a turn's cost to `day`, in total and for `provider`, keeping a month of days.
-    pub fn add_spend(&mut self, day: &str, provider: &str, cents: f64) {
-        if cents <= 0.0 {
-            return;
-        }
-        *self.spend.entry(day.to_string()).or_default() += cents;
-        keep_month(&mut self.spend);
-        *self
-            .agent_spend
-            .entry(day.to_string())
-            .or_default()
-            .entry(provider.to_string())
-            .or_default() += cents;
-        keep_month(&mut self.agent_spend);
-    }
-
-    /// What `provider` reported spending on `day`, in cents.
-    pub fn agent_spend_on(&self, day: &str, provider: &str) -> f64 {
-        self.agent_spend
-            .get(day)
-            .and_then(|by| by.get(provider))
-            .copied()
-            .unwrap_or_default()
-    }
-
-    /// Count a turn started on `day`, keeping a month of days.
-    pub fn add_turn(&mut self, day: &str) {
-        self.day_use.entry(day.to_string()).or_default().turns += 1;
-        keep_month(&mut self.day_use);
-    }
-
-    /// Add a turn's reported tokens to `day`, keeping a month of days.
-    pub fn add_tokens(&mut self, day: &str, tokens: u64) {
-        if tokens == 0 {
-            return;
-        }
-        let used = self.day_use.entry(day.to_string()).or_default();
-        used.tokens = used.tokens.saturating_add(tokens);
-        keep_month(&mut self.day_use);
-    }
-
-    /// Turns and tokens on `day`; a day with nothing yet, such as a new one, is zero.
-    pub fn used_on(&self, day: &str) -> DayUse {
-        self.day_use.get(day).copied().unwrap_or_default()
-    }
-
-    /// Record an event for the Activity feed, keeping the latest 500.
-    pub fn log(&mut self, session: u64, text: impl Into<String>) {
-        self.activity.push(Activity {
-            time: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-            session,
-            text: text.into(),
-        });
-        if self.activity.len() > 500 {
-            self.activity.drain(..100);
-        }
-    }
-}
+impl State {}
 
 /// Where agents and the `runo` command leave requests for the running app.
 pub fn inbox_dir() -> PathBuf {
@@ -1097,27 +651,6 @@ pub fn send_request(inbox: &Path, request: &PlaybookRequest) -> std::io::Result<
         &inbox.join(format!("{name}.json")),
         &serde_json::to_vec(request)?,
     )
-}
-
-/// Take every request waiting in `inbox`, oldest first, removing them.
-pub fn take_requests(inbox: &Path) -> Vec<PlaybookRequest> {
-    let Ok(entries) = std::fs::read_dir(inbox) else {
-        return Vec::new();
-    };
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "json"))
-        .collect();
-    files.sort();
-    files
-        .into_iter()
-        .filter_map(|path| {
-            let text = std::fs::read(&path).ok();
-            let _ = std::fs::remove_file(&path);
-            serde_json::from_slice(&text?).ok()
-        })
-        .collect()
 }
 
 /// Read a JSON file, or the default when it is missing. A file that exists but cannot be
@@ -1438,11 +971,10 @@ impl State {
     pub fn load_from(path: &Path) -> Self {
         let root = path.parent().unwrap_or(Path::new("."));
         let mut state = match crate::persist::read(path) {
-            Ok((state, mut written)) => {
-                if let Some(error) = written.index_error.take() {
+            Ok((state, index_error)) => {
+                if let Some(error) = index_error {
                     keep_aside(path, &error);
                 }
-                crate::persist::seed(root, written);
                 state
             }
             Err(error) => {
@@ -1477,263 +1009,14 @@ impl State {
             .map(|(state, ..)| state)
             .unwrap_or_default()
     }
-
-    /// Save in the background: the files are written a moment later, and only those
-    /// that changed.
-    pub fn save(&self) {
-        crate::persist::queue(&data_dir(), self.clone());
-    }
-
-    /// Write what is still waiting to be saved; for quitting.
-    pub fn flush() {
-        crate::persist::flush(std::time::Duration::from_secs(5));
-    }
-
-    pub fn next_id(&mut self) -> u64 {
-        self.next_id += 1;
-        self.next_id
-    }
-
-    pub fn session(&self, id: u64) -> Option<&Session> {
-        self.sessions.iter().find(|s| s.id == id)
-    }
-
-    pub fn session_mut(&mut self, id: u64) -> Option<&mut Session> {
-        self.sessions.iter_mut().find(|s| s.id == id)
-    }
 }
 
 #[cfg(test)]
-impl State {
-    /// Five projects and seven sessions for tests.
-    pub fn sample() -> Self {
-        // Each sample project gets its own color so the sidebar shows the project rails.
-        let project = |id: u64, name: &str| Project {
-            id,
-            name: name.into(),
-            path: format!("/sample/{name}"),
-            color: ["blue", "violet", "teal", "orange", "pink"][(id as usize - 1) % 5].into(),
-            ..Default::default()
-        };
-        let session =
-            |id, project_id, title: &str, provider: &str, branch: &str, status, messages| Session {
-                id,
-                project_id,
-                title: title.into(),
-                provider: provider.into(),
-                branch: branch.into(),
-                dir: String::new(),
-                isolated: true,
-                opts: HashMap::new(),
-                status,
-                messages,
-                agent_session: String::new(),
-                conversation_start: 0,
-                pinned: false,
-                archived: false,
-                unread: false,
-                notes: Vec::new(),
-                race: 0,
-                ..Default::default()
-            };
-        let nav = vec![
-            Message { time: "10:24 AM".into(), ..Message::new(Role::User, "Refine the workspace navigation. Keep it compact, intuitive, and consistent across desktop platforms.") },
-            Message {
-                time: "10:24 AM".into(),
-                steps: vec!["Explored 8 files".into(), "Updated 4 files".into(), "Build passed · 0.97s".into()],
-                ..Message::new(Role::Agent, "I've simplified the sidebar and given your workspace more breathing room.\n\n**What changed**\n\n- Projects and sessions in one sidebar\n- Clearer running and review states\n- Consistent keyboard navigation\n\nReady for your review.")
-            },
-        ];
-        let mut state = State {
-            next_id: 100,
-            projects: vec![
-                project(1, "runo-app"),
-                project(2, "Worldigo"),
-                project(3, "trademe"),
-                project(4, "scalpy"),
-                project(5, "botoxy"),
-            ],
-            sessions: vec![
-                session(
-                    11,
-                    1,
-                    "Refine navigation",
-                    "claude",
-                    "feature/navigation",
-                    Status::Working,
-                    nav.clone(),
-                ),
-                session(
-                    12,
-                    1,
-                    "Search indexing",
-                    "codex",
-                    "feature/search",
-                    Status::Idle,
-                    nav.clone(),
-                ),
-                session(
-                    13,
-                    1,
-                    "Fix build warnings",
-                    "opencode",
-                    "chore/build",
-                    Status::Done,
-                    nav.clone(),
-                ),
-                session(21, 2, "main", "claude", "main", Status::Done, nav.clone()),
-                session(
-                    31,
-                    3,
-                    "Scalping backtest",
-                    "claude",
-                    "indiana-scalping-backtest",
-                    Status::Done,
-                    nav.clone(),
-                ),
-                session(
-                    41,
-                    4,
-                    "Update dashboard",
-                    "codex",
-                    "feat/dashboard",
-                    Status::Done,
-                    nav.clone(),
-                ),
-                session(
-                    51,
-                    5,
-                    "Fix webhook retry",
-                    "opencode",
-                    "fix/webhooks",
-                    Status::Done,
-                    nav,
-                ),
-            ],
-            ..Default::default()
-        };
-        // One unread and one pinned session.
-        state.sessions[1].unread = true;
-        state.sessions[2].pinned = true;
-        state
-    }
-}
+impl State {}
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-
-    #[test]
-    fn context_is_measured_against_the_window_the_session_reported() {
-        let mid_turn = Usage {
-            input: 10,
-            cached: 290_000,
-            ..Usage::default()
-        };
-        // No window yet, but 300k in use: only a 1M window holds that, not "150%".
-        assert_eq!(mid_turn.window_or(0), 1_000_000);
-        // A window an earlier turn reported wins.
-        let mut done = Message::new(Role::Agent, "");
-        done.usage.window = 1_000_000;
-        let known = known_window(&[Message::new(Role::User, "go"), done]);
-        let small = Usage {
-            input: 50_000,
-            ..Usage::default()
-        };
-        assert_eq!(small.window_or(known), 1_000_000);
-        assert_eq!(small.window_or(0), 200_000);
-        let reported = Usage {
-            window: 272_000,
-            ..small
-        };
-        assert_eq!(reported.window_or(known), 272_000);
-    }
-
-    #[test]
-    fn thread_messages_saved_as_playbooks_are_recognised() {
-        let mut old = Message::new(Role::User, "Thread #41 (Refine Arcade) says: Ready.");
-        old.playbook = "From Refine Arcade".into();
-        assert_eq!(old.thread_origin(|_| false), Some(41));
-        // A playbook really named that is still a playbook run.
-        assert_eq!(old.thread_origin(|n| n == "From Refine Arcade"), None);
-        // Saved before the field existed, it loads and is still recognised.
-        let json = r#"{"role":"User","text":"Thread #41 (Refine Arcade) says: Ready.","playbook":"From Refine Arcade"}"#;
-        let loaded: Message = serde_json::from_str(json).unwrap();
-        assert_eq!(loaded.from_thread, None);
-        assert_eq!(loaded.thread_origin(|_| false), Some(41));
-    }
-
-    #[test]
-    fn playbook_runs_are_not_thread_messages() {
-        let mut run = Message::new(Role::User, "Write the release notes for…");
-        run.playbook = "Release notes".into();
-        assert_eq!(run.thread_origin(|_| true), None);
-        assert_eq!(run.thread_origin(|_| false), None);
-        // "From …" alone isn't enough: the text must be a thread's message.
-        run.playbook = "From scratch".into();
-        assert_eq!(run.thread_origin(|_| false), None);
-        assert!(!serde_json::to_string(&run).unwrap().contains("from_thread"));
-        let typed = Message::new(Role::User, "Thread #3 (x) says: hi");
-        assert_eq!(typed.thread_origin(|_| false), None);
-    }
-
-    #[test]
-    fn a_shared_folder_counts_only_what_the_agent_changed() {
-        let change = |path: &str| crate::git::Change {
-            path: path.into(),
-            status: "A".into(),
-            added: 1,
-            removed: 0,
-            staged: false,
-            unstaged: true,
-            binary: false,
-        };
-        let mut reply = Message::new(Role::Agent, "Done.");
-        reply.changed = vec!["src/lib.rs".into()];
-        let mut session = Session {
-            messages: vec![
-                Message::new(Role::User, "Fix it"),
-                reply,
-                Message::new(Role::User, "Did you change any files?"),
-                Message::new(Role::Agent, "No."),
-            ],
-            ..Default::default()
-        };
-        let folder = vec![change("src/lib.rs"), change("architecture/model.toml")];
-        let touched = session.touched();
-        let mine = only_touched(folder.clone(), touched.as_ref());
-        assert_eq!(mine.len(), 1);
-        assert_eq!(mine[0].path, "src/lib.rs");
-        // An isolated session owns its worktree, so everything in it counts.
-        session.isolated = true;
-        assert_eq!(session.touched(), None);
-        assert_eq!(only_touched(folder, None).len(), 2);
-    }
-
-    #[test]
-    fn schedules_say_when_they_run_next() {
-        let mut a = Automation {
-            project_id: 1,
-            every_minutes: 60,
-            last_run: 1_000_000,
-            enabled: true,
-            ..Default::default()
-        };
-        assert_eq!(a.next_run(), Some(1_003_600));
-        assert!(!a.due(1_003_599) && a.due(1_003_600));
-        assert_eq!(a.runs_due(1_000_000 + 3 * 3600 + 5), 3);
-        // A cron schedule wins over the minutes; this one runs every minute.
-        a.cron = "* * * * *".into();
-        let start = 1_000_020;
-        a.last_run = start;
-        assert_eq!(a.next_run(), Some(1_000_080));
-        assert_eq!(a.runs_due(start + 600), 10);
-        assert_eq!(a.schedule_label(), "Cron * * * * *");
-        a.cron = "30 9 * * 1,2,3,4,5".into();
-        assert_eq!(a.schedule_label(), "Weekdays at 09:30");
-        a.project_id = 0;
-        assert!(!a.scheduled() && a.next_run().is_none());
-    }
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("runo-store-{name}-{}", std::process::id()));
@@ -1772,76 +1055,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn picking_a_model_resets_its_effort_and_speed() {
-        let mut session = State::sample().sessions[0].clone();
-        session.opts.insert("effort".into(), "high".into());
-        session.opts.insert("tier".into(), "priority".into());
-        session.opts.insert("mode".into(), "read-only".into());
-        session.set_model("gpt-5.5".into());
-        let sel = session.selections();
-        assert_eq!(sel.get("model").map(String::as_str), Some("gpt-5.5"));
-        assert!(!sel.contains_key("effort") && !sel.contains_key("tier"));
-        assert_eq!(sel.get("mode").map(String::as_str), Some("read-only"));
-        // The agent's default is an explicit empty pick.
-        session.set_model(String::new());
-        assert_eq!(
-            session.selections().get("model").map(String::as_str),
-            Some("")
-        );
-    }
-
-    #[test]
-    fn saves_and_loads_round_trip() {
-        let dir = temp("roundtrip");
-        let path = dir.join("state.json");
-        let mut state = State::sample();
-        state.sessions[1].agent_session = "abc".into();
-        write_json(&path, &state);
-        let loaded = State::load_from(&path);
-        assert_eq!(loaded.projects.len(), state.projects.len());
-        assert_eq!(loaded.sessions.len(), state.sessions.len());
-        assert_eq!(loaded.next_id, state.next_id);
-        assert_eq!(loaded.session(12).unwrap().agent_session, "abc");
-        assert!(!dir.join("state.json.tmp").exists());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn running_sessions_load_as_interrupted() {
-        let dir = temp("interrupted");
-        let path = dir.join("state.json");
-        write_json(&path, &State::sample());
-        let loaded = State::load_from(&path);
-        let session = loaded.session(11).unwrap();
-        assert!(session.status == Status::Failed);
-        assert!(session
-            .messages
-            .last()
-            .unwrap()
-            .text
-            .starts_with("Interrupted"));
-        assert!(loaded.sessions.iter().all(|s| s.status != Status::Working));
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn turns_on_connections_stay_running_across_restarts() {
-        let dir = temp("remote-turn");
-        let path = dir.join("state.json");
-        let mut state = State::sample();
-        let session = state.session_mut(11).unwrap();
-        session.connection = 3;
-        session.remote_turn = true;
-        let before = session.messages.len();
-        write_json(&path, &state);
-        let loaded = State::load_from(&path);
-        let session = loaded.session(11).unwrap();
-        assert!(session.status == Status::Working);
-        assert_eq!(session.messages.len(), before);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn corrupt_state_is_moved_aside_not_overwritten() {
         let dir = temp("corrupt");
         let path = dir.join("state.json");
@@ -1875,214 +1088,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn switching_agents_starts_a_new_conversation() {
-        let mut state = State::sample();
-        let session = state.session_mut(12).unwrap();
-        session.opts.insert("model".into(), "gpt".into());
-        session.agent_session = "id".into();
-        assert!(session.has_conversation());
-        session.switch_provider("codex");
-        assert!(
-            session.has_conversation(),
-            "same provider keeps the conversation"
-        );
-        session.switch_provider("claude");
-        assert!(!session.has_conversation());
-        assert!(session.opts.is_empty() && session.agent_session.is_empty());
-        session.messages.push(Message::new(Role::Agent, ""));
-        assert!(
-            !session.has_conversation(),
-            "an empty reply is not a conversation"
-        );
-        session.messages.last_mut().unwrap().text = "done".into();
-        assert!(session.has_conversation());
-        // A first turn stopped after it ran tools keeps its conversation.
-        session.switch_provider("codex");
-        let mut stopped = Message::new(Role::Agent, "");
-        stopped.steps.push("Read src/main.rs".into());
-        session.messages.push(stopped);
-        assert!(session.has_conversation());
-    }
-
-    #[test]
-    fn a_stopped_session_reads_stopped_not_failed() {
-        assert_eq!(Status::Stopped.label(), "Stopped");
-        assert_eq!(Status::Failed.label(), "Failed");
-        let saved: Status =
-            serde_json::from_str(&serde_json::to_string(&Status::Stopped).unwrap()).unwrap();
-        assert!(saved == Status::Stopped);
-    }
-
-    #[test]
-    fn steps_run_until_finished_and_keep_failures() {
-        let mut m = Message::new(Role::Agent, "");
-        m.steps = vec![
-            ToolStep::running("a", "Bash", "Ran sleep 60"),
-            ToolStep::running("b", "Bash", "Ran false"),
-        ];
-        assert_eq!(m.step_state(0, true), StepState::Running);
-        assert_eq!(
-            m.step_state(0, false),
-            StepState::Done,
-            "nothing runs once the turn is over"
-        );
-        assert!(m.finish_step("b", false));
-        assert!(!m.finish_step("b", false), "already finished");
-        assert_eq!(m.step_state(1, true), StepState::Failed);
-        assert!(m.finish_step("a", true));
-        assert_eq!(m.step_state(0, true), StepState::Done);
-        let saved: Message = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
-        assert_eq!(saved.step_state(1, false), StepState::Failed);
-        assert_eq!(saved.steps[0].kind, crate::harness::ToolKind::Shell);
-    }
-
-    #[test]
-    fn unfinished_steps_settle_as_done_when_the_turn_ends() {
-        let mut m = Message::new(Role::Agent, "");
-        m.steps = vec![ToolStep::running("a", "Bash", "Ran sleep 60")];
-        m.settle_steps();
-        assert_eq!(m.steps[0].state, StepState::Done);
-        assert!(!m.finish_step("a", false), "nothing is left running");
-    }
-
-    #[test]
-    fn steps_saved_as_plain_labels_still_load() {
-        let saved = r#"{"role":"Agent","text":"ok","steps":["Read a.rs",
-            {"label":"Ran false","kind":"shell","state":"failed"}],"failed_steps":[1]}"#;
-        let m: Message = serde_json::from_str(saved).unwrap();
-        assert_eq!(
-            m.step_labels().collect::<Vec<_>>(),
-            ["Read a.rs", "Ran false"]
-        );
-        assert_eq!(m.step_state(0, false), StepState::Done);
-        assert_eq!(m.step_state(1, false), StepState::Failed);
-    }
-
-    #[test]
-    fn ids_increase() {
-        let mut state = State::default();
-        assert_eq!(state.next_id(), 1);
-        assert_eq!(state.next_id(), 2);
-    }
-
-    #[test]
-    fn stamped_messages_have_a_time() {
-        assert!(Message::now(Role::User, "x").time.contains(':'));
-        assert!(Message::new(Role::User, "x").time.is_empty());
-    }
-
-    #[test]
-    fn notes_become_one_prompt() {
-        let notes = vec![
-            Note {
-                path: "src/a.rs".into(),
-                line: 12,
-                code: "+    let x = 1;  ".into(),
-                text: "Name this better".into(),
-            },
-            Note {
-                path: "b.css".into(),
-                line: 3,
-                code: "−color: red;".into(),
-                text: " Keep red here ".into(),
-            },
-        ];
-        assert_eq!(
-            notes_prompt(&notes),
-            "Please address these review notes on your changes:\n\n1. `src/a.rs:12`: Name this better\n   On the line `+    let x = 1;`\n\n2. `b.css, line 3 of the old version (removed)`: Keep red here\n   On the line `−color: red;`\n"
-        );
-    }
-
-    /// Sample state written to `dir` the way Runo writes it, and the first session's file.
-    fn written_sample(dir: &Path) -> (State, PathBuf) {
-        let mut state = State::sample();
-        crate::persist::write_all(dir, &mut state, &mut crate::persist::Written::default());
-        let file = crate::persist::session_dir(dir, state.sessions[0].id).join("session.json");
-        (state, file)
-    }
-
-    fn edit_json(path: &Path, edit: impl FnOnce(&mut serde_json::Value)) {
-        let mut value: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        edit(&mut value);
-        std::fs::write(path, value.to_string()).unwrap();
-    }
-
-    fn aside_copies(dir: &Path, prefix: &str) -> usize {
-        std::fs::read_dir(dir)
-            .unwrap()
-            .flatten()
-            .filter(|e| e.file_name().to_string_lossy().starts_with(prefix))
-            .count()
-    }
-
-    #[test]
-    fn a_session_from_a_newer_runo_still_loads() {
-        let dir = temp("newer-session");
-        let (state, file) = written_sample(&dir);
-        edit_json(&file, |v| {
-            v["status"] = "Paused".into();
-            v["something_new"] = serde_json::json!({ "a": 1 });
-            v["proof"] = serde_json::json!({ "shape": "from the future" });
-            let message = &mut v["messages"][1];
-            message["role"] = "Tool".into();
-            message["crew"] = serde_json::json!({ "Hologram": { "id": 1 } });
-            message["steps"] = serde_json::json!([
-                { "label": "Beamed up", "kind": "teleport", "state": "queued" }
-            ]);
-        });
-        let loaded = State::load_from(&dir.join("state.json"));
-        let session = loaded.session(state.sessions[0].id).expect("still listed");
-        assert!(session.status == Status::Idle);
-        assert!(session.proof.is_none());
-        let message = &session.messages[1];
-        assert_eq!(message.role, Role::System);
-        assert!(message.crew.is_none());
-        assert_eq!(message.steps[0].label, "Beamed up");
-        assert_eq!(message.steps[0].kind, crate::harness::ToolKind::Other);
-        assert_eq!(message.steps[0].state, StepState::Done);
-        assert!(file.exists());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn a_session_with_a_field_it_cannot_read_keeps_the_rest() {
-        let dir = temp("salvage-session");
-        let (state, file) = written_sample(&dir);
-        let id = state.sessions[0].id;
-        edit_json(&file, |v| v["pinned"] = "very".into());
-        let loaded = State::load_from(&dir.join("state.json"));
-        let session = loaded.session(id).expect("kept in the sidebar");
-        assert_eq!(session.title, state.sessions[0].title);
-        // A session saved mid-turn also gets the "Interrupted" note on load.
-        let interrupted = usize::from(state.sessions[0].status == Status::Working);
-        assert_eq!(
-            session.messages.len(),
-            state.sessions[0].messages.len() + interrupted
-        );
-        assert!(!session.pinned);
-        assert_eq!(
-            aside_copies(file.parent().unwrap(), "session.json.corrupt-"),
-            1
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn an_index_read_in_part_keeps_its_projects_and_a_copy() {
-        let dir = temp("salvage-index");
-        let (state, _) = written_sample(&dir);
-        let path = dir.join("state.json");
-        edit_json(&path, |v| v["notes"] = "not a map".into());
-        let loaded = State::load_from(&path);
-        assert_eq!(loaded.projects.len(), state.projects.len());
-        assert_eq!(loaded.sessions.len(), state.sessions.len());
-        assert!(path.exists());
-        assert_eq!(aside_copies(&dir, "state.json.corrupt-"), 1);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn salvage_keeps_what_reads() {
         #[derive(Default, Serialize, Deserialize, PartialEq, Debug)]
         struct Saved {
@@ -2105,46 +1110,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn data_from_a_newer_runo_is_copied_before_it_is_saved_over() {
-        let dir = temp("version");
-        let (state, file) = written_sample(&dir);
-        std::fs::write(dir.join("settings.json"), "{}").unwrap();
-        std::fs::write(dir.join("version"), "9.9.9").unwrap();
-        keep_before_version_change(&dir, "0.5.9");
-        assert!(dir.join("state.json.prev").is_file());
-        assert!(dir.join("settings.json.prev").is_file());
-        let backups: Vec<PathBuf> = std::fs::read_dir(dir.join("backups"))
-            .unwrap()
-            .flatten()
-            .map(|e| e.path())
-            .collect();
-        assert_eq!(backups.len(), 1);
-        assert!(backups[0]
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .starts_with("9.9.9-"));
-        let id = state.sessions[0].id.to_string();
-        let copy = backups[0].join("sessions").join(id).join("session.json");
-        assert_eq!(
-            std::fs::read_to_string(copy).unwrap(),
-            std::fs::read_to_string(&file).unwrap()
-        );
-        assert_eq!(
-            std::fs::read_to_string(dir.join("version")).unwrap(),
-            "0.5.9"
-        );
-        // The same version again changes nothing; an update keeps only the .prev copies.
-        std::fs::remove_file(dir.join("state.json.prev")).unwrap();
-        keep_before_version_change(&dir, "0.5.9");
-        assert!(!dir.join("state.json.prev").exists());
-        keep_before_version_change(&dir, "0.6.0");
-        assert!(dir.join("state.json.prev").is_file());
-        assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 1);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn old_layouts_still_load() {
         let layout: Layout = serde_json::from_str(r#"{"tabs":[3],"selected":3}"#).unwrap();
         assert_eq!(layout.tabs, vec![3]);
@@ -2164,77 +1129,6 @@ pub(crate) mod tests {
         };
         let back: Layout = serde_json::from_str(&serde_json::to_string(&full).unwrap()).unwrap();
         assert_eq!(back, full);
-    }
-
-    #[test]
-    fn spend_adds_up_per_day_and_keeps_a_month() {
-        let mut state = State::default();
-        state.add_spend("2026-10-13", "claude", 12.5);
-        state.add_spend("2026-10-13", "opencode", 7.5);
-        state.add_spend("2026-10-13", "claude", 0.0);
-        assert_eq!(state.spend.get("2026-10-13"), Some(&20.0));
-        assert_eq!(state.agent_spend_on("2026-10-13", "claude"), 12.5);
-        assert_eq!(state.agent_spend_on("2026-10-13", "opencode"), 7.5);
-        assert_eq!(state.agent_spend_on("2026-10-13", "codex"), 0.0);
-        for day in 1..=40 {
-            state.add_spend(&format!("2026-11-{day:02}"), "claude", 1.0);
-        }
-        assert_eq!(state.spend.len(), 31);
-        assert_eq!(state.agent_spend.len(), 31);
-        assert!(!state.spend.contains_key("2026-10-13"));
-    }
-
-    #[test]
-    fn turns_and_tokens_add_up_per_day_and_keep_a_month() {
-        let mut state = State::default();
-        state.add_turn("2026-10-13");
-        state.add_turn("2026-10-13");
-        state.add_tokens("2026-10-13", 1_500);
-        state.add_tokens("2026-10-13", 0);
-        state.add_tokens("2026-10-13", 500);
-        assert_eq!(
-            state.used_on("2026-10-13"),
-            DayUse {
-                turns: 2,
-                tokens: 2_000
-            }
-        );
-        // A new day starts from nothing, and yesterday's count stays as it was.
-        assert_eq!(state.used_on("2026-10-14"), DayUse::default());
-        state.add_turn("2026-10-14");
-        assert_eq!(state.used_on("2026-10-14").turns, 1);
-        assert_eq!(state.used_on("2026-10-13").turns, 2);
-        // Tokens alone start a day too, with no turns.
-        state.add_tokens("2026-10-15", 7);
-        assert_eq!(
-            state.used_on("2026-10-15"),
-            DayUse {
-                turns: 0,
-                tokens: 7
-            }
-        );
-        for day in 1..=40 {
-            state.add_turn(&format!("2026-11-{day:02}"));
-        }
-        assert_eq!(state.day_use.len(), 31);
-        assert!(!state.day_use.contains_key("2026-10-13"));
-        assert_eq!(state.used_on("2026-10-13"), DayUse::default());
-    }
-
-    #[test]
-    fn turns_and_tokens_per_day_survive_a_restart() {
-        let mut state = State::default();
-        state.add_turn("2026-10-13");
-        state.add_tokens("2026-10-13", 42);
-        let text = serde_json::to_string(&state).unwrap();
-        let back: State = serde_json::from_str(&text).unwrap();
-        assert_eq!(
-            back.used_on("2026-10-13"),
-            DayUse {
-                turns: 1,
-                tokens: 42
-            }
-        );
     }
 
     /// Held by any test that changes process-wide environment variables,

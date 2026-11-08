@@ -914,7 +914,7 @@ impl Runtime {
     fn poll_goals(&mut self, st: &AppSettings) {
         let mut back = Vec::new();
         self.planning.retain(|(id, rx)| match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, r)) => {
+            Ok(crate::agent::Event::Output(r)) => {
                 back.push((*id, r));
                 false
             }
@@ -2711,7 +2711,7 @@ impl Runtime {
     fn poll_draft(&mut self) {
         if let Some((rx, about, name)) = &self.drafting {
             let back = match rx.try_recv() {
-                Ok(crate::agent::Event::Output(_, r)) => Some(r.ok()),
+                Ok(crate::agent::Event::Output(r)) => Some(r.ok()),
                 Ok(_) | Err(TryRecvError::Empty) => None,
                 Err(TryRecvError::Disconnected) => Some(None),
             };
@@ -2739,7 +2739,7 @@ impl Runtime {
         }
         if let Some((rx, about)) = &self.skilling {
             let back = match rx.try_recv() {
-                Ok(crate::agent::Event::Output(_, r)) => Some(r.ok()),
+                Ok(crate::agent::Event::Output(r)) => Some(r.ok()),
                 Ok(_) | Err(TryRecvError::Empty) => None,
                 Err(TryRecvError::Disconnected) => Some(None),
             };
@@ -2776,7 +2776,7 @@ impl Runtime {
     fn poll_designs(&mut self) {
         let mut back = Vec::new();
         self.designing.retain(|(id, set, rx)| match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, r)) => {
+            Ok(crate::agent::Event::Output(r)) => {
                 back.push((*id, *set, r.ok()));
                 false
             }

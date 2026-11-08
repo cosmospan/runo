@@ -26,15 +26,6 @@ pub struct Install {
 
 static FOUND: RwLock<Option<HashMap<String, Vec<Install>>>> = RwLock::new(None);
 
-/// The copies of an agent found by the last search.
-pub fn get(provider: &str) -> Vec<Install> {
-    FOUND
-        .read()
-        .ok()
-        .and_then(|m| m.as_ref()?.get(provider).cloned())
-        .unwrap_or_default()
-}
-
 /// Look for every copy of an agent again, on this thread.
 pub fn refresh(provider: &'static crate::agent::Provider) {
     let home = std::env::var_os("HOME")
@@ -160,67 +151,6 @@ pub(crate) fn find(bin: &str, dirs: &[(PathBuf, bool)]) -> Vec<Install> {
     out
 }
 
-/// The newest copy that reported a version.
-pub fn newest(copies: &[Install]) -> Option<&Install> {
-    copies
-        .iter()
-        .filter(|c| !c.version.is_empty())
-        .max_by_key(|c| crate::alerts::version_parts(&c.version))
-}
-
-/// The copy Runo runs for an agent, among `copies`.
-pub fn in_use<'a>(
-    provider: &'static crate::agent::Provider,
-    copies: &'a [Install],
-) -> Option<&'a Install> {
-    let runs = crate::updater::resolve(&crate::caps::binary(provider))?;
-    let real = std::fs::canonicalize(&runs).unwrap_or(runs);
-    copies.iter().find(|c| c.real == real)
-}
-
-/// The copy Runo runs and a newer one it could run instead, when the one it runs is older.
-pub fn shadow<'a>(
-    copies: &'a [Install],
-    using: Option<&'a Install>,
-) -> Option<(&'a Install, &'a Install)> {
-    let using = using?;
-    let newest = newest(copies)?;
-    crate::alerts::is_newer(&newest.version, &using.version).then_some((using, newest))
-}
-
-/// For an agent: the copy Runo runs and a newer one already on this computer.
-pub fn shadowed(provider: &'static crate::agent::Provider) -> Option<(Install, Install)> {
-    let copies = get(provider.id);
-    shadow(&copies, in_use(provider, &copies)).map(|(a, b)| (a.clone(), b.clone()))
-}
-
-/// A newer copy than `version` already on this computer: (path, version).
-pub fn newer_than(provider: &'static crate::agent::Provider, version: &str) -> Option<Install> {
-    newest(&get(provider.id))
-        .filter(|c| crate::alerts::is_newer(&c.version, version))
-        .cloned()
-}
-
-/// Remove a link to a CLI. Only links are removed, never the file they lead to.
-pub fn remove_link(path: &Path) -> Result<(), String> {
-    if !is_link(path) {
-        return Err(format!(
-            "{} isn't a link, so Runo leaves it alone. Remove it the way it was installed.",
-            path.display()
-        ));
-    }
-    std::fs::remove_file(path).map_err(|e| format!("Couldn't remove {}: {e}", path.display()))?;
-    if let Ok(mut map) = FOUND.write() {
-        if let Some(map) = map.as_mut() {
-            for list in map.values_mut() {
-                list.retain(|c| c.path != path);
-            }
-        }
-    }
-    crate::caps::mark_updated();
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,15 +160,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
-    }
-
-    fn copy(path: &str, version: &str) -> Install {
-        Install {
-            path: path.into(),
-            real: path.into(),
-            version: version.into(),
-            ..Default::default()
-        }
     }
 
     #[test]
@@ -274,60 +195,5 @@ mod tests {
             ],
             "newest Node.js first"
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn finds_each_real_file_once_and_marks_links() {
-        let home = temp("find");
-        let (local, nvm, app) = (
-            home.join(".local/bin"),
-            home.join(".nvm/versions/node/v22.12.0/bin"),
-            home.join("Library/Application Support/Orca/runtime/bin"),
-        );
-        for d in [&local, &nvm, &app] {
-            std::fs::create_dir_all(d).unwrap();
-        }
-        std::fs::write(app.join("codex"), "#!/bin/sh\n").unwrap();
-        std::os::unix::fs::symlink(app.join("codex"), local.join("codex")).unwrap();
-        std::fs::write(nvm.join("codex"), "#!/bin/sh\n").unwrap();
-        let dirs = vec![
-            (local.clone(), true),
-            (nvm.clone(), false),
-            (app.clone(), false),
-        ];
-        let found = find("codex", &dirs);
-        assert_eq!(found.len(), 2, "the link and its target are one copy");
-        assert_eq!(found[0].path, local.join("codex"));
-        assert!(found[0].link && found[0].on_path);
-        assert_eq!(found[0].owner.as_deref(), Some("Orca"));
-        assert_eq!(found[1].path, nvm.join("codex"));
-        assert!(!found[1].link && !found[1].on_path && found[1].owner.is_none());
-        assert!(find("gemini", &dirs).is_empty());
-
-        assert!(
-            remove_link(&nvm.join("codex")).is_err(),
-            "only links are removed"
-        );
-        remove_link(&local.join("codex")).unwrap();
-        assert!(!local.join("codex").exists() && app.join("codex").is_file());
-    }
-
-    #[test]
-    fn an_older_copy_in_use_is_shadowing_a_newer_one() {
-        let copies = vec![
-            copy("/home/a/.local/bin/codex", "0.147.0"),
-            copy("/home/a/.nvm/versions/node/v22.12.0/bin/codex", "0.162.1"),
-            copy("/opt/homebrew/bin/codex", ""),
-        ];
-        assert_eq!(newest(&copies).unwrap().version, "0.162.1");
-        let (using, better) = shadow(&copies, Some(&copies[0])).unwrap();
-        assert_eq!(
-            (using.version.as_str(), better.version.as_str()),
-            ("0.147.0", "0.162.1")
-        );
-        assert!(shadow(&copies, Some(&copies[1])).is_none());
-        assert!(shadow(&copies, None).is_none());
-        assert!(newest(&[copy("/x", "")]).is_none());
     }
 }

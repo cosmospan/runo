@@ -1780,7 +1780,7 @@ impl Shell {
             return;
         };
         let reply = match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+            Ok(crate::agent::Event::Output(r)) => r.ok(),
             Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
         };
@@ -1905,8 +1905,8 @@ impl Shell {
             return;
         };
         let (reply, err) = match rx.try_recv() {
-            Ok(crate::agent::Event::Output(_, Ok(r))) => (Some(r), None),
-            Ok(crate::agent::Event::Output(_, Err(e))) => (None, Some(e)),
+            Ok(crate::agent::Event::Output(Ok(r))) => (Some(r), None),
+            Ok(crate::agent::Event::Output(Err(e))) => (None, Some(e)),
             Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => return,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => (None, None),
         };
@@ -3666,6 +3666,11 @@ struct OpenWindow(AnyWindowHandle);
 impl Global for OpenWindow {}
 
 /// Brings the Squad Code window forward, opening a new one if it was closed.
+/// The Squad Code window, while it's open.
+pub fn open_handle(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<OpenWindow>().map(|w| w.0)
+}
+
 pub fn to_front(cx: &mut App) {
     let shown = cx.try_global::<OpenWindow>().map(|w| w.0).is_some_and(|w| {
         w.update(cx, |_, window, _| window.activate_window())

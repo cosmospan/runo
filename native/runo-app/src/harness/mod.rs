@@ -10,7 +10,6 @@ pub mod event;
 #[cfg(test)]
 mod fixtures;
 pub mod host;
-pub mod log;
 pub mod pi;
 pub mod record;
 pub mod rpc;

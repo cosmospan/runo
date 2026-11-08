@@ -148,7 +148,7 @@ pub fn parse_split(reply: &str) -> Vec<Step> {
 
 /// Asks Squad Code's model to split a goal, on another thread.
 pub fn plan(st: &AppSettings, folder: &Folder, goal: &str) -> Result<Receiver<Event>, String> {
-    let i = crate::assistant::assistant_provider(st);
+    let i = crate::settings::assistant_provider(st);
     let p = &agent::PROVIDERS[i];
     let configured = st.agent(p.id).binary;
     if !agent::available(p.bin, &configured) {
@@ -157,11 +157,11 @@ pub fn plan(st: &AppSettings, folder: &Folder, goal: &str) -> Result<Receiver<Ev
             p.name
         ));
     }
-    let model = crate::assistant::assistant_model(st, p.id);
+    let model = crate::settings::assistant_model(st, p.id);
     let command =
         agent::ask_command_on(p.id, &configured, &split_prompt(goal, &folder.name), &model);
     let (tx, rx) = channel();
-    agent::oneshot("v2-goal".into(), command, &folder.path, tx);
+    agent::oneshot(command, &folder.path, tx);
     Ok(rx)
 }
 

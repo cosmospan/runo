@@ -256,7 +256,7 @@ pub fn start(
     };
     let (tx, rx) = channel();
     super::machine::use_server_screen();
-    let handle = agent::run_agent(Target::Terminal(job.id), &spec, &dir, None, tx)?;
+    let handle = agent::run_agent(Target::Terminal(job.id), &spec, &dir, tx)?;
     job.agent = p.id.to_string();
     job.engine = engine::label_of(i, &model);
     job.status = Status::Running;
@@ -286,7 +286,7 @@ impl Runner {
         for _ in 0..400 {
             let Ok(ev) = self.rx.try_recv() else { break };
             match ev {
-                Event::Line(_, line) if self.result.is_none() && is_result(&line) => {
+                Event::Line(line) if self.result.is_none() && is_result(&line) => {
                     self.result = Some((
                         std::time::Instant::now(),
                         !line.contains("\"is_error\":true"),
@@ -297,7 +297,7 @@ impl Runner {
                         }
                     }
                 }
-                Event::Line(_, line) => match &mut self.parser {
+                Event::Line(line) => match &mut self.parser {
                     Some(p) => {
                         for e in p.feed(&line) {
                             apply(job, e);
@@ -305,7 +305,7 @@ impl Runner {
                     }
                     None => say(job, &agent::strip_ansi(&line), true),
                 },
-                Event::Json(_, line, v) => {
+                Event::Json(line, v) => {
                     if v["type"] == "result" && self.result.is_none() {
                         self.result = Some((std::time::Instant::now(), v["is_error"] != true));
                     }
@@ -315,14 +315,14 @@ impl Runner {
                         }
                     }
                 }
-                Event::Err(_, line) => {
+                Event::Err(line) => {
                     self.errors.push(agent::strip_ansi(&line));
                     if self.errors.len() > 40 {
                         self.errors.remove(0);
                     }
                 }
-                Event::Done(_, ok) => ended = Some(ok),
-                Event::Output(..) | Event::Partial(..) => {}
+                Event::Done(ok) => ended = Some(ok),
+                Event::Output(..) => {}
             }
         }
         // The engine finished its turn but something it started (a dev

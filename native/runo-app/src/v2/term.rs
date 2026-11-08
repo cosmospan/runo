@@ -192,7 +192,7 @@ impl Shell {
         }
         if !self.terms.contains_key(&id) {
             let cols = self.term_cols;
-            match pty::Shell::spawn_program(id, id, &dir, ROWS, cols, prog, |_| {}) {
+            match pty::Shell::spawn_program(id, &dir, ROWS, cols, prog, |_| {}) {
                 Ok(sh) => {
                     self.terms.insert(id, sh);
                 }

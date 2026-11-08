@@ -34,17 +34,6 @@ impl Kind {
         }
     }
 
-    /// Two letters for the badge beside a connection.
-    pub(crate) fn mark(self) -> &'static str {
-        match self {
-            Kind::Postgres => "PG",
-            Kind::Sqlite => "SL",
-            Kind::Mysql => "MY",
-            Kind::Redis => "RD",
-            Kind::Mongo => "MG",
-        }
-    }
-
     /// Whether Runo can open it yet. The others are found and listed, so the person sees
     /// them, but open in a later release.
     pub(crate) fn supported(self) -> bool {
@@ -193,26 +182,6 @@ pub(crate) fn sensitive_name(name: &str) -> bool {
     WORDS.iter().any(|w| n.contains(w)) && !n.ends_with("_at") && !n.ends_with("_id")
 }
 
-/// A column type as the grid's header shows it: Postgres' long names shortened to the
-/// ones people type.
-pub(crate) fn short_type(data_type: &str) -> String {
-    const SHORT: [(&str, &str); 7] = [
-        ("timestamp with time zone", "timestamptz"),
-        ("timestamp without time zone", "timestamp"),
-        ("time with time zone", "timetz"),
-        ("time without time zone", "time"),
-        ("character varying", "varchar"),
-        ("character", "char"),
-        ("double precision", "float8"),
-    ];
-    for (long, short) in SHORT {
-        if let Some(rest) = data_type.strip_prefix(long) {
-            return format!("{short}{rest}");
-        }
-    }
-    data_type.to_string()
-}
-
 /// A hidden value as the grid shows it: an email keeps its first letter and domain, so
 /// rows can still be told apart; anything else is dots.
 pub(crate) fn mask(text: &str) -> String {
@@ -259,56 +228,6 @@ pub(crate) struct Rows {
     pub sql: String,
 }
 
-/// A condition on one column, picked in the filter bar.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Filter {
-    pub column: String,
-    pub op: Op,
-    pub value: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Op {
-    Eq,
-    Ne,
-    Gt,
-    Lt,
-    Contains,
-    IsNull,
-    NotNull,
-}
-
-impl Op {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Op::Eq => "=",
-            Op::Ne => "≠",
-            Op::Gt => ">",
-            Op::Lt => "<",
-            Op::Contains => "contains",
-            Op::IsNull => "is null",
-            Op::NotNull => "is not null",
-        }
-    }
-
-    /// Whether the condition takes a value.
-    pub(crate) fn takes_value(self) -> bool {
-        !matches!(self, Op::IsNull | Op::NotNull)
-    }
-}
-
-/// What to fetch from a table: a page of rows, filtered and sorted.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Browse {
-    pub filters: Vec<Filter>,
-    /// A column and whether it sorts descending.
-    pub sort: Option<(String, bool)>,
-    pub offset: usize,
-}
-
-/// Rows per page in the grid.
-pub(crate) const PAGE: usize = 100;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,14 +257,6 @@ mod tests {
         assert!(says_prod(&["botoxy-prod.cluster.rds.amazonaws.com"]));
         assert!(says_prod(&[".env.production"]));
         assert!(!says_prod(&["staging.internal", "app_dev"]));
-    }
-
-    #[test]
-    fn long_type_names_are_shortened() {
-        assert_eq!(short_type("timestamp with time zone"), "timestamptz");
-        assert_eq!(short_type("character varying(64)"), "varchar(64)");
-        assert_eq!(short_type("character(3)"), "char(3)");
-        assert_eq!(short_type("jsonb"), "jsonb");
     }
 
     #[test]

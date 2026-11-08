@@ -37,12 +37,6 @@ fn holds(
     crate::registry::spec(provider).is_some_and(|s| fact(s).holds(provider))
 }
 
-/// Whether the CLI keeps its own conversation that a follow-up can resume. Others get
-/// the recent conversation written into each follow-up prompt instead.
-pub fn resumes(provider: &str) -> bool {
-    holds(provider, |s| &s.resumes)
-}
-
 /// Whether the CLI can resume the conversation Runo kept for a session. Grok (xAI's
 /// Grok Build) and Antigravity both resume only by UUID; a session from the community
 /// Grok CLI Runo ran before keeps a shorter id, so it starts a new conversation with the
@@ -157,17 +151,6 @@ fn list(input: &str) -> Vec<String> {
         .collect()
 }
 
-/// Display name for Runo's provider-neutral permission levels (Settings > Chat), which
-/// each agent maps to its closest mode when launched.
-pub fn generic_mode_label(mode: &str) -> Option<&'static str> {
-    match mode {
-        "edit" => Some("Auto edit"),
-        "plan" => Some("Plan only"),
-        "full" => Some("Full access"),
-        _ => None,
-    }
-}
-
 pub struct RunSpec<'a> {
     pub provider: &'a str,
     pub prompt: &'a str,
@@ -274,12 +257,6 @@ pub fn mode_error(provider: &str, mode: &str) -> Option<String> {
         "{} has no read-only mode, so Runo won't run it in Plan only. Switch to Auto edit or Full access, or plan with another agent.",
         self::provider(provider).name
     ))
-}
-
-/// Whether images can be attached for this agent: it takes them as files or reads them
-/// from the paths listed in the prompt.
-pub fn takes_images(provider: &str) -> bool {
-    holds(provider, |s| &s.images)
 }
 
 /// MCP servers for one run: the ones the person shares, then Cove's and Runo's memory
@@ -861,17 +838,6 @@ fn pi_args(spec: &RunSpec, model: &str, effort: &str, mode: &str) -> Vec<String>
     args
 }
 
-/// Agents whose own interactive CLI can open the same conversation the chat uses, so
-/// the Chat and CLI views of a session can be swapped without sending anything.
-pub fn has_cli_view(provider: &str) -> bool {
-    resumes(provider)
-}
-
-/// Whether Runo can read the CLI's saved conversation to show CLI turns in the chat.
-pub fn imports_cli_turns(provider: &str) -> bool {
-    matches!(provider, "claude" | "codex")
-}
-
 /// Gemini's and Qwen Code's conversation flags: `--resume <id>` to continue, or a new
 /// conversation's id up front. Gemini names a new one only when it has `--session-id`.
 fn conversation_args(spec: &RunSpec) -> Vec<String> {
@@ -916,12 +882,6 @@ pub fn untrusted_config(spec: &RunSpec, dir: &str) -> Option<String> {
     ))
 }
 
-/// Whether `spec` may trust `dir`: the person trusts the project, or nothing in the
-/// folder starts programs Runo didn't add.
-pub fn folder_trusted(spec: &RunSpec, dir: &str) -> bool {
-    untrusted_config(spec, dir).is_none()
-}
-
 /// Cursor's headless runs stop at a workspace trust prompt in a folder it hasn't seen,
 /// such as a new worktree, unless the CLI is told to trust it.
 pub(crate) fn cursor_trust() -> Vec<String> {
@@ -942,182 +902,6 @@ pub(crate) fn cursor_mode(mode: &str) -> Vec<String> {
     }
 }
 
-/// Arguments that open the agent's interactive CLI on this session's conversation, with
-/// the same model, mode and tools as the chat. `spec.resume` picks up the conversation
-/// in `spec.session_id`; otherwise a new one starts (named up front for Claude Code).
-pub fn interactive_args(spec: &RunSpec) -> Vec<String> {
-    let s = |v: &str| v.to_string();
-    let id = spec.session_id.to_string();
-    let model = spec
-        .sel
-        .get("model")
-        .cloned()
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| spec.opts.model_override.clone());
-    let with_model = |mut args: Vec<String>, flag: &str| {
-        if !model.is_empty() {
-            args.extend([s(flag), model.clone()]);
-        }
-        args.extend(split_args(&spec.opts.extra_args));
-        args
-    };
-    let resume = spec.resume && !id.is_empty();
-    if let Some(agent) = crate::registry::spec(spec.provider).filter(|a| a.driver == "acp") {
-        let flag = agent.print.as_ref().and_then(|p| p.model.clone());
-        return match flag {
-            Some(flag) => with_model(Vec::new(), &flag),
-            None => split_args(&spec.opts.extra_args),
-        };
-    }
-    match spec.provider {
-        "gemini" | "qwen" => {
-            let mut args = with_model(Vec::new(), "-m");
-            args.extend(conversation_args(spec));
-            return args;
-        }
-        "cursor" | "copilot" | "droid" => {
-            let flag = if spec.provider == "copilot" {
-                "--model"
-            } else {
-                "-m"
-            };
-            let mut args = with_model(Vec::new(), flag);
-            if spec.provider == "cursor" && spec.sel.get("mode").is_some_and(|m| m == "plan") {
-                args.extend(cursor_mode("plan"));
-            }
-            if resume {
-                args.extend([s("--resume"), id]);
-            } else if !spec.resume && !id.is_empty() && names_conversation(spec.provider) {
-                args.extend([s("--session-id"), id]);
-            }
-            return args;
-        }
-        "opencode" => {
-            let mut args = with_model(Vec::new(), "-m");
-            if resume {
-                args.extend([s("-s"), id]);
-            }
-            return args;
-        }
-        "amp" => {
-            return if resume {
-                vec![s("threads"), s("continue"), id]
-            } else {
-                Vec::new()
-            };
-        }
-        "pi" => {
-            let mut args = Vec::new();
-            if !id.is_empty() {
-                args.extend([s("--session-id"), id]);
-            }
-            let mut args = with_model(args, "--model");
-            if !spec.prompt.is_empty() {
-                args.push(prompt_arg(spec.prompt));
-            }
-            return args;
-        }
-        "grok" => {
-            let mut args = with_model(Vec::new(), "-m");
-            match spec.sel.get("mode").map(String::as_str) {
-                Some("plan") => args.extend([s("--permission-mode"), s("plan")]),
-                Some("full") => args.extend([s("--permission-mode"), s("bypassPermissions")]),
-                Some("edit") => args.extend([s("--permission-mode"), s("acceptEdits")]),
-                _ => {}
-            }
-            let resume = resume && is_uuid(&id);
-            if resume {
-                args.extend([s("-r"), id]);
-            } else if is_uuid(&id) {
-                args.extend([s("-s"), id]);
-            }
-            if !resume && !spec.prompt.is_empty() {
-                // The interactive CLI takes its opening message as its argument.
-                args.push(prompt_arg(spec.prompt));
-            }
-            return args;
-        }
-        "antigravity" => {
-            let mut args = with_model(Vec::new(), "--model");
-            match spec.sel.get("mode").map(String::as_str) {
-                Some("plan") => args.extend([s("--mode"), s("plan")]),
-                Some("full") => args.push(s("--dangerously-skip-permissions")),
-                Some("edit") => args.extend([s("--mode"), s("accept-edits")]),
-                _ => {}
-            }
-            let resume = resume && is_uuid(&id);
-            if resume {
-                args.extend([s("--conversation"), id]);
-            }
-            if !resume && !spec.prompt.is_empty() {
-                args.push(prompt_arg(spec.prompt));
-            }
-            return args;
-        }
-        _ => {}
-    }
-    let args = provider_args(spec);
-    match spec.provider {
-        "codex" => {
-            // `exec [flags] [resume <id>] <prompt>` becomes `[resume <id>] [flags]`.
-            let mut flags: Vec<String> = Vec::new();
-            let mut iter = args.into_iter().skip(1).peekable();
-            while let Some(arg) = iter.next() {
-                match arg.as_str() {
-                    "--skip-git-repo-check" | "--json" => {}
-                    "-i" => {
-                        iter.next();
-                    }
-                    "resume" => {
-                        iter.next();
-                    }
-                    _ if iter.peek().is_none() => {} // the prompt
-                    _ => flags.push(arg),
-                }
-            }
-            let mut out = Vec::new();
-            if spec.resume && !spec.session_id.is_empty() {
-                out.extend(["resume".to_string(), spec.session_id.to_string()]);
-            }
-            out.extend(flags);
-            // The interactive CLI is the only place an approval policy has an effect.
-            let approval = spec.sel.get("approval").cloned().unwrap_or_default();
-            if !approval.is_empty() {
-                out.extend([s("-c"), format!("approval_policy=\"{approval}\"")]);
-            }
-            if !spec.prompt.is_empty() {
-                out.push(prompt_arg(spec.prompt));
-            }
-            out
-        }
-        _ => {
-            // Drop print mode, streaming output, Runo's permission prompts (the CLI asks
-            // itself) and the prompt; keep everything else.
-            let end = args.iter().rposition(|a| a == "--").unwrap_or(args.len());
-            let mut out: Vec<String> = Vec::new();
-            let mut iter = args[..end].iter();
-            while let Some(a) = iter.next() {
-                match a.as_str() {
-                    "-p"
-                    | "--output-format"
-                    | "stream-json"
-                    | "--verbose"
-                    | "--include-partial-messages" => {}
-                    "--permission-prompt-tool" => {
-                        iter.next();
-                    }
-                    _ => out.push(a.clone()),
-                }
-            }
-            // A first prompt, typed into the CLI as it opens.
-            if !spec.prompt.is_empty() {
-                out.extend(["--".to_string(), spec.prompt.to_string()]);
-            }
-            out
-        }
-    }
-}
-
 #[cfg(test)]
 mod interactive_tests {
     use super::*;
@@ -1129,55 +913,6 @@ mod interactive_tests {
             " --dangerously-bypass-approvals-and-sandbox"
         );
         assert_eq!(prompt_arg("fix the -x flag"), "fix the -x flag");
-    }
-
-    #[test]
-    fn interactive_args_drop_print_mode_and_keep_the_conversation() {
-        let sel = std::collections::HashMap::from([
-            ("model".to_string(), "haiku".to_string()),
-            ("mode".to_string(), "edit".to_string()),
-            ("approval".to_string(), "untrusted".to_string()),
-        ]);
-        let opts = AgentOptions::default();
-        let spec = |provider, resume, prompt| RunSpec {
-            provider,
-            prompt,
-            resume,
-            sel: &sel,
-            opts: &opts,
-            in_git: true,
-            session_id: "abc-123",
-            images: &[],
-            memory: None,
-            local: true,
-            thread: 0,
-            trusted: false,
-        };
-        let claude = interactive_args(&spec("claude", true, ""));
-        assert!(!claude
-            .iter()
-            .any(|a| a == "-p" || a == "stream-json" || a == "--"));
-        assert!(claude.windows(2).any(|w| w == ["--resume", "abc-123"]));
-        assert!(claude.windows(2).any(|w| w == ["--model", "haiku"]));
-        assert!(claude
-            .windows(2)
-            .any(|w| w == ["--permission-mode", "acceptEdits"]));
-        let fresh = interactive_args(&spec("claude", false, "Fix it"));
-        assert!(fresh.windows(2).any(|w| w == ["--session-id", "abc-123"]));
-        assert!(fresh.ends_with(&["--".to_string(), "Fix it".to_string()]));
-        let codex = interactive_args(&spec("codex", true, ""));
-        assert_eq!(&codex[..2], ["resume", "abc-123"]);
-        assert!(!codex
-            .iter()
-            .any(|a| a == "exec" || a == "--skip-git-repo-check"));
-        assert!(codex.windows(2).any(|w| w == ["-m", "haiku"]));
-        assert_eq!(codex.iter().filter(|a| *a == "resume").count(), 1);
-        assert!(codex
-            .windows(2)
-            .any(|w| w == ["-c", "approval_policy=\"untrusted\""]));
-        // Chat turns can't stop to ask, so the policy stays out of them.
-        let chat = provider_args(&spec("codex", true, "Go on"));
-        assert!(!chat.iter().any(|a| a.contains("approval_policy")));
     }
 }
 
@@ -1225,21 +960,19 @@ pub enum Target {
 }
 
 pub enum Event {
-    Line(Target, String),
+    Line(String),
     /// A line of an agent's output that is JSON, parsed on the thread that read it so the
     /// main thread only has to act on it.
-    Json(Target, String, serde_json::Value),
+    Json(String, serde_json::Value),
     /// stderr of an agent run: kept out of the conversation unless the run fails.
-    Err(Target, String),
-    Done(Target, bool),
-    /// Result of a one-off background command, by the key it was started with.
-    Output(String, Result<String, String>),
-    /// The reply so far of a command started with `oneshot_streamed`, by its key.
-    Partial(String, String),
+    Err(String),
+    Done(bool),
+    /// Result of a one-off background command.
+    Output(Result<String, String>),
 }
 
 /// Run a command to completion on a background thread and send its stdout back.
-pub fn oneshot(key: String, mut command: Command, dir: &str, tx: Sender<Event>) {
+pub fn oneshot(mut command: Command, dir: &str, tx: Sender<Event>) {
     command.current_dir(dir).stdin(Stdio::null());
     std::thread::spawn(move || {
         let result = match command.output() {
@@ -1259,135 +992,12 @@ pub fn oneshot(key: String, mut command: Command, dir: &str, tx: Sender<Event>) 
                 command.get_program()
             )),
         };
-        let _ = tx.send(Event::Output(key, result));
+        let _ = tx.send(Event::Output(result));
     });
-}
-
-/// Stops a run started with `oneshot_streamed`.
-#[derive(Clone)]
-pub struct Stopper(std::sync::Arc<std::sync::Mutex<Option<std::process::Child>>>);
-
-impl Stopper {
-    /// Stop the run; what it said so far still arrives as its result.
-    pub fn stop(&self) {
-        if let Some(child) = self.0.lock().ok().as_mut().and_then(|c| c.as_mut()) {
-            let _ = child.kill();
-        }
-    }
-}
-
-/// Like `oneshot`, but the reply arrives as it is written: `Event::Partial` with the text
-/// so far, at most every `PARTIAL_EVERY`, then `Event::Output` with all of it. `parser`
-/// reads the CLI's structured output (only its reply text is kept); without one, stdout is
-/// the reply. The run is killed after `limit`.
-pub fn oneshot_streamed(
-    key: String,
-    mut command: Command,
-    dir: &str,
-    mut parser: Option<crate::stream::Parser>,
-    limit: std::time::Duration,
-    tx: Sender<Event>,
-) -> Stopper {
-    use std::io::BufRead;
-    const PARTIAL_EVERY: std::time::Duration = std::time::Duration::from_millis(60);
-    command
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let slot = std::sync::Arc::new(std::sync::Mutex::new(None));
-    let stopper = Stopper(slot.clone());
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            let program = command.get_program().to_owned();
-            let _ = tx.send(Event::Output(
-                key,
-                Err(format!("could not start {program:?}: {error}")),
-            ));
-            return stopper;
-        }
-    };
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    if let Ok(mut s) = slot.lock() {
-        *s = Some(child);
-    }
-    // Past the limit, stop it as the person would.
-    let watchdog = stopper.clone();
-    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let finished = done.clone();
-    std::thread::spawn(move || {
-        let start = std::time::Instant::now();
-        while start.elapsed() < limit {
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(200));
-        }
-        watchdog.stop();
-    });
-    std::thread::spawn(move || {
-        let err = std::thread::spawn(move || {
-            let mut text = String::new();
-            if let Some(mut pipe) = stderr {
-                let _ = std::io::Read::read_to_string(&mut pipe, &mut text);
-            }
-            text
-        });
-        let mut reply = String::new();
-        let mut failure = None;
-        let mut sent = std::time::Instant::now();
-        if let Some(out) = stdout {
-            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
-                match parser.as_mut() {
-                    Some(p) => {
-                        for update in p.feed(&line) {
-                            match update {
-                                crate::harness::AgentEvent::Text(t) => reply.push_str(&t),
-                                crate::harness::AgentEvent::Error(e) => failure = Some(e),
-                                _ => {}
-                            }
-                        }
-                    }
-                    None => {
-                        reply.push_str(&line);
-                        reply.push('\n');
-                    }
-                }
-                if sent.elapsed() >= PARTIAL_EVERY && !reply.trim().is_empty() {
-                    sent = std::time::Instant::now();
-                    let _ = tx.send(Event::Partial(key.clone(), reply.clone()));
-                }
-            }
-        }
-        done.store(true, std::sync::atomic::Ordering::Relaxed);
-        let status = slot
-            .lock()
-            .ok()
-            .and_then(|mut c| c.take())
-            .and_then(|mut c| c.wait().ok());
-        let err = err.join().unwrap_or_default();
-        let reply = reply.trim().to_string();
-        let result = match (status, failure) {
-            (_, Some(e)) if reply.is_empty() => Err(e),
-            (Some(s), _) if s.success() => Ok(reply),
-            // Stopped or failed partway: what it said so far is still the answer.
-            _ if !reply.is_empty() => Ok(reply),
-            _ => Err(if err.trim().is_empty() {
-                "it stopped without answering".to_string()
-            } else {
-                err.trim().to_string()
-            }),
-        };
-        let _ = tx.send(Event::Output(key, result));
-    });
-    stopper
 }
 
 /// Like `oneshot`, but the command is killed after `limit` and reported as an error.
 pub fn oneshot_within(
-    key: String,
     mut command: Command,
     dir: &str,
     limit: std::time::Duration,
@@ -1403,10 +1013,9 @@ pub fn oneshot_within(
             Ok(child) => child,
             Err(error) => {
                 let program = command.get_program().to_owned();
-                let _ = tx.send(Event::Output(
-                    key,
-                    Err(format!("could not start {program:?}: {error}")),
-                ));
+                let _ = tx.send(Event::Output(Err(format!(
+                    "could not start {program:?}: {error}"
+                ))));
                 return;
             }
         };
@@ -1450,106 +1059,8 @@ pub fn oneshot_within(
             }
             None => Err(format!("timed out after {}s", limit.as_secs())),
         };
-        let _ = tx.send(Event::Output(key, result));
+        let _ = tx.send(Event::Output(result));
     });
-}
-
-/// A read-only follow-up in an agent's own conversation, for the recap it writes when
-/// a session switches away from it. It runs in a fork or without saving, so the
-/// conversation itself is left as it was. `None` for CLIs this is not supported for.
-pub fn recap_command(
-    provider: &str,
-    configured_bin: &str,
-    conversation: &str,
-    prompt: &str,
-) -> Option<Command> {
-    let bin = if configured_bin.trim().is_empty() {
-        self::provider(provider).bin
-    } else {
-        configured_bin.trim()
-    };
-    let mut command = Command::new(bin);
-    match provider {
-        // A fork leaves the conversation itself untouched, so switching back resumes it as it was.
-        "claude" if !conversation.is_empty() => {
-            command.args([
-                "-p",
-                "--output-format",
-                "text",
-                "--permission-mode",
-                "plan",
-                "--resume",
-                conversation,
-                "--fork-session",
-                "--",
-                prompt,
-            ]);
-        }
-        "codex" => {
-            command.args([
-                "exec",
-                "--sandbox",
-                "read-only",
-                "--skip-git-repo-check",
-                "--ephemeral",
-            ]);
-            if conversation.is_empty() {
-                command.args(["resume", "--last"]);
-            } else {
-                command.args(["fork", conversation]);
-            }
-            command.arg(prompt);
-        }
-        "grok" if is_uuid(conversation) => {
-            command.args([
-                "--permission-mode",
-                "plan",
-                "-r",
-                conversation,
-                "--fork-session",
-                "-p",
-                prompt,
-            ]);
-        }
-        "antigravity" if is_uuid(conversation) => {
-            command.args([
-                "--mode",
-                "plan",
-                "--conversation",
-                conversation,
-                "-p",
-                prompt,
-            ]);
-        }
-        "qwen" if !conversation.is_empty() => {
-            command.args([
-                "--approval-mode",
-                "plan",
-                "--resume",
-                conversation,
-                "--fork-session",
-                "-p",
-                prompt,
-            ]);
-        }
-        "opencode" if !conversation.is_empty() => {
-            command.args([
-                "run",
-                "-s",
-                conversation,
-                "--fork",
-                "--agent",
-                "plan",
-                prompt,
-            ]);
-        }
-        // Droid is read-only without an autonomy level.
-        "droid" if !conversation.is_empty() => {
-            command.args(["exec", "--fork", conversation, prompt]);
-        }
-        _ => return None,
-    }
-    Some(command)
 }
 
 /// What to do to sign an agent in, when its output says it isn't. Only lines from the
@@ -1627,93 +1138,6 @@ pub fn sign_in_help(provider: &str) -> String {
     format!("{name} isn't signed in. {how}")
 }
 
-/// Whether the CLI reports what a turn cost, which spending limits count.
-pub fn reports_cost(provider: &str) -> bool {
-    matches!(provider, "claude" | "opencode" | "grok" | "pi")
-}
-
-/// Whether Runo reads the tokens a turn used from the CLI's output, which the token limit
-/// counts. Agents whose output is plain text report none.
-pub fn reports_tokens(provider: &str) -> bool {
-    output(provider) != Output::Text
-}
-
-/// For an agent that reports no cost, which limits still count its turns, as the context
-/// meter says it. None for agents that report a cost, which every limit counts.
-pub fn cost_limit_note(provider: &str) -> Option<String> {
-    if reports_cost(provider) {
-        return None;
-    }
-    let name = self::provider(provider).name;
-    Some(if reports_tokens(provider) {
-        format!("{name} reports no cost, so spending limits don't count it; the turn and token limits do")
-    } else {
-        format!("{name} reports no cost or tokens, so only the turn limits count it")
-    })
-}
-
-/// Which agents report a cost, for spending limits and the spend shown: "Only Claude
-/// Code and OpenCode report a cost; …", pointing the others to the turn and token limits.
-pub fn cost_note() -> String {
-    let (some, none): (Vec<&Provider>, Vec<&Provider>) =
-        PROVIDERS.iter().partition(|p| reports_cost(p.id));
-    let names = |list: &[&Provider]| {
-        let names: Vec<&str> = list.iter().map(|p| p.name).collect();
-        match names.split_last() {
-            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
-            _ => names.join(""),
-        }
-    };
-    format!(
-        "Only {} report a cost; {} report none, so their turns count as $0 and spending limits don't hold them. Use the turn limits for those, which hold every agent, or the token limit for agents that report tokens.",
-        names(&some),
-        names(&none)
-    )
-}
-
-/// Where to pick another model, when the CLI's errors say the model can't be used.
-pub fn model_hint(provider: &str, log: &str) -> Option<String> {
-    let lower = log.to_lowercase();
-    let unusable = [
-        "not supported",
-        "not found",
-        "does not exist",
-        "unknown model",
-        "invalid model",
-        "model_not_found",
-        "unsupported model",
-        "do not have access",
-        "does not have access",
-    ];
-    if !lower.contains("model") || !unusable.iter().any(|s| lower.contains(s)) {
-        return None;
-    }
-    let name = self::provider(provider).name;
-    Some(format!(
-        "Tip: this model isn't available to your {name} account. Pick another from the model chip under the message box, or change the default model under Settings → {name}."
-    ))
-}
-
-/// Whether a line shows the CLI waiting for a browser sign-in, which never finishes in
-/// a run without a terminal.
-pub fn waits_for_sign_in(line: &str) -> bool {
-    // An event of a JSON stream is the agent's own output, such as its reply or a tool's
-    // result, which can quote these very words; a CLI waiting for a sign-in prints a
-    // plain line.
-    if line.trim_start().starts_with('{') {
-        return false;
-    }
-    let lower = line.to_lowercase();
-    lower.contains("starting login flow")
-        || (lower.contains("visit") && lower.contains("/auth/") && lower.contains("login"))
-}
-
-/// A plain, one-shot run of an agent CLI with a prompt, for small jobs such as
-/// writing a commit message. Read-only where the CLI supports it.
-pub fn ask_command(provider: &str, configured_bin: &str, prompt: &str) -> Command {
-    ask_command_on(provider, configured_bin, prompt, "")
-}
-
 /// The flag an agent's one-shot ask takes a model with, if it takes one.
 pub fn ask_model_flag(provider: &str) -> Option<&'static str> {
     match provider {
@@ -1786,11 +1210,6 @@ impl Handle {
         Self(None, false, Some(group))
     }
 
-    /// A turn with no process behind it, which `bench` plays.
-    pub(crate) fn none() -> Self {
-        Self(None, false, None)
-    }
-
     pub fn kill(&self) {
         if let Some(group) = self.2 {
             crate::detach::stop(group);
@@ -1826,12 +1245,6 @@ impl Handle {
             }
             let _ = child.kill();
         }
-    }
-
-    /// A turn that keeps going when Runo quits: Runo's connection runner, or a local turn
-    /// running detached.
-    pub fn runner(&self) -> bool {
-        self.1 || self.2.is_some()
     }
 }
 
@@ -2056,27 +1469,26 @@ pub fn pi_config(
     Some((config, with_images(spec)))
 }
 
-/// Run an agent turn, inside the session's Cove VM when `sandbox` is given.
+/// Run an agent turn.
 pub fn run_agent(
     target: Target,
     spec: &RunSpec,
     dir: &str,
-    sandbox: Option<&crate::connections::Sandbox>,
     tx: Sender<Event>,
 ) -> Result<Handle, String> {
     let foreign = untrusted_config(spec, dir);
     if let Some(why) = &foreign {
         // Shown with the error when the CLI then stops at its trust prompt.
-        let _ = tx.send(Event::Err(target, why.clone()));
+        let _ = tx.send(Event::Err(why.clone()));
     }
     let spec = &RunSpec {
         trusted: foreign.is_none(),
         ..*spec
     };
     let bin = program(spec);
-    let mut command = turn_command(spec);
-    let acp = match (target, crate::detach::root(), sandbox) {
-        (Target::Session(_), Some(_), None) => acp_config(spec, dir, &command),
+    let command = turn_command(spec);
+    let acp = match (target, crate::detach::root()) {
+        (Target::Session(_), Some(_)) => acp_config(spec, dir, &command),
         _ => None,
     };
     if acp.is_some() {
@@ -2086,11 +1498,9 @@ pub fn run_agent(
         }
         crate::mcp::clean_project(std::path::Path::new(dir));
     } else {
-        prepare_folder(spec, dir, sandbox.is_some());
+        prepare_folder(spec, dir, false);
     }
-    if let Some(sandbox) = sandbox {
-        command = sandbox.wrap(&command, dir, false)?;
-    } else if let (Target::Session(id), Some(root)) = (target, crate::detach::root()) {
+    if let (Target::Session(id), Some(root)) = (target, crate::detach::root()) {
         // Local turns outlive Runo, so closing or a crash doesn't stop them.
         if crate::updater::resolve(bin).is_some() {
             if let Some((config, prompt)) = acp {
@@ -2129,13 +1539,12 @@ pub fn run_agent(
     spawn(target, command, dir, tx)
 }
 
-/// Run a shell command, inside the session's Cove VM when `sandbox` is given.
+/// Run a shell command.
 #[cfg(test)]
 pub fn run_shell(
     target: Target,
     line: &str,
     dir: &str,
-    sandbox: Option<&crate::connections::Sandbox>,
     tx: Sender<Event>,
 ) -> Result<Handle, String> {
     let mut command = if cfg!(windows) {
@@ -2148,9 +1557,6 @@ pub fn run_shell(
         c
     };
     command.env("TERM", "dumb");
-    if let Some(sandbox) = sandbox {
-        command = sandbox.wrap(&command, dir, false)?;
-    }
     spawn(target, command, dir, tx)
 }
 
@@ -2168,12 +1574,12 @@ fn pump<R: Read + Send + 'static>(reader: R, target: Target, is_err: bool, tx: S
 /// The event for a line read from a run's stdout or stderr (`is_err`).
 pub(crate) fn line_event(target: Target, is_err: bool, line: String) -> Event {
     match target {
-        Target::Session(_) if is_err => Event::Err(target, line),
+        Target::Session(_) if is_err => Event::Err(line),
         Target::Session(_) => match crate::stream::parse_line(&line) {
-            Some(json) => Event::Json(target, line, json),
-            None => Event::Line(target, line),
+            Some(json) => Event::Json(line, json),
+            None => Event::Line(line),
         },
-        Target::Terminal(_) => Event::Line(target, line),
+        Target::Terminal(_) => Event::Line(line),
     }
 }
 
@@ -2234,7 +1640,7 @@ pub(crate) fn spawn(
                     ),
                 );
             }
-            let _ = tx.send(Event::Done(target, status.success()));
+            let _ = tx.send(Event::Done(status.success()));
             break;
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -2252,64 +1658,19 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let mut echo = Command::new("sh");
         echo.args(["-c", "echo recap"]);
-        oneshot_within("a".into(), echo, ".", Duration::from_secs(5), tx.clone());
+        oneshot_within(echo, ".", Duration::from_secs(5), tx.clone());
         let mut slow = Command::new("sh");
         slow.args(["-c", "sleep 10"]);
-        oneshot_within("b".into(), slow, ".", Duration::from_millis(300), tx);
-        let mut got: Vec<(String, Result<String, String>)> = (0..2)
+        oneshot_within(slow, ".", Duration::from_millis(300), tx);
+        // The quick one answers first; the slow one is stopped at its limit.
+        let got: Vec<Result<String, String>> = (0..2)
             .map(|_| match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                Event::Output(key, result) => (key, result),
+                Event::Output(result) => result,
                 _ => unreachable!(),
             })
             .collect();
-        got.sort_by(|a, b| a.0.cmp(&b.0));
-        assert_eq!(got[0], ("a".into(), Ok("recap".into())));
-        assert!(got[1].1.as_ref().unwrap_err().contains("timed out"));
-    }
-
-    #[test]
-    fn recaps_are_read_only_and_leave_the_conversation_alone() {
-        let args = |c: Command| -> Vec<String> {
-            c.get_args()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect()
-        };
-        let claude = args(recap_command("claude", "", "abc", "recap?").unwrap());
-        assert!(claude.windows(2).any(|w| w == ["--resume", "abc"]));
-        assert!(claude.contains(&"--fork-session".to_string()));
-        assert!(claude
-            .windows(2)
-            .any(|w| w == ["--permission-mode", "plan"]));
-        assert_eq!(claude.last().unwrap(), "recap?");
-        assert!(recap_command("claude", "", "", "recap?").is_none());
-        let codex = args(recap_command("codex", "", "", "recap?").unwrap());
-        assert_eq!(
-            codex,
-            [
-                "exec",
-                "--sandbox",
-                "read-only",
-                "--skip-git-repo-check",
-                "--ephemeral",
-                "resume",
-                "--last",
-                "recap?"
-            ]
-        );
-        // A known Codex conversation is forked, and nothing of the recap is saved.
-        let codex = args(recap_command("codex", "", "0199", "recap?").unwrap());
-        assert!(codex.contains(&"--ephemeral".to_string()));
-        assert!(codex.windows(2).any(|w| w == ["fork", "0199"]));
-        let qwen = args(recap_command("qwen", "", "q-1", "recap?").unwrap());
-        assert!(qwen.contains(&"--fork-session".to_string()));
-        assert!(qwen.windows(2).any(|w| w == ["--approval-mode", "plan"]));
-        let opencode = args(recap_command("opencode", "", "ses_1", "recap?").unwrap());
-        assert!(opencode.contains(&"--fork".to_string()));
-        assert!(opencode.windows(2).any(|w| w == ["--agent", "plan"]));
-        let droid = args(recap_command("droid", "", "d-1", "recap?").unwrap());
-        assert_eq!(droid, ["exec", "--fork", "d-1", "recap?"]);
-        assert!(recap_command("droid", "", "", "recap?").is_none());
-        assert!(recap_command("gemini", "", "x", "recap?").is_none());
+        assert_eq!(got[0], Ok("recap".into()));
+        assert!(got[1].as_ref().unwrap_err().contains("timed out"));
     }
 
     #[test]
@@ -2317,15 +1678,15 @@ mod tests {
         let session = Target::Session(1);
         let json = r#"{"type":"result"}"#.to_string();
         match line_event(session, false, json.clone()) {
-            Event::Json(target, line, value) => {
-                assert!(target == session && line == json);
+            Event::Json(line, value) => {
+                assert!(line == json);
                 assert_eq!(value["type"], "result");
             }
             _ => panic!("not parsed"),
         }
         assert!(matches!(
             line_event(session, false, "plain words".into()),
-            Event::Line(_, l) if l == "plain words"
+            Event::Line(l) if l == "plain words"
         ));
         assert!(matches!(
             line_event(session, true, json.clone()),
@@ -2346,19 +1707,18 @@ mod tests {
             Target::Terminal(1),
             "echo hi && echo err 1>&2",
             dir.to_str().unwrap(),
-            None,
             tx,
         )
         .unwrap();
         let mut lines = vec![];
         loop {
             match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                Event::Line(_, l) | Event::Json(_, l, _) | Event::Err(_, l) => lines.push(l),
-                Event::Done(_, ok) => {
+                Event::Line(l) | Event::Json(l, _) | Event::Err(l) => lines.push(l),
+                Event::Done(ok) => {
                     assert!(ok);
                     break;
                 }
-                Event::Output(..) | Event::Partial(..) => {}
+                Event::Output(..) => {}
             }
         }
         lines.sort();
@@ -2546,76 +1906,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn pi_gets_the_tools_its_mode_allows_and_runs_over_rpc() {
-        let o = AgentOptions::default();
-        let plan = args(
-            "pi",
-            false,
-            &[("mode", "plan"), ("model", "anthropic/sonnet")],
-            &o,
-            true,
-        );
-        assert_eq!(&plan[..2], ["--mode", "json"]);
-        assert!(plan
-            .windows(2)
-            .any(|w| w == ["--tools", "read,grep,find,ls"]));
-        assert!(plan
-            .windows(2)
-            .any(|w| w == ["--model", "anthropic/sonnet"]));
-        assert_eq!(plan.last().map(String::as_str), Some("hi"));
-        let edit = args("pi", false, &[], &o, true);
-        assert!(edit
-            .windows(2)
-            .any(|w| w == ["--tools", "read,edit,write,grep,find,ls"]));
-        let full = args(
-            "pi",
-            false,
-            &[("mode", "full"), ("effort", "high")],
-            &o,
-            true,
-        );
-        assert!(!full.iter().any(|a| a == "--tools"));
-        assert!(full.windows(2).any(|w| w == ["--thinking", "high"]));
-
-        let sel = std::collections::HashMap::new();
-        let spec = RunSpec {
-            provider: "pi",
-            prompt: "Fix it",
-            resume: true,
-            sel: &sel,
-            opts: &o,
-            in_git: true,
-            session_id: "pi-1",
-            images: &[],
-            memory: None,
-            local: true,
-            thread: 0,
-            trusted: false,
-        };
-        let json_mode = turn_command(&spec);
-        // A Pi whose help doesn't list `--mode` runs each prompt in print mode.
-        assert!(pi_config(&spec, "/w", &json_mode).is_none());
-        crate::caps::set(
-            "pi",
-            crate::caps::Caps {
-                help: "--mode <mode>  text, json or rpc".into(),
-                ..Default::default()
-            },
-        );
-        let (config, prompt) = pi_config(&spec, "/w", &json_mode).unwrap();
-        assert_eq!(&config.command[..3], ["pi", "--mode", "rpc"]);
-        assert!(!config.command.iter().any(|a| a == "json" || a == "Fix it"));
-        assert!(config
-            .command
-            .windows(2)
-            .any(|w| w == ["--session-id", "pi-1"]));
-        assert_eq!(config.fallback.last().map(String::as_str), Some("Fix it"));
-        assert_eq!(prompt, "Fix it");
-        assert!(resumes("pi") && names_conversation("pi"));
-        assert_eq!(output("pi"), Output::Pi);
-    }
-
-    #[test]
     fn modes_come_from_the_manifest() {
         assert_eq!(effective_mode("cursor", ""), "full");
         assert_eq!(effective_mode("amp", "edit"), "edit");
@@ -2685,12 +1975,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn generic_modes_have_labels() {
-        assert_eq!(generic_mode_label("edit"), Some("Auto edit"));
-        assert_eq!(generic_mode_label("acceptEdits"), None);
-    }
-
-    #[test]
     fn provider_lookup_falls_back_to_claude() {
         assert_eq!(provider("codex").name, "Codex");
         assert_eq!(provider("nope").id, "claude");
@@ -2730,18 +2014,17 @@ mod arg_tests {
             thread: 0,
             trusted: false,
         };
-        run_agent(Target::Session(5), &spec, dir.to_str().unwrap(), None, tx).unwrap();
+        run_agent(Target::Session(5), &spec, dir.to_str().unwrap(), tx).unwrap();
         let (mut out, mut err) = (vec![], vec![]);
         loop {
             match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                Event::Line(_, l) | Event::Json(_, l, _) => out.push(l),
-                Event::Err(_, l) => err.push(l),
-                Event::Done(target, ok) => {
-                    assert!(target == Target::Session(5));
+                Event::Line(l) | Event::Json(l, _) => out.push(l),
+                Event::Err(l) => err.push(l),
+                Event::Done(ok) => {
                     assert!(!ok);
                     break;
                 }
-                Event::Output(..) | Event::Partial(..) => unreachable!(),
+                Event::Output(..) => unreachable!(),
             }
         }
         assert_eq!(out[0], "env=from-env");
@@ -2776,9 +2059,7 @@ mod arg_tests {
             thread: 0,
             trusted: false,
         };
-        let error = run_agent(Target::Session(1), &spec, "/", None, tx)
-            .err()
-            .unwrap();
+        let error = run_agent(Target::Session(1), &spec, "/", tx).err().unwrap();
         assert!(error.contains("could not start"));
     }
 
@@ -2786,17 +2067,10 @@ mod arg_tests {
     fn kill_stops_a_running_command() {
         let (tx, rx) = std::sync::mpsc::channel();
         let dir = std::env::temp_dir();
-        let handle = run_shell(
-            Target::Terminal(7),
-            "sleep 30",
-            dir.to_str().unwrap(),
-            None,
-            tx,
-        )
-        .unwrap();
+        let handle = run_shell(Target::Terminal(7), "sleep 30", dir.to_str().unwrap(), tx).unwrap();
         handle.kill();
         loop {
-            if let Event::Done(_, ok) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            if let Event::Done(ok) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 assert!(!ok);
                 break;
             }
@@ -3154,120 +2428,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn memory_server_reaches_every_cli_that_takes_servers() {
-        let sel = HashMap::new();
-        let o = AgentOptions::default();
-        let spec = |provider| RunSpec {
-            provider,
-            prompt: "hi",
-            resume: false,
-            sel: &sel,
-            opts: &o,
-            in_git: true,
-            session_id: "",
-            images: &[],
-            memory: Some(("/bin/runo", "/work/app")),
-            local: true,
-            thread: 0,
-            trusted: false,
-        };
-        let claude = provider_args(&spec("claude"));
-        let config = claude[claude.iter().position(|a| a == "--mcp-config").unwrap() + 1].clone();
-        assert!(config.contains("\"--mcp-memory\""));
-        // Permission prompts go to Runo mid-turn; the interactive CLI asks for itself.
-        assert!(claude
-            .windows(2)
-            .any(|w| w == ["--permission-prompt-tool", "mcp__runo__permission_prompt"]));
-        assert!(!interactive_args(&spec("claude"))
-            .iter()
-            .any(|a| a.contains("permission-prompt")));
-        let codex = provider_args(&spec("codex"));
-        assert!(codex.contains(&"mcp_servers.runo.command=\"/bin/runo\"".to_string()));
-        assert!(codex
-            .contains(&"mcp_servers.runo.tools.read_memory.approval_mode=\"approve\"".to_string()));
-        let mut thread = spec("codex");
-        thread.thread = 7;
-        let thread = provider_args(&thread);
-        for tool in crate::memory_mcp::THREAD_TOOLS {
-            assert!(thread.contains(&format!(
-                "mcp_servers.runo.tools.{tool}.approval_mode=\"approve\""
-            )));
-        }
-        let amp = provider_args(&spec("amp"));
-        let config = &amp[amp.iter().position(|a| a == "--mcp-config").unwrap() + 1];
-        let config: serde_json::Value = serde_json::from_str(config).unwrap();
-        assert_eq!(config["runo"]["command"], "/bin/runo");
-        let env = provider_env(&spec("opencode"));
-        assert_eq!(env[0].0, "OPENCODE_CONFIG_CONTENT");
-        let config: serde_json::Value = serde_json::from_str(&env[0].1).unwrap();
-        assert_eq!(
-            config["mcp"]["runo"]["command"],
-            serde_json::json!(["/bin/runo", "--mcp-memory", "/work/app"])
-        );
-        assert!(provider_env(&spec("gemini")).is_empty());
-        // Cursor, Gemini and Droid get it through their project file.
-        for provider in ["cursor", "gemini", "droid"] {
-            let servers = file_servers(&spec(provider));
-            assert!(servers.iter().any(|(name, _)| name == MEMORY_SERVER));
-        }
-        assert!(file_servers(&spec("grok")).is_empty());
-        let mut remote = spec("cursor");
-        remote.local = false;
-        assert!(
-            file_servers(&remote).is_empty(),
-            "no local programs elsewhere"
-        );
-    }
-
-    #[test]
-    fn untrusted_folders_get_no_cursor_trust_or_mcp_approval() {
-        crate::caps::set(
-            "cursor",
-            crate::caps::Caps {
-                help: "--trust  Trust the workspace\n--approve-mcps  Approve all MCP servers"
-                    .into(),
-                ..Default::default()
-            },
-        );
-        let sel = sel(&[("mode", "full")]);
-        let o = AgentOptions::default();
-        let spec = |trusted| RunSpec {
-            provider: "cursor",
-            prompt: "hi",
-            resume: false,
-            sel: &sel,
-            opts: &o,
-            in_git: true,
-            session_id: "",
-            images: &[],
-            memory: Some(("/bin/runo", "/tmp/x")),
-            local: true,
-            thread: 0,
-            trusted,
-        };
-        let trusted = provider_args(&spec(true));
-        assert!(trusted.contains(&"--trust".to_string()));
-        assert!(trusted.contains(&"--approve-mcps".to_string()));
-        let untrusted = provider_args(&spec(false));
-        assert!(!untrusted.contains(&"--trust".to_string()));
-        assert!(!untrusted.contains(&"--approve-mcps".to_string()));
-
-        // A folder with a planted server isn't trusted unless the person said so.
-        let dir = std::env::temp_dir().join(format!("runo-untrusted-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join(".cursor")).unwrap();
-        let folder = dir.to_string_lossy().into_owned();
-        assert!(folder_trusted(&spec(false), &folder));
-        std::fs::write(dir.join(".cursor/hooks.json"), "{}").unwrap();
-        assert!(!folder_trusted(&spec(false), &folder));
-        assert!(
-            untrusted_config(&spec(false), &folder).is_some_and(|why| why.contains("hooks.json"))
-        );
-        assert!(folder_trusted(&spec(true), &folder));
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
     fn asks_take_a_model_before_the_prompt() {
         let args = |provider: &str, model: &str| -> Vec<String> {
             ask_command_on(provider, "", "why?", model)
@@ -3297,32 +2457,6 @@ mod arg_tests {
     }
 
     #[test]
-    fn cursor_trusts_the_folder_and_plans_once_its_help_lists_the_flags() {
-        crate::caps::set(
-            "cursor",
-            crate::caps::Caps {
-                help: "--model <model>  Model\n--mode <mode>  plan or ask\n--trust  Trust the workspace".into(),
-                ..Default::default()
-            },
-        );
-        let plan = run_args("cursor", "plan", false, &[]);
-        assert!(plan.contains(&"--trust".to_string()));
-        assert!(plan.windows(2).any(|w| w == ["--mode", "plan"]));
-        assert!(!plan.contains(&"--force".to_string()));
-        let full = run_args("cursor", "full", true, &[]);
-        assert!(full.contains(&"--trust".to_string()));
-        assert!(full.contains(&"--force".to_string()));
-        assert!(!full.contains(&"--mode".to_string()));
-        let ask = ask_command("cursor", "", "why?");
-        let ask: Vec<String> = ask
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
-        assert!(ask.windows(2).any(|w| w == ["--mode", "ask"]));
-        assert_eq!(ask.last().unwrap(), "why?");
-    }
-
-    #[test]
     fn gemini_names_a_conversation_once_its_help_lists_the_flag() {
         crate::caps::set(
             "gemini",
@@ -3337,336 +2471,6 @@ mod arg_tests {
         let resumed = run_args("gemini", "edit", true, &[]);
         assert!(resumed.windows(2).any(|w| w == ["--resume", "id-1"]));
         assert!(!resumed.contains(&"--session-id".to_string()));
-    }
-
-    #[test]
-    fn grok_runs_xais_grok_build() {
-        // Grok Build 1.0.70 speaks Claude Code's stream-json and permission modes, and
-        // takes a session UUID up front. Lines from its `--help`.
-        crate::caps::set(
-            "grok",
-            crate::caps::Caps {
-                help: "Grok Build TUI\n      --include-partial-messages\n          Emit incremental text and thinking deltas alongside whole messages\n      --output-format <OUTPUT_FORMAT>\n          Output format for headless mode [default: plain] [possible values: plain, json, streaming-json, streaming-messages-json]".into(),
-                ..Default::default()
-            },
-        );
-        assert_eq!(output("grok"), Output::Claude);
-        assert!(resumes("grok") && names_conversation("grok"));
-        assert_eq!(modes("grok"), ["edit", "plan", "full"]);
-        assert_eq!(effective_mode("grok", "edit"), "edit");
-        assert!(mode_error("grok", "plan").is_none());
-        assert!(reports_cost("grok") && reports_tokens("grok"));
-        assert_eq!(cost_limit_note("grok"), None);
-        let hint = sign_in_help("grok");
-        assert!(hint.starts_with("Grok isn't signed in. Open a terminal and run `grok login`"));
-        assert!(hint.contains("XAI_API_KEY") && !hint.contains("GROK_API_KEY"));
-        assert_eq!(
-            crate::install::sign_in_command("grok", "grok"),
-            "grok login"
-        );
-
-        const ID: &str = "0b5c2f9e-1d2a-4c3b-9e8f-7a6b5c4d3e2f";
-        let mode = sel(&[("model", "grok-4.7"), ("mode", "edit")]);
-        let o = AgentOptions::default();
-        let spec = |resume, session_id| RunSpec {
-            provider: "grok",
-            prompt: "hi",
-            resume,
-            sel: &mode,
-            opts: &o,
-            in_git: true,
-            session_id,
-            images: &[],
-            memory: None,
-            local: true,
-            thread: 0,
-            trusted: false,
-        };
-        assert_eq!(
-            provider_args(&spec(false, ID)),
-            [
-                "--output-format",
-                "streaming-messages-json",
-                "--include-partial-messages",
-                "--permission-mode",
-                "acceptEdits",
-                "-m",
-                "grok-4.7",
-                "-s",
-                ID,
-                "-p",
-                "hi"
-            ]
-        );
-        let resumed = provider_args(&spec(true, ID));
-        assert!(resumed.windows(2).any(|w| w == ["-r", ID]));
-        assert!(!resumed.contains(&"-s".to_string()));
-        assert!(resumed.ends_with(&["-p".into(), "hi".into()]));
-        assert!(run_args("grok", "plan", false, &[])
-            .windows(2)
-            .any(|w| w == ["--permission-mode", "plan"]));
-        assert!(run_args("grok", "full", false, &[])
-            .windows(2)
-            .any(|w| w == ["--permission-mode", "bypassPermissions"]));
-
-        // A session the community Grok CLI kept has an id Grok Build can't take: it starts
-        // a new conversation, with the history in the prompt.
-        assert!(!can_resume("grok", "9857aae5fff2"));
-        assert!(can_resume("grok", ID) && can_resume("grok", ""));
-        assert!(can_resume("claude", "9857aae5fff2"));
-        let old = provider_args(&spec(true, "9857aae5fff2"));
-        assert!(!old
-            .iter()
-            .any(|a| a == "-r" || a == "-s" || a == "9857aae5fff2"));
-
-        // Settings' effort, rules and tool rules reach it; extra folders only start a
-        // session, since a resumed one keeps its own.
-        let o = AgentOptions {
-            effort: "high".into(),
-            append_prompt: "Be brief.".into(),
-            allowed_tools: "Bash(git *)".into(),
-            disallowed_tools: "Bash(rm *)".into(),
-            add_dirs: "../lib".into(),
-            ..Default::default()
-        };
-        let mut build = spec(false, ID);
-        build.opts = &o;
-        let args = provider_args(&build);
-        for pair in [
-            ["--reasoning-effort", "high"],
-            ["--rules", "Be brief."],
-            ["--allow", "Bash(git *)"],
-            ["--deny", "Bash(rm *)"],
-            ["--add-dir", "../lib"],
-        ] {
-            assert!(args.windows(2).any(|w| w == pair), "{pair:?} in {args:?}");
-        }
-        build.resume = true;
-        assert!(!provider_args(&build).contains(&"--add-dir".to_string()));
-
-        // The interactive CLI opens the same session, in the same mode.
-        let plan = sel(&[("model", "grok-4.7"), ("mode", "plan")]);
-        let mut open = spec(true, ID);
-        open.sel = &plan;
-        open.prompt = "";
-        assert_eq!(
-            interactive_args(&open),
-            ["-m", "grok-4.7", "--permission-mode", "plan", "-r", ID]
-        );
-        open.resume = false;
-        open.prompt = "start here";
-        assert_eq!(
-            interactive_args(&open),
-            [
-                "-m",
-                "grok-4.7",
-                "--permission-mode",
-                "plan",
-                "-s",
-                ID,
-                "start here"
-            ]
-        );
-        let args = |c: Command| -> Vec<String> {
-            c.get_args()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect()
-        };
-        assert_eq!(
-            args(ask_command_on("grok", "", "why?", "grok-4.6")),
-            ["--permission-mode", "plan", "-m", "grok-4.6", "-p", "why?"]
-        );
-        assert_eq!(
-            args(recap_command("grok", "", ID, "recap").unwrap()),
-            [
-                "--permission-mode",
-                "plan",
-                "-r",
-                ID,
-                "--fork-session",
-                "-p",
-                "recap"
-            ]
-        );
-        assert!(recap_command("grok", "", "9857aae5fff2", "recap").is_none());
-    }
-
-    #[test]
-    fn antigravity_runs_googles_agy_cli() {
-        // Antigravity CLI prints its own `--output-format stream-json`; resume takes a
-        // UUID; `--mode accept-edits`/`plan` for the first two levels, and Full access
-        // skips every prompt. The CLI has no `login` subcommand, so sign-in is `agy` itself.
-        assert_eq!(output("antigravity"), Output::Antigravity);
-        assert!(resumes("antigravity") && !names_conversation("antigravity"));
-        assert_eq!(modes("antigravity"), ["edit", "plan", "full"]);
-        assert_eq!(effective_mode("antigravity", "edit"), "edit");
-        assert!(mode_error("antigravity", "plan").is_none());
-        assert!(!reports_cost("antigravity") && reports_tokens("antigravity"));
-        assert!(cost_limit_note("antigravity")
-            .unwrap()
-            .contains("spending limits don't count it"));
-        let hint = sign_in_help("antigravity");
-        assert!(hint.starts_with("Antigravity isn't signed in. Open a terminal and run `agy`"));
-        assert!(hint.contains("GEMINI_API_KEY"));
-        // No `login` subcommand: the CLI itself asks on first run.
-        assert_eq!(crate::install::sign_in_command("antigravity", "agy"), "agy");
-
-        const ID: &str = "0b5c2f9e-1d2a-4c3b-9e8f-7a6b5c4d3e2f";
-        let edit = sel(&[("model", "gemini-3-pro"), ("mode", "edit")]);
-        let o = AgentOptions::default();
-        let spec = |resume, session_id| RunSpec {
-            provider: "antigravity",
-            prompt: "hi",
-            resume,
-            sel: &edit,
-            opts: &o,
-            in_git: true,
-            session_id,
-            images: &[],
-            memory: None,
-            local: true,
-            thread: 0,
-            trusted: false,
-        };
-        assert_eq!(
-            provider_args(&spec(false, ID)),
-            [
-                "-p",
-                "--output-format",
-                "stream-json",
-                "--mode",
-                "accept-edits",
-                "--model",
-                "gemini-3-pro",
-                "hi"
-            ]
-        );
-        // A known conversation id resumes exactly it.
-        let resumed = provider_args(&spec(true, ID));
-        assert!(resumed.windows(2).any(|w| w == ["--conversation", ID]));
-        assert!(!resumed.contains(&"-c".to_string()));
-        // An unknown id resumes the most recent conversation instead.
-        let continued = provider_args(&spec(true, ""));
-        assert!(continued.contains(&"-c".to_string()));
-        assert!(!continued.contains(&"--conversation".to_string()));
-        assert!(run_args("antigravity", "plan", false, &[])
-            .windows(2)
-            .any(|w| w == ["--mode", "plan"]));
-        let full = run_args("antigravity", "full", false, &[]);
-        assert!(full.contains(&"--dangerously-skip-permissions".to_string()));
-        assert!(!full.contains(&"--mode".to_string()));
-
-        // A session with a non-UUID id (nothing Antigravity ever handed out) starts a
-        // new conversation with the history in the prompt.
-        assert!(!can_resume("antigravity", "9857aae5fff2"));
-        assert!(can_resume("antigravity", ID) && can_resume("antigravity", ""));
-        let old = provider_args(&spec(true, "9857aae5fff2"));
-        assert!(!old
-            .iter()
-            .any(|a| a == "-c" || a == "--conversation" || a == "9857aae5fff2"));
-
-        // Interactive, ask and recap all run the CLI as a native speaker.
-        let interactive = interactive_args(&spec(true, ID));
-        assert_eq!(
-            interactive,
-            [
-                "--model",
-                "gemini-3-pro",
-                "--mode",
-                "accept-edits",
-                "--conversation",
-                ID
-            ]
-        );
-        let args = |c: Command| -> Vec<String> {
-            c.get_args()
-                .map(|a| a.to_string_lossy().into_owned())
-                .collect()
-        };
-        assert_eq!(
-            args(ask_command_on("antigravity", "", "why?", "gemini-3-pro")),
-            ["--mode", "plan", "--model", "gemini-3-pro", "-p", "why?"]
-        );
-        assert_eq!(
-            args(recap_command("antigravity", "", ID, "recap").unwrap()),
-            ["--mode", "plan", "--conversation", ID, "-p", "recap"]
-        );
-        assert!(recap_command("antigravity", "", "9857aae5fff2", "recap").is_none());
-    }
-
-    #[test]
-    fn copilot_uses_newer_flags_once_its_help_lists_them() {
-        crate::caps::set(
-            "copilot",
-            crate::caps::Caps {
-                help: "--session-id --output-format --attachment --additional-mcp-config".into(),
-                ..Default::default()
-            },
-        );
-        assert!(names_conversation("copilot"));
-        assert_eq!(output("copilot"), Output::Json);
-        assert!(takes_images("copilot"));
-        let images = ["shot.png".to_string()];
-        let fresh = run_args("copilot", "edit", false, &images);
-        assert!(fresh.windows(2).any(|w| w == ["--session-id", "id-1"]));
-        assert!(fresh.windows(2).any(|w| w == ["--output-format", "json"]));
-        assert!(fresh.windows(2).any(|w| w == ["--attachment", "shot.png"]));
-        assert!(fresh.ends_with(&["-p".into(), "hi".into()]));
-        let resumed = run_args("copilot", "edit", true, &[]);
-        assert!(resumed.windows(2).any(|w| w == ["--resume", "id-1"]));
-        assert!(!resumed.contains(&"--session-id".to_string()));
-    }
-
-    #[test]
-    fn sign_in_problems_get_a_hint() {
-        let hint = sign_in_hint("codex", "Error: 401 Unauthorized: Missing bearer").unwrap();
-        assert!(hint.starts_with("Codex isn't signed in."));
-        assert!(hint.contains("codex login"));
-        assert!(sign_in_hint("claude", "Invalid API key · Please run /login").is_some());
-        assert!(sign_in_hint("claude", "error: model not found").is_none());
-        // An MCP server refused for its own login: the agent is still signed in.
-        assert!(sign_in_hint(
-            "claude",
-            "MCP server \"github\": HTTP 401 Unauthorized\nerror: model not found"
-        )
-        .is_none());
-        // The words count line by line, not across lines.
-        assert!(sign_in_hint("claude", "Token\nexpired").is_none());
-        let tip = model_hint(
-            "codex",
-            "The 'gpt-6-sol' model is not supported when using Codex with a ChatGPT account.",
-        )
-        .unwrap();
-        assert!(tip.contains("model chip") && tip.contains("Settings → Codex"));
-        assert!(model_hint("codex", "Model metadata for `x` not found.").is_some());
-        assert!(model_hint("codex", "file not found").is_none());
-        let note = cost_note();
-        assert!(note.starts_with("Only Claude Code, OpenCode, Grok and Pi report a cost; Codex, "));
-        assert!(note.contains("spending limits don't hold them"));
-        assert!(note.contains("turn limits") && note.contains("token limit"));
-        assert!(reports_tokens("claude") && reports_tokens("codex") && reports_tokens("cursor"));
-        assert_eq!(cost_limit_note("claude"), None);
-        assert_eq!(cost_limit_note("opencode"), None);
-        assert!(cost_limit_note("codex")
-            .unwrap()
-            .ends_with("the turn and token limits do"));
-        assert!(cost_limit_note("cursor").unwrap().contains("token limits"));
-        assert!(sign_in_hint("opencode", "Error: Token refresh failed: 401")
-            .unwrap()
-            .contains("opencode auth login"));
-        assert!(sign_in_hint(
-            "gemini",
-            "Please set an Auth method in your /Users/me/.gemini/settings.json or specify one of the following environment variables before running: GEMINI_API_KEY, GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_GENAI_USE_GCA"
-        )
-        .is_some());
-        assert!(waits_for_sign_in(
-            "No API key found. Starting login flow..."
-        ));
-        // The same words quoted in a JSON event, such as a tool's result, are not the CLI.
-        assert!(!waits_for_sign_in(
-            &serde_json::json!({ "type": "user", "content": "No API key found. Starting login flow..." }).to_string()
-        ));
-        assert!(!waits_for_sign_in("Reading src/login.rs"));
     }
 
     #[test]

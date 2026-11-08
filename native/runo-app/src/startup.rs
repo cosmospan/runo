@@ -41,8 +41,3 @@ pub fn mark(step: &str) {
         .map_or(0.0, |s| s.elapsed().as_secs_f64() * 1000.0);
     eprintln!("startup {ms:8.1} ms  {step}");
 }
-
-/// Whether to quit once the window responds.
-pub fn exit_when_ready() -> bool {
-    mode() == Some("exit")
-}

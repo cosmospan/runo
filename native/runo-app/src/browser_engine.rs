@@ -199,20 +199,6 @@ fn default_browser() -> Option<&'static Known> {
     })
 }
 
-/// Every known browser on this machine, in the order they're tried.
-pub fn installed() -> Vec<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    KNOWN
-        .iter()
-        .filter_map(|k| {
-            places(k, home.as_deref(), &path)
-                .into_iter()
-                .find(|p| p.exists())
-        })
-        .collect()
-}
-
 /// The browser to drive: `CHROME_PATH` when set, then the one chosen in Settings, then the
 /// default browser when it's Chromium-based, then the first known browser found.
 pub fn find_chromium() -> Option<PathBuf> {
@@ -267,16 +253,6 @@ pub fn not_found_message() -> &'static str {
     }
 }
 
-/// The first-run offer of the built-in browser when no browser was found. Browsers live
-/// in Applications on a Mac; elsewhere they could be anywhere on the computer.
-pub fn offer_without_browser(macos: bool) -> &'static str {
-    if macos {
-        "Runo can open your app in the Browser tab using a headless Chromium. None was found in Applications; install Chrome, Edge or Brave, then turn this on in Settings."
-    } else {
-        "Runo can open your app in the Browser tab using a headless Chromium. None was found on this computer; install Chrome, Edge, Brave or Chromium, then turn this on in Settings."
-    }
-}
-
 /// The browser's name from its executable path, e.g. "Google Chrome".
 pub fn browser_name(path: &Path) -> String {
     path.file_name()
@@ -306,31 +282,9 @@ pub fn split_messages(buf: &mut Vec<u8>) -> Vec<Vec<u8>> {
     out
 }
 
-/// A point in the panel (logical pixels from its top-left) as page CSS pixels, given the
-/// panel's size and the size of the page the shown frame was rendered at.
-pub fn to_page(local: (f32, f32), panel: (f32, f32), page: (f32, f32)) -> (f64, f64) {
-    let scale = |v: f32, from: f32, to: f32| {
-        if from <= 0. {
-            0.
-        } else {
-            (v.clamp(0., from) * to / from) as f64
-        }
-    };
-    (
-        scale(local.0, panel.0, page.0),
-        scale(local.1, panel.1, page.1),
-    )
-}
-
 /// CDP's modifier bit mask.
 pub fn modifier_bits(alt: bool, ctrl: bool, meta: bool, shift: bool) -> u8 {
     alt as u8 | (ctrl as u8) << 1 | (meta as u8) << 2 | (shift as u8) << 3
-}
-
-/// A decoded frame: the image GPUI draws and the CSS size of the page it shows.
-pub struct Frame {
-    pub image: Arc<RenderImage>,
-    pub css: (f32, f32),
 }
 
 /// What a page shows now, kept current by the reader thread.
@@ -429,9 +383,6 @@ struct Page {
 #[derive(Default)]
 struct Shared {
     pages: HashMap<u64, Page>,
-    /// The page streaming frames, by Runo session.
-    active: Option<u64>,
-    frame: Option<Frame>,
     replies: HashMap<u64, Sender<Value>>,
     dead: bool,
     /// New tabs or windows a page opened, by target, with the session of their opener.
@@ -449,7 +400,7 @@ pub struct Engine {
     writer: Mutex<std::fs::File>,
     next_id: Arc<AtomicU64>,
     shared: Arc<Mutex<Shared>>,
-    /// Bumped on every new frame or page change, so the UI knows to repaint.
+    /// Bumped on every page change.
     pub seq: Arc<AtomicU64>,
 }
 
@@ -672,9 +623,6 @@ impl Engine {
         );
         self.metrics(&session, viewport);
         self.send("Page.navigate", json!({"url": url}), s);
-        if self.shared.locked().active == Some(key) {
-            self.screencast(&session, viewport);
-        }
     }
 
     fn metrics(&self, session: &str, (w, h, scale): (u32, u32, f32)) {
@@ -683,147 +631,6 @@ impl Engine {
             json!({"width": w, "height": h, "deviceScaleFactor": scale, "mobile": false}),
             Some(session),
         );
-    }
-
-    fn screencast(&self, session: &str, (w, h, scale): (u32, u32, f32)) {
-        // Headless Chromium only renders the tab in front; others stop sending frames.
-        // Coming to the front resets the size override, so set it again after.
-        self.send("Page.bringToFront", json!({}), Some(session));
-        self.metrics(session, (w, h, scale));
-        self.send(
-            "Page.startScreencast",
-            json!({
-                "format": "jpeg",
-                "quality": 70,
-                "maxWidth": (w as f32 * scale) as u32,
-                "maxHeight": (h as f32 * scale) as u32,
-            }),
-            Some(session),
-        );
-    }
-
-    /// Stream the session's page, and stop streaming the one before.
-    pub fn show(&self, key: Option<u64>) {
-        let (old, new) = {
-            let mut shared = self.shared.locked();
-            if shared.active == key {
-                return;
-            }
-            let old = shared
-                .active
-                .and_then(|k| shared.pages.get(&k))
-                .map(|p| p.session.clone());
-            shared.active = key;
-            shared.frame = None;
-            let new = key
-                .and_then(|k| shared.pages.get(&k))
-                .map(|p| (p.session.clone(), p.viewport));
-            (old, new)
-        };
-        if let Some(old) = old.filter(|s| !s.is_empty()) {
-            self.send("Page.stopScreencast", json!({}), Some(&old));
-        }
-        if let Some((session, viewport)) = new.filter(|(s, _)| !s.is_empty()) {
-            self.screencast(&session, viewport);
-        }
-    }
-
-    /// Match the page to the panel: CSS size and device pixel ratio.
-    pub fn resize(&self, key: u64, viewport: (u32, u32, f32)) {
-        let (session, active) = {
-            let mut shared = self.shared.locked();
-            let active = shared.active == Some(key);
-            let Some(page) = shared.pages.get_mut(&key) else {
-                return;
-            };
-            if page.viewport == viewport {
-                return;
-            }
-            page.viewport = viewport;
-            (page.session.clone(), active)
-        };
-        if session.is_empty() {
-            return;
-        }
-        self.metrics(&session, viewport);
-        if active {
-            // The frame size is fixed when the screencast starts.
-            self.send("Page.stopScreencast", json!({}), Some(&session));
-            self.screencast(&session, viewport);
-        }
-    }
-
-    /// The newest frame of the page on screen, if one came since the last call.
-    pub fn take_frame(&self) -> Option<Frame> {
-        self.shared.locked().frame.take()
-    }
-
-    pub fn info(&self, key: u64) -> Option<PageInfo> {
-        let shared = self.shared.locked();
-        shared.pages.get(&key).map(|p| p.info.clone())
-    }
-
-    fn on_page(&self, key: u64, method: &str, params: Value) {
-        if let Some(session) = self.session_of(key) {
-            self.send(method, params, Some(&session));
-        }
-    }
-
-    pub fn reload(&self, key: u64) {
-        self.on_page(key, "Page.reload", json!({}));
-    }
-
-    pub fn history(&self, key: u64, back: bool) {
-        let js = if back {
-            "history.back()"
-        } else {
-            "history.forward()"
-        };
-        self.on_page(key, "Runtime.evaluate", json!({"expression": js}));
-    }
-
-    pub fn answer_dialog(&self, key: u64, accept: bool) {
-        let mut shared = self.shared.locked();
-        if let Some(page) = shared.pages.get_mut(&key) {
-            page.info.dialog = None;
-        }
-        drop(shared);
-        self.on_page(
-            key,
-            "Page.handleJavaScriptDialog",
-            json!({"accept": accept}),
-        );
-    }
-
-    /// Download messages since the last call, to show the person.
-    pub fn take_notes(&self) -> Vec<String> {
-        std::mem::take(&mut self.shared.locked().notes)
-    }
-
-    /// Forget the page's console errors.
-    pub fn clear_console(&self, key: u64) {
-        let mut shared = self.shared.locked();
-        if let Some(page) = shared.pages.get_mut(&key) {
-            page.info.console.clear();
-        }
-    }
-
-    /// The text selected in the page, in an input or field too. Blocks for the reply.
-    pub fn selected_text(&self, key: u64) -> Option<String> {
-        let session = self.session_of(key)?;
-        let js = "(() => { const e = document.activeElement; \
-            if (e && typeof e.selectionStart === 'number' && e.value !== undefined) \
-            return e.value.slice(e.selectionStart, e.selectionEnd); \
-            return String(getSelection()); })()";
-        let reply = self.call(
-            "Runtime.evaluate",
-            json!({"expression": js, "returnByValue": true}),
-            Some(&session),
-        )?;
-        reply["result"]["value"]
-            .as_str()
-            .filter(|t| !t.is_empty())
-            .map(str::to_string)
     }
 
     /// Whether the page is attached and takes commands.
@@ -911,61 +718,6 @@ impl Engine {
         )?;
         decode_image(reply["data"].as_str()?, image::ImageFormat::Png)
     }
-
-    /// `kind` is mouseMoved, mousePressed, mouseReleased or mouseWheel.
-    #[allow(clippy::too_many_arguments)]
-    pub fn mouse(
-        &self,
-        key: u64,
-        kind: &str,
-        (x, y): (f64, f64),
-        button: &str,
-        buttons: u8,
-        clicks: usize,
-        modifiers: u8,
-        wheel: (f64, f64),
-    ) {
-        self.on_page(
-            key,
-            "Input.dispatchMouseEvent",
-            json!({
-                "type": kind, "x": x, "y": y, "button": button, "buttons": buttons,
-                "clickCount": clicks, "modifiers": modifiers,
-                "deltaX": wheel.0, "deltaY": wheel.1,
-            }),
-        );
-    }
-
-    pub fn insert_text(&self, key: u64, text: &str) {
-        self.on_page(key, "Input.insertText", json!({"text": text}));
-    }
-
-    /// A key with no text of its own (Enter, arrows, Backspace…), or an editing command.
-    pub fn key(&self, key: u64, down: bool, k: &KeySpec, modifiers: u8, commands: &[&str]) {
-        let mut params = json!({
-            "type": if down { if k.text.is_empty() { "rawKeyDown" } else { "keyDown" } } else { "keyUp" },
-            "key": k.key, "code": k.code, "windowsVirtualKeyCode": k.vk,
-            "nativeVirtualKeyCode": k.vk, "modifiers": modifiers,
-        });
-        if down && !k.text.is_empty() {
-            params["text"] = json!(k.text);
-            params["unmodifiedText"] = json!(k.text);
-        }
-        if down && !commands.is_empty() {
-            params["commands"] = json!(commands);
-        } else if down && !k.command.is_empty() {
-            params["commands"] = json!([k.command]);
-        }
-        self.on_page(key, "Input.dispatchKeyEvent", params);
-    }
-
-    /// Close the session's page.
-    pub fn close(&self, key: u64) {
-        let page = self.shared.locked().pages.remove(&key);
-        if let Some(page) = page.filter(|p| !p.target.is_empty()) {
-            self.send("Target.closeTarget", json!({"targetId": page.target}), None);
-        }
-    }
 }
 
 impl Drop for Engine {
@@ -1045,46 +797,12 @@ fn read_loop(
             let session = msg["sessionId"].as_str().unwrap_or_default();
             let params = &msg["params"];
             if std::env::var_os("RUNO_CDP_LOG").is_some() {
-                if msg["method"] != "Page.screencastFrame" {
-                    eprintln!(
-                        "cdp< {}",
-                        msg.to_string().chars().take(300).collect::<String>()
-                    );
-                } else {
-                    let m = &msg["params"]["metadata"];
-                    eprintln!(
-                        "cdp< frame css {}x{} scale {}",
-                        m["deviceWidth"], m["deviceHeight"], m["pageScaleFactor"]
-                    );
-                }
+                eprintln!(
+                    "cdp< {}",
+                    msg.to_string().chars().take(300).collect::<String>()
+                );
             }
             match msg["method"].as_str().unwrap_or_default() {
-                "Page.screencastFrame" => {
-                    // Ack first so Chromium can render the next frame while this one decodes.
-                    // Ids share the engine's counter: Chromium wants them to fit an int.
-                    let ack = json!({"id": ids.fetch_add(1, Ordering::Relaxed), "sessionId": session,
-                        "method": "Page.screencastFrameAck",
-                        "params": {"sessionId": params["sessionId"]}});
-                    let _ = writer.write_all(&frame_message(&ack));
-                    let active = {
-                        let s = shared.locked();
-                        s.active
-                            .and_then(|k| s.pages.get(&k))
-                            .is_some_and(|p| p.session == session)
-                    };
-                    if !active {
-                        continue;
-                    }
-                    let meta = &params["metadata"];
-                    let css = (
-                        meta["deviceWidth"].as_f64().unwrap_or(0.) as f32,
-                        meta["deviceHeight"].as_f64().unwrap_or(0.) as f32,
-                    );
-                    if let Some(image) = params["data"].as_str().and_then(decode_frame) {
-                        shared.locked().frame = Some(Frame { image, css });
-                        seq.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
                 "Target.targetCreated" | "Target.targetInfoChanged"
                     if adopt_popup(&params["targetInfo"], &shared, &mut writer, &ids) => {}
                 "Target.targetInfoChanged" => {
@@ -1206,12 +924,6 @@ fn adopt_popup(
     true
 }
 
-/// A base64 JPEG as a BGRA image GPUI can draw.
-#[cfg(unix)]
-fn decode_frame(data: &str) -> Option<Arc<RenderImage>> {
-    decode_image(data, image::ImageFormat::Jpeg)
-}
-
 /// A base64 image as a BGRA image GPUI can draw.
 pub(crate) fn decode_image(data: &str, format: image::ImageFormat) -> Option<Arc<RenderImage>> {
     use base64::Engine as _;
@@ -1251,14 +963,6 @@ mod tests {
     }
 
     #[test]
-    fn the_offer_names_applications_only_on_a_mac() {
-        assert!(offer_without_browser(true).contains("in Applications"));
-        let elsewhere = offer_without_browser(false);
-        assert!(!elsewhere.contains("Applications"));
-        assert!(elsewhere.contains("on this computer"));
-    }
-
-    #[test]
     #[cfg(unix)]
     fn messages_are_nul_framed_and_split() {
         let bytes = frame_message(&json!({"id": 1, "method": "Page.enable"}));
@@ -1295,21 +999,6 @@ mod tests {
             console_error("Log.entryAdded", &net).as_deref(),
             Some("Failed to load resource (http://x/a.png)")
         );
-    }
-
-    #[test]
-    fn panel_points_map_to_page_pixels() {
-        // Same size: unchanged.
-        assert_eq!(to_page((10., 20.), (400., 300.), (400., 300.)), (10., 20.));
-        // The page is still at the old size after the panel grew: scale.
-        assert_eq!(
-            to_page((200., 150.), (400., 300.), (800., 600.)),
-            (400., 300.)
-        );
-        // Outside the panel clamps to its edge; an empty panel maps to the origin.
-        assert_eq!(to_page((-5., 999.), (400., 300.), (400., 300.)), (0., 300.));
-        assert_eq!(to_page((5., 5.), (0., 0.), (400., 300.)), (0., 0.));
-        assert_eq!(modifier_bits(false, true, false, true), 2 | 8);
     }
 
     #[test]

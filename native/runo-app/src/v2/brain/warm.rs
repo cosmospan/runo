@@ -224,7 +224,7 @@ fn drop_if(k: &str) {
 }
 
 /// Sends `prompt` to the warm engine for `dir`; its reply comes back on the
-/// receiver as `Event::Output(id, …)` within `limit`. None when the warm
+/// receiver as `Event::Output(…)` within `limit`. None when the warm
 /// engine can't take it now; read cold then.
 pub fn ask(
     bin: &str,
@@ -232,7 +232,6 @@ pub fn ask(
     dir: &str,
     prompt: &str,
     limit: Duration,
-    id: String,
 ) -> Option<Receiver<Event>> {
     let mut g = WARM.lock().ok()?;
     if !ensure(&mut g, bin, model, dir) {
@@ -282,7 +281,7 @@ pub fn ask(
                             break r;
                         }
                         if let Some(text) = reply_of(&line) {
-                            let _ = tx.send(Event::Output(id.clone(), Ok(text.clone())));
+                            let _ = tx.send(Event::Output(Ok(text.clone())));
                             sent = true;
                             owed.fetch_add(1, Ordering::SeqCst);
                             break Ok(text);
@@ -303,7 +302,7 @@ pub fn ask(
             drop_if(&k);
         }
         if !sent {
-            let _ = tx.send(Event::Output(id, result));
+            let _ = tx.send(Event::Output(result));
         }
     });
     Some(rx)
@@ -382,19 +381,10 @@ mod tests {
         let _ = Command::new("chmod").arg("+x").arg(&script).status();
         let bin = script.to_string_lossy().into_owned();
         let d = dir.to_string_lossy().into_owned();
-        for i in 0..3 {
-            let rx = ask(
-                &bin,
-                "",
-                &d,
-                "hello",
-                Duration::from_secs(10),
-                format!("t{i}"),
-            )
-            .expect("warm");
+        for _ in 0..3 {
+            let rx = ask(&bin, "", &d, "hello", Duration::from_secs(10)).expect("warm");
             match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
-                Event::Output(id, Ok(r)) => {
-                    assert_eq!(id, format!("t{i}"));
+                Event::Output(Ok(r)) => {
                     assert_eq!(r, "ok");
                 }
                 _ => panic!("no reply"),
@@ -413,7 +403,7 @@ fn real_reads() {
     let dir = std::env::temp_dir().to_string_lossy().into_owned();
     prepare("claude", "haiku", &dir);
     std::thread::sleep(Duration::from_secs(4));
-    for (i, text) in [
+    for text in [
         "make a snake and ladder game and do it on the vps",
         "runthe app",
         "the export button does nothing on safari",
@@ -421,7 +411,6 @@ fn real_reads() {
         "thanks",
     ]
     .iter()
-    .enumerate()
     {
         let crew = crate::v2::data::Member::CREW.to_vec();
         let p = super::think::prompt(
@@ -437,18 +426,10 @@ fn real_reads() {
             },
         );
         let at = Instant::now();
-        let rx = ask(
-            "claude",
-            "haiku",
-            &dir,
-            &p,
-            Duration::from_secs(40),
-            format!("r{i}"),
-        )
-        .unwrap();
+        let rx = ask("claude", "haiku", &dir, &p, Duration::from_secs(40)).unwrap();
         let got = rx.recv_timeout(Duration::from_secs(45)).ok();
         let reply = match got {
-            Some(Event::Output(_, r)) => format!("{r:?}"),
+            Some(Event::Output(r)) => format!("{r:?}"),
             _ => "nothing".into(),
         };
         println!("{:.1}s {text}: {reply}", at.elapsed().as_secs_f32());

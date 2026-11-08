@@ -34,17 +34,6 @@ fn set(provider: &str, signed_in: bool) {
     }
 }
 
-/// Record what a turn showed: it ran signed in, or the CLI said it isn't.
-pub fn turn_showed(provider: &str, signed_in: bool) {
-    if let Ok(mut worked) = WORKED.lock() {
-        worked.retain(|p| p != provider);
-        if signed_in {
-            worked.push(provider.to_string());
-        }
-    }
-    set(provider, signed_in);
-}
-
 fn turn_worked(provider: &str) -> bool {
     WORKED
         .lock()
@@ -85,12 +74,6 @@ pub fn refresh(force: bool) {
             }
         }
     });
-}
-
-/// Check now, on this thread, whether `provider` is signed in: for a turn whose errors
-/// read like a sign-in problem, before saying so. None when Runo can't tell.
-pub fn verify(provider: &str) -> Option<bool> {
-    check(provider, &crate::settings::AppSettings::load())
 }
 
 fn check(provider: &str, settings: &crate::settings::AppSettings) -> Option<bool> {

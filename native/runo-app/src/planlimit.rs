@@ -5,8 +5,6 @@
 //! where it stopped instead of starting over.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Mutex;
 
 /// Where a plan window stands.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,12 +32,6 @@ pub struct PlanLimit {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used: Option<f32>,
 }
-
-/// Sent to a session whose turn the limit cut short, once it may run again.
-pub const CONTINUE: &str = "Carry on from where you stopped: the plan's usage limit ended your last turn. Work that finished before it, yours or a subagent's, may already be in the files, so check what is done before redoing it.";
-
-/// How long a used-up window holds turns when the agent didn't say when it resets.
-const UNKNOWN_RESET: i64 = 15 * 60;
 
 /// Claude Code's `rate_limit_info`.
 pub fn from_claude(info: &serde_json::Value) -> Option<PlanLimit> {
@@ -128,17 +120,6 @@ fn next_time(time: &str, now: chrono::DateTime<chrono::Local>) -> Option<i64> {
     None
 }
 
-/// A window's name the way people say it.
-pub fn window_name(kind: &str) -> &'static str {
-    match kind {
-        "five_hour" => "5-hour",
-        "seven_day" | "seven_day_overage_included" => "weekly",
-        "seven_day_opus" => "weekly Opus",
-        "seven_day_sonnet" => "weekly Sonnet",
-        _ => "usage",
-    }
-}
-
 /// The time of day a window resets, "15:00", with the day when it isn't today.
 pub fn reset_clock(at: i64, now: i64) -> String {
     let Some(t) = chrono::DateTime::from_timestamp(at, 0).map(|t| t.with_timezone(&chrono::Local))
@@ -151,56 +132,6 @@ pub fn reset_clock(at: i64, now: i64) -> String {
         t.format("%H:%M").to_string()
     } else {
         t.format("%a %H:%M").to_string()
-    }
-}
-
-/// Agents whose plan is used up, with when it resets.
-static HELD: Mutex<Option<HashMap<String, i64>>> = Mutex::new(None);
-
-/// Note what a turn said about `provider`'s plan. Returns true when this newly holds its
-/// turns.
-pub fn note(provider: &str, limit: &PlanLimit, now: i64) -> bool {
-    let Ok(mut held) = HELD.lock() else {
-        return false;
-    };
-    let held = held.get_or_insert_with(HashMap::new);
-    match limit.status {
-        Status::Rejected => {
-            let until = limit
-                .resets_at
-                .filter(|t| *t > now)
-                .unwrap_or(now + UNKNOWN_RESET);
-            held.insert(provider.to_string(), until)
-                .is_none_or(|t| t <= now)
-        }
-        // A request went through, so whatever held it has reset.
-        Status::Allowed | Status::Warning => {
-            held.remove(provider);
-            false
-        }
-    }
-}
-
-/// When `provider`'s used-up plan resets, while it is still used up.
-pub fn held_until(provider: &str, now: i64) -> Option<i64> {
-    let mut held = HELD.lock().ok()?;
-    let held = held.as_mut()?;
-    match held.get(provider) {
-        Some(&until) if until > now => Some(until),
-        Some(_) => {
-            held.remove(provider);
-            None
-        }
-        None => None,
-    }
-}
-
-/// Let `provider`'s turns go again, before the window is known to have reset.
-pub fn release(provider: &str) {
-    if let Ok(mut held) = HELD.lock() {
-        if let Some(held) = held.as_mut() {
-            held.remove(provider);
-        }
     }
 }
 
@@ -258,34 +189,5 @@ mod tests {
             None
         );
         assert!(from_text("The build hit a rate of 3 per second", now).is_none());
-    }
-
-    #[test]
-    fn a_used_up_plan_holds_until_it_resets_or_a_request_goes_through() {
-        let p = "test-provider-hold";
-        let rejected = PlanLimit {
-            status: Status::Rejected,
-            resets_at: Some(1_000),
-            ..PlanLimit::default()
-        };
-        assert!(note(p, &rejected, 500));
-        assert!(!note(p, &rejected, 600), "already held");
-        assert_eq!(held_until(p, 900), Some(1_000));
-        assert_eq!(held_until(p, 1_000), None, "reset");
-        note(p, &rejected, 500);
-        note(p, &PlanLimit::default(), 700);
-        assert_eq!(held_until(p, 800), None);
-        // No reset time: held for a while, not forever.
-        note(
-            p,
-            &PlanLimit {
-                resets_at: None,
-                ..rejected
-            },
-            500,
-        );
-        assert_eq!(held_until(p, 500), Some(500 + UNKNOWN_RESET));
-        release(p);
-        assert_eq!(held_until(p, 500), None);
     }
 }

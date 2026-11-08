@@ -241,17 +241,6 @@ fn start(
     Ok(Handle::detached(pid))
 }
 
-/// Follow a turn started before Runo last closed, replaying its output from the start.
-pub fn attach(root: &Path, id: u64, tx: Sender<Event>) -> Result<Handle, String> {
-    let turn = turn_dir(root, id);
-    let pid: u32 = std::fs::read_to_string(turn.join("pid"))
-        .ok()
-        .and_then(|p| p.trim().parse().ok())
-        .ok_or("its output is gone")?;
-    follow(Target::Session(id), turn, pid, None, tx);
-    Ok(Handle::detached(pid))
-}
-
 /// New complete lines of a file, from `offset` on; a partial last line waits unless `all`.
 fn read_lines(path: &Path, offset: &mut u64, all: bool) -> Vec<String> {
     let Ok(mut file) = std::fs::File::open(path) else {
@@ -274,11 +263,6 @@ fn read_lines(path: &Path, offset: &mut u64, all: bool) -> Vec<String> {
         .lines()
         .map(str::to_string)
         .collect()
-}
-
-/// How session `id`'s last detached turn ended: its exit code, if it got to write one.
-pub(crate) fn last_exit(id: u64) -> Option<i32> {
-    exit_code(&turn_dir(root()?, id))
 }
 
 /// How the turn ended: its exit code, if it got to write one.
@@ -320,7 +304,7 @@ fn follow(target: Target, turn: PathBuf, pid: u32, mut child: Option<Child>, tx:
                 .chain(
                     read_lines(&turn.join("err"), &mut err, ended)
                         .into_iter()
-                        .map(|l| Event::Err(target, l)),
+                        .map(|l| Event::Err(l)),
                 );
             for event in lines {
                 if tx.send(event).is_err() {
@@ -342,7 +326,7 @@ fn follow(target: Target, turn: PathBuf, pid: u32, mut child: Option<Child>, tx:
                 if code != Some(0) && !stopped {
                     crate::applog::warn("agent", format!("{target:?}: {}", exit_text(code)));
                 }
-                let _ = tx.send(Event::Done(target, code == Some(0)));
+                let _ = tx.send(Event::Done(code == Some(0)));
                 return;
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -365,9 +349,9 @@ mod tests {
         let (mut out, mut err) = (Vec::new(), Vec::new());
         loop {
             match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
-                Event::Line(_, l) | Event::Json(_, l, _) => out.push(l),
-                Event::Err(_, l) => err.push(l),
-                Event::Done(_, ok) => return (out, err, ok),
+                Event::Line(l) | Event::Json(l, _) => out.push(l),
+                Event::Err(l) => err.push(l),
+                Event::Done(ok) => return (out, err, ok),
                 _ => {}
             }
         }
@@ -392,39 +376,6 @@ mod tests {
         assert_eq!(exit_code(&turn_dir(&root, 4)), Some(3));
         assert_eq!(left_behind(&root, 4), Some(Left::Ended));
         assert_eq!(left_behind(&root, 5), None);
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn a_turn_keeps_running_and_is_picked_up_again() {
-        let root = temp("attach");
-        let (tx, rx) = std::sync::mpsc::channel();
-        let mut command = Command::new("sh");
-        command.args(["-c", "echo started; sleep 1; echo finished"]);
-        spawn(&root, 7, command, root.to_str().unwrap(), tx).unwrap();
-        // Runo goes away: nobody listens to the first follower any more.
-        drop(rx);
-        assert_eq!(left_behind(&root, 7), Some(Left::Running));
-        let (tx, rx) = std::sync::mpsc::channel();
-        attach(&root, 7, tx).unwrap();
-        let (out, _, ok) = collect(&rx);
-        assert_eq!(out, ["started", "finished"]);
-        assert!(ok);
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn stopping_a_detached_turn_ends_it() {
-        let root = temp("stop");
-        let (tx, rx) = std::sync::mpsc::channel();
-        let mut command = Command::new("sh");
-        command.args(["-c", "sleep 30"]);
-        let handle = spawn(&root, 9, command, root.to_str().unwrap(), tx).unwrap();
-        assert!(handle.runner());
-        std::thread::sleep(Duration::from_millis(200));
-        handle.kill();
-        let (.., ok) = collect(&rx);
-        assert!(!ok);
         let _ = std::fs::remove_dir_all(root);
     }
 }

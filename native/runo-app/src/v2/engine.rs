@@ -228,7 +228,7 @@ impl Ask {
         ));
         let command = agent::ask_command_on(p.id, &configured, &prompt, &model);
         let (tx, rx) = channel();
-        agent::oneshot("v2-ask".into(), command, dir, tx);
+        agent::oneshot(command, dir, tx);
         Ok(Ask {
             who,
             engine: label(st, who),
@@ -241,10 +241,10 @@ impl Ask {
     /// The reply, once it has arrived.
     pub fn poll(&self) -> Option<Reply> {
         match self.rx.try_recv() {
-            Ok(Event::Output(_, Ok(text))) => {
+            Ok(Event::Output(Ok(text))) => {
                 Some(Reply::Answer(agent::strip_ansi(&text).trim().to_string()))
             }
-            Ok(Event::Output(_, Err(err))) => {
+            Ok(Event::Output(Err(err))) => {
                 let help = agent::sign_in_hint(self.agent_id, &err);
                 let first = err
                     .lines()

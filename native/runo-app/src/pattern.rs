@@ -101,29 +101,6 @@ pub fn shows(area: Area) -> bool {
     current() != Pattern::Off && AREAS.load(Ordering::Relaxed) & area as u8 != 0
 }
 
-/// A stand-in desktop for screenshots on a machine whose window can't be see-through
-/// (Xvfb): `RUNO_BACKDROP` names an image, already blurred, laid under everything.
-pub fn backdrop() -> Option<AnyElement> {
-    let path = std::env::var_os("RUNO_BACKDROP")?;
-    settings::glass_on().then(|| {
-        img(std::path::PathBuf::from(path))
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .object_fit(ObjectFit::Cover)
-            .into_any_element()
-    })
-}
-
-/// The pattern behind the islands, in glass mode, when it lies on the whole window. It
-/// shows through every island, so it waits for all three areas. Stronger than on the
-/// frame, since the islands over it let only a part of it through.
-pub fn under() -> Option<AnyElement> {
-    (shows(Area::Content) && shows(Area::Panels) && shows(Area::Frame) && settings::glass_on())
-        .then(|| layer(|b, window| paint(b, None, UNDER, window)))
-}
-
 /// The pattern on a piece of the frame (a bar, a gutter), over its fill.
 pub fn chrome() -> Option<AnyElement> {
     surface(Area::Frame)
@@ -145,8 +122,6 @@ fn layer(f: impl FnOnce(Bounds<Pixels>, &mut Window) + 'static) -> AnyElement {
 
 /// How strong the pattern is on a surface laid straight over it.
 pub const FRAME: f32 = 1.;
-/// How strong it is behind the islands in glass mode.
-const UNDER: f32 = 3.;
 
 /// The grid's pitch.
 const STEP: f32 = 16.;

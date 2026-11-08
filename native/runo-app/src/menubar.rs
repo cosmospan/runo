@@ -1,114 +1,32 @@
-//! Runo in the macOS menu bar: a glyph with a count, and a panel under it with what
-//! agents are doing, what needs the person, and Ask Runo, all usable in place: allow or
-//! deny a waiting agent, stop one, or chat with the assistant without opening Runo.
-//! With the menu bar on, closing the window or ⌘Q hides Runo to it so agents keep
-//! running; Quit in the panel quits.
+//! Squad Code in the macOS menu bar: a glyph with the crew's count, and the
+//! crew's panel under it (`v2::tray`). With the menu bar on, closing the window
+//! or ⌘Q hides Squad Code to it so the crew keeps working; Quit in the panel quits.
 //!
 //! gpui has no tray support, so other platforms show nothing for now.
 
 use crate::*;
-use shell::Need;
 
-/// Rows shown per section; the rest are one "more" line away.
-pub(crate) const ROWS: usize = 8;
-
-/// One session in the panel.
-#[derive(Clone, PartialEq, Debug)]
-pub(crate) struct Row {
-    pub id: u64,
-    pub title: String,
-    pub project: String,
-    pub branch: String,
-    /// The agent's name, glyph and colour, for its badge.
-    pub agent: &'static str,
-    pub mark: &'static str,
-    pub color: u32,
-    pub dot: Dot,
-    /// "Waiting on you", "Failed", "Finished", or how long it has run: "12m".
-    pub status: String,
-    /// The first line of its last reply.
-    pub last: Option<String>,
-    /// "4 files changed · $0.86".
-    pub facts: String,
-    /// The permission it waits on: "Claude wants to run" and the command, if any.
-    pub approval: Option<(String, Option<String>)>,
-    /// Its agent runs on this machine and can be stopped.
-    pub stoppable: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Dot {
-    Waiting,
-    Failed,
-    Finished,
-    Working,
-}
-
-/// What the menu bar shows, built from the app's sessions.
+/// What the menu bar shows.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct Snapshot {
     /// Beside the glyph: what needs the person, else how many are working; empty for none.
     pub count: String,
     /// The glyph carries a dot while something needs the person.
     pub attention: bool,
-    /// Beside "Runo" at the top: "3 working · 2 need you".
+    /// In the glyph's tooltip: "3 working · 2 need you".
     pub summary: String,
-    pub needs: Vec<Row>,
-    pub more_needs: usize,
-    pub working: Vec<Row>,
-    pub more_working: usize,
-    /// Idle sessions with changes to review.
-    pub review: usize,
-    pub running: usize,
-    pub needs_you: usize,
-    /// No window is open: the panel only offers to open one.
+    /// No window is open.
     pub closed: bool,
 }
 
-/// Somewhere in Runo the panel sends the person: the window comes forward on it.
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub(crate) enum Go {
-    Open(u64),
-    NewSession,
-    Inbox,
-    Sessions,
-    Review,
-    Settings,
-    OpenRuno,
-}
-
 impl Snapshot {
-    /// Runo is running with its window closed.
+    /// Squad Code is running with its window closed.
     pub(crate) fn closed() -> Self {
         Self {
             summary: "No window open".into(),
             closed: true,
             ..Default::default()
         }
-    }
-}
-
-/// "just now", "12m", "1h 5m".
-pub(crate) fn age(secs: u64) -> String {
-    match secs {
-        0..60 => "just now".into(),
-        60..3600 => format!("{}m", secs / 60),
-        _ => format!("{}h {}m", secs / 3600, secs % 3600 / 60),
-    }
-}
-
-/// The first line of `text`, cut to about `max` characters.
-fn first_line(text: &str, max: usize) -> String {
-    let line = text
-        .lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or("");
-    if line.chars().count() > max {
-        format!("{}…", line.chars().take(max).collect::<String>().trim_end())
-    } else {
-        line.to_string()
     }
 }
 
@@ -123,156 +41,19 @@ pub(crate) fn split_code(what: &str) -> (String, Option<String>) {
     }
 }
 
-impl RunoApp {
-    /// What the menu bar shows now.
-    pub(crate) fn menubar_snapshot(&self) -> Snapshot {
-        let counts = self.counts();
-        let mut needs = Vec::new();
-        for (s, need) in self.needs_you() {
-            let dot = match need {
-                Need::Blocked => Dot::Waiting,
-                Need::Failed => Dot::Failed,
-                Need::Finished => Dot::Finished,
-            };
-            needs.push(self.menubar_row(s, dot, need.label().to_string()));
-        }
-        let mut working: Vec<(&Session, u64)> = self
-            .state
-            .sessions
-            .iter()
-            .filter(|s| self.bucket(s) == Some(shell::Bucket::Running))
-            .map(|s| {
-                let secs = self
-                    .turns
-                    .get(&s.id)
-                    .map(|t| &t.started)
-                    .map(|at| at.elapsed().as_secs())
-                    .unwrap_or_default();
-                (s, secs)
-            })
-            .collect();
-        // The longest running first.
-        working.sort_by_key(|(s, secs)| (std::cmp::Reverse(*secs), s.id));
-        let working: Vec<Row> = working
-            .into_iter()
-            .map(|(s, secs)| self.menubar_row(s, Dot::Working, age(secs)))
-            .collect();
-
-        let mut summary = Vec::new();
-        if counts.running > 0 {
-            summary.push(format!("{} working", counts.running));
-        }
-        if counts.needs_you > 0 {
-            summary.push(format!(
-                "{} need{} you",
-                counts.needs_you,
-                if counts.needs_you == 1 { "s" } else { "" }
-            ));
-        }
-        if summary.is_empty() {
-            summary.push("Nothing running".into());
-        }
-        let count = match (counts.needs_you, counts.running) {
-            (0, 0) => String::new(),
-            (0, n) | (n, _) => n.to_string(),
-        };
-        Snapshot {
-            count,
-            attention: counts.needs_you > 0,
-            summary: summary.join(" · "),
-            more_needs: needs.len().saturating_sub(ROWS),
-            needs: needs.into_iter().take(ROWS).collect(),
-            more_working: working.len().saturating_sub(ROWS),
-            working: working.into_iter().take(ROWS).collect(),
-            review: counts.review,
-            running: counts.running,
-            needs_you: counts.needs_you,
-            closed: false,
-        }
-    }
-
-    fn menubar_row(&self, s: &Session, dot: Dot, status: String) -> Row {
-        let provider = agent::provider(&s.provider);
-        let project = self
-            .state
-            .projects
-            .iter()
-            .find(|p| p.id == s.project_id)
-            .map(|p| p.name.clone())
-            .unwrap_or_default();
-        let last = s
-            .messages
-            .iter()
-            .rev()
-            .find(|m| m.role == Role::Agent && !m.text.trim().is_empty())
-            .map(|m| first_line(&m.text, 80));
-        let mut facts = Vec::new();
-        if let Some((files, _, _)) = self.stats.get(&s.id).filter(|st| st.0 > 0) {
-            facts.push(format!(
-                "{files} file{} changed",
-                if *files == 1 { "" } else { "s" }
-            ));
-        }
-        let cents: f64 = s.messages.iter().map(|m| m.usage.cost_cents).sum();
-        if cents >= 0.5 {
-            facts.push(format!("${:.2}", cents / 100.));
-        }
-        let approval = self.approval_for(s.id).map(|r| {
-            let (verb, code) = split_code(&approvals::describe(&r.tool, &r.input));
-            (format!("{} wants to {verb}", provider.name), code)
-        });
-        Row {
-            id: s.id,
-            title: s.title.clone(),
-            project,
-            branch: s.branch.clone(),
-            agent: provider.name,
-            mark: provider.mark,
-            color: provider.color,
-            dot,
-            status,
-            last,
-            facts: facts.join(" · "),
-            approval,
-            stoppable: self.handles.contains_key(&Target::Session(s.id)),
-        }
-    }
-
-    /// Show the place `go` names in the window.
-    pub(crate) fn menubar_go(&mut self, go: Go, window: &mut Window, cx: &mut Context<Self>) {
-        match go {
-            Go::Open(id) => {
-                if self.state.session(id).is_some() {
-                    self.select(id);
-                }
-            }
-            Go::NewSession => self.open_new_session(),
-            Go::Inbox => self.go(Mode::Inbox, window, cx),
-            Go::Sessions => self.view = View::AllSessions,
-            Go::Review => self.go(Mode::Home, window, cx),
-            Go::Settings => self.open_settings(),
-            Go::OpenRuno => {}
-        }
-        cx.notify();
-    }
-}
-
-/// Whether ⌘Q and closing the window hide Runo to the menu bar instead of quitting.
+/// Whether ⌘Q and closing the window hide Squad Code to the menu bar instead of quitting.
 pub(crate) fn keeps_running(cx: &App) -> bool {
     let st = cx.global::<AppSettings>();
     platform::SUPPORTED && st.menu_bar && st.run_in_background
 }
 
-/// Hide Runo to the menu bar: the window and the Dock icon go, the agents keep running.
-/// The first time, a notification says where Runo went.
+/// Hide Squad Code to the menu bar: the window and the Dock icon go, the crew keeps
+/// working. The first time, a notification says where it went.
 pub(crate) fn to_background(cx: &mut App) {
-    if let Some(app) = cx.try_global::<MainApp>().and_then(|m| m.0.upgrade()) {
-        app.update(cx, |this, _| this.save_now());
-    }
     panel::close(cx);
     // Deferred: the close button and ⌘Q land here from inside the window's own update,
     // where updating that window again fails and would leave it on screen.
-    if let Some(window) = cx.try_global::<MainApp>().map(|m| m.1) {
+    if let Some(window) = crate::v2::open_handle(cx) {
         cx.defer(move |cx| {
             let _ = window.update(cx, |_, window, _| platform::order_out(window));
         });
@@ -284,63 +65,19 @@ pub(crate) fn to_background(cx: &mut App) {
             cx,
             None,
             "Squad Code is still running",
-            "It's in the menu bar, and your agents keep working. Quit from there to quit.",
+            "It's in the menu bar, and your crew keeps working. Quit from there to quit.",
         );
     }
 }
 
-/// Bring Runo back from the menu bar, with its Dock icon.
-pub(crate) fn to_foreground(cx: &mut App) {
-    platform::set_dock_icon(true);
-    cx.activate(true);
-    match cx.try_global::<MainApp>().map(|m| m.1) {
-        Some(window) => {
-            let _ = window.update(cx, |_, window, _| window.activate_window());
-        }
-        None if std::env::var_os("RUNO_V1").is_some() => crate::open_main_window(cx),
-        // The Squad Code window: bring it forward, or open it if it was closed.
-        None => crate::v2::to_front(cx),
-    }
-}
-
-/// Bring the window forward on `go`, closing the panel.
-pub(crate) fn go(go: Go, cx: &mut App) {
-    panel::close(cx);
-    let main = cx
-        .try_global::<MainApp>()
-        .and_then(|m| m.0.upgrade().map(|app| (app, m.1)));
-    to_foreground(cx);
-    if let Some((app, window)) = main {
-        let _ = window.update(cx, |_, window, cx| {
-            app.update(cx, |this, cx| this.menubar_go(go, window, cx));
-        });
-    }
-}
-
-/// Quit for real, from the panel: running agents still get the usual warning, in the
-/// window.
+/// Quit for real, from the panel.
 pub(crate) fn quit(cx: &mut App) {
     panel::close(cx);
-    let app = cx.try_global::<MainApp>().and_then(|m| m.0.upgrade());
-    let go = app.is_none_or(|app| {
-        app.update(cx, |this, cx| {
-            this.save();
-            this.may_close(cx)
-        })
-    });
-    if go {
-        cx.quit();
-    } else {
-        to_foreground(cx);
-    }
+    cx.quit();
 }
 
-/// What the menu bar shows now.
+/// What the menu bar shows now: the crew's count and dot beside the glyph.
 pub(crate) fn snapshot(cx: &App) -> Snapshot {
-    if let Some(app) = cx.try_global::<MainApp>().and_then(|m| m.0.upgrade()) {
-        return app.read(cx).menubar_snapshot();
-    }
-    // The Squad Code window: its crew's count and dot beside the glyph.
     match crate::v2::tray::glyph(cx) {
         Some((count, attention, summary)) => Snapshot {
             count,
@@ -691,23 +428,6 @@ mod tests {
     use std::prelude::v1::test;
 
     #[test]
-    fn ages_read_short() {
-        assert_eq!(age(5), "just now");
-        assert_eq!(age(12 * 60 + 30), "12m");
-        assert_eq!(age(3600 + 5 * 60), "1h 5m");
-    }
-
-    #[test]
-    fn first_line_skips_blanks_and_cuts() {
-        assert_eq!(
-            first_line("\n\n  Done. All tests pass.\nMore", 60),
-            "Done. All tests pass."
-        );
-        assert_eq!(first_line("abcdef", 3), "abc…");
-        assert_eq!(first_line("", 3), "");
-    }
-
-    #[test]
     fn commands_come_out_of_their_code_span() {
         assert_eq!(
             split_code("run `cargo test -p runo`"),
@@ -722,6 +442,6 @@ mod tests {
     #[test]
     fn closed_offers_only_open() {
         let s = Snapshot::closed();
-        assert!(s.closed && s.needs.is_empty() && s.count.is_empty());
+        assert!(s.closed && s.count.is_empty());
     }
 }

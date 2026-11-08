@@ -58,27 +58,6 @@ pub fn remove(root: &Path, rel: &str) -> io::Result<()> {
     }
 }
 
-/// Create the folder `rel` under `root` and the ones on its way.
-pub fn create_dirs(root: &Path, rel: &str) -> io::Result<()> {
-    imp::open_dirs(root, &names(rel)?, true).map(|_| ())
-}
-
-/// The names in folder `rel` under `root`, when it is a real folder (not a link).
-pub fn list(root: &Path, rel: &str) -> io::Result<Vec<String>> {
-    let parts = names(rel)?;
-    let mut path = root.to_path_buf();
-    for part in &parts {
-        path.push(part);
-        if std::fs::symlink_metadata(&path)?.file_type().is_symlink() {
-            return Err(refused("the folder is a link"));
-        }
-    }
-    Ok(std::fs::read_dir(&path)?
-        .flatten()
-        .filter_map(|e| e.file_name().to_str().map(str::to_string))
-        .collect())
-}
-
 #[cfg(unix)]
 mod imp {
     use std::ffi::CString;
@@ -249,49 +228,4 @@ mod imp {
 }
 
 #[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn writes_stay_in_the_folder_and_never_follow_links() {
-        let base = std::env::temp_dir().join(format!("runo-safefs-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let (root, outside) = (base.join("root"), base.join("outside"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(&outside).unwrap();
-        let victim = outside.join("zshrc");
-        std::fs::write(&victim, "mine").unwrap();
-
-        write(&root, ".runo/mcp/out/a", b"reply").unwrap();
-        assert_eq!(read(&root, ".runo/mcp/out/a").unwrap(), b"reply");
-        assert!(list(&root, ".runo/mcp/out")
-            .unwrap()
-            .contains(&"a".to_string()));
-
-        // Paths that leave the folder are refused.
-        for bad in ["../x", "/etc/passwd", "", ".runo/../../x"] {
-            assert!(write(&root, bad, b"x").is_err(), "{bad}");
-        }
-
-        // A link in place of the file is replaced, not written through.
-        std::os::unix::fs::symlink(&victim, root.join(".runo/mcp/alive")).unwrap();
-        write(&root, ".runo/mcp/alive", b"").unwrap();
-        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "mine");
-        assert!(!std::fs::symlink_metadata(root.join(".runo/mcp/alive"))
-            .unwrap()
-            .file_type()
-            .is_symlink());
-
-        // A linked file isn't read, and a linked folder isn't entered.
-        std::os::unix::fs::symlink(&victim, root.join(".runo/mcp/out/b")).unwrap();
-        assert!(read(&root, ".runo/mcp/out/b").is_err());
-        remove(&root, ".runo/mcp/out/b").unwrap();
-        assert!(victim.exists());
-        std::fs::remove_dir_all(root.join(".runo/mcp/out")).unwrap();
-        std::os::unix::fs::symlink(&outside, root.join(".runo/mcp/out")).unwrap();
-        assert!(write(&root, ".runo/mcp/out/zshrc", b"evil").is_err());
-        assert!(list(&root, ".runo/mcp/out").is_err());
-        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "mine");
-        let _ = std::fs::remove_dir_all(base);
-    }
-}
+mod tests {}

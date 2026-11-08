@@ -3,7 +3,7 @@
 //! each time it opens, and a password typed or pasted goes to the macOS Keychain (on
 //! other systems, to a file only the person can read).
 
-use super::{detect, redact, Env, Kind};
+use super::{detect, Env, Kind};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -93,37 +93,6 @@ pub(crate) fn load() -> Vec<Saved> {
         .unwrap_or_default()
 }
 
-pub(crate) fn store(all: &[Saved]) -> std::io::Result<()> {
-    let text = serde_json::to_string_pretty(all).unwrap_or_else(|_| "[]".into());
-    write_private(&file(), &text)
-}
-
-/// A query kept under a name, for one connection.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub(crate) struct SavedQuery {
-    pub id: String,
-    /// The saved connection it runs on.
-    pub conn: String,
-    pub name: String,
-    pub sql: String,
-}
-
-fn queries_file() -> PathBuf {
-    folder().join("queries.json")
-}
-
-pub(crate) fn load_queries() -> Vec<SavedQuery> {
-    std::fs::read_to_string(queries_file())
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
-}
-
-pub(crate) fn store_queries(all: &[SavedQuery]) -> std::io::Result<()> {
-    let text = serde_json::to_string_pretty(all).unwrap_or_else(|_| "[]".into());
-    write_private(&queries_file(), &text)
-}
-
 /// One thing an agent ran on a database, kept so the person can see it in the Data place.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Activity {
@@ -171,115 +140,6 @@ pub(crate) fn log_activity(entry: &Activity) {
     }
 }
 
-/// The latest `n` entries for connection `conn`, newest first.
-pub(crate) fn activity(conn: &str, n: usize) -> Vec<Activity> {
-    let text = std::fs::read_to_string(activity_file()).unwrap_or_default();
-    let mut out: Vec<Activity> = text
-        .lines()
-        .rev()
-        .filter_map(|l| serde_json::from_str::<Activity>(l).ok())
-        .filter(|a| a.conn == conn)
-        .take(n)
-        .collect();
-    out.sort_by_key(|a| std::cmp::Reverse(a.at));
-    out
-}
-
-/// A new connection's id: unique enough for one person's list.
-pub(crate) fn new_id() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    format!("c{:x}", nanos)
-}
-
-/// Save a connection found in the project.
-pub(crate) fn from_found(project: u64, found: &detect::Found) -> Saved {
-    Saved {
-        id: new_id(),
-        project,
-        name: found.name.clone(),
-        kind: found.kind,
-        env: found.env,
-        source: Source::Found {
-            key: found.key.clone(),
-        },
-        shown: found.shown.clone(),
-    }
-}
-
-/// Save a connection to a URL or a SQLite file the person typed. The password, if the URL
-/// has one, goes to the Keychain under the connection's id.
-pub(crate) fn from_typed(project: u64, typed: &str) -> Result<Saved, String> {
-    let typed = typed.trim();
-    let id = new_id();
-    let path = Path::new(typed.trim_start_matches("file:"));
-    if Kind::of_url(typed).is_none() && detect::is_sqlite(path) {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        return Ok(Saved {
-            id,
-            project,
-            name,
-            kind: Kind::Sqlite,
-            env: Env::Local,
-            source: Source::File {
-                path: path.to_string_lossy().to_string(),
-            },
-            shown: typed.to_string(),
-        });
-    }
-    let kind = Kind::of_url(typed).ok_or_else(|| {
-        "That isn't a database URL or a SQLite file. Paste something like postgres://user:password@host:5432/name.".to_string()
-    })?;
-    if kind == Kind::Sqlite {
-        return from_typed(
-            project,
-            typed
-                .trim_start_matches("sqlite:")
-                .trim_start_matches("file:"),
-        );
-    }
-    let mut url = url::Url::parse(typed).map_err(|e| format!("That URL can't be read: {e}."))?;
-    let password = url.password().map(|p| {
-        percent_encoding::percent_decode_str(p)
-            .decode_utf8_lossy()
-            .to_string()
-    });
-    if let Some(pw) = &password {
-        set_secret(&id, pw)?;
-        let _ = url.set_password(None);
-    }
-    let host = url.host_str().unwrap_or("").to_string();
-    let db = url.path().trim_start_matches('/').to_string();
-    let env = if super::says_prod(&[&host, &db]) {
-        Env::Prod
-    } else if super::local_host(&host) {
-        Env::Local
-    } else {
-        Env::Staging
-    };
-    let name = if !db.is_empty() {
-        db
-    } else {
-        host.split('.').next().unwrap_or("database").to_string()
-    };
-    Ok(Saved {
-        id,
-        project,
-        name,
-        kind,
-        env,
-        shown: redact(url.as_str()),
-        source: Source::Url {
-            url: url.to_string(),
-            password: password.is_some(),
-        },
-    })
-}
-
 /// What to connect to for `saved`, secrets filled in, for the project at `root`.
 pub(crate) fn target(saved: &Saved, root: &Path) -> Result<String, String> {
     match &saved.source {
@@ -313,12 +173,6 @@ pub(crate) fn target(saved: &Saved, root: &Path) -> Result<String, String> {
                 )
             })
         }
-    }
-}
-
-pub(crate) fn forget(saved: &Saved) {
-    if matches!(saved.source, Source::Url { password: true, .. }) {
-        delete_secret(&saved.id);
     }
 }
 
@@ -358,81 +212,6 @@ fn secrets() -> std::collections::BTreeMap<String, String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn write_secrets(all: &std::collections::BTreeMap<String, String>) -> Result<(), String> {
-    write_private(
-        &secrets_file(),
-        &serde_json::to_string(all).unwrap_or_default(),
-    )
-    .map_err(|e| e.to_string())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn set_secret(id: &str, secret: &str) -> Result<(), String> {
-    let mut all = secrets();
-    all.insert(id.to_string(), secret.to_string());
-    write_secrets(&all)
-}
-
-#[cfg(not(target_os = "macos"))]
 fn get_secret(id: &str) -> Option<String> {
     secrets().get(id).cloned()
-}
-
-#[cfg(not(target_os = "macos"))]
-fn delete_secret(id: &str) {
-    let mut all = secrets();
-    if all.remove(id).is_some() {
-        let _ = write_secrets(&all);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn typed_urls_keep_their_password_apart() {
-        let home = std::env::temp_dir().join(format!("runo-saved-{}", std::process::id()));
-        TEST_DIR.with_borrow_mut(|d| *d = Some(home.clone()));
-        let saved = from_typed(7, "postgres://app:s%40cret@db.internal:5432/shop").unwrap();
-        assert_eq!(saved.kind, Kind::Postgres);
-        assert_eq!(saved.name, "shop");
-        assert_eq!(saved.env, Env::Staging);
-        let Source::Url { url, password } = &saved.source else {
-            panic!("{saved:?}")
-        };
-        assert!(*password);
-        assert!(!url.contains("cret"));
-        assert!(!saved.shown.contains("cret"));
-        store(std::slice::from_ref(&saved)).unwrap();
-        assert!(!std::fs::read_to_string(file()).unwrap().contains("cret"));
-        assert_eq!(load(), vec![saved.clone()]);
-        let full = target(&saved, Path::new("/nowhere")).unwrap();
-        assert_eq!(full, "postgres://app:s%40cret@db.internal:5432/shop");
-        forget(&saved);
-        assert!(target(&saved, Path::new("/nowhere")).is_err());
-
-        let prod = from_typed(7, "postgres://u@shop-prod.example.com/shop").unwrap();
-        assert_eq!(prod.env, Env::Prod);
-        assert!(from_typed(7, "not a url").is_err());
-        let _ = std::fs::remove_dir_all(home);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn saved_files_are_only_ever_the_persons() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("runo-private-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        TEST_DIR.with_borrow_mut(|d| *d = Some(dir.clone()));
-        store_queries(&[]).unwrap();
-        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode(&dir), 0o700);
-        assert_eq!(mode(&queries_file()), 0o600);
-        // Writing again replaces the file whole, still private.
-        store_queries(&[]).unwrap();
-        assert_eq!(mode(&queries_file()), 0o600);
-        TEST_DIR.with_borrow_mut(|d| *d = None);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 }

@@ -30,16 +30,6 @@ pub fn here() -> Hardware {
     })
 }
 
-/// Post-turn check sets that run at once on Auto. A check set is usually a full build and
-/// test run, which can take every core and a few gigabytes (a Rust or C++ link, a webpack
-/// build, a JVM test run), while the agents and the person's own tools keep running
-/// beside them. So one set per 4 logical cores and per 6 GB, the smaller of the two, from
-/// 1 to 6: 8 GB gives 1, 16 GB with 8 cores gives 2, 32 GB with 12 cores 3, 64 GB with
-/// 16 cores 4. Past 6 the disk and memory bandwidth run out before the cores do.
-pub fn checks_auto(hw: Hardware) -> usize {
-    (hw.cores / 4).min((hw.ram_gb / 6) as usize).clamp(1, 6)
-}
-
 /// Crew threads that run at once on Auto. An agent mostly waits on the network and its
 /// model, but the builds and tests it runs take cores and memory like anyone's, so one
 /// thread per 3 logical cores and per 4 GB, the smaller of the two, from 2 to 8: 8 GB
@@ -47,23 +37,6 @@ pub fn checks_auto(hw: Hardware) -> usize {
 /// a plan's usage window is the limit, not the computer.
 pub fn crew_auto(hw: Hardware) -> usize {
     (hw.cores / 3).min((hw.ram_gb / 4) as usize).clamp(2, 8)
-}
-
-/// How Settings names this computer and its size: "this Mac: 16 cores, 64 GB".
-pub fn describe(hw: Hardware) -> String {
-    let name = if cfg!(target_os = "macos") {
-        "this Mac"
-    } else if cfg!(windows) {
-        "this PC"
-    } else {
-        "this computer"
-    };
-    let ram = if hw.ram_gb == 0 {
-        "memory unknown".to_string()
-    } else {
-        format!("{} GB", hw.ram_gb)
-    };
-    format!("{name}: {} cores, {ram}", hw.cores)
 }
 
 /// A concurrency setting's value: "auto" takes `auto`, a number is itself, and 0 is no
@@ -141,22 +114,6 @@ mod tests {
     }
 
     #[test]
-    fn checks_scale_with_the_smaller_of_cores_and_memory() {
-        assert_eq!(checks_auto(hw(8, 8)), 1);
-        assert_eq!(checks_auto(hw(4, 8)), 1);
-        assert_eq!(checks_auto(hw(8, 16)), 2);
-        assert_eq!(checks_auto(hw(12, 32)), 3);
-        assert_eq!(checks_auto(hw(16, 64)), 4);
-        assert_eq!(checks_auto(hw(24, 64)), 6);
-        // Lots of cores, little memory: memory decides.
-        assert_eq!(checks_auto(hw(32, 16)), 2);
-        assert_eq!(checks_auto(hw(128, 512)), 6);
-        // Unknown memory, or a tiny machine, still runs one.
-        assert_eq!(checks_auto(hw(16, 0)), 1);
-        assert_eq!(checks_auto(hw(1, 2)), 1);
-    }
-
-    #[test]
     fn crew_threads_scale_from_two_to_eight() {
         assert_eq!(crew_auto(hw(8, 8)), 2);
         assert_eq!(crew_auto(hw(8, 16)), 2);
@@ -176,13 +133,6 @@ mod tests {
         assert_eq!(resolve("0", 3), 0);
         assert_eq!(resolve("", 3), 3);
         assert_eq!(resolve("lots", 3), 3);
-    }
-
-    #[test]
-    fn the_computer_is_described_plainly() {
-        let text = describe(hw(16, 64));
-        assert!(text.ends_with(": 16 cores, 64 GB"), "{text}");
-        assert!(describe(hw(4, 0)).ends_with("memory unknown"));
     }
 
     #[test]

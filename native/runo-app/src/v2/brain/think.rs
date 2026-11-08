@@ -190,13 +190,13 @@ pub fn ask(
     text: &str,
     seen: &Seen,
 ) -> Result<Receiver<Event>, String> {
-    let i = crate::assistant::assistant_provider(st);
+    let i = crate::settings::assistant_provider(st);
     let p = &agent::PROVIDERS[i];
     let configured = st.agent(p.id).binary;
     if !agent::available(p.bin, &configured) {
         return Err(format!("{} isn't installed", p.name));
     }
-    let model = crate::assistant::assistant_model(st, p.id);
+    let model = crate::settings::assistant_model(st, p.id);
     let words = prompt(text, seen);
     // The warm engine answers in a second or two; a cold start takes six.
     if super::warm::can(p.id) {
@@ -205,14 +205,13 @@ pub fn ask(
         } else {
             configured.trim().to_string()
         };
-        if let Some(rx) = super::warm::ask(&bin, &model, dir, &words, LIMIT, "v2-peek-reads".into())
-        {
+        if let Some(rx) = super::warm::ask(&bin, &model, dir, &words, LIMIT) {
             return Ok(rx);
         }
     }
     let command = agent::ask_command_on(p.id, &configured, &words, &model);
     let (tx, rx) = channel();
-    agent::oneshot_within("v2-peek-reads".into(), command, dir, LIMIT, tx);
+    agent::oneshot_within(command, dir, LIMIT, tx);
     Ok(rx)
 }
 
@@ -226,7 +225,7 @@ pub fn decide(
 ) -> Result<(Front, String), String> {
     let rx = ask(st, dir, text, seen)?;
     let reply = match rx.recv_timeout(LIMIT + Duration::from_secs(5)) {
-        Ok(Event::Output(_, r)) => r?,
+        Ok(Event::Output(r)) => r?,
         _ => return Err(format!("{} didn't answer in time", engine_name(st))),
     };
     parse(&agent::strip_ansi(&reply), text, seen.crew)
@@ -239,7 +238,7 @@ pub fn prepare(st: &AppSettings, dir: &str) {
     if dir.is_empty() {
         return;
     }
-    let p = &agent::PROVIDERS[crate::assistant::assistant_provider(st)];
+    let p = &agent::PROVIDERS[crate::settings::assistant_provider(st)];
     if !super::warm::can(p.id) {
         return;
     }
@@ -252,13 +251,13 @@ pub fn prepare(st: &AppSettings, dir: &str) {
     } else {
         configured.trim().to_string()
     };
-    let model = crate::assistant::assistant_model(st, p.id);
+    let model = crate::settings::assistant_model(st, p.id);
     super::warm::prepare(&bin, &model, dir);
 }
 
 /// The name of the engine Peek reads with, as the person knows it.
 pub fn engine_name(st: &AppSettings) -> &'static str {
-    agent::PROVIDERS[crate::assistant::assistant_provider(st)].name
+    agent::PROVIDERS[crate::settings::assistant_provider(st)].name
 }
 
 #[cfg(test)]

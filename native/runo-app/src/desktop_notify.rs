@@ -24,10 +24,8 @@ fn listen(cx: &App) {
         return;
     }
     cx.on_system_notification_response(|response, cx| {
+        let _ = response;
         cx.activate(true);
-        if let Some(id) = session_of(&response.tag) {
-            crate::open_session_from_notification(id, cx);
-        }
     });
 }
 
@@ -70,21 +68,5 @@ fn tag(session: Option<u64>) -> String {
                 .map(|d| d.as_millis())
                 .unwrap_or(0)
         ),
-    }
-}
-
-fn session_of(tag: &str) -> Option<u64> {
-    tag.strip_prefix("session-")?.parse().ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tags_name_the_session() {
-        assert_eq!(session_of(&tag(Some(42))), Some(42));
-        assert_eq!(session_of(&tag(None)), None);
-        assert_eq!(session_of("session-x"), None);
     }
 }

@@ -3,10 +3,10 @@
 //! opened read-only with `query_only` on. Both have a statement timeout, and the grid's
 //! filters become SQL with every value quoted or bound, never pasted in.
 
-use super::{Browse, Cell, CellKind, Column, Filter, Kind, Op, Rows, Table, PAGE};
+use super::{Cell, CellKind, Column, Kind, Rows, Table};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How long one statement may run before the database stops it.
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
@@ -15,8 +15,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 const CELL_MAX: usize = 4000;
 
 pub(crate) enum Session {
-    /// The client, and how its TLS was checked, which a cancel request uses too.
-    Postgres(postgres::Client, TlsCheck),
+    Postgres(postgres::Client),
     Sqlite(rusqlite::Connection),
 }
 
@@ -73,109 +72,6 @@ pub(crate) fn scrub(text: &str, target: &str) -> String {
 /// `name` as a quoted SQL identifier.
 pub(crate) fn ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
-}
-
-/// `value` as a quoted SQL string literal (standard_conforming_strings on).
-pub(crate) fn literal(value: &str) -> String {
-    format!("'{}'", value.replace('\0', "").replace('\'', "''"))
-}
-
-/// `value` with LIKE's wildcards escaped by backslash.
-fn like_escape(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_")
-}
-
-pub(crate) fn table_ref(kind: Kind, table: &Table) -> String {
-    if kind == Kind::Postgres && !table.schema.is_empty() {
-        format!("{}.{}", ident(&table.schema), ident(&table.name))
-    } else {
-        ident(&table.name)
-    }
-}
-
-/// A browse's filters as SQL conditions, with values written in as literals (for
-/// Postgres, and for showing) or as `?` with the values beside (for SQLite).
-pub(crate) fn conditions(kind: Kind, filters: &[Filter], bind: bool) -> (Vec<String>, Vec<String>) {
-    let mut values = Vec::new();
-    let mut put = |v: String| -> String {
-        if bind {
-            values.push(v);
-            "?".into()
-        } else {
-            literal(&v)
-        }
-    };
-    let mut wheres = Vec::new();
-    for Filter { column, op, value } in filters {
-        let col = ident(column);
-        let cond = match op {
-            Op::Eq => format!("{col} = {}", put(value.clone())),
-            Op::Ne => format!("{col} <> {}", put(value.clone())),
-            Op::Gt => format!("{col} > {}", put(value.clone())),
-            Op::Lt => format!("{col} < {}", put(value.clone())),
-            Op::Contains => {
-                let pattern = put(format!("%{}%", like_escape(value)));
-                match kind {
-                    Kind::Postgres => format!("{col}::text ILIKE {pattern}"),
-                    _ => format!("CAST({col} AS TEXT) LIKE {pattern} ESCAPE '\\'"),
-                }
-            }
-            Op::IsNull => format!("{col} IS NULL"),
-            Op::NotNull => format!("{col} IS NOT NULL"),
-        };
-        wheres.push(cond);
-    }
-    (wheres, values)
-}
-
-/// ` WHERE …` for a browse's filters, or nothing.
-pub(super) fn where_sql(wheres: &[String]) -> String {
-    if wheres.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", wheres.join(" AND "))
-    }
-}
-
-/// The WHERE, ORDER BY and paging of a browse, with values written in as literals (for
-/// Postgres, and for showing) or as `?` with the values beside (for SQLite).
-pub(crate) fn browse_sql(
-    kind: Kind,
-    table: &Table,
-    b: &Browse,
-    bind: bool,
-) -> (String, Vec<String>) {
-    let (sql, values) = select_sql(kind, table, b, bind);
-    (
-        format!("{sql} LIMIT {} OFFSET {}", PAGE + 1, b.offset),
-        values,
-    )
-}
-
-/// A browse's rows, filtered and sorted, without paging: what an export writes out.
-pub(crate) fn select_sql(
-    kind: Kind,
-    table: &Table,
-    b: &Browse,
-    bind: bool,
-) -> (String, Vec<String>) {
-    let (wheres, values) = conditions(kind, &b.filters, bind);
-    let mut sql = format!(
-        "SELECT * FROM {}{}",
-        table_ref(kind, table),
-        where_sql(&wheres)
-    );
-    if let Some((column, desc)) = &b.sort {
-        sql.push_str(&format!(" ORDER BY {}", ident(column)));
-        sql.push_str(if *desc { " DESC" } else { " ASC" });
-        if kind == Kind::Postgres {
-            sql.push_str(" NULLS LAST");
-        }
-    }
-    (sql, values)
 }
 
 /// How a column's values look, from its type name.
@@ -417,7 +313,7 @@ impl Session {
                     _ => Transport::Plain,
                 };
                 Ok((
-                    Session::Postgres(client, check),
+                    Session::Postgres(client),
                     Opened {
                         server: format!("Postgres {version}").trim().to_string(),
                         read_only,
@@ -475,7 +371,7 @@ impl Session {
     /// while the computer slept.
     pub(crate) fn is_closed(&self) -> bool {
         match self {
-            Session::Postgres(client, _) => client.is_closed(),
+            Session::Postgres(client) => client.is_closed(),
             Session::Sqlite(_) => false,
         }
     }
@@ -490,43 +386,9 @@ impl Session {
     /// Every table and view with its columns, keys and estimated size.
     pub(crate) fn tables(&mut self) -> Result<Vec<Table>, String> {
         match self {
-            Session::Postgres(client, _) => pg_tables(client),
+            Session::Postgres(client) => pg_tables(client),
             Session::Sqlite(conn) => sqlite_tables(conn).map_err(|e| e.to_string()),
         }
-    }
-
-    /// One page of a table's rows.
-    pub(crate) fn browse(&mut self, table: &Table, b: &Browse) -> Result<Rows, String> {
-        let kind = self.kind();
-        let (shown, _) = browse_sql(kind, table, b, false);
-        let types: HashMap<&str, CellKind> = table
-            .columns
-            .iter()
-            .map(|c| (c.name.as_str(), kind_of_type(&c.data_type)))
-            .collect();
-        let start = Instant::now();
-        let mut rows = match self {
-            Session::Postgres(client, _) => {
-                let messages =
-                    super::query::read_only(client, |c| c.simple_query(&shown).map_err(pg_error))?;
-                let mut rows = pg_text_rows(messages, |_, name| {
-                    types.get(name).copied().unwrap_or(CellKind::Text)
-                });
-                if rows.columns.is_empty() {
-                    rows.columns = table.columns.iter().map(|c| c.name.clone()).collect();
-                }
-                rows
-            }
-            Session::Sqlite(conn) => {
-                let (sql, values) = browse_sql(kind, table, b, true);
-                sqlite_rows(conn, &sql, &values, &types).map_err(|e| e.to_string())?
-            }
-        };
-        rows.millis = start.elapsed().as_millis();
-        rows.more = rows.rows.len() > PAGE;
-        rows.rows.truncate(PAGE);
-        rows.sql = shown;
-        Ok(rows)
     }
 }
 
@@ -745,148 +607,9 @@ pub(super) fn sqlite_cell(value: rusqlite::types::ValueRef<'_>, declared: CellKi
     }
 }
 
-fn sqlite_rows(
-    conn: &rusqlite::Connection,
-    sql: &str,
-    values: &[String],
-    types: &HashMap<&str, CellKind>,
-) -> rusqlite::Result<Rows> {
-    let mut stmt = conn.prepare(sql)?;
-    let columns: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
-    let mut out = Vec::new();
-    let mut rows = stmt.query(rusqlite::params_from_iter(values.iter()))?;
-    while let Some(row) = rows.next()? {
-        let mut cells = Vec::with_capacity(columns.len());
-        for (i, name) in columns.iter().enumerate() {
-            let declared = types.get(name.as_str()).copied().unwrap_or(CellKind::Text);
-            cells.push(sqlite_cell(row.get_ref(i)?, declared));
-        }
-        out.push(cells);
-    }
-    Ok(Rows {
-        columns,
-        rows: out,
-        ..Rows::default()
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn table() -> Table {
-        Table {
-            schema: "public".into(),
-            name: "orders".into(),
-            ..Table::default()
-        }
-    }
-
-    #[test]
-    fn filters_quote_every_value_and_name() {
-        let b = Browse {
-            filters: vec![
-                Filter {
-                    column: "status".into(),
-                    op: Op::Eq,
-                    value: "x'; DROP TABLE orders; --".into(),
-                },
-                Filter {
-                    column: "we\"ird".into(),
-                    op: Op::Contains,
-                    value: "50%_off".into(),
-                },
-                Filter {
-                    column: "paid_at".into(),
-                    op: Op::IsNull,
-                    value: String::new(),
-                },
-            ],
-            sort: Some(("created_at".into(), true)),
-            offset: 200,
-        };
-        let (sql, values) = browse_sql(Kind::Postgres, &table(), &b, false);
-        assert_eq!(
-            sql,
-            "SELECT * FROM \"public\".\"orders\" WHERE \"status\" = 'x''; DROP TABLE orders; --' AND \"we\"\"ird\"::text ILIKE '%50\\%\\_off%' AND \"paid_at\" IS NULL ORDER BY \"created_at\" DESC NULLS LAST LIMIT 101 OFFSET 200"
-        );
-        assert!(values.is_empty());
-        let (sql, values) = browse_sql(Kind::Sqlite, &table(), &b, true);
-        assert!(sql.starts_with("SELECT * FROM \"orders\" WHERE \"status\" = ? AND CAST(\"we\"\"ird\" AS TEXT) LIKE ? ESCAPE '\\'"));
-        assert_eq!(values, vec!["x'; DROP TABLE orders; --", "%50\\%\\_off%"]);
-    }
-
-    fn sample_db() -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("runo-engine-{}.db", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE customers (id INTEGER PRIMARY KEY, email TEXT NOT NULL);
-             CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER REFERENCES customers(id), status TEXT, total REAL, paid BOOLEAN, meta JSON);
-             INSERT INTO customers VALUES (1, 'a@x.dev'), (2, 'b@x.dev');
-             INSERT INTO orders VALUES (1, 1, 'paid', 9.5, 1, '{\"n\":1}'), (2, 1, 'failed', 12, 0, NULL), (3, 2, '50% off', 3, 1, NULL);
-             CREATE VIEW failed AS SELECT * FROM orders WHERE status = 'failed';",
-        )
-        .unwrap();
-        path
-    }
-
-    #[test]
-    fn sqlite_sessions_read_and_never_write() {
-        let path = sample_db();
-        let (mut s, opened) = Session::open(Kind::Sqlite, path.to_str().unwrap()).unwrap();
-        assert!(opened.read_only);
-        assert!(opened.server.starts_with("SQLite 3."));
-        let tables = s.tables().unwrap();
-        let names: Vec<&str> = tables.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, vec!["customers", "failed", "orders"]);
-        let orders = tables.iter().find(|t| t.name == "orders").unwrap();
-        assert_eq!(orders.estimate, Some(3));
-        assert!(orders.columns[0].primary);
-        assert_eq!(
-            orders.columns[1].refers,
-            Some(("customers".into(), "id".into()))
-        );
-        assert!(tables.iter().find(|t| t.name == "failed").unwrap().view);
-
-        let rows = s
-            .browse(
-                orders,
-                &Browse {
-                    filters: vec![Filter {
-                        column: "status".into(),
-                        op: Op::Contains,
-                        value: "%".into(),
-                    }],
-                    ..Browse::default()
-                },
-            )
-            .unwrap();
-        assert_eq!(rows.rows.len(), 1, "only the row with a real % matches");
-        assert_eq!(rows.rows[0][3], Cell::text("3", CellKind::Number));
-
-        let rows = s
-            .browse(
-                orders,
-                &Browse {
-                    sort: Some(("total".into(), true)),
-                    ..Browse::default()
-                },
-            )
-            .unwrap();
-        assert_eq!(rows.columns[0], "id");
-        assert_eq!(rows.rows[0][0].text, "2");
-        assert_eq!(rows.rows[0][4], Cell::text("false", CellKind::Bool));
-        assert_eq!(rows.rows[1][5].kind, CellKind::Json);
-        assert_eq!(rows.rows[0][5], Cell::null());
-        assert!(!rows.more);
-
-        let Session::Sqlite(conn) = &s else {
-            unreachable!()
-        };
-        assert!(conn.execute("DELETE FROM orders", []).is_err());
-        let _ = std::fs::remove_file(path);
-    }
 
     #[test]
     fn remote_databases_never_drop_to_plain_text() {
@@ -954,36 +677,5 @@ mod tests {
         assert_eq!(kind_of_type("boolean"), CellKind::Bool);
         assert_eq!(kind_of_type("timestamp with time zone"), CellKind::Text);
         assert_eq!(kind_of_type("character varying(255)"), CellKind::Text);
-    }
-
-    /// Runs against a real server when `RUNO_TEST_PG` holds its URL.
-    #[test]
-    fn postgres_sessions_are_read_only() {
-        let Ok(url) = std::env::var("RUNO_TEST_PG") else {
-            return;
-        };
-        let (mut s, opened) = Session::open(Kind::Postgres, &url).unwrap();
-        assert!(opened.read_only, "{opened:?}");
-        // A local server's certificate isn't checked, and the test role is a superuser.
-        assert!(matches!(
-            opened.transport,
-            Transport::Encrypted | Transport::Plain
-        ));
-        assert!(opened.superuser);
-        let Session::Postgres(client, _) = &mut s else {
-            unreachable!()
-        };
-        let lock_wait = client.simple_query("SHOW lock_timeout").unwrap();
-        assert!(lock_wait
-            .iter()
-            .any(|m| matches!(m, postgres::SimpleQueryMessage::Row(r) if r.get(0) == Some("3s"))));
-        let err = client
-            .batch_execute("CREATE TABLE runo_should_not_exist (id int)")
-            .unwrap_err();
-        assert!(pg_error(err).contains("read-only"));
-        let tables = s.tables().unwrap();
-        if let Some(t) = tables.iter().find(|t| !t.view) {
-            s.browse(t, &Browse::default()).unwrap();
-        }
     }
 }

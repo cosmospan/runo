@@ -2,9 +2,6 @@
 //! before it goes. Secrets and keys, `.env` files, huge files, debugging leftovers and
 //! clash markers, each with a plain name. Scanning only, no UI.
 
-/// Files over this size make the repository heavy for everyone who clones it.
-pub const HUGE: u64 = 10 * 1024 * 1024;
-
 /// What the seatbelt found.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Snag {
@@ -12,8 +9,6 @@ pub enum Snag {
     Secret(&'static str),
     /// A file that holds secrets by its nature, such as `.env` or a private key.
     SecretFile,
-    /// A file this many bytes big.
-    Huge(u64),
     /// A line left in while debugging, by what it is.
     Leftover(&'static str),
     /// A marker from a clash that was never sorted out.
@@ -26,10 +21,6 @@ impl Snag {
         match self {
             Snag::Secret(kind) => format!("Looks like {kind}"),
             Snag::SecretFile => "A file that usually holds passwords or keys".into(),
-            Snag::Huge(bytes) => format!(
-                "A big file ({:.0} MB) that every copy of the project will carry",
-                *bytes as f64 / 1_048_576.0
-            ),
             Snag::Leftover(what) => format!("{what} left in from debugging"),
             Snag::Marker => "A clash marker that was never sorted out".into(),
         }

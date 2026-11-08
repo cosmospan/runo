@@ -247,29 +247,6 @@ pub fn send(turn: &Path, text: &str) -> std::io::Result<()> {
     writeln!(file, "{}", user_line(text))
 }
 
-/// The messages of a live turn the agent never got, oldest first: those after the
-/// lines the host forwarded.
-pub fn unsent(turn: &Path) -> Vec<String> {
-    let sent: usize = std::fs::read_to_string(turn.join("sent"))
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(0);
-    let mut offset = 0;
-    new_lines(&turn.join("in"), &mut offset)
-        .into_iter()
-        .skip(sent)
-        .filter_map(|line| {
-            let v: serde_json::Value = serde_json::from_str(&line).ok()?;
-            v["message"]["content"].as_str().map(str::to_string)
-        })
-        .collect()
-}
-
-/// Whether a turn folder belongs to a live turn.
-pub fn is_live(turn: &Path) -> bool {
-    turn.join("in").is_file()
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -282,66 +259,8 @@ mod tests {
         dir
     }
 
-    /// An agent that answers each line with a result naming it, and exits when its
-    /// input closes.
-    const ECHO: &str = r#"while read -r l; do printf '{"type":"assistant","got":%s}\n' "$l"; sleep 0.3; echo '{"type":"result","subtype":"success"}'; done; echo bye"#;
-
     fn sh(script: &str) -> Vec<String> {
         vec!["-c".into(), script.into()]
-    }
-
-    #[test]
-    fn one_message_gets_its_result_and_the_agent_exits() {
-        let turn = temp("one");
-        send(&turn, "hello").unwrap();
-        let code = run(&turn, "sh", &sh(ECHO), IDLE);
-        assert_eq!(code, 0);
-        let out = std::fs::read_to_string(turn.join("out")).unwrap();
-        assert!(out.contains("hello"), "{out}");
-        assert!(out.ends_with("bye\n"), "{out}");
-        assert_eq!(
-            std::fs::read_to_string(turn.join("exit")).unwrap().trim(),
-            "0"
-        );
-        assert_eq!(std::fs::read_to_string(turn.join("sent")).unwrap(), "1");
-        assert!(unsent(&turn).is_empty());
-        let _ = std::fs::remove_dir_all(turn);
-    }
-
-    #[test]
-    fn a_message_sent_while_the_agent_works_reaches_it() {
-        let turn = temp("steer");
-        send(&turn, "first").unwrap();
-        let t = turn.clone();
-        // An agent that takes a while over each message.
-        let slow = ECHO.replace("sleep 0.3", "sleep 1.5");
-        let host = std::thread::spawn(move || run(&t, "sh", &sh(&slow), IDLE));
-        // Sent once the agent is working on the first message, however slow the machine.
-        let start = std::time::Instant::now();
-        while !std::fs::read_to_string(turn.join("out")).is_ok_and(|o| o.contains("first")) {
-            assert!(
-                start.elapsed() < Duration::from_secs(20),
-                "the agent never started"
-            );
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        send(&turn, "second").unwrap();
-        assert_eq!(host.join().unwrap(), 0);
-        let out = std::fs::read_to_string(turn.join("out")).unwrap();
-        assert!(out.contains("first") && out.contains("second"), "{out}");
-        assert_eq!(out.matches("\"result\"").count(), 2);
-        assert!(unsent(&turn).is_empty());
-        let _ = std::fs::remove_dir_all(turn);
-    }
-
-    #[test]
-    fn a_message_after_the_last_result_is_handed_back() {
-        let turn = temp("late");
-        send(&turn, "first").unwrap();
-        run(&turn, "sh", &sh(ECHO), IDLE);
-        send(&turn, "too late").unwrap();
-        assert_eq!(unsent(&turn), ["too late"]);
-        let _ = std::fs::remove_dir_all(turn);
     }
 
     #[test]

@@ -3,20 +3,11 @@
 //! most `limit` rows fetched through a cursor. Here too: the plan check that warns before
 //! a big scan on production, exact counts, column statistics, and CSV export.
 
-use super::engine::{
-    conditions, ident, kind_of_type, literal, pg_error, pg_rows, pg_text_rows, sqlite_cell,
-    table_ref, tls, where_sql, Session, TlsCheck,
-};
-use super::{mask, sensitive_name, Browse, Cell, CellKind, Column, Kind, Rows, Table};
+use super::engine::{kind_of_type, pg_error, pg_rows, pg_text_rows, sqlite_cell, Session};
+use super::{sensitive_name, Cell, CellKind, Kind, Rows, Table};
 use std::collections::{HashMap, HashSet};
-use std::io::Write as _;
-use std::path::Path;
 use std::time::Instant;
 
-/// Rows a query shows; the rest wait for an export.
-pub(crate) const MAX_ROWS: usize = 1000;
-/// Rows an export writes at most.
-pub(crate) const EXPORT_MAX: usize = 1_000_000;
 /// A full read of a table with at least this many rows is worth a warning on production.
 pub(crate) const BIG_SCAN: i64 = 100_000;
 
@@ -373,25 +364,6 @@ pub(crate) fn hidden_columns(ran: &Ran, sql: &str, tables: &[Table]) -> Vec<bool
         .collect()
 }
 
-/// Stops a statement that is running on a session, from another thread.
-pub(crate) enum Canceller {
-    Postgres(postgres::CancelToken, TlsCheck),
-    Sqlite(rusqlite::InterruptHandle),
-}
-
-impl Canceller {
-    pub(crate) fn cancel(&self) {
-        match self {
-            Canceller::Postgres(token, check) => {
-                if let Ok(tls) = tls(*check) {
-                    let _ = token.cancel_query(tls);
-                }
-            }
-            Canceller::Sqlite(handle) => handle.interrupt(),
-        }
-    }
-}
-
 /// Run `f` inside a read-only transaction and roll it back, whatever happened.
 pub(super) fn read_only<T>(
     client: &mut postgres::Client,
@@ -426,21 +398,13 @@ pub(crate) fn about(n: i64) -> String {
 }
 
 impl Session {
-    /// The thing to call to stop what this session is running.
-    pub(crate) fn canceller(&self) -> Canceller {
-        match self {
-            Session::Postgres(client, check) => Canceller::Postgres(client.cancel_token(), *check),
-            Session::Sqlite(conn) => Canceller::Sqlite(conn.get_interrupt_handle()),
-        }
-    }
-
     /// Run one statement that only reads; at most `limit` rows come back.
     pub(crate) fn run(&mut self, sql: &str, limit: usize) -> Result<Ran, String> {
         let kind = self.kind();
         let sql = check(kind, sql)?;
         let start = Instant::now();
         let mut ran = match self {
-            Session::Postgres(client, _) => pg_run(client, &sql, limit)?,
+            Session::Postgres(client) => pg_run(client, &sql, limit)?,
             Session::Sqlite(conn) => sqlite_run(conn, &sql, limit)?,
         };
         ran.rows.millis = start.elapsed().as_millis();
@@ -458,7 +422,7 @@ impl Session {
         sql: &str,
         tables: &[Table],
     ) -> Result<Option<String>, String> {
-        let Session::Postgres(client, _) = self else {
+        let Session::Postgres(client) = self else {
             return Ok(None);
         };
         if matches!(first_word(sql).as_str(), "explain" | "show") {
@@ -479,338 +443,6 @@ impl Session {
         let plan: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
         Ok(plan_warning(&plan[0]["Plan"], tables))
     }
-
-    /// How many rows match the browse's filters, counted.
-    pub(crate) fn count(&mut self, table: &Table, b: &Browse) -> Result<i64, String> {
-        let kind = self.kind();
-        let (sql, values) = count_sql(kind, table, b);
-        match self {
-            Session::Postgres(client, _) => {
-                let rows = read_only(client, |c| pg_rows(c, &sql))?;
-                rows.first()
-                    .and_then(|r| r.first().cloned().flatten())
-                    .and_then(|v| v.parse().ok())
-                    .ok_or_else(|| "The count didn't come back.".to_string())
-            }
-            Session::Sqlite(conn) => conn
-                .query_row(&sql, rusqlite::params_from_iter(values.iter()), |r| {
-                    r.get(0)
-                })
-                .map_err(|e| e.to_string()),
-        }
-    }
-
-    /// The database's own estimates for the table's columns, without reading it:
-    /// Postgres's statistics. SQLite keeps none, so it gives nothing.
-    pub(crate) fn estimated_stats(&mut self, table: &Table) -> Result<Vec<ColumnStat>, String> {
-        let Session::Postgres(client, _) = self else {
-            return Ok(Vec::new());
-        };
-        let schema = if table.schema.is_empty() {
-            "public"
-        } else {
-            &table.schema
-        };
-        let rows = pg_rows(
-            client,
-            &format!(
-                "SELECT attname, null_frac::text, n_distinct::text, most_common_vals::text FROM pg_stats WHERE schemaname = {} AND tablename = {}",
-                literal(schema),
-                literal(&table.name)
-            ),
-        )?;
-        let total = table.estimate.unwrap_or(0) as f64;
-        Ok(rows
-            .into_iter()
-            .map(|r| {
-                let name = r[0].clone().unwrap_or_default();
-                let distinct = r[2]
-                    .as_deref()
-                    .and_then(|v| v.parse::<f64>().ok())
-                    .map(|n| if n < 0. { (-n * total).round() } else { n });
-                let common = if sensitive_name(&name) {
-                    Vec::new()
-                } else {
-                    pg_array(r[3].as_deref().unwrap_or(""))
-                        .into_iter()
-                        .take(3)
-                        .collect()
-                };
-                ColumnStat {
-                    nulls: r[1].as_deref().and_then(|v| v.parse().ok()),
-                    distinct,
-                    common,
-                    name,
-                    ..ColumnStat::default()
-                }
-            })
-            .collect())
-    }
-
-    /// One column counted exactly over the rows the browse's filters keep: how many are
-    /// empty, how many distinct values, and the smallest and largest.
-    pub(crate) fn exact_stats(
-        &mut self,
-        table: &Table,
-        column: &Column,
-        b: &Browse,
-    ) -> Result<ColumnStat, String> {
-        let kind = self.kind();
-        let col = ident(&column.name);
-        let as_text = match kind {
-            Kind::Postgres => format!("{col}::text"),
-            _ => format!("CAST({col} AS TEXT)"),
-        };
-        let t = column.data_type.to_ascii_lowercase();
-        let ordered = kind_of_type(&t) == CellKind::Number
-            || t.contains("date")
-            || t.contains("time")
-            || kind == Kind::Sqlite;
-        let shown = ordered && !column.sensitive();
-        let range = match (shown, kind) {
-            (false, _) => String::new(),
-            (true, Kind::Postgres) => format!(", min({col})::text, max({col})::text"),
-            (true, _) => format!(", CAST(min({col}) AS TEXT), CAST(max({col}) AS TEXT)"),
-        };
-        let (wheres, values) = conditions(kind, &b.filters, kind == Kind::Sqlite);
-        let sql = format!(
-            "SELECT count(*), count({col}), count(DISTINCT {as_text}){range} FROM {}{}",
-            table_ref(kind, table),
-            where_sql(&wheres)
-        );
-        let row: Vec<Option<String>> = match self {
-            Session::Postgres(client, _) => read_only(client, |c| pg_rows(c, &sql))?
-                .into_iter()
-                .next()
-                .unwrap_or_default(),
-            Session::Sqlite(conn) => conn
-                .query_row(&sql, rusqlite::params_from_iter(values.iter()), |r| {
-                    (0..r.as_ref().column_count())
-                        .map(|i| {
-                            r.get::<_, rusqlite::types::Value>(i).map(|v| match v {
-                                rusqlite::types::Value::Null => None,
-                                rusqlite::types::Value::Integer(n) => Some(n.to_string()),
-                                rusqlite::types::Value::Real(f) => Some(f.to_string()),
-                                rusqlite::types::Value::Text(s) => Some(s),
-                                rusqlite::types::Value::Blob(b) => {
-                                    Some(format!("{} bytes", b.len()))
-                                }
-                            })
-                        })
-                        .collect()
-                })
-                .map_err(|e| e.to_string())?,
-        };
-        let num = |i: usize| -> Option<f64> { row.get(i).cloned().flatten()?.parse().ok() };
-        let total = num(0).unwrap_or(0.);
-        let filled = num(1).unwrap_or(0.);
-        Ok(ColumnStat {
-            name: column.name.clone(),
-            rows: Some(total as i64),
-            nulls: (total > 0.).then(|| (total - filled) / total),
-            distinct: num(2),
-            common: Vec::new(),
-            min: row.get(3).cloned().flatten(),
-            max: row.get(4).cloned().flatten(),
-            exact: true,
-        })
-    }
-
-    /// Write every row `sql` returns, up to `EXPORT_MAX`, to `path` as CSV, with the
-    /// columns named in `hidden` masked. Returns how many rows were written.
-    pub(crate) fn export_csv(
-        &mut self,
-        sql: &str,
-        path: &Path,
-        hidden: &HashSet<String>,
-    ) -> Result<usize, String> {
-        let kind = self.kind();
-        let sql = check(kind, sql)?;
-        let mut out = std::io::BufWriter::new(private_file(path).map_err(|e| e.to_string())?);
-        let mut written = 0;
-        let put = |out: &mut std::io::BufWriter<std::fs::File>,
-                   fields: Vec<String>|
-         -> Result<(), String> {
-            let line = fields
-                .iter()
-                .map(|f| csv_field(f))
-                .collect::<Vec<_>>()
-                .join(",");
-            writeln!(out, "{line}").map_err(|e| e.to_string())
-        };
-        match self {
-            Session::Postgres(client, _) => {
-                let names: Vec<String> = client
-                    .prepare(&sql)
-                    .map_err(pg_error)?
-                    .columns()
-                    .iter()
-                    .map(|c| c.name().to_string())
-                    .collect();
-                put(&mut out, names.clone())?;
-                let masked: Vec<bool> = names.iter().map(|n| hidden.contains(n)).collect();
-                read_only(client, |c| {
-                    let cursor = cursor_kind(&sql);
-                    if cursor {
-                        c.batch_execute(&format!("DECLARE runo_export NO SCROLL CURSOR FOR {sql}"))
-                            .map_err(pg_error)?;
-                    }
-                    loop {
-                        let batch = if cursor {
-                            c.simple_query("FETCH FORWARD 5000 FROM runo_export")
-                        } else {
-                            c.simple_query(&sql)
-                        }
-                        .map_err(pg_error)?;
-                        let mut got = 0;
-                        for m in batch {
-                            if let postgres::SimpleQueryMessage::Row(r) = m {
-                                got += 1;
-                                let fields = (0..r.len())
-                                    .map(|i| match r.get(i) {
-                                        None => String::new(),
-                                        Some(v) if masked.get(i) == Some(&true) => mask(v),
-                                        Some(v) => v.to_string(),
-                                    })
-                                    .collect();
-                                put(&mut out, fields)?;
-                                written += 1;
-                            }
-                        }
-                        if !cursor || got == 0 || written >= EXPORT_MAX {
-                            return Ok(());
-                        }
-                    }
-                })?;
-            }
-            Session::Sqlite(conn) => {
-                let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-                if !stmt.readonly() {
-                    return Err(
-                        "That statement would change the file, so Runo didn't run it.".into(),
-                    );
-                }
-                let names: Vec<String> =
-                    stmt.column_names().iter().map(|n| n.to_string()).collect();
-                put(&mut out, names.clone())?;
-                let masked: Vec<bool> = names.iter().map(|n| hidden.contains(n)).collect();
-                let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
-                while let Some(row) = rows.next().map_err(|e| e.to_string())? {
-                    let fields = (0..names.len())
-                        .map(|i| {
-                            let text = match row.get_ref(i) {
-                                Ok(rusqlite::types::ValueRef::Null) | Err(_) => {
-                                    return String::new()
-                                }
-                                Ok(rusqlite::types::ValueRef::Integer(n)) => n.to_string(),
-                                Ok(rusqlite::types::ValueRef::Real(f)) => f.to_string(),
-                                Ok(rusqlite::types::ValueRef::Text(t)) => {
-                                    String::from_utf8_lossy(t).to_string()
-                                }
-                                Ok(rusqlite::types::ValueRef::Blob(b)) => {
-                                    b.iter().map(|x| format!("{x:02x}")).collect()
-                                }
-                            };
-                            if masked[i] {
-                                mask(&text)
-                            } else {
-                                text
-                            }
-                        })
-                        .collect();
-                    put(&mut out, fields)?;
-                    written += 1;
-                    if written >= EXPORT_MAX {
-                        break;
-                    }
-                }
-            }
-        }
-        out.flush().map_err(|e| e.to_string())?;
-        Ok(written)
-    }
-}
-
-/// A new file only the person can read: an export can hold anything the database does.
-fn private_file(path: &Path) -> std::io::Result<std::fs::File> {
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)
-}
-
-/// One CSV field. A value a spreadsheet would run as a formula (`=…`, `+…`, `@…`) gets a
-/// leading `'` so it opens as text.
-pub(crate) fn csv_field(text: &str) -> String {
-    let formula =
-        text.starts_with(['=', '+', '-', '@', '\t', '\r']) && text.trim().parse::<f64>().is_err();
-    let text = if formula {
-        format!("'{text}")
-    } else {
-        text.to_string()
-    };
-    if text.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", text.replace('"', "\"\""))
-    } else {
-        text
-    }
-}
-
-fn count_sql(kind: Kind, table: &Table, b: &Browse) -> (String, Vec<String>) {
-    let (wheres, values) = conditions(kind, &b.filters, kind == Kind::Sqlite);
-    (
-        format!(
-            "SELECT count(*) FROM {}{}",
-            table_ref(kind, table),
-            where_sql(&wheres)
-        ),
-        values,
-    )
-}
-
-/// A column's statistics: estimated from what the database keeps, or counted.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct ColumnStat {
-    pub name: String,
-    /// Rows counted, when counted.
-    pub rows: Option<i64>,
-    /// The share of rows with no value, 0 to 1.
-    pub nulls: Option<f64>,
-    pub distinct: Option<f64>,
-    /// The most common values; never for a column whose values are hidden.
-    pub common: Vec<String>,
-    pub min: Option<String>,
-    pub max: Option<String>,
-    pub exact: bool,
-}
-
-/// The values of a Postgres array literal like `{a,"b c",d}`.
-fn pg_array(text: &str) -> Vec<String> {
-    let inner = text.trim().trim_start_matches('{').trim_end_matches('}');
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    let mut quoted = false;
-    let mut chars = inner.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => quoted = !quoted,
-            '\\' if quoted => {
-                if let Some(n) = chars.next() {
-                    cur.push(n);
-                }
-            }
-            ',' if !quoted => out.push(std::mem::take(&mut cur)),
-            c => cur.push(c),
-        }
-    }
-    if !cur.is_empty() || !out.is_empty() {
-        out.push(cur);
-    }
-    out
 }
 
 /// The warning for a plan that reads every row of a big table. A sequential scan under
@@ -1094,26 +726,6 @@ mod tests {
     }
 
     #[test]
-    fn spreadsheets_get_formulas_as_text() {
-        assert_eq!(csv_field("plain"), "plain");
-        assert_eq!(csv_field("a,b"), "\"a,b\"");
-        assert_eq!(csv_field("say \"hi\""), "\"say \"\"hi\"\"\"");
-        assert_eq!(csv_field("=HYPERLINK(\"x\")"), "\"'=HYPERLINK(\"\"x\"\")\"");
-        assert_eq!(csv_field("@SUM(A1)"), "'@SUM(A1)");
-        assert_eq!(csv_field("-12.5"), "-12.5");
-        assert_eq!(csv_field("-cmd"), "'-cmd");
-    }
-
-    #[test]
-    fn postgres_arrays_split() {
-        assert_eq!(
-            pg_array("{paid,failed,\"on hold\"}"),
-            vec!["paid", "failed", "on hold"]
-        );
-        assert!(pg_array("").is_empty());
-    }
-
-    #[test]
     fn plans_warn_on_full_reads_of_big_tables() {
         let tables = vec![Table {
             name: "orders".into(),
@@ -1134,20 +746,6 @@ mod tests {
         // An index lookup is fine, and so is a small table.
         assert!(plan(r#"{"Node Type":"Index Scan","Relation Name":"orders"}"#).is_none());
         assert!(plan(r#"{"Node Type":"Aggregate","Plans":[{"Node Type":"Seq Scan","Relation Name":"tiny","Plan Rows":40}]}"#).is_none());
-    }
-
-    fn sample() -> (std::path::PathBuf, Session) {
-        let path = std::env::temp_dir().join(format!("runo-query-{}.db", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT, n REAL, ok BOOLEAN);
-             INSERT INTO t VALUES (1, 'a@x.dev', 1.5, 1), (2, '=cmd', NULL, 0), (3, 'c@x.dev', 3, 1);",
-        )
-        .unwrap();
-        drop(conn);
-        let (s, _) = Session::open(Kind::Sqlite, path.to_str().unwrap()).unwrap();
-        (path, s)
     }
 
     fn masked(s: &mut Session, sql: &str) -> Vec<bool> {
@@ -1196,55 +794,6 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    #[test]
-    fn sqlite_queries_read_count_and_export() {
-        let (path, mut s) = sample();
-        let ran = s.run("select id, ok, n from t order by id", 2).unwrap();
-        assert_eq!(ran.rows.columns, vec!["id", "ok", "n"]);
-        assert_eq!(ran.rows.rows.len(), 2);
-        assert!(ran.rows.more);
-        assert_eq!(ran.rows.rows[0][1], Cell::text("true", CellKind::Bool));
-        assert!(s.run("delete from t", 10).is_err());
-        assert!(s.run("select 1; delete from t", 10).is_err());
-
-        let tables = s.tables().unwrap();
-        let table = &tables[0];
-        assert_eq!(s.count(table, &Browse::default()).unwrap(), 3);
-        let n = table.columns.iter().find(|c| c.name == "n").unwrap();
-        let stat = s.exact_stats(table, n, &Browse::default()).unwrap();
-        assert_eq!(stat.rows, Some(3));
-        assert!((stat.nulls.unwrap() - 1. / 3.).abs() < 1e-9);
-        assert_eq!(stat.distinct, Some(2.));
-        assert_eq!(
-            (stat.min.as_deref(), stat.max.as_deref()),
-            (Some("1.5"), Some("3.0"))
-        );
-        let email = table.columns.iter().find(|c| c.name == "email").unwrap();
-        assert_eq!(
-            s.exact_stats(table, email, &Browse::default()).unwrap().min,
-            None
-        );
-
-        let out = std::env::temp_dir().join(format!("runo-export-{}.csv", std::process::id()));
-        let hidden = HashSet::from(["email".to_string()]);
-        let n = s
-            .export_csv("select id, email from t", &out, &hidden)
-            .unwrap();
-        assert_eq!(n, 3);
-        let text = std::fs::read_to_string(&out).unwrap();
-        assert_eq!(text, "id,email\n1,a•••@x.dev\n2,••••••\n3,c•••@x.dev\n");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(&out).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-        }
-        let _ = std::fs::remove_file(out);
-        let _ = std::fs::remove_file(path);
-    }
-
     /// Runs against a real server when `RUNO_TEST_PG` holds its URL.
     #[test]
     fn postgres_queries_stay_read_only() {
@@ -1286,7 +835,7 @@ mod tests {
         );
         // The session is still usable and still read-only afterwards.
         assert!(s.run("select 2", 10).is_ok());
-        let Session::Postgres(client, _) = &mut s else {
+        let Session::Postgres(client) = &mut s else {
             unreachable!()
         };
         let still = client.simple_query("SHOW transaction_read_only").unwrap();

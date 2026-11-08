@@ -38,8 +38,6 @@ pub struct Caps {
     pub modes: Vec<Choice>,
     /// Provider-wide effort levels (Claude).
     pub efforts: Vec<Choice>,
-    /// Codex approval policies.
-    pub approvals: Vec<Choice>,
     /// OpenCode named agents.
     pub agents: Vec<Choice>,
     pub detected: bool,
@@ -47,10 +45,6 @@ pub struct Caps {
     pub default_model: String,
     /// The CLI's own `--help`, for flags that only newer releases have.
     pub help: String,
-    /// Models the CLI keeps out of its menu but still accepts (Codex's hidden ones).
-    pub hidden_models: Vec<ModelInfo>,
-    /// The CLI release that wrote its model list, which can be newer than the one installed.
-    pub client_version: String,
     /// The model the CLI's own config file picks (Codex's config.toml).
     pub config_model: String,
 }
@@ -59,7 +53,6 @@ pub struct Caps {
 #[derive(Clone)]
 pub struct Control {
     pub id: &'static str,
-    pub label: String,
     pub choices: Vec<Choice>,
 }
 
@@ -107,30 +100,6 @@ pub fn set(provider: &str, caps: Caps) {
     }
 }
 
-/// The installed CLI's version, without copying the rest.
-pub fn version(provider: &str) -> String {
-    store()
-        .read()
-        .ok()
-        .and_then(|m| m.get(provider).map(|c| c.version.clone()))
-        .unwrap_or_default()
-}
-
-/// Every CLI found so far with its version, by id, for diagnostics.
-pub fn versions() -> Vec<(String, String)> {
-    let mut found: Vec<(String, String)> = store()
-        .read()
-        .map(|m| {
-            m.iter()
-                .filter(|(_, c)| !c.version.is_empty())
-                .map(|(id, c)| (id.clone(), c.version.clone()))
-                .collect()
-        })
-        .unwrap_or_default();
-    found.sort();
-    found
-}
-
 pub fn get(provider: &str) -> Caps {
     store()
         .read()
@@ -151,11 +120,6 @@ fn shared(provider: &str) -> std::sync::Arc<Caps> {
 /// Ask the UI to repaint, as when discovery finished.
 pub fn mark_updated() {
     UPDATED.store(true, Ordering::Relaxed);
-}
-
-/// True once after discovery finished, so the UI can repaint.
-pub fn take_updated() -> bool {
-    UPDATED.swap(false, Ordering::Relaxed)
 }
 
 /// Discover every provider on a background thread.
@@ -509,36 +473,16 @@ fn parse_codex(
     .map(|list| list.split(',').map(|v| choice(v.trim())).collect())
     .unwrap_or_default();
 
-    let mut approvals = Vec::new();
-    let mut inside = false;
-    for line in top_help.lines() {
-        if line.contains("--ask-for-approval") {
-            inside = true;
-            continue;
-        }
-        if inside {
-            let t = line.trim();
-            if let Some(rest) = t.strip_prefix("- ") {
-                let (name, desc) = rest.split_once(':').unwrap_or((rest, ""));
-                approvals.push(Choice {
-                    value: name.trim().to_string(),
-                    label: pretty(name.trim()),
-                    desc: desc.trim().to_string(),
-                });
-            } else if t.starts_with('-') && !t.starts_with("- ") {
-                break;
-            }
-        }
-    }
-
     let mut models: Vec<(i64, ModelInfo)> = Vec::new();
-    let mut hidden_models: Vec<(i64, ModelInfo)> = Vec::new();
     if let Some(list) = cache
         .and_then(|v| v.get("models"))
         .and_then(|m| m.as_array())
     {
         for m in list {
-            let hidden = m.get("visibility").and_then(|v| v.as_str()) != Some("list");
+            // Models kept out of the CLI's menu aren't offered.
+            if m.get("visibility").and_then(|v| v.as_str()) != Some("list") {
+                continue;
+            }
             let Some(slug) = m.get("slug").and_then(|v| v.as_str()) else {
                 continue;
             };
@@ -591,15 +535,10 @@ fn parse_codex(
                 upgrade_to,
             };
             let priority = m.get("priority").and_then(|p| p.as_i64()).unwrap_or(999);
-            if hidden {
-                hidden_models.push((priority, info));
-            } else {
-                models.push((priority, info));
-            }
+            models.push((priority, info));
         }
     }
     models.sort_by_key(|(p, _)| *p);
-    hidden_models.sort_by_key(|(p, _)| *p);
     Caps {
         installed: true,
         version: version
@@ -608,14 +547,7 @@ fn parse_codex(
             .trim()
             .to_string(),
         models: models.into_iter().map(|(_, m)| m).collect(),
-        hidden_models: hidden_models.into_iter().map(|(_, m)| m).collect(),
-        client_version: cache
-            .and_then(|v| v.get("client_version"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
         modes,
-        approvals,
         detected: true,
         // Both, for flags and commands only some releases have (`app-server`).
         help: format!("{top_help}\n{exec_help}"),
@@ -712,11 +644,6 @@ pub fn short_version(version: &str) -> String {
             .collect::<Vec<_>>()
             .join(".")
     }
-}
-
-/// Every model the CLI accepts: its menu, then the hidden ones.
-pub fn all_models(caps: &Caps) -> impl Iterator<Item = &ModelInfo> {
-    caps.models.iter().chain(caps.hidden_models.iter())
 }
 
 fn opencode(bin: &str) -> Caps {
@@ -834,7 +761,6 @@ fn controls_for(provider: &str, caps: &Caps, sel: &HashMap<String, String>) -> V
     if !model_choices.is_empty() {
         out.push(Control {
             id: "model",
-            label: "Model".into(),
             choices: with_default(
                 &if caps.default_model.is_empty() {
                     "Default".to_string()
@@ -856,14 +782,8 @@ fn controls_for(provider: &str, caps: &Caps, sel: &HashMap<String, String>) -> V
         _ => caps.efforts.clone(),
     };
     if !efforts.is_empty() {
-        let label = if provider == "codex" {
-            "Reasoning"
-        } else {
-            "Effort"
-        };
         out.push(Control {
             id: "effort",
-            label: label.into(),
             choices: with_default("Default", efforts),
         });
     }
@@ -871,20 +791,13 @@ fn controls_for(provider: &str, caps: &Caps, sel: &HashMap<String, String>) -> V
         if !m.tiers.is_empty() {
             out.push(Control {
                 id: "tier",
-                label: "Speed".into(),
                 choices: with_default("Standard", m.tiers.clone()),
             });
         }
     }
     if !caps.modes.is_empty() {
-        let label = match provider {
-            "codex" => "Sandbox",
-            "opencode" => "Permissions",
-            _ => "Permission",
-        };
         out.push(Control {
             id: "mode",
-            label: label.into(),
             choices: with_default("Default", caps.modes.clone()),
         });
     }
@@ -893,7 +806,6 @@ fn controls_for(provider: &str, caps: &Caps, sel: &HashMap<String, String>) -> V
     if !caps.agents.is_empty() {
         out.push(Control {
             id: "agent",
-            label: "Agent".into(),
             choices: with_default("Default", caps.agents.clone()),
         });
     }
@@ -994,11 +906,6 @@ mod fixture_tests {
             values(&caps.modes),
             ["read-only", "workspace-write", "danger-full-access"]
         );
-        assert_eq!(
-            values(&caps.approvals),
-            ["untrusted", "on-request", "never"]
-        );
-        assert_eq!(caps.approvals[2].desc, "Never ask for user approval");
         let models: Vec<&str> = caps
             .models
             .iter()
@@ -1016,48 +923,6 @@ mod fixture_tests {
 
         let bare = parse_codex("codex-cli 1.0", "", "", None);
         assert!(bare.installed && bare.models.is_empty() && bare.modes.is_empty());
-    }
-
-    #[test]
-    fn codex_cache_keeps_hidden_retiring_and_newer_models() {
-        let cache: serde_json::Value = serde_json::from_str(
-            r#"{"client_version":"0.162.1","models":[
-              {"slug":"gpt-6-sol","priority":1,"visibility":"list","minimal_client_version":"0.160.0"},
-              {"slug":"gpt-5.5","priority":2,"visibility":"list",
-               "upgrade":{"model":"gpt-6.1-sol","migration_markdown":"GPT-5.5 retires on 2026-10-13."}},
-              {"slug":"gpt-5.4","priority":3,"visibility":"list","upgrade":"gpt-5.6-sol","retires_at":"2026-11-01T00:00:00Z"},
-              {"slug":"gpt-6-astra","priority":4,"visibility":"hide"}
-            ]}"#,
-        )
-        .unwrap();
-        let caps = parse_codex("codex-cli 0.147.0", "", "", Some(&cache));
-        assert_eq!(caps.client_version, "0.162.1");
-        assert_eq!(caps.models.len(), 3);
-        assert_eq!(
-            values(
-                &caps
-                    .hidden_models
-                    .iter()
-                    .map(|m| m.choice.clone())
-                    .collect::<Vec<_>>()
-            ),
-            ["gpt-6-astra"]
-        );
-        assert_eq!(all_models(&caps).count(), 4);
-        let note = |i: usize| model_note("codex", &caps.models[i], &caps.version, "2026-10-13");
-        assert_eq!(note(0), "Needs Codex 0.160.0+");
-        assert_eq!(note(1), "Retires today, switch to gpt-6.1-sol");
-        assert_eq!(note(2), "Retires 2026-11-01, switch to gpt-5.6-sol");
-        assert_eq!(
-            model_note("codex", &caps.models[0], "0.162.1", "2026-10-13"),
-            ""
-        );
-        assert_eq!(
-            model_note("codex", &caps.models[1], "0.162.1", "2026-10-14"),
-            "Retired 2026-10-13, switch to gpt-6.1-sol"
-        );
-        assert_eq!(first_date("no date"), None);
-        assert_eq!(short_version("codex-cli 0.162.1\n"), "0.162.1");
     }
 
     #[test]
@@ -1097,19 +962,16 @@ mod fixture_tests {
                 },
             ],
             modes: vec![level("read-only")],
-            approvals: vec![level("never")],
             ..Default::default()
         };
         let ids = |c: &[Control]| c.iter().map(|c| c.id).collect::<Vec<_>>();
         let none = controls_for("codex", &caps, &HashMap::new());
         assert_eq!(ids(&none), ["model", "effort", "mode"]);
-        assert_eq!(none[1].label, "Reasoning");
         assert_eq!(
             values(&none[1].choices),
             ["", "low"],
             "first model's levels, after Default"
         );
-        assert_eq!(none[2].label, "Sandbox");
 
         let sel = HashMap::from([("model".to_string(), "b".to_string())]);
         let b = controls_for("codex", &caps, &sel);
@@ -1175,17 +1037,15 @@ mod tests {
             return;
         }
         println!(
-            "codex {} modes={:?} approvals={:?} models={:?}",
+            "codex {} modes={:?} models={:?}",
             caps.version,
             names(&caps.modes),
-            names(&caps.approvals),
             caps.models
                 .iter()
                 .map(|m| (m.choice.value.as_str(), m.efforts.len(), m.tiers.len()))
                 .collect::<Vec<_>>()
         );
         assert!(caps.modes.iter().any(|m| m.value == "read-only"));
-        assert!(caps.approvals.iter().any(|m| m.value == "never"));
     }
 
     #[test]

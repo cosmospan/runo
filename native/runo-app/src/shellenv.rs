@@ -115,42 +115,6 @@ pub fn login_var(name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-/// The PATH folders and where each came from.
-pub fn folders() -> Vec<(PathBuf, Source)> {
-    FOUND.read().map(|f| f.clone()).unwrap_or_default()
-}
-
-/// Where a folder on the PATH came from, by the tool that uses it.
-pub fn source_of(dir: &Path) -> Option<Source> {
-    folders()
-        .into_iter()
-        .find(|(p, _)| p == dir)
-        .map(|(_, source)| source)
-}
-
-/// A short label for where a program was found: "nvm", "Homebrew", "login shell".
-pub fn found_via(program: &Path) -> Option<String> {
-    let dir = program.parent()?;
-    Some(match source_of(dir)? {
-        Source::Known(tool) => tool.to_string(),
-        Source::Shell => "login shell PATH".into(),
-        Source::Inherited => "PATH".into(),
-    })
-}
-
-/// The version managers and package managers whose folders are on the PATH, in order.
-pub fn managers() -> Vec<&'static str> {
-    let mut out = Vec::new();
-    for (_, source) in folders() {
-        if let Source::Known(tool) = source {
-            if !out.contains(&tool) {
-                out.push(tool);
-            }
-        }
-    }
-    out
-}
-
 fn home() -> PathBuf {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))

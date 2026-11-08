@@ -386,7 +386,7 @@ pub fn ask_full(
             dir.to_string_lossy().into_owned()
         }
     };
-    agent::oneshot("v2-maker".into(), command, &dir, tx);
+    agent::oneshot(command, &dir, tx);
     Ok(rx)
 }
 

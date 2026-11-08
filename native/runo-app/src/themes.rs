@@ -11,7 +11,6 @@ pub struct Palette {
     pub id: &'static str,
     /// The page: the editor background in the source theme.
     pub canvas: u32,
-    pub sidebar: u32,
     /// The deepest layer, under the mode rail.
     pub rail: u32,
     /// A step off the canvas, for the list beside the rail.
@@ -26,7 +25,6 @@ pub struct Palette {
     pub text: u32,
     pub secondary: u32,
     pub muted: u32,
-    pub green: u32,
     pub amber: u32,
     pub red: u32,
     /// The theme's own accent, used while the accent setting is left at its default.
@@ -61,7 +59,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "tokyo-night",
         canvas: 0x1a1b26,
-        sidebar: 0x16161e,
         rail: 0x111118,
         sheet: 0x1f2030,
         subtle: 0x222436,
@@ -72,7 +69,6 @@ const DARK: [Palette; 9] = [
         text: 0xc0caf5,
         secondary: 0xa9b1d6,
         muted: 0x737aa2,
-        green: 0x9ece6a,
         amber: 0xe0af68,
         red: 0xf7768e,
         accent: Some(0x7aa2f7),
@@ -85,7 +81,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "tokyo-night-storm",
         canvas: 0x24283b,
-        sidebar: 0x1f2335,
         rail: 0x1b1e2e,
         sheet: 0x292e42,
         subtle: 0x2b3048,
@@ -96,7 +91,6 @@ const DARK: [Palette; 9] = [
         text: 0xc0caf5,
         secondary: 0xa9b1d6,
         muted: 0x737aa2,
-        green: 0x9ece6a,
         amber: 0xe0af68,
         red: 0xf7768e,
         accent: Some(0x7aa2f7),
@@ -109,7 +103,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "catppuccin-mocha",
         canvas: 0x1e1e2e,
-        sidebar: 0x181825,
         rail: 0x11111b,
         sheet: 0x282839,
         subtle: 0x2b2c3e,
@@ -120,7 +113,6 @@ const DARK: [Palette; 9] = [
         text: 0xcdd6f4,
         secondary: 0xbac2de,
         muted: 0x7f849c,
-        green: 0xa6e3a1,
         amber: 0xf9e2af,
         red: 0xf38ba8,
         accent: Some(0xcba6f7),
@@ -133,7 +125,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "catppuccin-macchiato",
         canvas: 0x24273a,
-        sidebar: 0x1e2030,
         rail: 0x181926,
         sheet: 0x2d3045,
         subtle: 0x303349,
@@ -144,7 +135,6 @@ const DARK: [Palette; 9] = [
         text: 0xcad3f5,
         secondary: 0xb8c0e0,
         muted: 0x8087a2,
-        green: 0xa6da95,
         amber: 0xeed49f,
         red: 0xed8796,
         accent: Some(0xc6a0f6),
@@ -157,7 +147,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "catppuccin-frappe",
         canvas: 0x303446,
-        sidebar: 0x292c3c,
         rail: 0x232634,
         sheet: 0x383c50,
         subtle: 0x3b3f53,
@@ -168,7 +157,6 @@ const DARK: [Palette; 9] = [
         text: 0xc6d0f5,
         secondary: 0xb5bfe2,
         muted: 0x838ba7,
-        green: 0xa6d189,
         amber: 0xe5c890,
         red: 0xe78284,
         accent: Some(0xca9ee6),
@@ -181,7 +169,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "ayu-dark",
         canvas: 0x0d1017,
-        sidebar: 0x0b0e14,
         rail: 0x080a0f,
         sheet: 0x131721,
         subtle: 0x141922,
@@ -192,7 +179,6 @@ const DARK: [Palette; 9] = [
         text: 0xbfbdb6,
         secondary: 0xa6a49d,
         muted: 0x6c7380,
-        green: 0xaad94c,
         amber: 0xffb454,
         red: 0xf07178,
         accent: Some(0xe6b450),
@@ -205,7 +191,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "ayu-mirage",
         canvas: 0x242936,
-        sidebar: 0x1f2430,
         rail: 0x1a1f29,
         sheet: 0x2a2f3c,
         subtle: 0x2c3240,
@@ -216,7 +201,6 @@ const DARK: [Palette; 9] = [
         text: 0xcccac2,
         secondary: 0xb3b1aa,
         muted: 0x707a8c,
-        green: 0xd5ff80,
         amber: 0xffd173,
         red: 0xf28779,
         accent: Some(0xffcc66),
@@ -229,7 +213,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "night-owl",
         canvas: 0x011627,
-        sidebar: 0x01111d,
         rail: 0x010d17,
         sheet: 0x0b2236,
         subtle: 0x0b2942,
@@ -240,7 +223,6 @@ const DARK: [Palette; 9] = [
         text: 0xd6deeb,
         secondary: 0x9fb4c7,
         muted: 0x5f7e97,
-        green: 0xc5e478,
         amber: 0xffcb8b,
         red: 0xef5350,
         accent: Some(0x82aaff),
@@ -253,7 +235,6 @@ const DARK: [Palette; 9] = [
     Palette {
         id: "one-dark",
         canvas: 0x282c34,
-        sidebar: 0x21252b,
         rail: 0x1b1d23,
         sheet: 0x30353f,
         subtle: 0x323842,
@@ -264,7 +245,6 @@ const DARK: [Palette; 9] = [
         text: 0xdcdfe4,
         secondary: 0xabb2bf,
         muted: 0x7f848e,
-        green: 0x98c379,
         amber: 0xe5c07b,
         red: 0xe06c75,
         accent: None,
@@ -280,7 +260,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "runo",
         canvas: 0xffffff,
-        sidebar: 0xf7f7f8,
         rail: 0xe4e4e8,
         sheet: 0xf4f4f6,
         subtle: 0xf1f1f3,
@@ -291,7 +270,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x18181b,
         secondary: 0x55555e,
         muted: 0x8a8a94,
-        green: 0x16a34a,
         amber: 0xf0a020,
         red: 0xdc2626,
         accent: None,
@@ -304,7 +282,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "catppuccin-latte",
         canvas: 0xeff1f5,
-        sidebar: 0xe6e9ef,
         rail: 0xdce0e8,
         sheet: 0xe9ecf2,
         subtle: 0xe6e9ef,
@@ -315,7 +292,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x4c4f69,
         secondary: 0x5c5f77,
         muted: 0x8c8fa1,
-        green: 0x40a02b,
         amber: 0xdf8e1d,
         red: 0xd20f39,
         accent: Some(0x8839ef),
@@ -328,7 +304,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "tokyo-night-day",
         canvas: 0xe1e2e7,
-        sidebar: 0xd0d5e3,
         rail: 0xc1c9df,
         sheet: 0xd8dbe5,
         subtle: 0xd5d8e3,
@@ -339,7 +314,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x3760bf,
         secondary: 0x6172b0,
         muted: 0x848cb5,
-        green: 0x587539,
         amber: 0x8c6c3e,
         red: 0xf52a65,
         accent: Some(0x2e7de9),
@@ -352,7 +326,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "ayu-light",
         canvas: 0xfcfcfc,
-        sidebar: 0xf3f4f5,
         rail: 0xe7eaed,
         sheet: 0xf6f7f8,
         subtle: 0xf3f4f5,
@@ -363,7 +336,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x5c6166,
         secondary: 0x6c7680,
         muted: 0x8a9199,
-        green: 0x86b300,
         amber: 0xf2ae49,
         red: 0xf07171,
         accent: Some(0xfa8d3e),
@@ -376,7 +348,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "light-owl",
         canvas: 0xfbfbfb,
-        sidebar: 0xf0f0f0,
         rail: 0xe4e4e4,
         sheet: 0xf4f4f4,
         subtle: 0xf0f0f0,
@@ -387,7 +358,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x403f53,
         secondary: 0x5f5e72,
         muted: 0x90a7b2,
-        green: 0x08916a,
         amber: 0xdaaa01,
         red: 0xde3d3b,
         accent: Some(0x4876d6),
@@ -400,7 +370,6 @@ const LIGHT: [Palette; 6] = [
     Palette {
         id: "one-light",
         canvas: 0xfafafa,
-        sidebar: 0xf0f0f1,
         rail: 0xe5e5e6,
         sheet: 0xf3f3f4,
         subtle: 0xf0f0f1,
@@ -411,7 +380,6 @@ const LIGHT: [Palette; 6] = [
         text: 0x383a42,
         secondary: 0x696c77,
         muted: 0xa0a1a7,
-        green: 0x50a14f,
         amber: 0xc18401,
         red: 0xe45649,
         accent: Some(0x4078f2),
@@ -425,7 +393,6 @@ const LIGHT: [Palette; 6] = [
 
 pub struct Theme {
     pub id: &'static str,
-    pub name: &'static str,
     /// Palette ids in `LIGHT` and `DARK`. A theme without its own light version borrows
     /// its family's.
     light: &'static str,
@@ -436,61 +403,51 @@ pub struct Theme {
 pub const THEMES: [Theme; 10] = [
     Theme {
         id: "runo",
-        name: "Runo (default)",
         light: "runo",
         dark: "tokyo-night",
     },
     Theme {
         id: "tokyo-night",
-        name: "Tokyo Night",
         light: "tokyo-night-day",
         dark: "tokyo-night",
     },
     Theme {
         id: "tokyo-night-storm",
-        name: "Tokyo Night Storm",
         light: "tokyo-night-day",
         dark: "tokyo-night-storm",
     },
     Theme {
         id: "catppuccin",
-        name: "Catppuccin (Latte, Mocha)",
         light: "catppuccin-latte",
         dark: "catppuccin-mocha",
     },
     Theme {
         id: "catppuccin-macchiato",
-        name: "Catppuccin Macchiato",
         light: "catppuccin-latte",
         dark: "catppuccin-macchiato",
     },
     Theme {
         id: "catppuccin-frappe",
-        name: "Catppuccin Frappé",
         light: "catppuccin-latte",
         dark: "catppuccin-frappe",
     },
     Theme {
         id: "ayu",
-        name: "Ayu",
         light: "ayu-light",
         dark: "ayu-dark",
     },
     Theme {
         id: "ayu-mirage",
-        name: "Ayu Mirage",
         light: "ayu-light",
         dark: "ayu-mirage",
     },
     Theme {
         id: "night-owl",
-        name: "Night Owl",
         light: "light-owl",
         dark: "night-owl",
     },
     Theme {
         id: "one",
-        name: "One (Light, Dark)",
         light: "one-light",
         dark: "one-dark",
     },

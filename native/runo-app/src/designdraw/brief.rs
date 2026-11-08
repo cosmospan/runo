@@ -485,34 +485,6 @@ mod tests {
     }
 
     #[test]
-    fn a_selection_and_its_picture_are_described() {
-        let c = Canvas {
-            screens: vec![("Inbox", "inbox", Device::Phone)],
-            selected: Some(("Inbox", "inbox")),
-            element: Some("button \"Send\" at `body > :nth-child(2)`".into()),
-            picture: Some("/tmp/inbox.png".into()),
-            components: COMPONENTS_CSS,
-            tokens: "",
-            ..Default::default()
-        };
-        let text = context(&c);
-        assert!(text.contains("- Inbox (design/screens/inbox.html, phone)"));
-        assert!(text.contains("the element button \"Send\""));
-        assert!(text.contains("Change only that element"));
-        assert!(text.contains("attached (/tmp/inbox.png)"));
-        // Parts are split on blank lines, so a later ask repeats only what changed.
-        let rest = context(&Canvas {
-            selected: None,
-            element: None,
-            picture: None,
-            ..c
-        });
-        let lean = crate::shell::lean_context(&text, &rest);
-        assert!(lean.contains("Nothing is selected"));
-        assert!(!lean.contains("How to design well"));
-    }
-
-    #[test]
     fn ai_keeps_what_design_keeps() {
         let text = context(&Canvas {
             library: vec![(

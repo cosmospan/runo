@@ -845,21 +845,6 @@ pub(crate) fn answers(host: &str, port: u16) -> bool {
     addrs.any(|a| TcpStream::connect_timeout(&a, std::time::Duration::from_millis(250)).is_ok())
 }
 
-/// Fill in `running` for the databases on this machine.
-pub(crate) fn probe(found: &mut [Found]) {
-    for f in found.iter_mut() {
-        if f.kind == Kind::Sqlite {
-            f.running = Some(Path::new(&f.target).is_file());
-            continue;
-        }
-        let (host, port, _) = url_parts(&f.target);
-        if local_host(&host) {
-            let port = port.or(default_port(f.kind)).unwrap_or(0);
-            f.running = Some(answers("127.0.0.1", port));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
