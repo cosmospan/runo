@@ -17,12 +17,12 @@ path = "src/main.rs"
 name = "Squad Code"
 identifier = "dev.squadcode.app"
 icon = [
-    "assets/icon/png/runo-32.png",
-    "assets/icon/png/runo-128.png",
-    "assets/icon/png/runo-256.png",
-    "assets/icon/png/runo-512.png",
-    "assets/icon/png/runo-1024.png",
-    "assets/icon/runo.icns",
+    "assets/icon/png/squadcode-32.png",
+    "assets/icon/png/squadcode-128.png",
+    "assets/icon/png/squadcode-256.png",
+    "assets/icon/png/squadcode-512.png",
+    "assets/icon/png/squadcode-1024.png",
+    "assets/icon/squadcode.icns",
 ]
 category = "public.app-category.developer-tools"
 short_description = "A crew of coding bots that work on your code"

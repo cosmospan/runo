@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Squad Code
+GenericName=Coding agent workspace
+Comment=A crew of coding bots that work on your code
+Exec=SquadCode %U
+Icon=squadcode
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=squadcode

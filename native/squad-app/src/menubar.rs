@@ -215,8 +215,8 @@ mod mac {
 
     pub(super) const SUPPORTED: bool = true;
 
-    static GLYPH: &[u8] = include_bytes!("../assets/icon/menubar/runo-menubar.png");
-    static GLYPH_DOT: &[u8] = include_bytes!("../assets/icon/menubar/runo-menubar-dot.png");
+    static GLYPH: &[u8] = include_bytes!("../assets/icon/menubar/squadcode-menubar.png");
+    static GLYPH_DOT: &[u8] = include_bytes!("../assets/icon/menubar/squadcode-menubar-dot.png");
 
     struct Bar {
         item: Retained<NSStatusItem>,

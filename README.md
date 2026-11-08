@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="native/squad-app/assets/icon/png/runo-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
+<img src="native/squad-app/assets/icon/png/squadcode-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
 
 <h1>Squad Code</h1>
 
@@ -368,7 +368,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up,
 <br />
 
 <div align="center">
-<img src="native/squad-app/assets/icon/png/runo-256.png" width="40" alt="" />
+<img src="native/squad-app/assets/icon/png/squadcode-256.png" width="40" alt="" />
 <br />
 <sub>Built in Rust for people who'd rather hand out the jobs than juggle the agents.</sub>
 </div>

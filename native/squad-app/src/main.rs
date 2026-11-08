@@ -177,7 +177,7 @@ fn app_icon() -> std::sync::Arc<Image> {
     ICON.get_or_init(|| {
         std::sync::Arc::new(Image::from_bytes(
             ImageFormat::Png,
-            include_bytes!("../assets/icon/png/runo-128.png").to_vec(),
+            include_bytes!("../assets/icon/png/squadcode-128.png").to_vec(),
         ))
     })
     .clone()
@@ -238,7 +238,7 @@ fn set_dock_icon() {
     }
     #[link(name = "AppKit", kind = "framework")]
     unsafe extern "C" {}
-    static PNG: &[u8] = include_bytes!("../assets/icon/png/runo-512.png");
+    static PNG: &[u8] = include_bytes!("../assets/icon/png/squadcode-512.png");
     unsafe {
         let send0: unsafe extern "C" fn(Id, Id) -> Id =
             std::mem::transmute(objc_msgSend as *const ());
