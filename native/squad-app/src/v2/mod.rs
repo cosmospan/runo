@@ -3340,6 +3340,13 @@ impl Shell {
         let now = self.now();
         let (shown, was, since) = self.moods.entry(slot).or_insert((state, state, -1.0));
         if *shown != state {
+            // Two faces drawn at one size share this slot. When the other one
+            // just took it from this mood, leave it be: swapping back each
+            // frame restarts the cross-fade, and the face flickers between
+            // two bots drawn over each other.
+            if *since >= 0.0 && now - *since < 0.5 && *was == state {
+                return pose;
+            }
             *was = *shown;
             *shown = state;
             *since = now;
