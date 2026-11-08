@@ -73,9 +73,31 @@ pub fn classify(s: &str) -> Option<Act> {
     if COMMANDS.contains(&first) && s.contains(' ') {
         return Some(Act::Run(s.to_string()));
     }
+    // A path on this computer. A bare "/hello/Anish" is more often a web
+    // route than a file, so an absolute path needs a real root or a file
+    // extension to count.
+    let real_root = [
+        "/Users/",
+        "/home/",
+        "/tmp/",
+        "/var/",
+        "/etc/",
+        "/opt/",
+        "/private/",
+        "/Volumes/",
+    ]
+    .iter()
+    .any(|r| s.starts_with(r));
+    let has_ext = s
+        .rsplit('/')
+        .next()
+        .and_then(|name| name.rsplit_once('.'))
+        .is_some_and(|(stem, ext)| !stem.is_empty() && (1..=5).contains(&ext.len()));
     if !s.contains(' ')
-        && (s.starts_with('/') || s.starts_with("~/") || s.starts_with("./"))
         && s.len() > 2
+        && (s.starts_with("~/")
+            || s.starts_with("./")
+            || (s.starts_with('/') && (real_root || has_ext)))
     {
         return Some(Act::File(s.to_string()));
     }
@@ -216,7 +238,7 @@ impl Shell {
             let ranges: Vec<Range<usize>> = p.acts.iter().map(|(r, _)| r.clone()).collect();
             let acts: Vec<Act> = p.acts.iter().map(|(_, a)| a.clone()).collect();
             for a in &acts {
-                if !all.contains(a) {
+                if !all.iter().any(|b| same(a, b, dir)) {
                     all.push(a.clone());
                 }
             }
@@ -289,19 +311,7 @@ impl Shell {
                 }
             }
             Act::File(p) => {
-                let path = if p.starts_with('/') {
-                    p.clone()
-                } else if let Some(rest) = p.strip_prefix("~/") {
-                    std::env::var("HOME")
-                        .map(|h| format!("{h}/{rest}"))
-                        .unwrap_or_else(|_| p.clone())
-                } else {
-                    format!(
-                        "{}/{}",
-                        dir.trim_end_matches('/'),
-                        p.trim_start_matches("./")
-                    )
-                };
+                let path = file_path(p, dir);
                 if std::path::Path::new(&path).exists() {
                     cx.open_url(&format!("file://{path}"));
                 } else {
@@ -310,6 +320,33 @@ impl Shell {
             }
         }
         cx.notify();
+    }
+}
+
+/// Where a file a message names is: as written when absolute, under the
+/// home folder for `~/`, else in `dir`.
+fn file_path(p: &str, dir: &str) -> String {
+    if p.starts_with('/') {
+        p.to_string()
+    } else if let Some(rest) = p.strip_prefix("~/") {
+        std::env::var("HOME")
+            .map(|h| format!("{h}/{rest}"))
+            .unwrap_or_else(|_| p.to_string())
+    } else {
+        format!(
+            "{}/{}",
+            dir.trim_end_matches('/'),
+            p.trim_start_matches("./")
+        )
+    }
+}
+
+/// Whether two things to do are the same: a file named twice, once by its
+/// name and once by its whole path, is one file.
+fn same(a: &Act, b: &Act, dir: &str) -> bool {
+    match (a, b) {
+        (Act::File(x), Act::File(y)) => file_path(x, dir) == file_path(y, dir),
+        _ => a == b,
     }
 }
 
@@ -325,7 +362,29 @@ fn shell_quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, parse, Act};
+    use super::{classify, parse, same, Act};
+
+    #[test]
+    fn a_file_named_twice_is_one_file() {
+        let dir = "/Users/a/dev/sandbox";
+        let short = Act::File("index.html".into());
+        let long = Act::File("/Users/a/dev/sandbox/index.html".into());
+        assert!(same(&short, &long, dir));
+        assert!(same(&Act::File("./index.html".into()), &long, dir));
+        assert!(!same(&Act::File("other/index.html".into()), &long, dir));
+    }
+
+    #[test]
+    fn a_web_route_is_not_a_file() {
+        assert!(classify("/hello/Anish").is_none());
+        assert!(classify("/api/users").is_none());
+        assert!(matches!(
+            classify("/Users/anish/dev/test/server.js"),
+            Some(Act::File(_))
+        ));
+        assert!(matches!(classify("./server.js"), Some(Act::File(_))));
+        assert!(matches!(classify("/src/app.ts"), Some(Act::File(_))));
+    }
 
     #[test]
     fn a_message_turns_into_things_to_do() {
