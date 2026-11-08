@@ -19,6 +19,7 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod gitcards;
 mod goal;
 mod history;
 mod home;
@@ -26,6 +27,7 @@ mod jobs;
 mod live;
 mod machine;
 mod mascot;
+mod motion;
 mod myserver;
 mod palette;
 mod prefs;
@@ -52,6 +54,7 @@ mod trouble;
 mod ui;
 mod usage;
 mod wallpaper;
+mod webpage;
 mod welcome;
 mod work;
 
@@ -93,6 +96,8 @@ pub enum Place {
     Server,
     /// Your server's screen, live.
     Screen,
+    /// A job's own browser, live, by the job's id.
+    Browser(u64),
     /// The first-run walkthrough.
     Welcome,
 }
@@ -431,11 +436,23 @@ pub struct Shell {
     chat_len: usize,
     thread_scroll: ScrollHandle,
     thread_key: u64,
+    /// Who spoke last in the chat being drawn, and when: a run of messages
+    /// from one author shows their face and name once.
+    streak: Option<(String, u64)>,
     /// The Fin in the "make your own" playground on Crew: its colour and outfit.
     maker: (runo_holo::Tint, runo_holo::fin::Outfit),
     /// Which jobs History shows: 0 all, 1 running, 2 done, 3 problems.
     history_filter: usize,
     folder_menu: bool,
+    /// The sidebar shows only its icon rail.
+    side_slim: bool,
+    /// The thread on screen and when you last looked at it before opening it,
+    /// for the feed's New line.
+    new_mark: (String, u64, u64),
+    /// A job's own conversation, open beside its thread like a reply pane.
+    reply_open: Option<u64>,
+    /// The sidebar's sections folded open or shut, by name; unset, open.
+    side_folds: HashMap<String, bool>,
     toast: Option<(SharedString, Instant)>,
     /// Motion is on (Settings → Animations); off, the crew holds still.
     motion: bool,
@@ -469,6 +486,8 @@ pub struct Shell {
     maker_skills: Entity<InputState>,
     maker_rules: Entity<TextareaState>,
     maker_like: Option<Member>,
+    /// The bot being made is tied to one project, not every project.
+    maker_here: bool,
     /// What the bot is for, in the person's words: the engine drafts from it.
     maker_about: Entity<TextareaState>,
     /// Its instructions, memory (one a line) and what it reads first.
@@ -507,8 +526,13 @@ pub struct Shell {
     /// Which jobs the list beside a job shows: all, needing you, running or done.
     /// The Jobs panel shows the thread you're in (false) or every job (true).
     list_all: bool,
+    /// The Jobs panel shows its Git side: branches, the folder's state, watch-outs.
+    list_git: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
+    /// On a job's page the one right sidebar shows that job's details (true)
+    /// or the Jobs panel (false). Opening a job from elsewhere starts on details.
+    side_job: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
     /// A bot with a chat or know-how of its own, waiting for you to confirm
@@ -524,6 +548,11 @@ pub struct Shell {
     reading: Option<Reading>,
     /// When Peek's engine started reading it.
     reading_since: Option<std::time::Instant>,
+    /// The bot the message being read named with @: it answers or does the
+    /// work, whichever Peek decides.
+    reading_for: Option<Member>,
+    /// While Peek's decision is acted on: the bot named with @, who answers.
+    answer_by: Option<Member>,
     /// Terminals running an app Squad Code started for the person.
     serving: Vec<u64>,
     /// When Peek's engine was last made sure of being warm.
@@ -626,6 +655,8 @@ pub struct Shell {
     screen_retired: Vec<Arc<RenderImage>>,
     screen_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
     screen_focus: FocusHandle,
+    /// A job's browser, watched in Squad.
+    web: webpage::Web,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -737,7 +768,7 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) => 2,
+        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
@@ -882,7 +913,8 @@ impl Shell {
             SliderEvent::Change(v) => (v.end().round().clamp(0., 100.) as u8, false),
             SliderEvent::Release(v) => (v.end().round().clamp(0., 100.) as u8, true),
         };
-        let subs = vec![
+        let (web, web_sub) = webpage::Web::new(window, cx);
+        let mut subs = vec![
             // The background image's dim and show-through preview as you drag; its
             // blur needs a new copy made, so that waits until you let go.
             cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
@@ -999,7 +1031,13 @@ impl Shell {
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
-                    if let (false, Place::Live(id)) = (text.is_empty(), this.place) {
+                    // The job on its own page, or open beside its thread.
+                    let job = match this.place {
+                        Place::Live(id) => Some(id),
+                        Place::Today => this.reply_open,
+                        _ => None,
+                    };
+                    if let (false, Some(id)) = (text.is_empty(), job) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
                         // To a finished job, Peek's engine reads it first:
                         // "run the app" runs it, "stop" stops it, and the
@@ -1108,7 +1146,7 @@ impl Shell {
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
-            Ok("review") => store
+            Ok("review" | "review-jobs") => store
                 .jobs
                 .iter()
                 .find(|j| j.status == Status::Review && j.race == 0)
@@ -1137,8 +1175,12 @@ impl Shell {
             scale: 1.0,
             mode: Mode::Build,
             crew: {
+                let demo = store.demo;
                 let mut rt = runtime::Runtime::new(store);
                 rt.link = remote::load().map(remote::Link::start);
+                if demo {
+                    rt.repos = demo::repos();
+                }
                 rt
             },
             composer,
@@ -1152,9 +1194,14 @@ impl Shell {
             chat_len: 0,
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
+            streak: None,
             maker: (runo_holo::Tint::VIOLET, runo_holo::fin::ROLES[6].outfit),
             history_filter: 0,
             folder_menu: false,
+            side_slim: false,
+            new_mark: (String::new(), 0, 0),
+            reply_open: None,
+            side_folds: HashMap::new(),
             toast: None,
             entered: Instant::now(),
             motion: true,
@@ -1178,13 +1225,17 @@ impl Shell {
             inbox_pick: None,
             list_filter: 0,
             list_all: false,
+            list_git: false,
             jobs_open: false,
+            side_job: true,
             deleting: None,
             removing: None,
             raw_open: Default::default(),
             confirming: None,
             reading: None,
             reading_since: None,
+            reading_for: None,
+            answer_by: None,
             serving: Vec::new(),
             warmed_at: None,
             run_wanted: None,
@@ -1198,6 +1249,7 @@ impl Shell {
             maker_skills,
             maker_rules,
             maker_like: None,
+            maker_here: false,
             maker_about,
             maker_instr,
             maker_memory,
@@ -1255,6 +1307,7 @@ impl Shell {
             screen_retired: Vec::new(),
             screen_bounds: Default::default(),
             screen_focus: cx.focus_handle(),
+            web,
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -1283,7 +1336,10 @@ impl Shell {
             bg_blur_slider,
             bg_dim_slider,
             bg_show_slider,
-            _subs: subs,
+            _subs: {
+                subs.push(web_sub);
+                subs
+            },
             _pump: pump,
         };
         // The maker, for looking at it: empty, with a draft, or a bot's setup.
@@ -1292,6 +1348,23 @@ impl Shell {
             Ok("maker-review") => {
                 shell.open_maker(Some(builder::SAMPLE), None, window, cx);
                 shell.start_blank(window, cx);
+            }
+            // The Jobs panel open on its Git side.
+            Ok("git") => {
+                shell.jobs_open = true;
+                shell.list_git = true;
+            }
+            // A job open with the sidebar on its Jobs list.
+            Ok("review-jobs") => {
+                shell.jobs_open = true;
+                shell.side_job = false;
+            }
+            // A job's browser, on RUNO_V2_URL when it's set.
+            Ok("browser") => {
+                if let Some(id) = shell.crew.store.jobs.last().map(|j| j.id) {
+                    let url = std::env::var("RUNO_V2_URL").ok();
+                    shell.open_job_browser(id, url, cx);
+                }
             }
             Ok("setup") => {
                 let who = Member::all()
@@ -1349,6 +1422,11 @@ impl Shell {
                 };
                 self.nav_to = to;
                 self.nav_at = Instant::now();
+            }
+            // Coming to a job from elsewhere: the sidebar starts on its details.
+            // Moving between jobs keeps whichever side you were looking at.
+            if matches!(place, Place::Live(_)) && !matches!(self.place, Place::Live(_)) {
+                self.side_job = true;
             }
             self.place = place;
             if let Place::Settings(pane) = place {
@@ -1506,6 +1584,19 @@ impl Shell {
         let Some((who, rest)) = mention else {
             return self.read_first(text, cx);
         };
+        // Stepping into the bots' talk: "@Builder ..." carries on Builder's
+        // job there, on its branch, rather than starting over.
+        if self.place == Place::Today && !rest.trim().is_empty() {
+            let here = self.crew.store.thread_here();
+            let folder = self.crew.store.folder().map(|f| f.path.clone());
+            if let Some(id) = folder.and_then(|f| self.crew.talking_job(&f, here, who)) {
+                let st = Self::app_settings(cx);
+                self.crew.step_in(&st, id, rest);
+                self.crew.store.save();
+                cx.notify();
+                return;
+            }
+        }
         if self.place == Place::Today {
             let here = self.crew.store.thread_here();
             if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == here) {
@@ -1513,6 +1604,18 @@ impl Shell {
                     t.bots.push(who);
                 }
             }
+        }
+        // In a thread Peek still reads it, so "@Pixel who are you" gets an
+        // answer from Pixel, and only real work becomes Pixel's job.
+        if self.place == Place::Today
+            && !rest.starts_with('/')
+            && !rest.trim().is_empty()
+            && !self.sampling
+            && self.crew.store.folder().is_some()
+            && self.reading.is_none()
+        {
+            self.crew.store.save();
+            return self.peek_reads(rest, Some(who), cx);
         }
         let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
         self.target = Some(who);
@@ -1538,6 +1641,12 @@ impl Shell {
         if skip {
             return self.hand_over_inner(text, cx);
         }
+        self.peek_reads(text, None, cx)
+    }
+
+    /// Peek's engine reads `text`; `pinned` is the bot it was addressed to
+    /// with @, if any.
+    fn peek_reads(&mut self, text: String, pinned: Option<Member>, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);
         let folder = self
             .crew
@@ -1565,6 +1674,7 @@ impl Shell {
         if self.sampling {
             return self.hand_over_inner(text, cx);
         }
+        self.reading_for = pinned;
         {
             let project = self
                 .crew
@@ -1600,8 +1710,30 @@ impl Shell {
                     self.reading_since = Some(std::time::Instant::now());
                     cx.notify();
                 }
-                Err(why) => self.engine_missed(&st, text, &why, None, cx),
+                Err(why) => self.read_missed(&st, text, &why, None, cx),
             }
+        }
+    }
+
+    /// Peek's engine couldn't read `text`. Addressed to a bot with @, the bot
+    /// answers it, read-only; else Peek says so and offers to try again.
+    fn read_missed(
+        &mut self,
+        st: &crate::settings::AppSettings,
+        text: String,
+        why: &str,
+        pending: Option<u64>,
+        cx: &mut Context<Self>,
+    ) {
+        match self.reading_for.take() {
+            Some(who) => {
+                if let Some(id) = pending {
+                    self.crew.store.talks.retain(|t| t.id != id);
+                }
+                self.crew.ask_in_thread(st, who, text);
+                cx.notify();
+            }
+            None => self.engine_missed(st, text, why, pending, cx),
         }
     }
 
@@ -1796,6 +1928,12 @@ impl Shell {
         match decided {
             Some((f, say)) => {
                 let via = format!("{} \u{b7} {took:.1}s", brain::think::engine_name(&st));
+                let pinned = self.reading_for.take();
+                let f = match pinned {
+                    Some(who) => brain::front::pinned(f, who, &text),
+                    None => f,
+                };
+                self.answer_by = pinned;
                 self.act_on(
                     f,
                     text,
@@ -1804,13 +1942,14 @@ impl Shell {
                     Some(via),
                     cx,
                 );
+                self.answer_by = None;
             }
             None => {
                 let why = match (failed, err) {
                     (true, Some(e)) => e,
                     _ => "its answer didn't make sense".to_string(),
                 };
-                self.engine_missed(&st, text, &why, Some(talk), cx);
+                self.read_missed(&st, text, &why, Some(talk), cx);
             }
         }
     }
@@ -1861,7 +2000,7 @@ impl Shell {
             brain::front::Front::Answer { question, .. } => {
                 drop_pending(self);
                 if !self.sample_guard(cx) {
-                    let who = self.ask_who();
+                    let who = self.answer_by.unwrap_or_else(|| self.ask_who());
                     self.crew.ask_in_thread(&st, who, question);
                 }
                 cx.notify();
@@ -2486,6 +2625,22 @@ impl Shell {
         cx.notify();
     }
 
+    /// Approves a job the seatbelt held, as it is.
+    pub(super) fn approve_anyway(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
+        self.crew.approve_anyway(id);
+        cx.notify();
+    }
+
+    /// Hands what the seatbelt found back to the job's bot to take out.
+    pub(super) fn take_out(&mut self, id: u64, cx: &mut Context<Self>) {
+        let st = Self::app_settings(cx);
+        self.crew.take_out(&st, id);
+        cx.notify();
+    }
+
     fn start_job_in(
         &mut self,
         bot: Member,
@@ -2750,6 +2905,7 @@ impl Shell {
         };
         self.poll_server_setup(cx);
         self.poll_machine(cx);
+        self.poll_web(cx);
         let finished = self.crew.poll(&st, viewing);
         self.poll_reading(cx);
         self.poll_follow_reading(cx);
@@ -2796,31 +2952,61 @@ impl Shell {
         if self.crew.store.busy(who).is_some() {
             return Mood::Working;
         }
-        if self
-            .crew
-            .store
+        // The face follows the bot's latest update: its last finished job or
+        // its last answer, whichever came later.
+        let store = &self.crew.store;
+        let job = store
             .jobs
             .iter()
-            .any(|j| j.bot == who && j.needs_you())
-        {
-            return Mood::NeedsYou;
-        }
-        let recent = self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .rev()
-            .find(|j| j.bot == who && j.ended.is_some());
-        if let Some(j) = recent {
-            let fresh = store::now().saturating_sub(j.ended.unwrap_or(0)) < 8;
-            match j.status {
-                Status::Done if fresh => return Mood::Done,
-                Status::Failed if !j.seen => return Mood::NeedsYou,
-                _ => {}
+            .filter(|j| j.bot == who && j.ended.is_some())
+            .max_by_key(|j| j.ended);
+        let said = store
+            .chat(who)
+            .into_iter()
+            .filter(|m| !m.mine && !m.note)
+            .map(|m| (m.at, m.text))
+            .chain(store.talks.iter().filter(|t| t.bot == who).filter_map(|t| {
+                t.answer
+                    .as_ref()
+                    .filter(|a| !a.note)
+                    .map(|a| (t.at, a.text.clone()))
+            }))
+            .max_by_key(|(at, _)| *at);
+        let job_at = job.and_then(|j| j.ended).unwrap_or(0);
+        let fresh = |at: u64| store::now().saturating_sub(at) < 30 * 60;
+        match (job, said) {
+            (_, Some((at, text))) if at > job_at => {
+                let mood = text_mood(&text);
+                if fresh(at) {
+                    mood
+                } else {
+                    Mood::Signature
+                }
             }
+            (Some(j), _) => {
+                let mood = job_mood(j);
+                // What waits on you holds its face; good news fades.
+                if j.needs_you() || fresh(job_at) {
+                    mood
+                } else {
+                    Mood::Signature
+                }
+            }
+            _ => Mood::Signature,
         }
-        Mood::Signature
+    }
+
+    /// A bot's face drawn still, in `mood`, for a message.
+    fn face(&mut self, who: Member, mood: Mood, size: f32) -> Img {
+        let image = self.holos.image(
+            mascot::figure(who, mood),
+            size,
+            Framing::Bust,
+            2.0,
+            self.scale,
+            false,
+        );
+        img(image).size(px(size)).flex_none()
     }
 
     /// One word for what a bot is doing, and its colour.
@@ -3002,6 +3188,7 @@ impl Render for Shell {
         }
         self.poll(cx);
         self.poll_maker(window, cx);
+        data::set_here(self.crew.store.folder().map_or("", |f| f.path.as_str()));
         if self.applied_theme != look() {
             self.applied_theme = look();
             apply_theme(window, cx);
@@ -3025,6 +3212,7 @@ impl Render for Shell {
             || self.inbox_at.elapsed() < Duration::from_millis(700)
             || self.chat_at.elapsed() < Duration::from_millis(500)
             || self.nav_at.elapsed() < Duration::from_millis(600)
+            || motion::settling()
             || (self.hovered.is_some() && self.hover_at.elapsed() < Duration::from_millis(400))
             || self
                 .toast
@@ -3075,7 +3263,7 @@ impl Render for Shell {
             && !self.palette
             // The server's page and its screen keep reading the server: their
             // news only shows on a redraw, so they keep the app awake.
-            && !matches!(self.place, Place::Server | Place::Screen)
+            && !matches!(self.place, Place::Server | Place::Screen | Place::Browser(_))
             && self
                 .toast
                 .as_ref()
@@ -3083,7 +3271,10 @@ impl Render for Shell {
         self.dozing
             .store(doze, std::sync::atomic::Ordering::Relaxed);
         self.holos.begin(window, cx);
-        self.motion = cx.global::<crate::settings::AppSettings>().animations;
+        // Settings → Animations, and Reduce motion in macOS, both calm everything.
+        self.motion =
+            cx.global::<crate::settings::AppSettings>().animations && !crate::motion::calm(cx);
+        motion::begin(self.motion);
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
             Place::Today => self.channel(cx),
@@ -3101,10 +3292,11 @@ impl Render for Shell {
             Place::Usage => self.usage(cx),
             Place::Server => self.server_page(cx),
             Place::Screen => self.screen_page(window, cx),
+            Place::Browser(_) => self.web_page(window, cx),
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
-        let k = runo_holo::anim::spring(self.entered.elapsed().as_secs_f64(), 0.32) as f32;
+        let k = motion::ease(self.entered, motion::GENTLE, 0.0);
         let body = div()
             .size_full()
             .opacity(0.35 + 0.65 * k)
@@ -3120,7 +3312,7 @@ impl Render for Shell {
             .clone()
             .filter(|(_, at)| at.elapsed() < Duration::from_millis(3500));
         let toast_el = toast.map(|(text, at)| {
-            let k = (at.elapsed().as_secs_f32() / 0.25).min(1.0);
+            let k = motion::ease(at, motion::BASE, 0.0);
             let fade = ((3.5 - at.elapsed().as_secs_f32()) / 0.4).clamp(0.0, 1.0);
             div()
                 .absolute()
@@ -3279,17 +3471,33 @@ impl Render for Shell {
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.
             .when(self.usage_open && !setup, |d| {
-                d.child(self.usage_popover(cx))
+                // Positioned after the motion: it makes what it moves
+                // relative, and this has to stay over the window.
+                d.child(
+                    motion::panel(
+                        div().inset_0().child(self.usage_popover(cx)),
+                        motion::key("usage-popover"),
+                        0.,
+                        6.,
+                    )
+                    .absolute(),
+                )
             })
             .when(self.palette, |d| d.child(self.palette_view(cx)))
-            .children(self.delete_dialog(cx))
-            .children(self.remove_dialog(cx))
+            .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
+            .children(self.remove_dialog(cx).map(|d| dialog(d, "remove")))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
                     .absolute()
                     .size_0(),
             );
+        // Anything that started easing while the page was built (a hover, a
+        // panel coming in) gets its next frame straight away.
+        if motion::settling() {
+            window.request_animation_frame();
+        }
+        motion::end();
         crate::framestats::rendered();
         // A stand-in desktop under a see-through window, for screenshots taken where
         // the window can't really be see-through (Xvfb): RUNO_BACKDROP names an image.
@@ -3526,4 +3734,90 @@ fn mentioned(text: &str) -> Option<(Member, String)> {
         }
     }
     found.map(|m| (m, rest.join(" ")))
+}
+
+/// The face for a job's latest news: busy while it runs, pleased when it
+/// finished well, concerned when it failed or its report reads badly.
+pub(super) fn job_mood(j: &store::Job) -> Mood {
+    match j.status {
+        Status::Running | Status::Shipping => Mood::Working,
+        Status::Failed | Status::Interrupted => Mood::NeedsYou,
+        Status::Review | Status::Done | Status::Shipped => match text_mood(&j.summary) {
+            Mood::NeedsYou => Mood::NeedsYou,
+            _ => Mood::Done,
+        },
+        Status::Stopped | Status::Discarded => Mood::Signature,
+    }
+}
+
+/// The face for what a bot said: pleased at good news, concerned when
+/// something's wrong or it's asking you, else its own look.
+pub(super) fn text_mood(text: &str) -> Mood {
+    let t = text.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
+    if has(&[
+        "good news",
+        "all good",
+        "nothing to fix",
+        "no issues",
+        "looks good",
+    ]) {
+        return Mood::Done;
+    }
+    if has(&[
+        "fail",
+        "broke",
+        "error",
+        "crash",
+        "couldn't",
+        "could not",
+        "found a bug",
+        "problem",
+        "blocked",
+        "went wrong",
+        "doesn't work",
+        "does not work",
+    ]) {
+        return Mood::NeedsYou;
+    }
+    if t.trim_end().ends_with('?') {
+        return Mood::NeedsYou;
+    }
+    if has(&[
+        "done", "fixed", "passes", "passed", "works", "finished", "shipped", "ready",
+    ]) {
+        return Mood::Done;
+    }
+    Mood::Signature
+}
+
+#[cfg(test)]
+mod mood_tests {
+    use super::text_mood;
+    use runo_holo::Mood;
+
+    #[test]
+    fn a_face_matches_the_news() {
+        assert_eq!(
+            text_mood("Good news: the counter can't go negative, so job #8 has nothing to fix."),
+            Mood::Done
+        );
+        assert_eq!(text_mood("The login test fails on Safari."), Mood::NeedsYou);
+        assert_eq!(text_mood("Should I keep the old API?"), Mood::NeedsYou);
+        assert_eq!(text_mood("Fixed it. All tests passed."), Mood::Done);
+        assert_eq!(text_mood("The app has three screens."), Mood::Signature);
+    }
+}
+
+/// A dialog over the window, fading in with its scrim.
+fn dialog(el: AnyElement, name: &'static str) -> Div {
+    // Absolute after the motion, which makes what it moves relative: a
+    // relative dialog would be laid out beside the page, off the window.
+    motion::panel(
+        div().inset_0().child(el),
+        motion::key(("dialog", name)),
+        0.,
+        0.,
+    )
+    .absolute()
 }

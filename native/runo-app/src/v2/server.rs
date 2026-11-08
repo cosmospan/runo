@@ -243,6 +243,8 @@ impl Hub {
 
     /// Moves the crew along and tells every listener what changed.
     pub fn tick(&mut self) {
+        // Jobs' browsers nobody has used for a while are closed.
+        crate::browse::host::reap_now_and_then();
         let finished = self.rt.poll(&self.st, None);
         for id in finished {
             self.send(json!({ "kind": "ended", "id": id }));
@@ -564,6 +566,8 @@ pub fn respond(http: &Http, base: &Path, hub: &Mutex<Hub>) -> Reply {
             };
             match *action {
                 "approve" => hub.rt.approve(id),
+                "approve-anyway" => hub.rt.approve_anyway(id),
+                "take-out" => hub.rt.take_out(&st, id),
                 "discard" => hub.rt.discard(id),
                 "stop" => hub.rt.stop(id),
                 "recheck" => hub.rt.recheck(id),

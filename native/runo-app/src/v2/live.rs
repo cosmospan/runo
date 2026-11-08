@@ -53,18 +53,18 @@ impl Shell {
             .flex()
             .flex_col()
             .child(
+                // Its details live in the one right sidebar, beside the Jobs list.
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .child(self.live_main(&job, cx))
-                    .child(self.live_side(&job, cx)),
+                    .child(self.live_main(&job, cx)),
             )
             .children(drawer)
             .into_any_element()
     }
 
-    fn live_main(&mut self, job: &Job, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn live_main(&mut self, job: &Job, cx: &mut Context<Self>) -> impl IntoElement {
         let who = job.bot;
         let running = job.status == Status::Running;
         let mood = match job.status {
@@ -193,6 +193,22 @@ impl Shell {
             )
             // A job on your server: its screen, where anything the bot
             // opens (a browser, the app it's testing) shows up.
+            // The job's own browser, where its bot tries pages and you can too.
+            .when(!matches!(job.status, Status::Shipped), |d| {
+                let id = job.id;
+                d.child(
+                    ui::ghost_i("job-browser", IconName::Globe, "Browser")
+                        .tooltip(|window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(
+                                "This job's own browser, inside Squad: watch the bot try pages, or open one yourself.",
+                            )
+                            .build(window, cx)
+                        })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.open_job_browser(id, None, cx)
+                        })),
+                )
+            })
             .when(running && !job.remote_on.is_empty(), |d| {
                 d.child(self.screen_button("job-screen", "Watch its screen", cx))
             })
@@ -332,8 +348,7 @@ impl Shell {
         let mut feed = div().flex().flex_col().gap(px(10.)).px(px(30.)).py(px(20.));
         let mut tools: Vec<(String, String, u8)> = Vec::new();
         // A step in progress shows a dot that breathes.
-        let breathe =
-            0.35 + 0.65 * runo_holo::anim::alternate(self.now(), 0.9, runo_holo::anim::SOFT) as f32;
+        let breathe = 0.35 + 0.65 * super::motion::breath();
         let flush = |feed: Div, tools: &mut Vec<(String, String, u8)>| -> Div {
             if tools.is_empty() {
                 return feed;
@@ -511,6 +526,12 @@ impl Shell {
         if let Some(card) = self.trouble_card(job, cx) {
             feed = feed.child(card);
         }
+        if let Some(card) = self.belt_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
+        if let Some(card) = self.clash_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
         if let Some(card) = self.review_card(job, cx) {
             feed = feed.child(card);
         }
@@ -600,7 +621,9 @@ impl Shell {
             )
     }
 
-    fn live_side(&mut self, job: &Job, cx: &mut Context<Self>) -> impl IntoElement {
+    /// A job's details for the right sidebar: where it stands, its plan, the
+    /// files it changed and the bot's other jobs.
+    pub(super) fn job_details(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
         let mut plan = div().flex().flex_col().gap(px(10.));
         if job.plan.is_empty() {
             plan = plan.child(
@@ -680,7 +703,7 @@ impl Shell {
                     .py(px(5.))
                     .rounded(px(8.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
+                    .map(|d| super::motion::hover_fill(d, None, ui::hover()))
                     .child(
                         Icon::new(IconName::FileText)
                             .size(px(13.))
@@ -754,7 +777,7 @@ impl Shell {
                     .py(px(5.))
                     .rounded(px(9.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
+                    .map(|d| super::motion::hover_fill(d, None, ui::hover()))
                     .child(
                         div()
                             .size(px(7.))
@@ -815,16 +838,6 @@ impl Shell {
             );
         }
         div()
-            .id("live-side")
-            .w(px(320.))
-            .flex_none()
-            .h_full()
-            .overflow_y_scroll()
-            .border_l_1()
-            .border_color(c(ui::line2()))
-            .px(px(24.))
-            .pt(px(if cfg!(target_os = "macos") { 16. } else { 4. }))
-            .pb(px(24. + super::DOCK_ROOM))
             .flex()
             .flex_col()
             .child(section(

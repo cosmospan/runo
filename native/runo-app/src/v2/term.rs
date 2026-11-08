@@ -333,7 +333,7 @@ impl Shell {
             Some(rest) if !home.is_empty() => format!("~{rest}"),
             _ => dir,
         };
-        let width = self.view_w - super::sidebar::WIDTH - 24.;
+        let width = self.view_w - self.side_w() - 24.;
         self.drawer(id, dir, quick, width, cx)
     }
 
@@ -495,7 +495,9 @@ impl Shell {
                     cx.notify();
                 })),
         );
-        Some(
+        // Rises out of its own slot when opened, opaque the whole way, so the
+        // translucent status bar under it never shows through mid-motion.
+        Some(super::motion::drawer(
             div()
                 .flex_none()
                 .mx(px(8.))
@@ -530,7 +532,9 @@ impl Shell {
                             ))
                         }),
                 ),
-        )
+            super::motion::key(("drawer", id)),
+            24.,
+        ))
     }
 
     fn term_key(&mut self, id: u64, ev: &KeyDownEvent, cx: &mut Context<Self>) {

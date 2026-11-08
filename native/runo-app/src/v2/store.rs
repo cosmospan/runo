@@ -36,6 +36,8 @@ pub struct Store {
     pub steps: Vec<Step>,
     /// The getting-started card was put away.
     pub guide_hidden: bool,
+    /// The sidebar's Try list was put away.
+    pub try_hidden: bool,
     /// Bot ideas Fin already offered (`brain::ideas`), so each is offered once.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub offered: Vec<String>,
@@ -47,6 +49,9 @@ pub struct Store {
     /// When you last looked at each thread, by "folder#id", for unread dots.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub seen_at: HashMap<String, u64>,
+    /// Reactions you put on messages in threads, by "job-<id>" or "talk-<id>".
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub reactions: HashMap<String, Vec<String>>,
     /// Questions asked in threads, with the answers that came back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<Talk>,
@@ -243,6 +248,15 @@ pub struct Job {
     pub agent: String,
     pub started: u64,
     pub ended: Option<u64>,
+    /// Seconds its finished turns actually ran. Follow-ups move `ended`
+    /// on, so `ended - started` would count the waiting in between too.
+    pub worked: u64,
+    /// When the turn running now began; 0 when none is.
+    pub turn: u64,
+    /// Where the latest turn's items start in the feed.
+    pub turn_from: usize,
+    /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
+    pub reads: Vec<String>,
     pub status: Status,
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
@@ -304,6 +318,18 @@ pub struct Job {
     pub remote: u64,
     /// Its worktree on the server, so its work can be brought home.
     pub remote_dir: String,
+    /// What the seatbelt found when Approve was pressed, one line each
+    /// ("src/config.ts:14 · Looks like a Stripe key"). Approving is held while
+    /// any of them is serious, until the person says to go ahead anyway.
+    pub held: Vec<String>,
+    /// The person said to push or merge in spite of the seatbelt.
+    pub belt_ok: bool,
+    /// Commits on its branch since it started, and commits its base got since.
+    pub ahead: usize,
+    pub behind: usize,
+    /// Other jobs in the same project whose work clashes with this one's:
+    /// their id and where ("total.ts around line 40").
+    pub clash_with: Vec<(u64, String)>,
 }
 
 /// One file a job changed.
@@ -346,6 +372,10 @@ impl Default for Job {
             agent: String::new(),
             started: 0,
             ended: None,
+            worked: 0,
+            turn: 0,
+            turn_from: 0,
+            reads: Vec::new(),
             status: Status::Done,
             feed: Vec::new(),
             plan: Vec::new(),
@@ -378,14 +408,43 @@ impl Default for Job {
             remote_on: String::new(),
             remote: 0,
             remote_dir: String::new(),
+            held: Vec::new(),
+            belt_ok: false,
+            ahead: 0,
+            behind: 0,
+            clash_with: Vec::new(),
         }
     }
 }
 
 impl Job {
-    /// Seconds it has run, or ran.
+    /// Seconds it has run, or ran: its turns only, not the time it sat
+    /// waiting for a follow-up.
     pub fn seconds(&self) -> u64 {
-        self.ended.unwrap_or_else(now).saturating_sub(self.started)
+        if self.worked == 0 && self.turn == 0 {
+            // Saved before turns were timed.
+            return self.ended.unwrap_or_else(now).saturating_sub(self.started);
+        }
+        let running = if self.turn > 0 {
+            self.ended.unwrap_or_else(now).saturating_sub(self.turn)
+        } else {
+            0
+        };
+        self.worked + running
+    }
+
+    /// A turn starts: the first run or a follow-up.
+    pub fn turn_began(&mut self) {
+        self.turn = now();
+        self.turn_from = self.feed.len();
+    }
+
+    /// The running turn ended; its time goes on the job.
+    pub fn turn_ended(&mut self) {
+        if self.turn > 0 {
+            self.worked += now().saturating_sub(self.turn).max(1);
+            self.turn = 0;
+        }
     }
 
     /// Steps done out of steps planned, when the agent keeps a plan.
@@ -442,6 +501,17 @@ impl Job {
         }
     }
 
+    /// The bot that started this job by @mentioning its bot in the thread;
+    /// None when the person asked for it.
+    pub fn asked_by(&self) -> Option<Member> {
+        match self.feed.first() {
+            Some(Item::By(m, _)) if self.title.starts_with(&format!("{} asked:", m.name())) => {
+                Some(*m)
+            }
+            _ => None,
+        }
+    }
+
     pub fn needs_you(&self) -> bool {
         // Changes waiting for approval stay in Needs you until you decide.
         if self.status == Status::Review {
@@ -470,6 +540,15 @@ pub struct Said {
     pub folder: String,
     /// When it was said, to place it among the bot's jobs.
     pub at: u64,
+    /// The job the bot offers to do, in its words; empty when its answer
+    /// needs no code changed.
+    pub job: String,
+    /// Once the offer is taken: the job it started (0 when the work went
+    /// another way, as a plan). The offer then can't be taken again.
+    pub job_id: u64,
+    pub job_taken: bool,
+    /// "Not now" on the offer.
+    pub job_off: bool,
 }
 
 impl Said {
@@ -762,8 +841,11 @@ impl Store {
                 }
             }
         }
+        // A job a bot asked for: its words are in the thread already, as its own.
         for j in self.jobs_in(folder, thread) {
-            said.push((j.started, "you".into(), j.title.clone()));
+            if j.asked_by().is_none() {
+                said.push((j.started, "you".into(), j.title.clone()));
+            }
         }
         said.sort_by_key(|s| s.0);
         let n = said.len();
@@ -833,6 +915,20 @@ impl Store {
     }
 
     /// You're looking at a thread now: it has nothing unread.
+    /// Puts `emoji` on a message, or takes it off when it's already there.
+    pub fn toggle_reaction(&mut self, key: &str, emoji: &str) {
+        let list = self.reactions.entry(key.to_string()).or_default();
+        if let Some(i) = list.iter().position(|e| e == emoji) {
+            list.remove(i);
+        } else {
+            list.push(emoji.to_string());
+        }
+        if list.is_empty() {
+            self.reactions.remove(key);
+        }
+        self.save();
+    }
+
     pub fn mark_seen(&mut self, folder: &str, thread: u64) {
         self.seen_at.insert(format!("{folder}#{thread}"), now());
     }
@@ -974,6 +1070,15 @@ impl Store {
     pub fn say_in_dm(&mut self, who: Member, mut said: Said) {
         said.folder = self.folder().map(|f| f.path.clone()).unwrap_or_default();
         self.chats.entry(who).or_default().push(said);
+    }
+
+    /// The line in the DM with `who` said at `at` with these words.
+    pub fn dm_line_mut(&mut self, who: Member, at: u64, text: &str) -> Option<&mut Said> {
+        self.chats
+            .get_mut(&who)?
+            .iter_mut()
+            .rev()
+            .find(|m| !m.mine && m.at == at && m.text == text)
     }
 
     /// Clears the DM with `who` in the project you're in; other projects keep theirs.
@@ -1145,6 +1250,37 @@ pub fn span(s: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_waiting_for_a_follow_up_is_not_time_at_work() {
+        let t = now();
+        // Ran 6 seconds, sat for hours, then a 4 second follow-up.
+        let j = Job {
+            started: t - 30_000,
+            ended: Some(t),
+            worked: 10,
+            ..Job::default()
+        };
+        assert_eq!(j.seconds(), 10);
+        // A turn running now counts from when it began.
+        let mut k = Job {
+            started: t - 30_000,
+            worked: 6,
+            turn: t - 5,
+            ..Job::default()
+        };
+        assert!((11..=12).contains(&k.seconds()));
+        k.turn_ended();
+        assert_eq!(k.turn, 0);
+        assert!(k.worked >= 11);
+        // Jobs saved before turns were timed keep their old span.
+        let old = Job {
+            started: t - 60,
+            ended: Some(t),
+            ..Job::default()
+        };
+        assert_eq!(old.seconds(), 60);
+    }
 
     fn with_project() -> Store {
         let mut s = Store::default();

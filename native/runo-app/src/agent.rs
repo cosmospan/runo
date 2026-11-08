@@ -345,10 +345,19 @@ fn unasked_tools(spec: &RunSpec) -> Vec<&'static str> {
         "get_playbook",
         "list_connections",
     ];
+    // The job's own headless browser, inside Squad: nothing outside it changes.
+    tools.extend(crate::browse::tools::TOOLS);
     if spec.thread != 0 {
         tools.extend(crate::memory_mcp::THREAD_TOOLS);
     }
     tools
+}
+
+/// Whether `provider` takes MCP servers for a run: by flag, project file or ACP.
+/// Grok reads them only from a trusted folder, and Pi and Antigravity's print mode
+/// have no way in, so those use Squad's tools as shell commands instead.
+pub fn takes_mcp(provider: &str) -> bool {
+    !matches!(provider, "grok" | "pi" | "antigravity") || acp_args(provider).is_some()
 }
 
 /// MCP servers for a CLI that reads them from a project file. That file is in the

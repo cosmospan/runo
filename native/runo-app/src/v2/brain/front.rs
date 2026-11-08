@@ -32,7 +32,75 @@ pub enum Front {
     RunApp,
 }
 
+/// What Peek decided, when the person named the bot with @: the named bot
+/// answers what Peek would answer, and does the work Peek would hand to
+/// another bot. A bot that only answers (one that never writes code) answers
+/// work asks too. Stop, run the app and asking back stay Peek's.
+pub fn pinned(front: Front, bot: Member, text: &str) -> Front {
+    let answer = || Front::Answer {
+        question: text.to_string(),
+        code: true,
+    };
+    let to = |mut r: Route| {
+        r.bot = bot;
+        r.mode = bot.mode();
+        r
+    };
+    match front {
+        Front::Chat { .. } => answer(),
+        Front::Hand(_) | Front::Confirm { .. } if !bot.mode().writes() => answer(),
+        Front::Hand(r) => Front::Hand(to(r)),
+        Front::Confirm { why, route } => Front::Confirm {
+            why,
+            route: to(route),
+        },
+        other => other,
+    }
+}
+
 /// Who answers a question when nobody was picked: the crew's explainer.
 pub fn answerer(crew: &[Member]) -> Member {
     route::doer(Mode::Ask, crew)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(bot: Member) -> Route {
+        Route {
+            mode: bot.mode(),
+            bot,
+            sure: 1.0,
+            why: String::new(),
+            by: "engine".into(),
+            site: String::new(),
+        }
+    }
+
+    #[test]
+    fn small_talk_to_a_named_bot_is_its_to_answer_not_a_job() {
+        let f = pinned(
+            Front::Chat {
+                reply: "Hi!".into(),
+            },
+            Member::Builder,
+            "who are you",
+        );
+        assert!(matches!(f, Front::Answer { ref question, .. } if question == "who are you"));
+    }
+
+    #[test]
+    fn work_goes_to_the_named_bot() {
+        let f = pinned(
+            Front::Hand(route(Member::Fixer)),
+            Member::Builder,
+            "add a login page",
+        );
+        match f {
+            Front::Hand(r) => assert_eq!(r.bot, Member::Builder),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(pinned(Front::Stop, Member::Builder, "stop"), Front::Stop);
+    }
 }

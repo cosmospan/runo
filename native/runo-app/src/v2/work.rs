@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use crate::git;
 use crate::proof::{self, CheckRun};
+use crate::seatbelt::{self, Snag};
 
 use super::store::{Changed, Job};
 
@@ -204,12 +205,116 @@ pub fn discard(job: &Job) {
 /// Removes the job's worktree, and its branch once it's merged.
 fn cleanup(job: &Job) {
     let repo = job.folder.path.as_str();
+    // The job's browser goes with its worktree.
+    if !job.worktree.is_empty() {
+        crate::browse::host::close(&job.worktree);
+    }
     if !job.worktree.is_empty() && Path::new(&job.worktree).exists() {
         let _ = git::remove_worktree(repo, &job.worktree);
     }
     let _ = git::prune_worktrees(repo);
     if !job.branch.is_empty() && !job.base.is_empty() {
         git::delete_branch_if_merged(repo, &job.branch, &job.base);
+    }
+}
+
+/// What the seatbelt finds in everything a job would send: its commits and
+/// the work it left uncommitted, new files included, since it started.
+/// `(path, line, snag)`, line 0 for a whole file.
+pub fn seatbelt(job: &Job) -> Vec<(String, usize, Snag)> {
+    if job.worktree.is_empty() || job.base_sha.is_empty() || !Path::new(&job.worktree).is_dir() {
+        return Vec::new();
+    }
+    let patch = git::patch_since(&job.worktree, &job.base_sha, 8 * 1024 * 1024);
+    seatbelt::scan_patch(&patch)
+}
+
+/// Whether any of the seatbelt's finds should stop a push or a merge.
+pub fn holds(found: &[(String, usize, Snag)]) -> bool {
+    found.iter().any(|(_, _, s)| s.serious())
+}
+
+/// The seatbelt's finds as lines for a card, serious ones first:
+/// "src/config.ts:14 · Looks like a GitHub token".
+pub fn held_lines(found: &[(String, usize, Snag)]) -> Vec<String> {
+    let mut found: Vec<&(String, usize, Snag)> = found.iter().collect();
+    found.sort_by_key(|(_, _, s)| !s.serious());
+    found
+        .into_iter()
+        .map(|(path, line, snag)| match line {
+            0 => format!("{path} \u{b7} {}", snag.words()),
+            l => format!("{path}:{l} \u{b7} {}", snag.words()),
+        })
+        .collect()
+}
+
+/// Commits on a job's branch since it started, and commits its base branch
+/// got since then.
+pub fn counts(job: &Job) -> (usize, usize) {
+    if job.worktree.is_empty() || job.base_sha.is_empty() {
+        return (0, 0);
+    }
+    let repo = job.folder.path.as_str();
+    let ahead = if Path::new(&job.worktree).is_dir() {
+        git::commits_ahead(&job.worktree, "HEAD", &job.base_sha)
+    } else {
+        0
+    };
+    let behind = if job.base.is_empty() {
+        0
+    } else {
+        git::commits_ahead(repo, &job.base, &job.base_sha)
+    };
+    (ahead, behind)
+}
+
+/// One job the clash check looks at: its id, its project and its worktree.
+#[derive(Clone, Debug)]
+pub struct Lane {
+    pub id: u64,
+    pub repo: String,
+    pub worktree: String,
+}
+
+/// Jobs in the same project whose work, committed or not, changes the same
+/// lines: each pair once, with where ("total.ts around line 40"). Merged in
+/// memory; no folder is touched.
+pub fn clashes(lanes: &[Lane]) -> Vec<(u64, u64, String)> {
+    let tips: Vec<(&Lane, String)> = lanes
+        .iter()
+        .filter(|l| Path::new(&l.worktree).is_dir())
+        .filter_map(|l| git::work_tip(&l.worktree).map(|t| (l, t)))
+        .collect();
+    let mut out = Vec::new();
+    for i in 0..tips.len() {
+        for j in i + 1..tips.len() {
+            let ((a, ta), (b, tb)) = (&tips[i], &tips[j]);
+            if a.repo != b.repo || ta == tb {
+                continue;
+            }
+            if let Ok(files) = git::test_merge(&a.repo, ta, tb) {
+                if !files.is_empty() {
+                    out.push((a.id, b.id, clash_words(&files)));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// "total.ts around line 40", or "total.ts and cart.ts" for several files.
+pub fn clash_words(files: &[git::Overlap]) -> String {
+    match files {
+        [one] => {
+            let name = one.path.rsplit('/').next().unwrap_or(&one.path);
+            let at = crate::radar::around(&one.lines);
+            if at.is_empty() {
+                name.to_string()
+            } else {
+                format!("{name} {at}")
+            }
+        }
+        _ => crate::radar::file_names(files),
     }
 }
 
@@ -348,6 +453,93 @@ mod tests {
         );
         assert_eq!(verdict(&[], true).1, Verdict::Running);
         assert_eq!(verdict(&[], false).1, Verdict::None);
+    }
+
+    fn job_in(folder: &str, iso: &Isolated, id: u64) -> Job {
+        Job {
+            id,
+            folder: super::super::store::Folder {
+                name: "t".into(),
+                path: folder.to_string(),
+                ship: String::new(),
+            },
+            branch: iso.branch.clone(),
+            worktree: iso.worktree.clone(),
+            base: iso.base.clone(),
+            base_sha: iso.base_sha.clone(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_seatbelt_holds_a_job_that_adds_secrets() {
+        let dir = repo("belt");
+        let folder = dir.to_string_lossy().into_owned();
+        let iso = isolate(&folder, "Wire up payments", 4).unwrap().unwrap();
+        let job = job_in(&folder, &iso, 4);
+        // Nothing yet, nothing held.
+        assert!(seatbelt(&job).is_empty());
+        let wt = Path::new(&iso.worktree);
+        std::fs::write(wt.join(".env"), "PAY_KEY=abc\n").unwrap();
+        std::fs::write(wt.join("a.txt"), "one\nconsole.log(token)\n").unwrap();
+        let found = seatbelt(&job);
+        assert!(holds(&found), "{found:?}");
+        let lines = held_lines(&found);
+        assert!(lines[0].starts_with(".env \u{b7} "), "{lines:?}");
+        // A leftover alone is pointed out but doesn't hold.
+        std::fs::remove_file(wt.join(".env")).unwrap();
+        let found = seatbelt(&job);
+        assert!(!holds(&found));
+        discard(&job);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn counts_commits_ahead_and_behind() {
+        let dir = repo("counts");
+        let folder = dir.to_string_lossy().into_owned();
+        let iso = isolate(&folder, "Count things", 5).unwrap().unwrap();
+        let job = job_in(&folder, &iso, 5);
+        let wt = Path::new(&iso.worktree);
+        std::fs::write(wt.join("b.txt"), "b\n").unwrap();
+        run(wt, &["add", "-A"]);
+        run(wt, &["commit", "-q", "-m", "b"]);
+        std::fs::write(dir.join("c.txt"), "c\n").unwrap();
+        run(&dir, &["add", "-A"]);
+        run(&dir, &["commit", "-q", "-m", "c"]);
+        run(&dir, &["commit", "-q", "--allow-empty", "-m", "d"]);
+        assert_eq!(counts(&job), (1, 2));
+        discard(&job);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn finds_two_jobs_changing_the_same_lines() {
+        let dir = repo("clash");
+        let folder = dir.to_string_lossy().into_owned();
+        let a = isolate(&folder, "Say two", 6).unwrap().unwrap();
+        let b = isolate(&folder, "Say three", 7).unwrap().unwrap();
+        let c = isolate(&folder, "Add a file", 8).unwrap().unwrap();
+        // Uncommitted work counts too.
+        std::fs::write(Path::new(&a.worktree).join("a.txt"), "two\n").unwrap();
+        std::fs::write(Path::new(&b.worktree).join("a.txt"), "three\n").unwrap();
+        std::fs::write(Path::new(&c.worktree).join("z.txt"), "z\n").unwrap();
+        let lanes: Vec<Lane> = [(6, &a), (7, &b), (8, &c)]
+            .iter()
+            .map(|(id, iso)| Lane {
+                id: *id,
+                repo: folder.clone(),
+                worktree: iso.worktree.clone(),
+            })
+            .collect();
+        let found = clashes(&lanes);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!((found[0].0, found[0].1), (6, 7));
+        assert!(found[0].2.starts_with("a.txt"), "{found:?}");
+        for (id, iso) in [(6, &a), (7, &b), (8, &c)] {
+            discard(&job_in(&folder, iso, id));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

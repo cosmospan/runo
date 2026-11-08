@@ -79,6 +79,9 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
   squad approve <id>          approve a job waiting for review
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
+  squad browser <command>     use the browser of the job working in this
+                             folder: open, look, click, type, press, back,
+                             screenshot, eval (squad browser help)
 
 On a server:
   squad serve [--listen <address>|tailscale]
@@ -250,6 +253,14 @@ pub fn main(args: &[String]) -> i32 {
             }
         }
         "brain" => super::brain::cli::main(&args[1..]),
+        // The job's browser, from a shell: what engines without MCP use, and how the
+        // desktop app finds a server job's browser (`browser port --dir …`).
+        "browser" => {
+            let cwd = std::env::current_dir()
+                .map(|d| d.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            crate::browse::cli::main(&args[1..], &cwd)
+        }
         "approve" => {
             id().and_then(|id| push(&Ask::Approve { id }).map(|_| format!("Approving #{id}.")))
         }

@@ -153,6 +153,37 @@ pub struct Ask {
     rx: Receiver<Event>,
 }
 
+/// How a bot says an ask is real work. It can only read here, so when the
+/// person wants the code changed it offers a job, which the person starts.
+const JOB_RULE: &str = " If, and only if, the person wants you to change, add, fix or build something in the code (not just to explain it), end with one more line on its own: \"JOB: <the change, as a short instruction>\". For questions, greetings and explanations, never add that line.";
+
+/// Splits a bot's reply into its words and the job it offers, if any: the
+/// last line when it reads "JOB: …". Empty when it offers none.
+pub fn split_job(reply: &str) -> (String, String) {
+    let reply = reply.trim_end();
+    let (head, last) = match reply.rsplit_once('\n') {
+        Some((h, l)) => (h, l),
+        None => ("", reply),
+    };
+    let tag = last.trim().trim_matches(['*', '_', '`']).trim();
+    let task = tag
+        .get(..4)
+        .filter(|t| t.eq_ignore_ascii_case("job:"))
+        .map(|_| {
+            tag[4..]
+                .trim()
+                .trim_matches(['*', '_', '`', '"'])
+                .trim()
+                .to_string()
+        });
+    match task {
+        Some(t) if !t.is_empty() => (head.trim_end().to_string(), t),
+        // "JOB:" with nothing after it offers nothing, and isn't shown.
+        Some(_) => (head.trim_end().to_string(), String::new()),
+        None => (reply.to_string(), String::new()),
+    }
+}
+
 /// What came back.
 pub enum Reply {
     Answer(String),
@@ -193,7 +224,7 @@ impl Ask {
             }
         }
         prompt.push_str(&format!(
-            "\nQuestion: {question}\n\nAnswer in under 150 words."
+            "\nQuestion: {question}\n\nAnswer in under 150 words.{JOB_RULE}"
         ));
         let command = agent::ask_command_on(p.id, &configured, &prompt, &model);
         let (tx, rx) = channel();
@@ -232,5 +263,36 @@ impl Ask {
                 Some(Reply::Failed("The engine stopped before answering.".into()))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod job_tests {
+    use super::split_job;
+
+    #[test]
+    fn a_question_offers_no_job() {
+        let (words, job) = split_job("I'm Pixel, the UI-polishing bot.");
+        assert_eq!(words, "I'm Pixel, the UI-polishing bot.");
+        assert!(job.is_empty());
+    }
+
+    #[test]
+    fn a_job_line_at_the_end_is_the_offer() {
+        let (words, job) = split_job(
+            "They're 28px tall.\nI'd go to 32px.\n\n**JOB: Make the sidebar buttons 32px tall**\n",
+        );
+        assert_eq!(words, "They're 28px tall.\nI'd go to 32px.");
+        assert_eq!(job, "Make the sidebar buttons 32px tall");
+        let (_, job) = split_job("Sure.\njob: \"fix the login\"");
+        assert_eq!(job, "fix the login");
+    }
+
+    #[test]
+    fn job_in_the_middle_or_empty_offers_nothing() {
+        let (words, job) = split_job("JOB: not last\nmore words");
+        assert!(job.is_empty() && words.contains("not last"));
+        let (words, job) = split_job("Hm.\nJOB:");
+        assert!(job.is_empty() && words == "Hm.");
     }
 }

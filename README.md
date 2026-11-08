@@ -4,12 +4,13 @@
 
 <h1>Squad Code</h1>
 
-<h3>A crew of coding bots, led by Fin. You hand out the jobs.</h3>
+<h3>Slack for your coding bots. Talk to the crew in threads; they do the work.</h3>
 
 <p>
-Type what you want in a sentence. <b>Fin</b> picks the right bot, the bot does the work on the coding agent you already use<br />
-(Claude Code, Codex, Gemini and nine more), each job on its own branch, and <b>Checker</b> runs your checks before you see it.<br />
-You approve, send it back or throw it away. <b>Shipper</b> opens the pull request.
+Each project is a workspace, each piece of work is a <b>#thread</b>, and the bots are your teammates.<br />
+Say what you want in a sentence. <b>Peek</b>, the crew lead, answers or plans it and hands each job to the right bot.<br />
+Bots work on the coding agent you already use (Claude Code, Codex, Gemini and nine more), each job on its own branch,<br />
+and you approve, send it back or throw it away right in the thread.
 </p>
 
 <p>
@@ -32,10 +33,10 @@ You approve, send it back or throw it away. <b>Shipper</b> opens the pull reques
 
 <p>
 <a href="#how-it-works"><b>How it works</b></a> ·
-<a href="#the-crew"><b>The crew</b></a> ·
 <a href="#a-tour"><b>Tour</b></a> ·
-<a href="#fin-squads-own-intelligence"><b>Smart Fin</b></a> ·
-<a href="#themes"><b>Themes</b></a> ·
+<a href="#the-crew"><b>The crew</b></a> ·
+<a href="#peek-squads-own-intelligence"><b>Peek</b></a> ·
+<a href="#make-it-yours"><b>Themes</b></a> ·
 <a href="#squad-in-a-terminal"><b>squad CLI</b></a> ·
 <a href="#run-the-crew-on-a-server"><b>Server</b></a> ·
 <a href="#getting-started"><b>Get started</b></a>
@@ -43,101 +44,109 @@ You approve, send it back or throw it away. <b>Shipper</b> opens the pull reques
 
 <br />
 
-<img src="docs/images/jobs.png" alt="Squad Code's Jobs page: the sidebar with Needs you, Jobs, Terminal and Usage, the crew listed with what each bot is doing, the job box with Ask, Build, Fix, Review, Test and Tidy, two goals, today's numbers, the jobs table, and the picked job's plan in the inspector" width="920" />
+<img src="docs/images/thread.png" alt="Squad Code's main window: the project rail on the far left, the sidebar with Needs you, All jobs, threads and direct messages with each bot, and the #checkout thread where Builder's finished job waits for review and Peek has posted a four-step plan to start" width="920" />
 
 </div>
 
 <br />
 
 > [!NOTE]
-> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.6`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
+> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.7`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
 
 ## How it works
 
+If you've used Slack, you already know your way around:
+
+| Slack | Squad Code |
+| --- | --- |
+| Workspaces down the left edge | **Projects**: one per folder, switched from the rail |
+| Channels | **#threads**: one per piece of work, like `#checkout` or `#flaky-tests` |
+| Teammates and DMs | **Bots**: Builder, Fixer, Guard and the rest, each one a message away |
+| The person who runs the channel | **Peek**, the crew lead, in every thread |
+
 ```mermaid
 flowchart LR
-    You(["You: one sentence"]) --> Fin["Fin<br/>picks the bot and kind of job"]
-    Fin --> Bot["A bot<br/>Builder, Fixer, Guard…"]
+    You(["You, in a #thread"]) --> Peek["Peek<br/>answers, or plans and picks the bot"]
+    Peek --> Bot["A bot<br/>Builder, Fixer, Guard…"]
     Bot -- "runs on" --> Engine["Your coding agent<br/>Claude Code, Codex, Gemini…"]
     Engine --> WT[("Its own branch<br/>and worktree")]
     WT --> Checker["Checker<br/>runs your checks"]
-    Checker --> Review{"You review"}
-    Review -- "Approve" --> Shipper["Shipper<br/>opens the PR, merges when green"]
+    Checker --> Review{"You review<br/>in the thread"}
+    Review -- "Approve" --> Shipper["Shipper<br/>merges or opens the PR"]
     Review -- "Send back" --> Bot
     Review -- "Discard" --> Gone(["Thrown away"])
 ```
 
-- **One box for every job.** Pick **Ask**, **Build**, **Fix**, **Review**, **Test** or **Tidy**, or just type and let Fin decide. **Split** turns something big into a goal of a few jobs; **Race** tries one job on two or three engines at once.
-- **Your checkout is never touched.** A job that may change files gets its own branch (`squad/<slug>`) and worktree, so several jobs run side by side without stepping on each other.
-- **Proven before you look.** When a job finishes, Checker runs the project's checks in its worktree and the review shows the result next to the diff.
+- **Just talk.** Type in a thread the way you'd message a teammate. Peek decides whether to answer, ask back, or turn it into jobs. `@` brings a bot in, `#` points at another thread, and `/` has the rest: `/plan`, `/race`, `/ask`, `/thread`, `/rename`, `/archive`.
+- **Plans before work.** For anything bigger than one step, Peek posts a plan card: the steps and the bot for each. Nothing starts until you press **Start the crew**.
+- **Your checkout is never touched.** Every job that changes files gets its own branch (`squad/<slug>`) and worktree, so several jobs run side by side without stepping on each other.
+- **Proven before you look.** When a job finishes, Checker runs the project's checks in its worktree, and the job card shows the result next to the diff.
 - **Bring your own agents.** Squad Code drives the agent CLIs you already have installed and signed in. It never sells or proxies tokens, and every bot can run on a different engine and model.
-- **Native and light.** Pure Rust on GPUI, with no Electron and no web view. The crew is drawn at 60 frames a second without getting in the way of the work.
-
-## The crew
-
-<img src="docs/images/crew.png" alt="The Crew page: every bot drawn as Fin in its own colour and outfit, with its status, engine, jobs, success rate and spend, and Chat and Give a job buttons" width="920" />
-
-Every bot is drawn as **Fin**, the hex-headed mascot, in its own colour and dressed for its job.
-
-| Bot | What it does | Kind of job |
-| --- | --- | --- |
-| **Fin** | Leads every crew. Answers questions about the code, hands each job to the right bot, and offers a bot your crew is missing. Always there, can't be removed. | Ask |
-| **Builder** | Writes the code: plans briefly, makes the change with tests, keeps to the project's style. | Build |
-| **Fixer** | Hunts the bug: paste an error or describe it, and it finds the cause and fixes it. | Fix |
-| **Guard** | Keeps your rules: reviews changes for risks to login, payments and data before they land. | Review |
-| **Checker** | Tries it for real: runs the tests or a flow and tells you what broke, and runs the checks on every finished job. | Test |
-| **Keeper** | Tidies up: dependencies, flaky tests, dead code, the chores nobody gets to. | Tidy |
-| **Explainer** | Reads the code and answers in plain words. | Ask |
-| **Shipper** | Owns git: squashes a job's commits, opens the pull request, watches its checks and merges when you've asked it to. | Ships what the others made |
-
-**New crews start with Fin alone.** When a job comes in that nobody on the crew does, Fin holds it and asks: add the bot it suggests and start, make your own bot for it, or not now. Goals add the bots their plan needs when you start them. **Make your own** on the Crew page builds a bot from Fin's parts: colour, role kit, head, fins and chest props, with **Surprise me**.
+- **Native and light.** Pure Rust on GPUI, with no Electron and no web view. The crew animates at 60 frames a second without getting in the way of the work.
 
 ## A tour
 
-### Watch a job as it works
+### Threads: where the work is talked about
 
-<img src="docs/images/live.png" alt="A live job: Guard looking for leaked keys, with what it says and does streaming on the left, and its plan, the files it touched and where things stand on the right" width="920" />
+<img src="docs/images/thread.png" alt="The #checkout thread: Builder's Add Apple Pay job card with its branch, +196 -8 across 3 files, 2 checks passed and Compare 3 tries, then Peek's plan card with four steps for Builder, Checker and Guard, and Drop, Edit plan and Start the crew" width="920" />
 
-Open any job to see what the bot says and does as it happens, with its plan step by step, the files it touched and what it has cost. A terminal drawer at the bottom opens a real shell in the job's own worktree, so you can run, test or poke at the branch without touching your checkout.
+Each thread is a chat with the crew about one piece of work. Your asks and the bots' replies read like a conversation, grouped by who said them, with clock times and reactions. Every job arrives as a live card in the thread: its progress while it runs, then its branch, its change and its checks, with the buttons it needs right there. A job that just finished folds down to a single line once you've dealt with it.
+
+The rail on the far left switches projects, and the sidebar lists the project's threads (with unread counts), a direct message with every bot, and what needs you. The status bar along the bottom shows every engine in play today, how much of its plan is left and what the crew has spent.
+
+### A job, with everything about it in one sidebar
+
+<img src="docs/images/job.png" alt="A finished job, Stop double charges on retry by Fixer: the seatbelt holding it over a Stripe key left in the code, a Clash ahead warning about job #9, the review card with 2 checks passing and Approve and merge into main, and the right sidebar with its status, time, turns, cost, plan, files changed and Fixer's other jobs" width="920" />
+
+Open any job to see what the bot says and does as it happens. The right sidebar has three tabs that share one place: **Details** (status, time, turns, cost, the plan step by step and the files it touched), **Jobs** (everything running and waiting in this thread or all of them) and **Git**. **Browser**, **Terminal** and **Open folder** are one click away; the terminal opens a real shell in the job's own worktree.
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-### Review and ship
+### Git, in the thread
 
-<img src="docs/images/review.png" alt="A finished job ready for review: the files it changed with their diff, Checker's run of the project's checks, and Approve, Send back and Discard" />
+<img src="docs/images/git.png" alt="The Git side of the right sidebar: main with 2 new commits on GitHub and a clean folder, the crew's branches with their commits and how far behind main they are, and watch-outs for a clash between #9 and #4" />
 
-When a job finishes you see what changed and Checker's proof. **Approve** merges it into the branch it started from, or, in a project on GitHub, has Shipper push it and open a pull request written from the job. **Send back** with a few more words, or **Discard**.
+Every job card shows its branch, its commits and how far its base has moved ("squad/apple-pay · 3 commits · 2 behind main"). The Git tab shows your branch against GitHub, every branch the crew is working on, and the watch-outs to sort out before approving.
 
 </td>
+<td width="50%" valign="top">
+
+### Seatbelt and clash ahead
+
+<img src="docs/images/seatbelt.png" alt="The seatbelt card stopping a push over a Stripe secret key and a leftover console.log, above a Clash ahead card" />
+
+Before Shipper pushes or a job is merged, the **seatbelt** checks the change for secrets, key files and leftover clash markers, and holds it with a card that says what and where. Every 45 seconds Squad test-merges the crew's work in the same project, and when two jobs change the same lines, Peek warns you on both, before either is approved.
+
+</td>
+</tr>
+</table>
+
+### A browser the bots can drive, live inside Squad
+
+<img src="docs/images/browser.png" alt="Guard's browser inside Squad Code, open on a local checkout page at localhost:3000, with Back to the job, reload, the address bar and Open outside" width="920" />
+
+Each job gets its own headless browser, and its bot drives it with Squad's browser tools: open, look, click, type, screenshot, run JavaScript. Pages are read as a short numbered outline, and each step reports only what changed plus the page's errors, so testing a page costs a few hundred tokens instead of a screenshot every time. Click **Browser** on a job to watch the page live and click, scroll or type into it yourself. `localhost` links in a job's messages open here too. Every engine gets it, through Squad's MCP server or the `squad browser` commands.
+
+<table>
+<tr>
 <td width="50%" valign="top">
 
 ### Race it
 
 <img src="docs/images/race.png" alt="A race: Add Apple Pay to checkout tried on Claude Code, Codex and Gemini side by side, each with its time, cost, change and checks, and Keep this one" />
 
-Try one job on two or three engines at once, each on its own branch, and compare them side by side. Keep the try you like best; Shipper takes it from there and the others are thrown away.
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-### Goals
-
-<img src="docs/images/goal.png" alt="A goal split into four jobs for Builder, Checker and Guard, waiting to start, with Discard and Start 4 jobs" />
-
-Something too big for one job? **Split** it. Squad Code turns the goal into two to six jobs, each for the right bot. Drop what you don't want and start it: the jobs run one after another, each building on the last.
+Try one job on two or three engines at once (`/race`), each on its own branch, and compare them side by side: time, cost, size of change and checks. Keep the one you like; Shipper takes it from there and the others are thrown away.
 
 </td>
 <td width="50%" valign="top">
 
-### Chat with any bot
+### Plans
 
-<img src="docs/images/chat.png" alt="Chat with Fin: Ask Fin anything, with three starter questions and a box to ask about the code" />
+<img src="docs/images/goal.png" alt="A plan, Let customers save their cart and come back to it, split into four jobs for Builder, Checker and Guard, with Discard and Start 4 jobs" />
 
-Ask any bot about the code in plain words. It reads the folder and answers, and nothing changes. Each bot keeps its own conversation.
+Something too big for one job? Peek splits it into two to six jobs, each for the right bot. Drop what you don't want and start it: the jobs run one after another, each building on the last.
 
 </td>
 </tr>
@@ -146,26 +155,45 @@ Ask any bot about the code in plain words. It reads the folder and answers, and 
 
 ### Needs you
 
-<img src="docs/images/inbox.png" alt="Needs you: finished work and jobs that stopped with a problem on the left, and what the bot said, the files it changed and its plan on the right" />
+<img src="docs/images/needs.png" alt="Needs you: three jobs ready for review and one that failed on the left, and on the right Builder's gift card change with a warning that main moved and two files now clash, and Ask Builder to fix it" />
 
-Everything waiting on you in one two-pane list: finished work you haven't looked at and jobs that stopped. A job that ends badly says what went wrong in plain words, with the one or two things that get it going again, like another engine when one runs out of plan.
+Everything waiting on you, in one two-pane list: finished work to review, bots waiting on your yes, and jobs that stopped. A job that ends badly says what went wrong in plain words, with the one or two things that get it going again.
 
 </td>
 <td width="50%" valign="top">
 
-### Usage
+### Direct messages
 
-<img src="docs/images/usage.png" alt="The Usage page: spend, jobs, success rate and time at work over 30 days, a chart split by bot, and a table for each bot" />
+<img src="docs/images/dm.png" alt="A direct message with Peek, with three starter questions: What does this project do in plain words, Which bots would help most here, and What should we work on first" />
 
-Spend, jobs, success rate and time at work over the last 30 days, per day and per bot. The status bar along the bottom shows every engine in play today with how much of its plan is left; click it for the details.
+Every bot is a DM away. Ask about the code in plain words: the bot reads the folder and answers, and nothing changes unless you start a job. Each bot keeps its own conversation.
 
 </td>
 </tr>
 </table>
 
+## The crew
+
+<img src="docs/images/crew.png" alt="Your crew: Peek, Builder, Checker, Guard, Fixer and Explainer as cards, each with its line-drawn face, what it does, its engine, skills, tools, jobs, success rate and spend, and Setup, Chat and Give a job" width="920" />
+
+Every bot is a line-drawn face in its own colour, and its face follows what it's doing: listening, thinking, working, done, stuck or waiting on you.
+
+| Bot | What it does | Kind of job |
+| --- | --- | --- |
+| **Peek** | Leads every crew. Answers questions, plans bigger work, hands each job to the right bot, and offers a bot your crew is missing. Always there. | Ask, plan |
+| **Builder** | Writes the code: plans briefly, makes the change with tests, keeps to the project's style. | Build |
+| **Fixer** | Hunts the bug: paste an error or describe it, and it finds the cause and fixes it. | Fix |
+| **Guard** | Keeps your rules: reviews changes for risks to login, payments and data before they land. | Review |
+| **Checker** | Tries it for real: runs the tests or drives the app in its browser, and runs the checks on every finished job. | Test |
+| **Keeper** | Tidies up: dependencies, flaky tests, dead code, the chores nobody gets to. | Tidy |
+| **Explainer** | Reads the code and answers in plain words. | Ask |
+| **Shipper** | Owns git: squashes a job's commits, opens the pull request, watches its checks and merges when you've asked it to. | Ships what the others made |
+
+**Make your own** with **Add a bot**: give it a name, a role, its skills and tools, and an engine. Each bot's **Setup** picks the engine and model it runs on, the skills it uses and the apps it may connect to.
+
 ### Engines: any bot on any agent
 
-<img src="docs/images/engines.png" alt="Settings, Engines: the coding agents on this computer and the ones not installed, and the engine and model each bot runs on" width="920" />
+<img src="docs/images/engines.png" alt="Settings, Engines: engines to install, the agents on this computer (Claude Code, Codex, OpenCode, Gemini and Grok) and Claude Code's command and models" width="920" />
 
 An **engine** is one of the coding agents Squad Code drives and the model it runs on. Each bot can have its own (Builder on Claude Code, Guard on Codex, say) and the rest follow the default. Squad Code detects which agent CLIs are installed and reads their models from the CLI itself, so new releases show up without an update.
 
@@ -180,37 +208,41 @@ An **engine** is one of the coding agents Squad Code drives and the model it run
 
 See [provider setup](docs/providers.md) for installing and signing in to each one.
 
-## Fin: Squad's own intelligence
+## Peek: Squad's own intelligence
 
-Peek reads every message you send with your own engine (Claude Code, Codex, Grok and the others, on your own plan) and decides: reply, ask back, stop what's running, run the app, answer a question about the project, or hand the work to the bot whose role fits. There are no keyword rules or built-in classifiers. When your engine can't be reached, Peek says so and starts nothing. Claude Code is kept warm in the background, so a message reads in about two seconds.
+Peek reads every message you send with your own engine (Claude Code, Codex, Grok and the others, on your own plan) and decides: reply, ask back, plan, stop what's running, run the app, answer a question about the project, or hand the work to the bot whose role fits. When your engine can't be reached, Peek says so and starts nothing. Claude Code is kept warm in the background, so a message reads in about two seconds. When you come back to a thread, Peek posts a short catch-up of only what you missed.
 
-Squad Code still decides some things for itself: whether a job runs here or on your server (and why, in the job's feed), when to suggest a bot you keep needing, and what Peek says. Smart Fin, if you turn it on, writes card titles and recaps with a small model on your computer. Turn it on in **Settings → Engines**, or with `squad brain install`.
+Squad Code still decides some things for itself: whether a job runs here or on your server (and why, in the job's feed), when to suggest a bot you keep needing, and what Peek says. **Smart Peek**, if you turn it on, writes card titles and recaps with a small model on your computer. Turn it on in **Settings → Engines**, or with `squad brain install`.
 
-## Themes
+## Make it yours
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/appearance.png" alt="Settings, Appearance: seven themes with a live preview of each, Midnight picked" /></td>
-<td width="50%"><img src="docs/images/daylight.png" alt="The Jobs page in the Daylight theme" /></td>
+<td width="50%"><img src="docs/images/aurora.png" alt="The #checkout thread over the Aurora background image, with the sidebar and page letting it show through" /></td>
+<td width="50%"><img src="docs/images/midnight.png" alt="The #checkout thread and the Git sidebar in the Midnight theme" /></td>
 </tr>
 </table>
 
-**Settings → Appearance** has seven themes, each with a live preview: **Midnight** (the original look), **Graphite**, **Deep sea** and **Daylight**, which are solid, and **Frost**, **Mist** and **Aurora**, frosted glass that lets your desktop show through the window, blurred. A theme applies the moment you pick it. **Settings → Mascot** changes Fin's material (liquid glass, bubble glow or solid) and dresses each bot with a role kit, a hat and props, with a live preview in every mood.
+**Settings → Appearance** has eight themes, each with a live preview: **Crew Chat** (the default), **Midnight**, **Graphite**, **Deep sea** and **Daylight**, which are solid, and **Frost**, **Mist** and **Aurora**, frosted glass that lets your desktop show through the window. Pick a **background image** (six ship with the app, or use your own) and tune its blur, dim and how far it shows through. A see-through window and see-through popovers have their own sliders.
 
-<img src="docs/images/mascot.png" alt="Settings, Mascot: a large live preview of Guard as Fin in a security cap with a shield and baton, the mood buttons under it, the material choice, and the role, head and fin props for each bot" width="920" />
+<img src="docs/images/appearance.png" alt="Settings, Appearance: the see-through window and popover switches and sliders, and the background image picker with None, Aurora, Dusk, Lagoon, Ember, Meadow, Blush and your own" width="920" />
+
+**Settings → Mascot** sets how the crew is drawn: line weight, colour (crew colour, pastel, two-tone or rainbow) and eyes, and dresses each bot with a role kit, with a large live preview in every mood.
+
+<img src="docs/images/mascot.png" alt="Settings, Mascot: a large live preview of Guard listening, the mood buttons under it, and the crew look and dress-a-bot options" width="920" />
 
 ## Squad in a terminal
 
 Every job you can start in the window you can start from a terminal, including the one built into each job. `squad` is installed for you in `~/.squadcode/bin`.
 
 ```bash
-squad do make the checkout remember the cart   # Fin picks the bot and the kind of job
+squad do make the checkout remember the cart   # Peek picks the bot and the kind of job
 squad fix the login redirect loops on Safari   # a Fix job, for Fixer
 squad new --bot Guard look for leaked keys     # a job for one bot
 squad ls                                       # jobs, newest first
 squad show 12                                  # where #12 stands and what it changed
 squad approve 12                               # or: squad discard 12, squad stop 12
-squad brain why tidy up the old feature flags  # where Fin would send a job, and why
+squad brain why tidy up the old feature flags  # where Peek would send a job, and why
 ```
 
 <details>
@@ -228,9 +260,9 @@ squad brain why tidy up the old feature flags  # where Fin would send a job, and
 | `squad approve <id>` / `discard <id>` / `stop <id>` | Approve a job waiting for review, throw its changes away, or stop it |
 | `squad serve [--listen <address>\|tailscale]` | Run the crew here with no window ([below](#run-the-crew-on-a-server)) |
 | `squad pair [name]` / `devices` / `unpair <name>` | Pair a device with the server, list them, or cut one off |
-| `squad brain why <words…>` | Where Fin would send a job, and why |
-| `squad brain ideas` | A bot Fin thinks you could use |
-| `squad brain install [file]` / `remove` | Turn Smart Fin on with Squad's own model, or off and delete it |
+| `squad brain why <words…>` | Where Peek would send a job, and why |
+| `squad brain ideas` | A bot Peek thinks you could use |
+| `squad brain install [file]` / `remove` | Turn Smart Peek on with Squad's own model, or off and delete it |
 
 Jobs run in the Squad Code app while it's open, or in `squad serve`.
 
@@ -249,7 +281,7 @@ squad pair laptop                # a one-time code for another device
 - **Nothing is opened to the internet.** It listens on `127.0.0.1:7640` unless told otherwise; reach it over an SSH tunnel or Tailscale.
 - **Every device pairs.** `squad pair` prints a one-time code (8 characters, 10 minutes, 5 tries) that a device trades for its own token, and `squad unpair` revokes one.
 - **One API for every client.** A small HTTP API under `/v1/` covers state, jobs and their actions, chats, goals, folders and devices, and `GET /v1/events` streams every change as server-sent events, so a job started from one device shows up live on all of them. `squad new` and the other commands on the server feed the same crew.
-- **Fin knows where work belongs.** When you have a server, Fin decides per job whether it runs here or there, by where the project lives, where the agent is signed in and how long the work is, and says why in the job's feed.
+- **Peek knows where work belongs.** When you have a server, Peek decides per job whether it runs here or there, by where the project lives, where the agent is signed in and how long the work is, and says why in the job's feed.
 
 Connecting the desktop app and the phone to a server is coming next; today you drive a server with `squad` on it or through the API.
 
@@ -272,14 +304,14 @@ Open the disk image and drag **Squad Code** to Applications. Squad Code checks f
 > [!WARNING]
 > - **The Mac app is signed ad hoc, not notarized.** The first time, right-click **Squad Code** in Applications and choose **Open**.
 > - **No Intel Mac build yet.** The bundled `llama-server` doesn't link on x86_64 macOS yet. Intel Macs can [build from source](#run-from-source).
-> - **Smart Fin's model has no public download yet**, and the Mac build doesn't bundle `llama-server` yet. The built-in classifier and rules work without it; to try Smart Fin now, point `squad brain install <file.gguf>` at a model you have, or use one you serve with llama-server or Ollama.
+> - **Smart Peek's model has no public download yet**, and the Mac build doesn't bundle `llama-server` yet. The built-in classifier and rules work without it; to try Smart Peek now, point `squad brain install <file.gguf>` at a model you have, or use one you serve with llama-server or Ollama.
 > - **The desktop app can't connect to `squad serve` yet.** See [Run the crew on a server](#run-the-crew-on-a-server).
 
 ### First run
 
-<img src="docs/images/welcome.png" alt="Welcome to Squad Code: step one asks whether a coding agent is installed, showing Claude Code ready and Codex and Gemini not found, with Check again and Continue" width="920" />
+<img src="docs/images/welcome.png" alt="Welcome to Squad Code: step one asks whether a coding agent is installed and shows the agents found on this computer, with Check again and Continue" width="920" />
 
-A two-step welcome checks which coding agents are installed and asks for a folder; both steps can be skipped. Until there are jobs, the Jobs page shows what to do first: cards to install an agent or pick a folder, **Look around with sample jobs first**, and every kind of work to start from. A short **Get started** checklist in the sidebar points at real controls.
+A two-step welcome checks which coding agents are installed and asks for a folder; both steps can be skipped. The folder becomes your first project, with a `#general` thread and Peek ready to talk. Until there's work, the page shows what to do first, and the **Try** list at the bottom of the sidebar points at real controls.
 
 ### Requirements
 
@@ -297,7 +329,7 @@ cd squadcode
 cargo run -p runo --release
 ```
 
-Set `RUNO_V2_DEMO=1` to open the app on a made-up crew with jobs in every state, without running anything or saving anything.
+Set `RUNO_V2_DEMO=1` to open the app on a made-up crew with threads and jobs in every state, without running anything or saving anything. That's how the screenshots in this README were taken.
 
 ### Build the app
 
@@ -321,7 +353,7 @@ Squad Code grew out of Runo, a session-by-session app for running coding agents,
 ## Learn more
 
 - 🔌 **[Provider setup](docs/providers.md)**: installing and signing in to each engine.
-- 🧠 **[Training Squad's own model](training/README.md)**: the test sets, data and scripts behind Smart Fin.
+- 🧠 **[Training Squad's own model](training/README.md)**: the test sets, data and scripts behind Smart Peek.
 - 📝 **[Changelog](CHANGELOG.md)**: everything that changed, as it lands.
 - 🚀 **[Releasing](docs/releasing.md)**: how a release is built and signed.
 

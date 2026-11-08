@@ -39,6 +39,8 @@ struct Relay {
     folder: store::Folder,
     thread: u64,
     said: String,
+    /// The whole reply the @mention ends.
+    whole: String,
 }
 
 pub struct Runtime {
@@ -100,6 +102,31 @@ pub struct Runtime {
     /// Tool uses running jobs wait on your yes for, oldest first.
     pub asks: Vec<crate::approvals::Request>,
     asks_at: Instant,
+    /// The git look at jobs' branches running now, and when the last one began:
+    /// commits ahead and behind, and jobs whose work clashes.
+    git_look: Option<Receiver<GitLook>>,
+    git_looked: Instant,
+    /// Each project folder's git state, from the last look.
+    pub repos: HashMap<String, RepoLine>,
+    /// Fetches from the remote running now.
+    fetching: Vec<Receiver<()>>,
+}
+
+/// What one git look found: each job's commits ahead and behind, and the
+/// pairs of jobs that change the same lines.
+struct GitLook {
+    counts: Vec<(u64, usize, usize)>,
+    clashes: Vec<(u64, u64, String)>,
+    repos: Vec<(String, RepoLine)>,
+}
+
+/// Where a project folder stands, for the Git side of the Jobs panel: its
+/// branch against the remote's copy as of the last fetch, and whether it has
+/// uncommitted work.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RepoLine {
+    pub state: crate::git::RepoState,
+    pub dirty: bool,
 }
 
 impl Runtime {
@@ -133,6 +160,10 @@ impl Runtime {
             skilled: None,
             asks: Vec::new(),
             asks_at: Instant::now(),
+            git_look: None,
+            git_looked: Instant::now() - Duration::from_secs(3600),
+            repos: HashMap::new(),
+            fetching: Vec::new(),
         }
     }
 
@@ -288,6 +319,19 @@ impl Runtime {
         }
         // A thread it builds on that isn't merged yet: this job starts from
         // the base without those changes, so say so and show where they are.
+        // A bot that only reads (Guard reviewing, say) is told where those
+        // changes are, or it would look at the folder without them.
+        if !mode.writes() {
+            for j in brain::digest::unmerged(text, &self.store.jobs) {
+                if j.folder.path != job.folder.path {
+                    continue;
+                }
+                job.context = format!("{}\n\n{}", job.context, brain::digest::read_hint(j))
+                    .trim()
+                    .to_string();
+                job.reads.push(j.worktree.clone());
+            }
+        }
         if mode.writes() {
             for j in brain::digest::unmerged(text, &self.store.jobs) {
                 if j.folder.path != job.folder.path {
@@ -303,6 +347,7 @@ impl Runtime {
                 job.context = format!("{}\n\n{}", job.context, brain::digest::unmerged_hint(j))
                     .trim()
                     .to_string();
+                job.reads.push(j.worktree.clone());
             }
         }
         // Peek's short title for the card, when Smart Peek is on.
@@ -1325,7 +1370,11 @@ impl Runtime {
         if job.status != Status::Review {
             return;
         }
-        if self.way(&job) == ship::Way::PullRequest {
+        let way = self.way(&job);
+        if !self.belt_lets_through(&job, way) {
+            return;
+        }
+        if way == ship::Way::PullRequest {
             if let Some(j) = self.store.job_mut(id) {
                 j.status = Status::Shipping;
                 j.shipping = true;
@@ -1370,6 +1419,265 @@ impl Runtime {
             }
         }
         self.store.save();
+    }
+
+    /// The seatbelt, before anything is pushed or merged: secrets, key files
+    /// and clash markers hold the job until the person decides; debugging
+    /// leftovers are only pointed out. Whether Approve can go on.
+    fn belt_lets_through(&mut self, job: &store::Job, way: ship::Way) -> bool {
+        if job.belt_ok {
+            return true;
+        }
+        let found = work::seatbelt(job);
+        let Some(j) = self.store.job_mut(job.id) else {
+            return false;
+        };
+        j.held.clear();
+        if found.is_empty() {
+            return true;
+        }
+        let lines = work::held_lines(&found);
+        if !work::holds(&found) {
+            j.feed.push(store::Item::By(
+                Member::Shipper,
+                format!(
+                    "Heads up, left in from debugging: {}. Going ahead.",
+                    lines.join("; ")
+                ),
+            ));
+            return true;
+        }
+        let what = match way {
+            ship::Way::PullRequest => "pushing",
+            ship::Way::Merge => "merging",
+        };
+        j.feed.push(store::Item::By(
+            Member::Shipper,
+            format!(
+                "I stopped before {what}. Something in this change shouldn't leave your computer: {}",
+                crate::seatbelt::summary(&found)
+            ),
+        ));
+        j.held = lines;
+        j.seen = false;
+        self.say("Shipper held it back: the seatbelt found something. It's on the job.");
+        self.store.save();
+        false
+    }
+
+    /// Approves a job the seatbelt held, as it is.
+    pub fn approve_anyway(&mut self, id: u64) {
+        if self.on_server(id, "approve-anyway", serde_json::Value::Null) {
+            return;
+        }
+        if let Some(j) = self.store.job_mut(id) {
+            j.belt_ok = true;
+            j.held.clear();
+            j.feed.push(store::Item::Note(
+                "You said to go ahead in spite of the seatbelt.".into(),
+            ));
+        }
+        self.approve(id);
+    }
+
+    /// Hands what the seatbelt found back to the job's bot to take out; it
+    /// comes back for review when it's done.
+    pub fn take_out(&mut self, st: &AppSettings, id: u64) {
+        if self.on_server(id, "take-out", serde_json::Value::Null) {
+            return;
+        }
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.held.is_empty() {
+            return;
+        }
+        let text = format!(
+            "Before this can be pushed, take these out of the change: {}. Move secrets to environment variables or a file git ignores, keep an example file with placeholder values if the project needs one, and remove debugging leftovers. Then run the project's checks and commit.",
+            job.held.join("; ")
+        );
+        if let Some(j) = self.store.job_mut(id) {
+            j.held.clear();
+        }
+        self.send_on(
+            st,
+            id,
+            text,
+            Some("Sent back to take out what the seatbelt found.".into()),
+        );
+    }
+
+    /// Every 45 seconds, off the window's thread: how far each job's branch is
+    /// ahead of where it started and how far its base moved, and which jobs in
+    /// the same project change the same lines. A new clash is told once, by
+    /// Peek, on both jobs.
+    fn poll_git(&mut self) {
+        let before = self.fetching.len();
+        self.fetching
+            .retain(|rx| matches!(rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        if self.fetching.len() < before && self.git_look.is_none() {
+            self.look_at_git_soon();
+        }
+        if let Some(rx) = &self.git_look {
+            match rx.try_recv() {
+                Ok(look) => {
+                    self.git_look = None;
+                    self.took_git_look(look);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.git_look = None,
+            }
+        }
+        // A demo store's folders aren't real projects.
+        if self.store.demo || self.git_looked.elapsed() < Duration::from_secs(45) {
+            return;
+        }
+        self.git_looked = Instant::now();
+        let live: Vec<store::Job> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| {
+                !j.worktree.is_empty()
+                    && j.remote_on.is_empty()
+                    && matches!(j.status, Status::Running | Status::Done | Status::Review)
+            })
+            .cloned()
+            .collect();
+        let mut folders: Vec<String> = live.iter().map(|j| j.folder.path.clone()).collect();
+        if let Some(f) = self.store.folder() {
+            folders.push(f.path.clone());
+        }
+        folders.sort();
+        folders.dedup();
+        folders.retain(|f| !f.is_empty());
+        if live.is_empty() && folders.is_empty() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let repos = folders
+                .into_iter()
+                .filter(|f| crate::git::is_repo(f))
+                .map(|f| {
+                    let line = RepoLine {
+                        state: crate::git::repo_state(&f),
+                        dirty: crate::git::has_uncommitted(&f) == Some(true),
+                    };
+                    (f, line)
+                })
+                .collect();
+            let counts = live
+                .iter()
+                .map(|j| {
+                    let (ahead, behind) = work::counts(j);
+                    (j.id, ahead, behind)
+                })
+                .collect();
+            let lanes: Vec<work::Lane> = live
+                .iter()
+                .map(|j| work::Lane {
+                    id: j.id,
+                    repo: j.folder.path.clone(),
+                    worktree: j.worktree.clone(),
+                })
+                .collect();
+            let _ = tx.send(GitLook {
+                counts,
+                clashes: work::clashes(&lanes),
+                repos,
+            });
+        });
+        self.git_look = Some(rx);
+    }
+
+    /// Asks the folder's remote what's new, off the window's thread, then looks
+    /// again. Nothing in the folder changes.
+    pub fn fetch(&mut self, folder: &str) {
+        let folder = folder.to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = crate::git::fetch(&folder);
+            let _ = tx.send(());
+        });
+        self.fetching.push(rx);
+    }
+
+    /// Looks at git on the next poll rather than waiting for the next round.
+    pub fn look_at_git_soon(&mut self) {
+        self.git_looked = Instant::now() - Duration::from_secs(3600);
+    }
+
+    fn took_git_look(&mut self, look: GitLook) {
+        let looked: Vec<u64> = look.counts.iter().map(|(id, ..)| *id).collect();
+        for (folder, line) in look.repos {
+            self.repos.insert(folder, line);
+        }
+        let mut changed = false;
+        for (id, ahead, behind) in look.counts {
+            if let Some(j) = self.store.job_mut(id) {
+                if (j.ahead, j.behind) != (ahead, behind) {
+                    (j.ahead, j.behind) = (ahead, behind);
+                    changed = true;
+                }
+            }
+        }
+        // Clashes that went away are dropped; new ones are told. Only the jobs
+        // this look covered: the others keep what they had.
+        let pairs: Vec<(u64, u64, String)> = look.clashes;
+        for id in looked {
+            let now: Vec<(u64, String)> = pairs
+                .iter()
+                .filter_map(|(a, b, w)| {
+                    if *a == id {
+                        Some((*b, w.clone()))
+                    } else if *b == id {
+                        Some((*a, w.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let titles: Vec<(u64, String)> = now
+                .iter()
+                .map(|(other, _)| {
+                    let t = self
+                        .store
+                        .job(*other)
+                        .map(|o| o.label().to_string())
+                        .unwrap_or_default();
+                    (*other, t)
+                })
+                .collect();
+            let Some(j) = self.store.job_mut(id) else {
+                continue;
+            };
+            if j.clash_with == now {
+                continue;
+            }
+            for (other, words) in &now {
+                if j.clash_with.iter().any(|(o, _)| o == other) {
+                    continue;
+                }
+                let title = titles
+                    .iter()
+                    .find(|(o, _)| o == other)
+                    .map(|(_, t)| t.clone())
+                    .unwrap_or_default();
+                j.feed.push(store::Item::By(
+                    Member::Fin,
+                    format!(
+                        "Heads up: #{other} {title} changes the same lines, in {words}. Whichever is approved second will need its branch brought up to date."
+                    ),
+                ));
+                j.seen = false;
+            }
+            j.clash_with = now;
+            changed = true;
+        }
+        if changed {
+            self.store.save();
+        }
     }
 
     /// Throws a job's changes away, with its branch and worktree.
@@ -1856,7 +2164,15 @@ impl Runtime {
                 let secs = ask.started.elapsed().as_secs_f32();
                 let said = match reply {
                     engine::Reply::Answer(text) if !text.is_empty() => {
-                        Said::bot(text, format!("{engine} · {secs:.0}s"))
+                        let (words, job) = engine::split_job(&text);
+                        let words = if words.is_empty() {
+                            "I can do that as a job.".to_string()
+                        } else {
+                            words
+                        };
+                        let mut said = Said::bot(words, format!("{engine} · {secs:.0}s"));
+                        said.job = job;
+                        said
                     }
                     engine::Reply::Answer(_) => {
                         Said::note("The engine answered with nothing. Try asking again.")
@@ -1895,6 +2211,7 @@ impl Runtime {
             self.store.save();
         }
         self.poll_ship();
+        self.poll_git();
         // Checker's runs of the checks coming back.
         let mut back = Vec::new();
         self.checking.retain(|(id, rx)| match rx.try_recv() {
@@ -1926,6 +2243,7 @@ impl Runtime {
             for id in &finished {
                 self.begin_review(*id);
                 self.peek(st, *id, true);
+                self.post_turn(*id);
                 self.relay_mentions(*id);
             }
             self.deliver_relays(st);
@@ -1949,13 +2267,29 @@ impl Runtime {
         let Some(job) = self.store.job(id) else {
             return;
         };
-        if job.goal != 0 || job.race != 0 {
+        // A turn the person stopped, or one that failed, says nothing to the crew.
+        if job.goal != 0
+            || job.race != 0
+            || matches!(
+                job.status,
+                Status::Failed | Status::Stopped | Status::Interrupted
+            )
+        {
             return;
         }
-        let Some(last) = job.feed.iter().rev().find_map(|i| match i {
-            store::Item::Text(t) => Some(t.clone()),
-            _ => None,
-        }) else {
+        // Only this turn's last words: an @mention from an earlier turn has
+        // been passed on already.
+        let Some(last) = job
+            .feed
+            .get(job.turn_from..)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                store::Item::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+        else {
             return;
         };
         let said = brain::talk::mentions(&last, job.bot, &Member::all());
@@ -1968,10 +2302,11 @@ impl Runtime {
             let hops = self.relay_hops.entry(key.clone()).or_insert(0);
             if *hops >= brain::talk::HOPS {
                 let note = format!(
-                    "{} and {} have gone back and forth {} times, so they've stopped for you. Reply here, or @ one of them to carry on.",
+                    "The bots have messaged each other {} times without you, so they've stopped here. {} was about to ask {}. Tell one of them what to do next, like \"@{} go ahead\", and they'll carry on.",
+                    brain::talk::HOPS,
                     from.name(),
                     to.name(),
-                    brain::talk::HOPS
+                    from.name(),
                 );
                 if let Some(j) = self.store.job_mut(id) {
                     j.feed.push(store::Item::Note(note.clone()));
@@ -1980,6 +2315,13 @@ impl Runtime {
                 return;
             }
             *hops += 1;
+            // An answer it passed on to another bot isn't waiting on the
+            // person; changes to approve still are.
+            if let Some(j) = self.store.job_mut(id) {
+                if j.status == Status::Done {
+                    j.seen = true;
+                }
+            }
             self.crew_says(
                 &folder,
                 thread,
@@ -1994,6 +2336,7 @@ impl Runtime {
                 folder: folder.clone(),
                 thread,
                 said: words,
+                whole: last.clone(),
             });
         }
     }
@@ -2007,7 +2350,7 @@ impl Runtime {
                 self.relays.push(r);
                 continue;
             }
-            let text = brain::talk::relay_text(r.from, r.from_job, &r.said);
+            let text = brain::talk::relay_text(r.from, r.from_job, &r.said, &r.whole);
             let theirs = self
                 .store
                 .jobs
@@ -2034,6 +2377,7 @@ impl Runtime {
                     job.thread = r.thread;
                     job.title = format!("{} asked: {}", r.from.name(), r.said);
                     job.feed.insert(0, store::Item::By(r.from, r.said.clone()));
+                    job.turn_from += 1;
                     self.store.jobs.push(job);
                 }
             }
@@ -2066,6 +2410,112 @@ impl Runtime {
             at: store::now(),
             choices: Vec::new(),
         });
+    }
+
+    /// `who`'s job in this thread that has been talking with the rest of the
+    /// crew, when it's waiting for its next turn: where the person's
+    /// "@Builder ..." goes once they step in, so it carries on that work
+    /// instead of starting again from scratch.
+    pub fn talking_job(&self, folder: &str, thread: u64, who: Member) -> Option<u64> {
+        self.store
+            .jobs_in(folder, thread)
+            .into_iter()
+            .rev()
+            .find(|j| j.bot == who && j.goal == 0 && j.race == 0)
+            .filter(|j| matches!(j.status, Status::Done | Status::Review))
+            .filter(|j| self.in_crew_talk(j))
+            .map(|j| j.id)
+    }
+
+    /// Whether a job has been talking with other bots: one messaged it, or
+    /// it messaged one.
+    fn in_crew_talk(&self, j: &store::Job) -> bool {
+        let from = format!("from #{}", j.id);
+        j.feed.iter().any(|i| matches!(i, store::Item::By(..)))
+            || self.store.talks.iter().any(|t| {
+                t.folder == j.folder.path
+                    && t.question.is_empty()
+                    && t.answer
+                        .as_ref()
+                        .and_then(|a| a.via.as_deref())
+                        .is_some_and(|v| v.ends_with(&from))
+            })
+    }
+
+    /// A later turn of a job in the bots' talk ends: what it said goes in the
+    /// thread as the bot's message, since its card sits further up where the
+    /// job began. Its @mentions are posted on their own after it.
+    fn post_turn(&mut self, id: u64) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        if job.goal != 0
+            || job.race != 0
+            // Its first turn shows in its card, right where it began.
+            || !job
+                .feed
+                .get(..job.turn_from)
+                .unwrap_or_default()
+                .iter()
+                .any(|i| matches!(i, store::Item::Text(_)))
+            || matches!(
+                job.status,
+                Status::Failed | Status::Stopped | Status::Interrupted
+            )
+            || !self.in_crew_talk(job)
+        {
+            return;
+        }
+        let Some(last) = job
+            .feed
+            .get(job.turn_from..)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .find_map(|i| match i {
+                store::Item::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+        else {
+            return;
+        };
+        let crew = Member::all();
+        let body = last
+            .lines()
+            .filter(|l| brain::talk::mentions(l, job.bot, &crew).is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+        if body.is_empty() {
+            return;
+        }
+        let (folder, thread, bot) = (job.folder.clone(), job.thread, job.bot);
+        self.crew_says(&folder, thread, bot, body, Some(format!("in #{id}")));
+    }
+
+    /// The person steps into the bots' talk with "@Builder ...": their words
+    /// show in the thread and go to Builder's job there as its next turn.
+    pub fn step_in(&mut self, st: &AppSettings, id: u64, text: String) {
+        let Some(job) = self.store.job(id) else {
+            return;
+        };
+        let (folder, thread, who) = (job.folder.path.clone(), job.thread, job.bot);
+        let tid = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        self.store.talks.push(Talk {
+            id: tid,
+            folder,
+            thread,
+            bot: who,
+            question: text.clone(),
+            answer: Some(Said::note(format!(
+                "{} picks this up in #{id}, where it was working with the crew.",
+                who.name()
+            ))),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        self.follow_up(st, id, text);
     }
 
     /// The person spoke in a thread: its bots may talk to each other again.
@@ -2124,16 +2574,16 @@ impl Runtime {
             outfit,
             skills: d.skills.clone(),
             rules: d.rules.clone(),
+            project: String::new(),
         });
         super::data::set_made(&self.store.made);
         self.store.save();
-        if let Some(folder) = self.store.folder().cloned() {
-            let found = crate::settings::discover(Some(&folder.path));
-            let (have, apps) = brain::maker::on_computer(&found);
-            let prompt = brain::maker::full_prompt(&d.role, name, &folder.name, &have, &apps);
-            if let Ok(rx) = brain::maker::ask_full(st, &folder, &prompt) {
-                self.designing.push((id, set, rx));
-            }
+        // A bot for every project: drafted from what it's for, not the open project.
+        let found = crate::settings::discover(None);
+        let (have, apps) = brain::maker::on_computer(&found);
+        let prompt = brain::maker::full_prompt(&d.role, name, None, &have, &apps);
+        if let Ok(rx) = brain::maker::ask_full(st, None, &prompt) {
+            self.designing.push((id, set, rx));
         }
         id
     }
@@ -2154,6 +2604,7 @@ impl Runtime {
         (skills, rules): (Vec<String>, Vec<String>),
         look: [u8; 4],
         setup: super::setup::Setup,
+        project: String,
     ) {
         self.store.made.retain(|m| m.id != id);
         self.store.made.push(super::data::Made {
@@ -2165,6 +2616,7 @@ impl Runtime {
             outfit: String::new(),
             skills,
             rules,
+            project,
         });
         super::data::set_made(&self.store.made);
         self.set_setup(Member::Made(id), setup);
@@ -2185,17 +2637,21 @@ impl Runtime {
     /// Asks the person's engine to draft a whole bot from `about`, for the
     /// maker. Without an open project or an engine, the quick draft is ready
     /// at once.
-    pub fn draft_bot(&mut self, st: &AppSettings, about: &str, name: &str) {
+    pub fn draft_bot(
+        &mut self,
+        st: &AppSettings,
+        about: &str,
+        name: &str,
+        project: Option<&store::Folder>,
+    ) {
         self.drafted = None;
-        let asked = self.store.folder().cloned().and_then(|folder| {
-            let found = crate::settings::discover(Some(&folder.path));
-            let (have, apps) = brain::maker::on_computer(&found);
-            let prompt = brain::maker::full_prompt(about, name, &folder.name, &have, &apps);
-            brain::maker::ask_full(st, &folder, &prompt).ok()
-        });
-        match asked {
-            Some(rx) => self.drafting = Some((rx, about.to_string(), name.to_string())),
-            None => {
+        let found = crate::settings::discover(project.map(|f| f.path.as_str()));
+        let (have, apps) = brain::maker::on_computer(&found);
+        let prompt =
+            brain::maker::full_prompt(about, name, project.map(|f| f.name.as_str()), &have, &apps);
+        match brain::maker::ask_full(st, project, &prompt) {
+            Ok(rx) => self.drafting = Some((rx, about.to_string(), name.to_string())),
+            Err(_) => {
                 self.drafting = None;
                 self.drafted = Some(brain::maker::quick(about, name));
             }
@@ -2215,20 +2671,32 @@ impl Runtime {
 
     /// Asks the person's engine to write one skill file for a bot, from what
     /// the person wants it to do.
-    pub fn draft_skill(&mut self, st: &AppSettings, about: &str, bot: &str) -> Result<(), String> {
-        let folder = self
-            .store
-            .folder()
-            .cloned()
-            .ok_or("Open a project first, so the skill fits its code.")?;
+    /// `project` is the one the bot is only for, read so the steps fit it;
+    /// None writes a skill that works in any project.
+    pub fn draft_skill(
+        &mut self,
+        st: &AppSettings,
+        about: &str,
+        bot: &str,
+        project: Option<&store::Folder>,
+    ) -> Result<(), String> {
+        let (whose, fit) = match project {
+            Some(f) => (
+                format!("for the project \"{}\" (the current folder)", f.name),
+                "Read the project so the steps fit it (its commands, folders and conventions). Change no files.",
+            ),
+            None => (
+                "that works across all of the person's projects".to_string(),
+                "Don't read any project: write steps that work in any codebase, saying how to find project-specific commands.",
+            ),
+        };
         let prompt = format!(
-            "Write a skill file for {bot}, a bot in Squad Code's crew for the project \"{}\" (the current folder). \
-             The skill: {about}\n\nRead the project so the steps fit it (its commands, folders and conventions). Change no files.\n\n\
+            "Write a skill file for {bot}, a bot in Squad Code's crew {whose}. \
+             The skill: {about}\n\n{fit}\n\n\
              Reply with JSON only: {{\"name\": \"short-kebab-name\", \"description\": \"when to use it, one line\", \
-             \"body\": \"Markdown: the steps, commands and checks, 10 to 40 lines\"}}",
-            folder.name
+             \"body\": \"Markdown: the steps, commands and checks, 10 to 40 lines\"}}"
         );
-        let rx = brain::maker::ask_full(st, &folder, &prompt)?;
+        let rx = brain::maker::ask_full(st, project, &prompt)?;
         self.skilling = Some((rx, about.to_string()));
         self.skilled = None;
         Ok(())
@@ -2338,8 +2806,7 @@ impl Runtime {
             let who = Member::Made(id);
             // Only a bot with no setup yet gets one: never over the person's edits.
             if !self.store.setups.contains_key(&super::engine::bot_key(who)) {
-                let dir = self.store.folder().map(|f| f.path.clone());
-                let found = crate::settings::discover(dir.as_deref());
+                let found = crate::settings::discover(None);
                 let setup = brain::maker::setup_from(who, &full, &found);
                 self.set_setup(who, setup);
             }
@@ -2499,7 +2966,7 @@ mod tests {
         assert!(fix_turn(&mut job).is_none());
     }
 
-    fn quiet_store() -> Store {
+    pub(super) fn quiet_store() -> Store {
         // A demo store is never saved, so tests leave ~/.runo alone.
         Store {
             demo: true,
@@ -2564,6 +3031,38 @@ mod tests {
         rt.person_spoke(&folder.path, 3);
         assert!(rt.relay_hops.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_old_mention_isnt_sent_again() {
+        let mut rt = Runtime::new(quiet_store());
+        let folder = store::Folder {
+            name: "t".into(),
+            path: "/tmp/squad-old-mention".into(),
+            ship: String::new(),
+        };
+        rt.store.jobs.push(store::Job {
+            id: 1,
+            thread: 3,
+            bot: Member::Builder,
+            folder: folder.clone(),
+            status: Status::Done,
+            feed: vec![
+                store::Item::Text("Done.\n@Guard: is the cookie safe?".into()),
+                store::Item::You("Also add a logout button".into()),
+            ],
+            // The person's follow-up began a turn that said nothing.
+            turn_from: 1,
+            ..Default::default()
+        });
+        rt.relay_mentions(1);
+        assert!(rt.store.talks.is_empty() && rt.relays.is_empty());
+        // Nor does a turn the person stopped.
+        let j = rt.store.job_mut(1).unwrap();
+        j.turn_from = 0;
+        j.status = Status::Stopped;
+        rt.relay_mentions(1);
+        assert!(rt.store.talks.is_empty() && rt.relays.is_empty());
     }
 
     #[test]
@@ -2673,5 +3172,191 @@ mod tests {
         mirror(&mut here, there);
         assert_eq!(here.feed.len(), 2);
         assert_eq!(here.engine, "Claude Code on vps");
+    }
+}
+
+#[cfg(all(test, unix))]
+mod talk_e2e {
+    use super::*;
+
+    /// A stand-in for Claude Code: answers in stream-json, scripted by what
+    /// it's told, so bots can be watched talking with no real engine.
+    const FAKE: &str = r#"#!/bin/bash
+all="$*"
+sid="sess-$$"
+if [[ "$all" == *"another bot on your crew"* ]]; then
+  who=$(printf '%s' "$all" | grep -o '[A-Za-z]* (another bot on your crew' | head -1 | cut -d' ' -f1)
+  text="I disagree: the cookie needs httpOnly.\\n@$who: please set httpOnly on the session cookie."
+elif [[ "$all" == *"TALK-START"* ]]; then
+  echo '<form>login</form>' > login.html
+  text="The login page works.\\n@Guard: is the session cookie safe?"
+else
+  text="Done, nothing to add."
+fi
+echo "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"$sid\"}"
+echo "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$text\"}]},\"session_id\":\"$sid\"}"
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"$text\",\"session_id\":\"$sid\"}"
+"#;
+
+    fn run_until_idle(rt: &mut Runtime, st: &AppSettings) {
+        let t = Instant::now();
+        loop {
+            rt.poll(st, None);
+            if rt.runners.is_empty() && rt.relays.is_empty() {
+                // Let a finished turn's relays go out.
+                rt.poll(st, None);
+                if rt.runners.is_empty() {
+                    return;
+                }
+            }
+            assert!(t.elapsed() < Duration::from_secs(60), "jobs never settled");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn two_bots_argue_until_the_person_is_needed() {
+        let base = std::env::temp_dir().join(format!("squad-talk-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let fake = base.join("claude");
+        std::fs::write(&fake, FAKE).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let sh = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+        };
+        sh(&["init", "-q"]);
+        std::fs::write(repo.join("README.md"), "demo\n").unwrap();
+        sh(&["add", "."]);
+        sh(&[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-qm",
+            "init",
+        ]);
+
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = if p.id == "claude" {
+                fake.to_string_lossy().into_owned()
+            } else {
+                "/nonexistent/squad-test-agent".into()
+            };
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let folder = store::Folder {
+            name: "repo".into(),
+            path: repo.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let mut rt = Runtime::new(super::tests::quiet_store());
+        let job = rt.make_job(
+            &st,
+            Member::Builder,
+            Mode::Build,
+            "TALK-START build a login page and have Guard check it",
+            folder.clone(),
+            None,
+            None,
+        );
+        let thread = job.thread;
+        rt.store.jobs.push(job);
+        run_until_idle(&mut rt, &st);
+
+        // Each bot's words show in the thread as its own message.
+        let said: Vec<(Member, String)> = rt
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.thread == thread)
+            .map(|t| (t.bot, t.answer.clone().unwrap().text))
+            .collect();
+        assert_eq!(said[0].0, Member::Builder);
+        assert!(said[0].1.starts_with("@Guard"));
+        assert_eq!(said[1].0, Member::Guard);
+        assert!(said[1].1.starts_with("@Builder") && said[1].1.contains("httpOnly"));
+        // Guard reads Builder's unmerged work where it is.
+        let builder = rt.store.jobs[0].clone();
+        let guard = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap();
+        assert_eq!(guard.thread, thread);
+        assert!(guard.context.contains(&builder.worktree));
+        assert_eq!(guard.reads, vec![builder.worktree.clone()]);
+        // Guard's job was Builder's ask, not the person's, and its answer
+        // went on to Builder, so it isn't waiting on the person.
+        assert_eq!(guard.asked_by(), Some(Member::Builder));
+        assert_eq!(builder.asked_by(), None);
+        assert!(guard.seen && !guard.needs_you());
+        let recent = rt.store.recent(&folder.path, thread);
+        assert!(!recent
+            .iter()
+            .any(|(who, w)| who == "you" && w.contains("asked:")));
+        let via = |t: &Talk| {
+            t.answer
+                .as_ref()
+                .and_then(|a| a.via.clone())
+                .unwrap_or_default()
+        };
+        let bot_msgs = rt
+            .store
+            .talks
+            .iter()
+            .filter(|t| t.thread == thread && via(t).starts_with("to "))
+            .count();
+        assert_eq!(bot_msgs as u32, brain::talk::HOPS);
+        // A later turn's words show in the thread too, without the @line.
+        let turn = rt
+            .store
+            .talks
+            .iter()
+            .find(|t| via(t).starts_with("in #"))
+            .unwrap();
+        let text = &turn.answer.as_ref().unwrap().text;
+        assert!(text.contains("I disagree") && !text.contains('@'));
+        assert_eq!(rt.store.talks.last().unwrap().bot, Member::Fin);
+        let paused = rt.store.talks.len();
+        // Nothing more goes on while they wait for the person.
+        run_until_idle(&mut rt, &st);
+        assert_eq!(rt.store.talks.len(), paused);
+        // The person steps in, answering Builder: the bots may talk again.
+        // "@Builder ..." goes on in Builder's job, not a new one.
+        let id = rt.talking_job(&folder.path, thread, Member::Builder);
+        assert_eq!(id, Some(builder.id));
+        let guard_id = rt
+            .store
+            .jobs
+            .iter()
+            .find(|j| j.bot == Member::Guard)
+            .unwrap()
+            .id;
+        assert_eq!(
+            rt.talking_job(&folder.path, thread, Member::Guard),
+            Some(guard_id)
+        );
+        assert_eq!(rt.talking_job(&folder.path, thread, Member::Checker), None);
+        rt.step_in(&st, builder.id, "TALK-START Fine, add httpOnly.".into());
+        assert!(rt.store.talks[paused]
+            .question
+            .contains("Fine, add httpOnly"));
+        let paused = paused + 1;
+        run_until_idle(&mut rt, &st);
+        let after: Vec<Member> = rt.store.talks[paused..].iter().map(|t| t.bot).collect();
+        assert_eq!(after.first(), Some(&Member::Builder));
+        assert!(after.len() > 1);
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -34,14 +34,19 @@ impl Shell {
         let n = all.len();
         let busy = self.crew.store.running().count();
         // The crew as a grid of cards, three across on a wide window.
-        let wide = self.view_w - super::sidebar::WIDTH > 1100.;
+        let wide = self.view_w - self.side_w() > 1100.;
         let mut list = div()
             .w_full()
             .grid()
             .grid_cols(if wide { 3 } else { 2 })
             .gap(px(14.));
-        for who in all {
-            list = list.child(self.crew_row(who, cx));
+        for (n, who) in all.into_iter().enumerate() {
+            let card = self.crew_row(who, cx);
+            list = list.child(super::motion::enter(
+                card,
+                super::motion::key(("crew-row", who.key())),
+                n,
+            ));
         }
         let page = div()
             .w_full()
@@ -139,7 +144,8 @@ impl Shell {
                 .text_size(px(12.))
                 .text_color(c(ui::muted()))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                .map(|d| super::motion::hover_fill(d, None, ui::hover()))
+                .hover(|s| s.text_color(c(ui::ink())))
                 .child(label)
         };
         let key = who.key() as usize;
@@ -241,6 +247,15 @@ impl Shell {
                                             Icon::new(IconName::Pin)
                                                 .size(px(12.))
                                                 .text_color(c(ui::faint())),
+                                        )
+                                    })
+                                    .when(!super::data::project_of(who).is_empty(), |d| {
+                                        d.child(
+                                            div()
+                                                .text_size(px(11.))
+                                                .font_weight(FontWeight::NORMAL)
+                                                .text_color(c(ui::faint()))
+                                                .child("This project only"),
                                         )
                                     }),
                             )

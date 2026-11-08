@@ -297,7 +297,8 @@ fn step_button(id: impl Into<ElementId>, icon: IconName) -> Stateful<Div> {
         .justify_center()
         .text_color(c(ui::body()))
         .cursor_pointer()
-        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+        .map(|d| super::motion::hover_fill(d, None, ui::hover()))
+        .hover(|s| s.text_color(c(ui::ink())))
         .active(|s| s.bg(c(ui::press())))
         .child(Icon::new(icon).size(px(13.)))
 }
@@ -1599,13 +1600,18 @@ impl Shell {
                 .text_color(c(if selected { ui::ink() } else { ui::muted() }))
                 .child(text)
         };
-        let shot = |path: Option<std::path::PathBuf>| {
+        // The tile's overflow_hidden clips to a plain rectangle, not to its rounded
+        // corners, so the picture rounds its own corners to match the inside edge of
+        // the border (the tile's 8px less the border's width), or its square corners
+        // poke out past the curve.
+        let shot = |path: Option<std::path::PathBuf>, selected: bool| {
             path.map(|p| {
                 img(p)
                     .absolute()
                     .top_0()
                     .left_0()
                     .size_full()
+                    .rounded(px(if selected { 6. } else { 7. }))
                     .object_fit(ObjectFit::Cover)
             })
         };
@@ -1655,7 +1661,7 @@ impl Shell {
             };
             let group = SharedString::from(format!("bg-tile-{i}"));
             let setting = source.setting();
-            let mut frame = tile_box(selected).children(shot(wp::preview(&source)));
+            let mut frame = tile_box(selected).children(shot(wp::preview(&source), selected));
             if let Some(path) = own {
                 frame = frame.child(
                     div()

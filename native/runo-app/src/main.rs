@@ -17,6 +17,7 @@ mod assistant_mem;
 mod assistant_ref;
 mod bench;
 mod branches;
+mod browse;
 mod browser;
 mod browser_engine;
 mod buildclean;
@@ -68,6 +69,7 @@ mod harness;
 mod health;
 mod history;
 mod home;
+mod icons;
 mod idle;
 mod inbox;
 mod install;
@@ -9774,6 +9776,22 @@ fn main() {
         println!("{password}");
         return;
     }
+    // `--version` and `--help` answer and quit, before anything that could open a
+    // window: on a server without a display a window would just hang.
+    match std::env::args().nth(1).as_deref() {
+        Some("--version" | "-V") => {
+            println!("Squad Code {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        Some("--help" | "-h") => {
+            println!(
+                "Squad Code {}\n\nUsage: SquadCode [v2 <command> | --version]\n\nWith no arguments it opens the app. `SquadCode v2 help` lists the crew's terminal commands.",
+                env!("CARGO_PKG_VERSION")
+            );
+            return;
+        }
+        _ => {}
+    }
     startup::begin();
     // `runo --mcp-memory <folder> [--thread <id>]`: serve the memory tools to an agent,
     // without a window; a Crew thread also gets the tools it reports through.
@@ -9847,7 +9865,7 @@ fn main() {
     harness::log::enable(store::data_dir());
     // Before settings or sessions are read, and so before either is saved again.
     store::keep_before_version_change(&store::data_dir(), env!("CARGO_PKG_VERSION"));
-    let app = application().with_assets(assets::AllAssets);
+    let app = application().with_assets(icons::Icons);
     startup::mark("gpui application");
     // Clicking the Dock icon with the window closed (macOS keeps Runo running) opens it again.
     app.on_reopen(|cx| {
