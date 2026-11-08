@@ -54,7 +54,7 @@ impl Entry {
 /// Who a reply to a message goes to: the job's own conversation, or a bot
 /// asked in the thread.
 #[derive(Clone, Copy)]
-enum Reply {
+pub(super) enum Reply {
     Job(u64),
     Bot(Member),
 }
@@ -269,7 +269,7 @@ impl Shell {
     }
 
     /// Puts words in the box you type in here: the DM's, or the thread's.
-    fn put_in_box(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn put_in_box(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.dm().is_some() {
             self.chat_input.update(cx, |i, cx| {
                 i.set_value(text, window, cx);
@@ -353,6 +353,18 @@ impl Shell {
             Msg::Mine(text) => Some(text.clone()),
             _ => None,
         };
+        let right = self.on_menu(
+            super::menu::Ctx::Message {
+                copy: copy.clone(),
+                reply,
+                edit: edit.clone(),
+                job: match &what {
+                    Msg::Job(id, ..) => Some(*id),
+                    _ => None,
+                },
+            },
+            cx,
+        );
         bar = bar
             .child(div().w(px(1.)).h(px(16.)).mx(px(2.)).bg(c(ui::line())))
             .when_some(reply, |d, reply| {
@@ -449,6 +461,7 @@ impl Shell {
             .px(px(10.))
             .rounded(px(8.))
             .hover(|s| s.bg(ca(ui::ink(), 0.03)))
+            .on_mouse_down(MouseButton::Right, right)
             .child(body)
             .children(marks)
             .children(stamp)

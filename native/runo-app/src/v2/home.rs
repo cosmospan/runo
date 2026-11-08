@@ -561,6 +561,10 @@ impl Shell {
                         d.child(div().mt(px(4.)).child(ui::bar(f, ui::BLUE).h(px(3.))))
                     }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                self.on_menu(super::menu::Ctx::Job(id), cx),
+            )
             .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)))
     }
 }
