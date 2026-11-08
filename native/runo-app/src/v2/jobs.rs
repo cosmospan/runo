@@ -129,6 +129,23 @@ fn prompt(job: &Job, text: &str, follow_up: bool, checks: &[String], browser: &s
         format!("{}\n\n", job.context)
     };
     let crew = super::brain::talk::crew_rule(job.bot, &Member::all());
+    // What the bot learned from the person's send-backs in this project, and
+    // how the project's own file says to set up and run it.
+    let mut part = part;
+    let lessons = super::learn::brief(job.bot, &job.folder.path);
+    if !lessons.is_empty() {
+        part.push_str(&lessons);
+        part.push_str("\n\n");
+    }
+    if job.mode.writes() {
+        let setup = super::project::load(job.dir())
+            .map(|p| p.brief(job.id))
+            .unwrap_or_default();
+        if !setup.is_empty() {
+            part.push_str(&setup);
+            part.push_str("\n\n");
+        }
+    }
     format!(
         "{}\n\n{part}{rules}{browser_rule}{crew} When you finish, wrap up like a friendly teammate, for someone who may not code: open with the result in one upbeat line (what works now, or what you found), then how to try it in a sentence or two. Put each link (like http://localhost:3000), command or file path on its own, written out in full, so Squad Code can turn it into a button. If you need something from the person, end with one clear question, with the choices spelled out. Keep it short and warm; a little personality is welcome, a wall of text is not.\n\nThe job: {text}",
         super::setup::brief(job.bot)
@@ -239,6 +256,13 @@ pub fn start(
         (true, false) if !exe.is_empty() => browser_rule(Some(&exe)),
         (true, false) => String::new(),
     };
+    // Where the files stand before this turn, so the job can be rewound here.
+    let said = if follow_up {
+        text.to_string()
+    } else {
+        job.title.clone()
+    };
+    super::rewind::take(job, &said);
     let sent = prompt(job, text, resume, &checks, &browser);
     let spec = agent::RunSpec {
         provider: p.id,
