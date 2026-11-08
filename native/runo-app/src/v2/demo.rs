@@ -472,6 +472,20 @@ pub fn seed() -> Store {
             .into_iter()
             .map(|(id, at)| (format!("{}#{id}", folder.path), at))
             .collect(),
+        summaries: vec![super::brain::summary::Summary {
+            folder: folder.path.clone(),
+            thread: 1,
+            text: "For:\n- Building gift cards and coupons into checkout\n\
+                   Decided:\n- Discounts come off before tax\n- Gift cards can't buy other gift cards\n\
+                   Open:\n- Should a coupon and a gift card stack?\n\
+                   Preferences:\n- Keep checkout to one page"
+                .into(),
+            notes: vec!["Launch is Friday: no new payment providers".into()],
+            covers: 9,
+            upto: t - 1_500,
+            updates: 2,
+            at: t - 1_400,
+        }],
         talks: vec![super::store::Talk {
             id: 1,
             folder: folder.path.clone(),
@@ -600,8 +614,26 @@ pub fn repos() -> std::collections::HashMap<String, super::runtime::RepoLine> {
     std::iter::once((
         path,
         super::runtime::RepoLine {
+            is_repo: true,
             state,
-            dirty: false,
+            dirty: true,
+            changes: vec![
+                ("M".into(), "src/checkout/tax.ts".into()),
+                ("??".into(), "notes/launch.md".into()),
+            ],
+            changed: 2,
+            commits: [
+                ("a41c9e2", "Merge #6: order history page", "2 hours ago"),
+                (
+                    "7d03b11",
+                    "Show the delivery date on the receipt",
+                    "5 hours ago",
+                ),
+                ("e19f2a0", "Round tax per line, not per order", "yesterday"),
+                ("3b8c6d4", "Move cart totals into one module", "2 days ago"),
+            ]
+            .map(|(h, s, t)| (h.to_string(), s.to_string(), t.to_string()))
+            .to_vec(),
         },
     ))
     .collect()

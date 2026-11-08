@@ -1001,14 +1001,14 @@ pub(super) fn status_color(s: Status) -> u32 {
 
 /// One block of the side column: its heading, then its body, with a hairline
 /// under it to part it from the next.
-fn section(title: &str, body: Div) -> Div {
+pub(super) fn section(title: &str, body: Div) -> Div {
     div()
-        .py(px(20.))
+        .py(px(18.))
         .border_b_1()
         .border_color(c(ui::line2()))
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(px(10.))
         .child(ui::heading(title, None, None))
         .child(body)
 }

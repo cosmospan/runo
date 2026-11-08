@@ -19,6 +19,7 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod filetab;
 mod gitcards;
 mod goal;
 mod history;
@@ -29,6 +30,7 @@ mod learn;
 mod live;
 mod machine;
 mod mascot;
+mod menu;
 mod motion;
 mod myserver;
 mod palette;
@@ -544,8 +546,16 @@ pub struct Shell {
     /// A bot with a chat or know-how of its own, waiting for you to confirm
     /// taking it off the crew.
     removing: Option<Member>,
+    /// The open right-click menu: where it was clicked and on what.
+    menu: Option<(Point<Pixels>, menu::Ctx)>,
+    /// The menu entry picked with the arrow keys.
+    menu_hot: Option<usize>,
+    /// A project waiting for you to confirm removing it, or deleting its folder.
+    gone: Option<menu::Gone>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
+    /// The thread's "About this thread" panel is open.
+    about_open: bool,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
@@ -593,6 +603,14 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// The filter over the right sidebar's Files tab.
+    files_input: Entity<InputState>,
+    /// The right sidebar shows its Files tab (beats `list_git`).
+    list_files: bool,
+    /// Folders open in the Files tab, by path from the folder's top.
+    files_open: std::collections::HashSet<String>,
+    /// The files last listed for the Files tab: the folder, when, and its files.
+    files_seen: Option<(String, Instant, std::sync::Arc<Vec<String>>)>,
     /// Settings, My server: the `you@host` box, the connecting in progress and
     /// what it has said so far.
     server_input: Entity<InputState>,
@@ -776,6 +794,8 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
+/// How tall the bar across the top is, the sidebar's top strip included.
+pub(super) const TOP_H: f32 = 54.;
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
@@ -890,6 +910,7 @@ impl Shell {
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
+        let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
             .global::<crate::settings::AppSettings>()
             .v2_clear
@@ -1003,6 +1024,11 @@ impl Shell {
                 cx.notify();
             }),
             cx.subscribe_in(&history_input, window, |_, _, event, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
+            cx.subscribe_in(&files_input, window, |_, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
                 }
@@ -1177,14 +1203,14 @@ impl Shell {
                 .first()
                 .map(|g| Place::Goal(g.id))
                 .unwrap_or(Place::Today),
-            Ok("jobs") => Place::Today,
+            Ok("jobs" | "files") => Place::Today,
             Ok("race") => store
                 .jobs
                 .iter()
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
-            Ok("review" | "review-jobs") => store
+            Ok("review" | "review-jobs" | "review-files") => store
                 .jobs
                 .iter()
                 .find(|j| j.status == Status::Review && j.race == 0)
@@ -1272,7 +1298,11 @@ impl Shell {
             side_job: true,
             deleting: None,
             removing: None,
+            menu: None,
+            menu_hot: None,
+            gone: None,
             raw_open: Default::default(),
+            about_open: false,
             confirming: None,
             reading: None,
             reading_since: None,
@@ -1309,6 +1339,10 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            files_input,
+            list_files: false,
+            files_open: Default::default(),
+            files_seen: None,
             server_input,
             server_setup: None,
             server_log: Vec::new(),
@@ -1395,6 +1429,21 @@ impl Shell {
             Ok("git") => {
                 shell.jobs_open = true;
                 shell.list_git = true;
+            }
+            // The status bar's usage popover, open.
+            Ok("usage-open") => shell.usage_open = true,
+            // The right sidebar open on its Files tab.
+            Ok("files") => {
+                shell.jobs_open = true;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
+            }
+            // A job open with the sidebar on its Files tab.
+            Ok("review-files") => {
+                shell.jobs_open = true;
+                shell.side_job = false;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
             }
             // A job open with the sidebar on its Jobs list.
             Ok("review-jobs") => {
@@ -1735,8 +1784,12 @@ impl Shell {
                 .collect();
             let (worked, in_thread) = self.bots_here();
             let server = self.server_note(&folder);
+            let thread = self.crew.store.thread_label(here);
+            let summary = self.crew.store.summary_brief(&folder, here);
             let seen = brain::think::Seen {
                 project: &project,
+                thread: &thread,
+                summary: &summary,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
@@ -1799,6 +1852,8 @@ impl Shell {
         let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
+            thread: "",
+            summary: "",
             recent: &recent,
             crew: &crew,
             running: &[],
@@ -2321,6 +2376,26 @@ impl Shell {
                     self.archive_thread(self.crew.store.thread_now, cx);
                     return;
                 }
+                "note" => {
+                    let Some(folder) = self.crew.store.folder().map(|f| f.path.clone()) else {
+                        self.say("Pick a project folder first.");
+                        return;
+                    };
+                    if arg.is_empty() {
+                        self.say("Write the note, like /note this thread is for discussion, not building.");
+                        return;
+                    }
+                    let here = self.crew.store.thread_here();
+                    let label = self.crew.store.thread_label(here);
+                    self.crew.store.summary_mut(&folder, here).notes.push(arg);
+                    self.crew.store.save();
+                    self.about_open = true;
+                    self.say(format!(
+                        "Pinned to #{label}. Every bot here reads it, and it wins over the summary."
+                    ));
+                    cx.notify();
+                    return;
+                }
                 "plan" => plan = true,
                 "race" => race = 2,
                 // "/later tonight tidy the deps": a job for the night shift.
@@ -2347,7 +2422,7 @@ impl Shell {
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /later, /ask, /thread, /rename, /archive or /delete."
+                        "There's no /{cmd}. Try /plan, /race, /later, /ask, /note, /thread, /rename, /archive or /delete."
                     ));
                     return;
                 }
@@ -3448,9 +3523,20 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
+                if this.menu.is_some() && !m.platform && !m.control {
+                    if this.menu_key(key, window, cx) {
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
+                if (this.deleting.is_some() || this.removing.is_some() || this.gone.is_some())
+                    && key == "escape"
+                {
                     this.deleting = None;
                     this.removing = None;
+                    if !this.gone.as_ref().is_some_and(|g| g.busy) {
+                        this.gone = None;
+                    }
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -3575,6 +3661,8 @@ impl Render for Shell {
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
             .children(self.remove_dialog(cx).map(|d| dialog(d, "remove")))
+            .children(self.gone_dialog(cx).map(|d| dialog(d, "gone")))
+            .children(self.menu_view(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())

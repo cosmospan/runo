@@ -74,10 +74,17 @@ impl Shell {
         };
         let ks = &ev.keystroke;
         let m = ks.modifiers;
-        // ⌘ works as Ctrl there, the way a Mac person expects copy and paste
-        // to; ⌘V first puts this computer's clipboard on the server.
-        let ctrl = m.control || m.platform;
-        if m.platform && ks.key == "v" {
+        // On a Mac, ⌘ works as Ctrl there, the way a Mac person expects copy
+        // and paste to. On Linux and Windows, Ctrl is Ctrl, and the Windows
+        // key stays here. Paste (⌘V, or Ctrl+V) first puts this computer's
+        // clipboard on the server.
+        let mac = cfg!(target_os = "macos");
+        let ctrl = m.control || (mac && m.platform);
+        let paste = ks.key == "v" && if mac { m.platform } else { m.control };
+        if !mac && m.platform {
+            return;
+        }
+        if paste {
             if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) {
                 v.clipboard(&text);
             }
@@ -162,7 +169,6 @@ impl Shell {
             State::Closed(why) => (ui::t_red(), why.clone()),
         };
         let closed = matches!(state, State::Closed(_));
-        let url = self.server_screen.as_ref().map(|s| s.url());
         let bar = div()
             .flex_none()
             .h(px(48.))
@@ -201,16 +207,6 @@ impl Shell {
                             this.open_server_screen(cx);
                         }),
                     ),
-                )
-            })
-            .when_some(url.filter(|_| cfg!(target_os = "macos")), |d, url| {
-                d.child(
-                    ui::ghost_i(
-                        "screen-sharing",
-                        IconName::ExternalLink,
-                        "Open in Screen Sharing",
-                    )
-                    .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             });
         let bounds = self.screen_bounds.clone();
