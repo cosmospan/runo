@@ -711,6 +711,10 @@ impl Shell {
             .child(card("HOW JOBS PICK A SIDE").child(line_row(
                 format!("Here or on {label}"),
                 "When Squad picks: a job runs where its project is, and when both sides have it, long work (big rewrites, migrations, overnight jobs) goes to the server and the rest stays here. Choose Always above to decide yourself. Each job's feed says where it ran and why, and if the server can't take it, it runs here.",
+            ))
+            .child(line_row(
+                "How work comes back",
+                "Like the cloud coding tools, through git: before a job runs there, Squad sends the server your latest commits, and when you approve one that ran there, its branch comes back here and merges like any job (or becomes a pull request). It all goes over the same SSH, so the server needs no GitHub login. Changes you haven't committed stay here.",
             )))
     }
 }
