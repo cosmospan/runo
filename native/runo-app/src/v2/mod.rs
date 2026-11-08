@@ -19,21 +19,27 @@ mod data;
 mod demo;
 mod engine;
 mod engines;
+mod filetab;
 mod gitcards;
 mod goal;
 mod history;
 mod home;
+mod issues;
 mod jobs;
+mod learn;
 mod live;
 mod machine;
 mod mascot;
+mod menu;
 mod motion;
 mod myserver;
 mod palette;
 mod prefs;
+mod project;
 mod race;
 mod remote;
 mod review;
+mod rewind;
 mod rfb;
 mod rich;
 mod runtime;
@@ -41,6 +47,7 @@ mod screenview;
 pub mod server;
 mod serverpage;
 mod setup;
+mod shift;
 mod ship;
 mod sidebar;
 mod start;
@@ -53,6 +60,7 @@ pub(crate) mod tray;
 mod trouble;
 mod ui;
 mod usage;
+mod waiting;
 mod wallpaper;
 mod webpage;
 mod welcome;
@@ -538,8 +546,16 @@ pub struct Shell {
     /// A bot with a chat or know-how of its own, waiting for you to confirm
     /// taking it off the crew.
     removing: Option<Member>,
+    /// The open right-click menu: where it was clicked and on what.
+    menu: Option<(Point<Pixels>, menu::Ctx)>,
+    /// The menu entry picked with the arrow keys.
+    menu_hot: Option<usize>,
+    /// A project waiting for you to confirm removing it, or deleting its folder.
+    gone: Option<menu::Gone>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
+    /// The thread's "About this thread" panel is open.
+    about_open: bool,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
@@ -587,6 +603,14 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// The filter over the right sidebar's Files tab.
+    files_input: Entity<InputState>,
+    /// The right sidebar shows its Files tab (beats `list_git`).
+    list_files: bool,
+    /// Folders open in the Files tab, by path from the folder's top.
+    files_open: std::collections::HashSet<String>,
+    /// The files last listed for the Files tab: the folder, when, and its files.
+    files_seen: Option<(String, Instant, std::sync::Arc<Vec<String>>)>,
     /// Settings, My server: the `you@host` box, the connecting in progress and
     /// what it has said so far.
     server_input: Entity<InputState>,
@@ -682,6 +706,14 @@ pub struct Shell {
     /// The changed file whose diff is open on a job's review, if any.
     diff_open: Option<(u64, String)>,
     diff_text: String,
+    /// The diff line a comment is being written on: job, file, and the
+    /// line's place in the shown diff.
+    line_at: Option<(u64, String, usize)>,
+    line_input: Entity<InputState>,
+    /// Comments on diff lines, waiting to go back with Send back.
+    line_notes: Vec<review::LineNote>,
+    /// The point-and-change bar on a job's browser.
+    pick_input: Entity<InputState>,
     /// How many engines a job from Today's box races on: 0 or 1 is no race.
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
@@ -765,6 +797,8 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
+/// How tall the bar across the top is, the sidebar's top strip included.
+pub(super) const TOP_H: f32 = 54.;
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
@@ -793,6 +827,12 @@ impl Shell {
         let chat_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Ask anything about the code…"));
         let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
+        let line_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("What should change here? Enter adds it")
+        });
+        let pick_input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("What should change about it? Enter sends it")
+        });
         let deny_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Tell it why (optional)"));
         let palette_input = cx.new(|cx| {
@@ -873,6 +913,7 @@ impl Shell {
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
+        let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
             .global::<crate::settings::AppSettings>()
             .v2_clear
@@ -990,6 +1031,11 @@ impl Shell {
                     cx.notify();
                 }
             }),
+            cx.subscribe_in(&files_input, window, |_, _, event, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }),
             cx.subscribe_in(&palette_input, window, |this, _, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.palette_sel = 0;
@@ -1031,6 +1077,24 @@ impl Shell {
                     }
                 }
             }),
+            cx.subscribe_in(&line_input, window, |this, input, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    let text = input.read(cx).value().trim().to_string();
+                    if !text.is_empty() {
+                        input.update(cx, |i, cx| i.set_value("", window, cx));
+                        this.add_line_note(text, cx);
+                    }
+                }
+            }),
+            cx.subscribe_in(&pick_input, window, |this, input, event, window, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    let text = input.read(cx).value().trim().to_string();
+                    if !text.is_empty() {
+                        input.update(cx, |i, cx| i.set_value("", window, cx));
+                        this.send_pick(text, cx);
+                    }
+                }
+            }),
             cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
                     let text = input.read(cx).value().trim().to_string();
@@ -1065,6 +1129,12 @@ impl Shell {
         let dozing = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let asleep = dozing.clone();
         let mut slept = 0u32;
+        // Saves still waiting for a tick are written before Squad Code quits.
+        cx.on_app_quit(|this, _| {
+            this.crew.store.flush(true);
+            async {}
+        })
+        .detach();
         let pump = cx.spawn(async move |this, cx| loop {
             // Dozing (nobody around, nothing running): no redraws at all, apart from
             // one every half minute so times like "4m ago" stay true.
@@ -1074,6 +1144,13 @@ impl Shell {
                     .await;
                 slept += 1;
                 if slept < 60 {
+                    // No redraw, but a save asked for still gets written.
+                    if this
+                        .update(cx, |this, _| this.crew.store.flush(false))
+                        .is_err()
+                    {
+                        break;
+                    }
                     continue;
                 }
                 slept = 0;
@@ -1121,7 +1198,10 @@ impl Shell {
             demo::usage(&mut s);
             s
         } else {
-            Store::load()
+            // The window writes saves on its ticks, not as each change asks.
+            let mut s = Store::load();
+            s.deferred = true;
+            s
         };
         let start = match std::env::var("RUNO_V2_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
@@ -1142,14 +1222,14 @@ impl Shell {
                 .first()
                 .map(|g| Place::Goal(g.id))
                 .unwrap_or(Place::Today),
-            Ok("jobs") => Place::Today,
+            Ok("jobs" | "files") => Place::Today,
             Ok("race") => store
                 .jobs
                 .iter()
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
-            Ok("review" | "review-jobs") => store
+            Ok("review" | "review-jobs" | "review-files") => store
                 .jobs
                 .iter()
                 .find(|j| j.status == Status::Review && j.race == 0)
@@ -1191,6 +1271,10 @@ impl Shell {
             deny_input,
             denying: None,
             live_input,
+            line_input: line_input.clone(),
+            line_notes: Vec::new(),
+            line_at: None,
+            pick_input: pick_input.clone(),
             live_scroll: ScrollHandle::new(),
             live_len: 0,
             chat_scroll: ScrollHandle::new(),
@@ -1205,7 +1289,8 @@ impl Shell {
             new_mark: (String::new(), 0, 0),
             reply_open: None,
             side_folds: HashMap::new(),
-            toast: None,
+            // A saved store that couldn't be read in full: say so once.
+            toast: store::take_load_note().map(|n| (n.into(), Instant::now())),
             entered: Instant::now(),
             motion: true,
             active,
@@ -1233,7 +1318,11 @@ impl Shell {
             side_job: true,
             deleting: None,
             removing: None,
+            menu: None,
+            menu_hot: None,
+            gone: None,
             raw_open: Default::default(),
+            about_open: false,
             confirming: None,
             reading: None,
             reading_since: None,
@@ -1270,6 +1359,10 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            files_input,
+            list_files: false,
+            files_open: Default::default(),
+            files_seen: None,
             server_input,
             server_setup: None,
             server_log: Vec::new(),
@@ -1357,6 +1450,21 @@ impl Shell {
             Ok("git") => {
                 shell.jobs_open = true;
                 shell.list_git = true;
+            }
+            // The status bar's usage popover, open.
+            Ok("usage-open") => shell.usage_open = true,
+            // The right sidebar open on its Files tab.
+            Ok("files") => {
+                shell.jobs_open = true;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
+            }
+            // A job open with the sidebar on its Files tab.
+            Ok("review-files") => {
+                shell.jobs_open = true;
+                shell.side_job = false;
+                shell.list_files = true;
+                shell.files_open = ["src", "src/checkout"].map(String::from).into();
             }
             // A job open with the sidebar on its Jobs list.
             Ok("review-jobs") => {
@@ -1697,8 +1805,12 @@ impl Shell {
                 .collect();
             let (worked, in_thread) = self.bots_here();
             let server = self.server_note(&folder);
+            let thread = self.crew.store.thread_label(here);
+            let summary = self.crew.store.summary_brief(&folder, here);
             let seen = brain::think::Seen {
                 project: &project,
+                thread: &thread,
+                summary: &summary,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
@@ -1761,6 +1873,8 @@ impl Shell {
         let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
+            thread: "",
+            summary: "",
             recent: &recent,
             crew: &crew,
             running: &[],
@@ -2215,7 +2329,8 @@ impl Shell {
         let mut text = text;
         let mut plan = false;
         let mut race = 0;
-        if let Some(rest) = text.strip_prefix('/') {
+        let mut later: Option<u64> = None;
+        if let Some(rest) = text.clone().strip_prefix('/') {
             let (cmd, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
             let arg = arg.trim().to_string();
             match cmd {
@@ -2282,20 +2397,60 @@ impl Shell {
                     self.archive_thread(self.crew.store.thread_now, cx);
                     return;
                 }
+                "note" => {
+                    let Some(folder) = self.crew.store.folder().map(|f| f.path.clone()) else {
+                        self.say("Pick a project folder first.");
+                        return;
+                    };
+                    if arg.is_empty() {
+                        self.say("Write the note, like /note this thread is for discussion, not building.");
+                        return;
+                    }
+                    let here = self.crew.store.thread_here();
+                    let label = self.crew.store.thread_label(here);
+                    self.crew.store.summary_mut(&folder, here).notes.push(arg);
+                    self.crew.store.save();
+                    self.about_open = true;
+                    self.say(format!(
+                        "Pinned to #{label}. Every bot here reads it, and it wins over the summary."
+                    ));
+                    cx.notify();
+                    return;
+                }
                 "plan" => plan = true,
                 "race" => race = 2,
+                // "/later tonight tidy the deps": a job for the night shift.
+                "later" => match shift::parse_when(&arg, chrono::Local::now()) {
+                    Some((at, rest)) => {
+                        later = Some(at);
+                        text = rest.clone();
+                        if !self.mode_pinned {
+                            self.mode = Mode::guess(&rest);
+                        }
+                        if !self.mode.writes() {
+                            self.mode = Mode::Build;
+                        }
+                        self.mode_pinned = true;
+                    }
+                    None => {
+                        self.say("Say when, then the job: /later tonight tidy the deps, /later 2am …, /later in 2h …, /later tomorrow ….");
+                        return;
+                    }
+                },
                 "ask" => {
                     self.mode = Mode::Ask;
                     self.mode_pinned = true;
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename, /archive or /delete."
+                        "There's no /{cmd}. Try /plan, /race, /later, /ask, /note, /thread, /rename, /archive or /delete."
                     ));
                     return;
                 }
             }
-            text = arg;
+            if later.is_none() {
+                text = arg;
+            }
         }
         if !self.mode_pinned {
             self.mode = Mode::guess(&text);
@@ -2351,6 +2506,18 @@ impl Shell {
             return;
         };
         let mode = self.mode;
+        if let Some(at) = later {
+            self.mode_pinned = false;
+            let when = shift::when_words(at, store::now());
+            self.crew.queue_later(doer, mode, text.clone(), folder, at);
+            self.say(format!(
+                "{} starts \u{201c}{}\u{201d} {when}. It's in the Waiting list until then.",
+                doer.name(),
+                text.lines().next().unwrap_or("").trim()
+            ));
+            cx.notify();
+            return;
+        }
         if racing > 1 && mode.writes() {
             self.start_race(doer, mode, text, folder, racing, cx);
             return;
@@ -2601,6 +2768,11 @@ impl Shell {
         let place = match opened {
             runtime::Opened::Job(id) | runtime::Opened::Busy(id) => Place::Live(id),
             runtime::Opened::Race(id) => Place::Race(id),
+            // It waits in line; what it waits for was said.
+            runtime::Opened::Waiting(_) => {
+                cx.notify();
+                return;
+            }
         };
         self.go(place, cx);
     }
@@ -2612,6 +2784,15 @@ impl Shell {
         if self.crew.rerun(&st, id, pick) {
             self.go(Place::Live(id), cx);
         }
+    }
+
+    /// Rewinds a job to before its turn `k`: its files go back and the
+    /// later turns leave its feed.
+    pub(super) fn rewind_job(&mut self, id: u64, k: usize, cx: &mut Context<Self>) {
+        if let Err(why) = self.crew.rewind(id, k) {
+            self.say(why);
+        }
+        cx.notify();
     }
 
     /// A stopped or interrupted job picks up where it was.
@@ -2907,6 +3088,8 @@ impl Shell {
             Place::Live(id) => Some(id),
             _ => None,
         };
+        // Saves asked for since the last tick, at most about once a second.
+        self.crew.store.flush(false);
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
@@ -3185,15 +3368,20 @@ impl Shell {
 
     /// A small avatar, like the ones beside chat lines: still, so it costs nothing.
     fn avatar(&mut self, who: Member, size: f32) -> Img {
-        let image = self.holos.image(
+        img(self.avatar_image(who, size)).size(px(size)).flex_none()
+    }
+
+    /// The still picture behind `avatar`, for views that draw it themselves,
+    /// like a bot's hover card.
+    fn avatar_image(&mut self, who: Member, size: f32) -> Arc<RenderImage> {
+        self.holos.image(
             mascot::figure(who, Mood::Idle),
             size,
             Framing::Bust,
             2.0,
             self.scale,
             false,
-        );
-        img(image).size(px(size)).flex_none()
+        )
     }
 
     fn inbox_count(&self) -> usize {
@@ -3419,9 +3607,20 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
+                if this.menu.is_some() && !m.platform && !m.control {
+                    if this.menu_key(key, window, cx) {
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
+                if (this.deleting.is_some() || this.removing.is_some() || this.gone.is_some())
+                    && key == "escape"
+                {
                     this.deleting = None;
                     this.removing = None;
+                    if !this.gone.as_ref().is_some_and(|g| g.busy) {
+                        this.gone = None;
+                    }
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -3546,6 +3745,8 @@ impl Render for Shell {
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
             .children(self.remove_dialog(cx).map(|d| dialog(d, "remove")))
+            .children(self.gone_dialog(cx).map(|d| dialog(d, "gone")))
+            .children(self.menu_view(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())
