@@ -123,6 +123,8 @@ pub struct AppSettings {
     pub sound_needs_you: bool,
     pub sound_failed: bool,
     pub sound_done: bool,
+    /// How they sound, by `sounds::Style` id.
+    pub sound_style: String,
     pub confirm_delete: bool,
     pub remove_worktree_on_delete: bool,
     /// Delete a worktree's build output once its thread is done or merged.
@@ -401,6 +403,7 @@ impl Default for AppSettings {
             sound_needs_you: true,
             sound_failed: true,
             sound_done: true,
+            sound_style: "bubble".into(),
             confirm_delete: true,
             remove_worktree_on_delete: true,
             remove_build_output: true,

@@ -3000,7 +3000,7 @@ impl Shell {
         }
         self.heard = Some(now);
         if let Some(cue) = crate::sounds::pick(fresh, st) {
-            crate::sounds::play(cue);
+            crate::sounds::play(cue, st);
         }
     }
 

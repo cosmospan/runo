@@ -6,7 +6,7 @@ All notable changes to Runo are documented here.
 
 ### Added
 
-- A soft chime when something needs you: two notes up when a bot asks for your OK or asks you to choose, one note when a job is done or ready to review, and two lower notes when a job fails. Nothing plays for the job or thread you're looking at, and several at once chime once. Settings > General > Alerts turns sounds off, or each kind on its own; switching one on plays it. The sounds are made by Squad Code, so they are the same on Mac, Windows and Linux.
+- A short sound when something needs you: a bot asking for your OK or asking you to choose, a job done or ready to review, or a job that failed, each with its own sound. Pick how they sound in Settings > General > Alerts: Bubble (the default), Marimba, Pluck or Glass; picking one plays it. Nothing plays for the job or thread you're looking at, and several at once sound once. Sounds can be turned off, or each kind on its own. The sounds are made by Squad Code, so they are the same on Mac, Windows and Linux.
 
 ## [2.0.0-alpha.7] - 2026-11-08
 

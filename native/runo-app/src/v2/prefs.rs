@@ -1198,7 +1198,8 @@ impl Shell {
                     .on_click(cx.listener(move |_, _, _, cx| {
                         save(cx, |st| set(st, !on));
                         if !on {
-                            crate::sounds::play(cue);
+                            let style = cx.global::<AppSettings>().sound_style.clone();
+                            crate::sounds::preview(crate::sounds::Style::parse(&style), cue);
                         }
                         cx.notify();
                     })),
@@ -1216,7 +1217,7 @@ impl Shell {
             sound(
                 "set-sounds",
                 "Sounds",
-                "A soft chime when something needs you. Quiet for the job or thread you're looking at.",
+                "A short sound when something needs you. Quiet for the job or thread you're looking at.",
                 crate::sounds::Cue::NeedsYou,
                 st.sounds,
                 |s, v| s.sounds = v,
@@ -1224,6 +1225,29 @@ impl Shell {
             ),
         ];
         if st.sounds {
+            let picked = crate::sounds::Style::parse(&st.sound_style);
+            let mut styles = div().flex_none().flex().gap(px(6.));
+            for (i, style) in crate::sounds::Style::ALL.into_iter().enumerate() {
+                styles = styles.child(
+                    ui::pill(("sound-style", i), style.label(), style == picked).on_click(
+                        cx.listener(move |_, _, _, cx| {
+                            save(cx, |st| st.sound_style = style.id().to_string());
+                            crate::sounds::preview(style, crate::sounds::Cue::NeedsYou);
+                            cx.notify();
+                        }),
+                    ),
+                );
+            }
+            alert_rows.push(row(
+                "Sound",
+                match picked {
+                    crate::sounds::Style::Bubble => "Quick blips that slide in pitch.",
+                    crate::sounds::Style::Marimba => "Warm, woody notes.",
+                    crate::sounds::Style::Pluck => "A soft plucked string.",
+                    crate::sounds::Style::Glass => "Airy bells with a shimmer.",
+                },
+                styles,
+            ));
             alert_rows.push(sound(
                 "set-sound-ask",
                 "When a bot needs you",
