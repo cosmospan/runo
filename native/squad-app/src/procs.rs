@@ -2,6 +2,16 @@
 //! parent and working folder, read straight from the kernel rather than by running
 //! `lsof` or `ps`, which scan every process and take a good part of a second.
 
+use std::path::PathBuf;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Proc {
+    pub pid: u32,
+    pub ppid: u32,
+    /// Its working folder; `None` when it can't be read (another user's process).
+    pub cwd: Option<PathBuf>,
+}
+
 #[cfg(target_os = "macos")]
 pub fn all() -> Vec<Proc> {
     use std::ffi::CStr;
@@ -58,6 +68,30 @@ pub fn all() -> Vec<Proc> {
         }
         out
     }
+}
+
+#[cfg(target_os = "linux")]
+pub fn all() -> Vec<Proc> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|e| {
+            let pid: u32 = e.file_name().to_str()?.parse().ok()?;
+            let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
+            // `pid (comm) state ppid ...`; comm may hold spaces and parentheses.
+            let ppid = stat
+                .rsplit_once(')')?
+                .1
+                .split_whitespace()
+                .nth(1)?
+                .parse()
+                .ok()?;
+            let cwd = std::fs::read_link(e.path().join("cwd")).ok();
+            Some(Proc { pid, ppid, cwd })
+        })
+        .collect()
 }
 
 /// Elsewhere (Windows) there is no cheap way to tell.
