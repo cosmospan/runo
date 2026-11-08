@@ -253,6 +253,10 @@ pub struct Job {
     pub worked: u64,
     /// When the turn running now began; 0 when none is.
     pub turn: u64,
+    /// Where the latest turn's items start in the feed.
+    pub turn_from: usize,
+    /// Other jobs' worktrees it may read: unmerged threads it was pointed at.
+    pub reads: Vec<String>,
     pub status: Status,
     pub feed: Vec<Item>,
     /// The agent's own todo list: (step, 0 todo / 1 doing / 2 done).
@@ -370,6 +374,8 @@ impl Default for Job {
             ended: None,
             worked: 0,
             turn: 0,
+            turn_from: 0,
+            reads: Vec::new(),
             status: Status::Done,
             feed: Vec::new(),
             plan: Vec::new(),
@@ -430,6 +436,7 @@ impl Job {
     /// A turn starts: the first run or a follow-up.
     pub fn turn_began(&mut self) {
         self.turn = now();
+        self.turn_from = self.feed.len();
     }
 
     /// The running turn ended; its time goes on the job.
@@ -494,6 +501,17 @@ impl Job {
         }
     }
 
+    /// The bot that started this job by @mentioning its bot in the thread;
+    /// None when the person asked for it.
+    pub fn asked_by(&self) -> Option<Member> {
+        match self.feed.first() {
+            Some(Item::By(m, _)) if self.title.starts_with(&format!("{} asked:", m.name())) => {
+                Some(*m)
+            }
+            _ => None,
+        }
+    }
+
     pub fn needs_you(&self) -> bool {
         // Changes waiting for approval stay in Needs you until you decide.
         if self.status == Status::Review {
@@ -522,6 +540,15 @@ pub struct Said {
     pub folder: String,
     /// When it was said, to place it among the bot's jobs.
     pub at: u64,
+    /// The job the bot offers to do, in its words; empty when its answer
+    /// needs no code changed.
+    pub job: String,
+    /// Once the offer is taken: the job it started (0 when the work went
+    /// another way, as a plan). The offer then can't be taken again.
+    pub job_id: u64,
+    pub job_taken: bool,
+    /// "Not now" on the offer.
+    pub job_off: bool,
 }
 
 impl Said {
@@ -814,8 +841,11 @@ impl Store {
                 }
             }
         }
+        // A job a bot asked for: its words are in the thread already, as its own.
         for j in self.jobs_in(folder, thread) {
-            said.push((j.started, "you".into(), j.title.clone()));
+            if j.asked_by().is_none() {
+                said.push((j.started, "you".into(), j.title.clone()));
+            }
         }
         said.sort_by_key(|s| s.0);
         let n = said.len();
@@ -1040,6 +1070,15 @@ impl Store {
     pub fn say_in_dm(&mut self, who: Member, mut said: Said) {
         said.folder = self.folder().map(|f| f.path.clone()).unwrap_or_default();
         self.chats.entry(who).or_default().push(said);
+    }
+
+    /// The line in the DM with `who` said at `at` with these words.
+    pub fn dm_line_mut(&mut self, who: Member, at: u64, text: &str) -> Option<&mut Said> {
+        self.chats
+            .get_mut(&who)?
+            .iter_mut()
+            .rev()
+            .find(|m| !m.mine && m.at == at && m.text == text)
     }
 
     /// Clears the DM with `who` in the project you're in; other projects keep theirs.

@@ -73,6 +73,20 @@ pub fn unmerged_hint(j: &Job) -> String {
     )
 }
 
+/// What a bot that only reads is told about an unmerged thread it's asked
+/// about: where its changes are, since they aren't in the folder it reads.
+pub fn read_hint(j: &Job) -> String {
+    let base = if j.base_sha.is_empty() {
+        j.base.as_str()
+    } else {
+        j.base_sha.as_str()
+    };
+    format!(
+        "#{}'s changes aren't merged yet, so they aren't in this folder. Read them where they are: the folder {} (branch {}); `git -C {} diff {base}` shows them all. Look at those files, not this folder's, when you check #{}'s work.",
+        j.id, j.worktree, j.branch, j.worktree, j.id
+    )
+}
+
 fn clip(s: &str, n: usize) -> String {
     let s = s.trim();
     if s.chars().count() <= n {
