@@ -4,6 +4,9 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Your server's screen now opens only in Squad's own viewer, the same on macOS, Linux and Windows, with nothing else to install. The Mac-only Open in Screen Sharing button is gone. Keys follow your computer: on a Mac ⌘ acts as Ctrl and ⌘V pastes; elsewhere Ctrl is Ctrl, Ctrl+V puts this computer's clipboard on the server first, and the Windows key stays on your computer.
 ### Added
 
 - Right-click menus across the app. A project's tile offers Open, New thread, Open terminal here, Copy path, Show in Finder, Remove from Squad Code and Delete folder from disk. A thread offers Open, Mark as read, Copy name, Rename, Archive and Delete. A bot offers Message, Rename or edit (Edit setup for the built-in crew), Show on the Crew page and Remove from crew. A job's row or card, and every message about one, offers Open, Stop or Run again, a terminal in its folder, Show in Finder, Open pull request and Copy branch name. Any message offers Copy text, Reply, Quote in reply and, for your own, Edit and send again. Arrow keys, Enter and Escape work in every menu.
