@@ -176,6 +176,11 @@ impl Shell {
             .flex()
             .items_center()
             .gap(px(7.))
+            .child(
+                Icon::new(IconName::Gauge)
+                    .size(px(13.))
+                    .text_color(c(ui::muted())),
+            )
             .child(dots)
             .when_some(single, |d, name| d.child(name))
             .when(days.len() > BAR_ENGINES, |d| {
@@ -229,32 +234,17 @@ impl Shell {
             })
             .child(engines)
             .child(rule())
-            .child(
-                div()
-                    .flex()
-                    .items_baseline()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .text_color(c(ui::ink()))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(format!("${spend:.2}")),
-                    )
-                    .child(div().text_color(c(ui::faint())).child("today")),
-            )
+            .child(segment(
+                IconName::CircleDollarSign,
+                format!("${spend:.2}"),
+                "today",
+            ))
             .child(rule())
-            .child(
-                div()
-                    .flex()
-                    .items_baseline()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .text_color(c(ui::body()))
-                            .child(crate::health::token_count(tokens)),
-                    )
-                    .child(div().text_color(c(ui::faint())).child("tokens")),
-            )
+            .child(segment(
+                IconName::Zap,
+                crate::health::token_count(tokens),
+                "tokens",
+            ))
             .child(
                 Icon::new(if open {
                     IconName::ChevronDown
@@ -321,7 +311,17 @@ impl Shell {
     /// The engines popover, over the status bar: today across the crew, then
     /// each engine's plan windows, how much of them is used and when they
     /// reset, and its day.
+    ///
+    /// Everything sits on one grid: a 16 px edge on both sides, and under
+    /// each engine a column that starts where its name does.
     pub(super) fn usage_popover(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        /// The popover's side padding.
+        const EDGE: f32 = 16.;
+        /// An engine's icon tile, and the gap after it: its name, windows
+        /// and notes all start this far in.
+        const TILE: f32 = 28.;
+        const INSET: f32 = TILE + 10.;
+
         let st = cx.global::<crate::settings::AppSettings>();
         let days = engines_today(st, &self.crew.store);
         let now = crate::usage::now_secs();
@@ -337,15 +337,18 @@ impl Shell {
             .map(|u| u.at)
             .max();
 
-        // The header: a title, when the plans were last read, and a refresh.
+        // The header: a tile, the title over when the plans were last read,
+        // and a refresh.
         let refresh = div()
             .id("usage-refresh")
-            .size(px(26.))
+            .size(px(28.))
             .flex()
             .flex_none()
             .items_center()
             .justify_center()
             .rounded(px(7.))
+            .border_1()
+            .border_color(c(ui::line_hi()))
             .cursor_pointer()
             .map(|d| {
                 super::motion::hover_paint(d, None, ui::hover(), Some((ui::muted(), ui::ink())))
@@ -370,41 +373,61 @@ impl Shell {
                 crate::usage::refresh(true);
                 cx.notify();
             }));
+        let updated = match (reading, read_at) {
+            (true, _) => "Reading plan limits\u{2026}".to_string(),
+            (false, Some(at)) => format!("Updated {}", crate::usage::ago(at, now)),
+            (false, None) => "Plan limits and today's spend".to_string(),
+        };
         let head = div()
-            .pl(px(16.))
-            .pr(px(10.))
-            .pt(px(12.))
-            .pb(px(10.))
+            .px(px(EDGE))
+            .pt(px(14.))
+            .pb(px(12.))
             .flex()
             .items_center()
-            .gap(px(8.))
+            .gap(px(10.))
+            .child(tile(IconName::Gauge, ui::BLUE, TILE))
             .child(
                 div()
                     .flex_1()
-                    .text_size(px(13.5))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(ui::ink()))
-                    .child("Usage today"),
+                    .flex()
+                    .flex_col()
+                    .gap(px(1.))
+                    .child(
+                        div()
+                            .text_size(px(13.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Usage today"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(c(ui::faint()))
+                            .child(updated),
+                    ),
             )
-            .child(div().text_size(px(11.)).text_color(c(ui::faint())).child(
-                match (reading, read_at) {
-                    (true, _) => "Reading\u{2026}".to_string(),
-                    (false, Some(at)) => format!("Updated {}", crate::usage::ago(at, now)),
-                    (false, None) => String::new(),
-                },
-            ))
             .child(refresh);
 
         // Today across every engine, as three figures on one tile.
-        let figure = |label: &'static str, value: String, first: bool| {
+        let figure = |icon: IconName, label: &'static str, value: String, first: bool| {
             div()
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(3.))
+                .gap(px(4.))
                 .px(px(12.))
                 .py(px(10.))
                 .when(!first, |el| el.border_l_1().border_color(c(ui::line2())))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(5.))
+                        .text_size(px(11.))
+                        .text_color(c(ui::faint()))
+                        .child(Icon::new(icon).size(px(12.)))
+                        .child(label),
+                )
                 .child(
                     div()
                         .text_size(px(17.))
@@ -412,45 +435,73 @@ impl Shell {
                         .text_color(c(ui::ink()))
                         .child(value),
                 )
-                .child(
-                    div()
-                        .text_size(px(11.))
-                        .text_color(c(ui::faint()))
-                        .child(label),
-                )
         };
         let totals = div()
-            .mx(px(12.))
+            .mx(px(EDGE))
             .flex()
             .rounded(px(10.))
             .bg(c(ui::raised()))
             .border_1()
             .border_color(c(ui::line2()))
-            .child(figure("Spent", format!("${spend:.2}"), true))
-            .child(figure("Tokens", crate::health::token_count(tokens), false))
-            .child(figure("Jobs", jobs.to_string(), false));
+            .child(figure(
+                IconName::CircleDollarSign,
+                "Spent",
+                format!("${spend:.2}"),
+                true,
+            ))
+            .child(figure(
+                IconName::Zap,
+                "Tokens",
+                crate::health::token_count(tokens),
+                false,
+            ))
+            .child(figure(
+                IconName::ListChecks,
+                "Jobs",
+                jobs.to_string(),
+                false,
+            ));
 
-        let mut list = div().flex().flex_col().pt(px(6.));
+        let caption = div()
+            .px(px(EDGE))
+            .pt(px(16.))
+            .pb(px(4.))
+            .text_size(px(10.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(ui::faint()))
+            .child("ENGINES");
+
+        let mut list = div().flex().flex_col();
         for (k, d) in days.iter().enumerate() {
             let p = &crate::agent::PROVIDERS[d.i];
             let default = k == 0;
-            let mut card = div()
-                .px(px(16.))
-                .py(px(12.))
+            let state = if d.ready { ui::GREEN } else { ui::RED };
+            // The tile, with the engine's state as a dot on its corner.
+            let mark = div()
+                .relative()
+                .flex_none()
+                .child(tile(IconName::Cpu, ui::VIOLET, TILE))
+                .child(
+                    div()
+                        .absolute()
+                        .right(px(-2.))
+                        .bottom(px(-2.))
+                        .size(px(10.))
+                        .rounded_full()
+                        .border_2()
+                        .border_color(c(ui::float()))
+                        .bg(c(state)),
+                );
+            let title = div()
+                .flex_1()
                 .flex()
                 .flex_col()
-                .gap(px(10.))
-                .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
+                .gap(px(1.))
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(8.))
-                        .child(div().size(px(7.)).rounded_full().bg(c(if d.ready {
-                            ui::GREEN
-                        } else {
-                            ui::RED
-                        })))
+                        .gap(px(6.))
                         .child(
                             div()
                                 .text_size(px(13.))
@@ -461,48 +512,60 @@ impl Shell {
                         .when(default, |el| {
                             el.child(
                                 div()
-                                    .h(px(18.))
+                                    .h(px(17.))
                                     .px(px(6.))
                                     .flex()
                                     .items_center()
                                     .rounded(px(5.))
                                     .bg(ca(ui::RUNO, 0.14))
-                                    .text_size(px(10.5))
+                                    .text_size(px(10.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(c(ui::t_violet()))
                                     .child("Default"),
                             )
-                        })
-                        .child(div().flex_1())
-                        .child(
-                            div()
-                                .flex()
-                                .items_baseline()
-                                .gap(px(6.))
-                                .text_size(px(11.5))
-                                .child(
-                                    div()
-                                        .text_color(c(ui::body()))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(format!("${:.2}", d.spend)),
-                                )
-                                .child(div().text_color(c(ui::faint())).child(format!(
-                                    "{} \u{b7} {} job{}",
-                                    crate::health::token_count(d.tokens),
-                                    d.jobs,
-                                    if d.jobs == 1 { "" } else { "s" }
-                                ))),
-                        ),
+                        }),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.))
+                        .text_color(c(ui::faint()))
+                        .child(format!(
+                            "{} tokens \u{b7} {} job{}",
+                            crate::health::token_count(d.tokens),
+                            d.jobs,
+                            if d.jobs == 1 { "" } else { "s" }
+                        )),
                 );
+            let row = div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(mark)
+                .child(title)
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(format!("${:.2}", d.spend)),
+                );
+
+            // Under the name: its plan windows, or a note.
+            let mut body = div().pl(px(INSET)).flex().flex_col().gap(px(10.));
+            let mut any = false;
             match d.usage.as_ref().map(|u| &u.reading) {
                 Some(crate::usage::Reading::Limits(windows)) if !windows.is_empty() => {
-                    let mut rows = div().flex().flex_col().gap(px(10.)).pl(px(15.));
                     for w in windows {
                         let resets = w
                             .resets_at
                             .map(|at| format!("resets in {}", crate::usage::left(at, now)))
                             .unwrap_or_default();
-                        rows = rows.child(
+                        let icon = if w.label == "Weekly" {
+                            IconName::CalendarDays
+                        } else {
+                            IconName::Clock
+                        };
+                        body = body.child(
                             div()
                                 .flex()
                                 .flex_col()
@@ -510,9 +573,14 @@ impl Shell {
                                 .child(
                                     div()
                                         .flex()
-                                        .items_baseline()
+                                        .items_center()
                                         .gap(px(6.))
                                         .text_size(px(11.5))
+                                        .child(
+                                            Icon::new(icon)
+                                                .size(px(12.))
+                                                .text_color(c(ui::faint())),
+                                        )
                                         .child(
                                             div()
                                                 .text_color(c(ui::body()))
@@ -535,31 +603,58 @@ impl Shell {
                                                 .child(format!("{:.0}% used", w.used)),
                                         ),
                                 )
-                                .child(meter(w.used, 296., 6.).w_full()),
+                                .child(meter(w.used, 280., 6.).w_full()),
                         );
+                        any = true;
                     }
-                    card = card.child(rows);
                 }
-                Some(crate::usage::Reading::Note(text)) => card = card.child(note(text)),
+                Some(crate::usage::Reading::Note(text)) => {
+                    body = body.child(note(text));
+                    any = true;
+                }
                 Some(crate::usage::Reading::Problem { long, .. }) => {
-                    card = card.child(note(long).text_color(c(ui::t_amber())))
+                    body = body.child(note(long).text_color(c(ui::t_amber())));
+                    any = true;
                 }
                 _ if !d.ready => {}
                 _ => {
-                    card = card.child(note(if reading {
+                    body = body.child(note(if reading {
                         "Reading its plan\u{2026}"
                     } else {
                         "This engine doesn't share its plan limits."
-                    }))
+                    }));
+                    any = true;
                 }
             }
             if !d.ready {
-                card = card.child(
-                    note("Not found on this computer. Set it up under Engines.")
-                        .text_color(c(ui::t_red())),
+                body = body.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
+                            Icon::new(IconName::TriangleAlert)
+                                .size(px(12.))
+                                .text_color(c(ui::t_red())),
+                        )
+                        .child(
+                            note("Not installed here. Set it up under Engines.")
+                                .text_color(c(ui::t_red())),
+                        ),
                 );
+                any = true;
             }
-            list = list.child(card);
+            list = list.child(
+                div()
+                    .mx(px(EDGE))
+                    .py(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .when(k > 0, |el| el.border_t_1().border_color(c(ui::line2())))
+                    .child(row)
+                    .when(any, |el| el.child(body)),
+            );
         }
 
         // Two equal buttons at the foot: where engines are set up, and the
@@ -590,8 +685,8 @@ impl Shell {
             .flex()
             .items_center()
             .gap(px(8.))
-            .px(px(12.))
-            .py(px(10.))
+            .px(px(EDGE))
+            .py(px(12.))
             .border_t_1()
             .border_color(c(ui::line2()))
             .child(
@@ -603,7 +698,7 @@ impl Shell {
                 )),
             )
             .child(
-                link("usage-page", IconName::ArrowUpRight, "Usage details").on_click(cx.listener(
+                link("usage-page", IconName::ChartColumn, "Usage details").on_click(cx.listener(
                     |this, _, _, cx| {
                         this.usage_open = false;
                         this.go(Place::Usage, cx)
@@ -632,8 +727,7 @@ impl Shell {
                     .left(px(self.usage_left()))
                     .bottom(px(36.))
                     .w(px(USAGE_W))
-                    .max_h(px(560.))
-                    .overflow_y_scroll()
+                    .max_h(px(620.))
                     .flex()
                     .flex_col()
                     .rounded(px(12.))
@@ -649,11 +743,52 @@ impl Shell {
                     }])
                     .on_click(|_, _, cx| cx.stop_propagation())
                     .child(head)
-                    .child(totals)
-                    .child(list)
+                    // The header and the buttons stay put; the middle scrolls
+                    // when there are many engines.
+                    .child(
+                        div()
+                            .id("usage-scroll")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .pb(px(4.))
+                            .child(totals)
+                            .child(caption)
+                            .child(list),
+                    )
                     .child(foot),
             )
     }
+}
+
+/// One of the status item's figures: an icon, the value, and a quiet word.
+fn segment(icon: IconName, value: String, word: &'static str) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(5.))
+        .child(Icon::new(icon).size(px(12.)).text_color(c(ui::faint())))
+        .child(
+            div()
+                .text_color(c(ui::ink()))
+                .font_weight(FontWeight::MEDIUM)
+                .child(value),
+        )
+        .child(div().text_color(c(ui::faint())).child(word))
+}
+
+/// A square tile holding an icon, tinted with `tone`: the popover's header
+/// and each engine lead with one.
+fn tile(icon: IconName, tone: u32, size: f32) -> Div {
+    div()
+        .size(px(size))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .rounded(px(7.))
+        .bg(ca(tone, 0.12))
+        .child(Icon::new(icon).size(px(size * 0.55)).text_color(c(tone)))
 }
 
 /// A hairline between the status item's parts.
