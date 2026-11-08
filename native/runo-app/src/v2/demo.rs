@@ -419,6 +419,7 @@ pub fn seed() -> Store {
         ship: String::new(),
     };
     Store {
+        format: super::store::FORMAT,
         setups,
         // The night shift: one job waiting for tonight, one for its bot.
         later: vec![

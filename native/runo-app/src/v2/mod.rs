@@ -1270,7 +1270,8 @@ impl Shell {
             new_mark: (String::new(), 0, 0),
             reply_open: None,
             side_folds: HashMap::new(),
-            toast: None,
+            // A saved store that couldn't be read in full: say so once.
+            toast: store::take_load_note().map(|n| (n.into(), Instant::now())),
             entered: Instant::now(),
             motion: true,
             active,
