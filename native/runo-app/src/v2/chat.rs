@@ -87,7 +87,7 @@ impl Shell {
                     .line_height(px(21.))
                     .text_color(c(ui::body()))
                     .child(words);
-                let line = self.bot_line(who, m.at, said, m.via.clone());
+                let line = self.bot_line(who, super::text_mood(&m.text), m.at, said, m.via.clone());
                 self.message(
                     key,
                     plain(&m.text),
@@ -120,7 +120,7 @@ impl Shell {
                         .text_color(c(ui::muted()))
                         .child(format!("reading the code \u{b7} {secs}s")),
                 );
-            body = body.child(self.bot_line(who, 0, dots, None));
+            body = body.child(self.bot_line(who, Mood::Thinking, 0, dots, None));
         }
         if !log.is_empty() && !thinking && !matches!(who.like(), Member::Explainer | Member::Fin) {
             // Turn the conversation into work: a made bot takes the job itself.
@@ -193,8 +193,15 @@ impl Shell {
 
     /// A bot's message in its DM, laid out as in a thread: face, name and
     /// time, the words, and which engine answered.
-    fn bot_line(&mut self, who: Member, at: u64, said: Div, via: Option<String>) -> Div {
-        let face = self.avatar(who, 34.);
+    fn bot_line(
+        &mut self,
+        who: Member,
+        mood: Mood,
+        at: u64,
+        said: Div,
+        via: Option<String>,
+    ) -> Div {
+        let face = self.face(who, mood, 34.);
         let accent = who.accent();
         let mut by = if at > 0 {
             channel::byline(who.name(), at)

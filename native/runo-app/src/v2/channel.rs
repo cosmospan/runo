@@ -1109,7 +1109,10 @@ impl Shell {
 
     /// A question asked in the thread, and the bot's answer under it.
     fn talk_entry(&mut self, t: &store::Talk, cx: &mut Context<Self>) -> Div {
-        let face = self.avatar(t.bot, 34.);
+        let face = match t.answer.as_ref().filter(|a| !a.note) {
+            Some(a) => self.face(t.bot, super::text_mood(&a.text), 34.),
+            None => self.avatar(t.bot, 34.),
+        };
         let waiting = t.answer.is_none() && self.crew.asking_talk == Some(t.id);
         let accent = t.bot.accent();
         let answer: Div = match &t.answer {
@@ -1334,10 +1337,10 @@ impl Shell {
         let running = j.status == Status::Running;
         let face = if running {
             self.bot(j.bot, Mood::Working, 34., Framing::Bust)
-        } else if j.needs_you() {
-            self.bot(j.bot, Mood::NeedsYou, 34., Framing::Bust)
         } else {
-            self.avatar(j.bot, 34.)
+            // The face matches the job's news: pleased at good news,
+            // concerned only when something's wrong.
+            self.face(j.bot, super::job_mood(j), 34.)
         };
         let (word, tone) = status_of(j);
         let frac = j.progress().map(|(d, n)| d as f32 / n.max(1) as f32);
