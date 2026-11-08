@@ -1,6 +1,6 @@
 //! What v2 keeps between launches: the folders the crew works in, every job
 //! and what happened in it, and each bot's chat. Saved as JSON in Squad Code's data
-//! folder (`~/.runo/v2.json`), apart from v1's state.
+//! folder (`~/.squadcode/v2.json`), apart from v1's state.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

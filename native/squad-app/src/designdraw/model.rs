@@ -416,8 +416,13 @@ pub(crate) fn seed(root: &Path) -> std::io::Result<()> {
         let was = std::fs::read_to_string(&file).ok();
         let old = match name {
             PROTOTYPE => {
+                // Also this file and the one before as builds from before the rename
+                // wrote them, with the controls' guard still under the old name.
+                let renamed = |js: String| js.replace("__squadcodeUi", "__runoUi");
                 was.as_deref() == Some(PROTOTYPE_JS_V1)
                     || was.as_deref() == Some(prototype_js_v2().as_str())
+                    || was.as_deref() == Some(renamed(prototype_js_v2()).as_str())
+                    || was.as_deref() == Some(renamed(prototype_js()).as_str())
             }
             COMPONENTS => was.as_deref() == Some(COMPONENTS_CSS_V1),
             _ => false,
@@ -462,9 +467,13 @@ pub(crate) fn title_of(html: &str) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
-/// The device a screen says it's for, in `<meta name="runo:device">`.
+/// The device a screen says it's for, in `<meta name="squadcode:device">` (or
+/// `runo:device`, as builds from before the rename wrote it).
 pub(crate) fn device_of(html: &str) -> Device {
-    let Some(i) = html.find("name=\"runo:device\"") else {
+    let Some(i) = html
+        .find("name=\"squadcode:device\"")
+        .or_else(|| html.find("name=\"runo:device\""))
+    else {
         return Device::Phone;
     };
     let rest = &html[i..html.len().min(i + 80)];
@@ -979,7 +988,7 @@ pub(crate) fn page(name: &str, device: Device, body: &str) -> String {
         Device::Desktop => "desktop",
     };
     format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"runo:device\" content=\"{device}\">\n<title>{}</title>\n<link rel=\"stylesheet\" href=\"../tokens.css\">\n<link rel=\"stylesheet\" href=\"../components.css\">\n<script src=\"../prototype.js\" defer></script>\n</head>\n<body>\n{body}\n</body>\n</html>\n",
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"squadcode:device\" content=\"{device}\">\n<title>{}</title>\n<link rel=\"stylesheet\" href=\"../tokens.css\">\n<link rel=\"stylesheet\" href=\"../components.css\">\n<script src=\"../prototype.js\" defer></script>\n</head>\n<body>\n{body}\n</body>\n</html>\n",
         esc(name)
     )
 }
@@ -1072,8 +1081,8 @@ pub(crate) const UI_JS: &str = r#"// Controls work when clicked: a .switch flips
 // becomes the one that's on, [data-toggle] toggles a class on itself, and [data-show]
 // shows or hides what its selector names, for menus, accordions and sheets.
 (() => {
-  if (window.__runoUi) return;
-  window.__runoUi = true;
+  if (window.__squadcodeUi) return;
+  window.__squadcodeUi = true;
   document.addEventListener('click', (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
@@ -1125,8 +1134,28 @@ document.addEventListener('click', (e) => {{
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_screens_device_reads_under_either_name() {
+        let tag = |name: &str| format!("<head><meta name=\"{name}:device\" content=\"tablet\">");
+        assert_eq!(device_of(&tag("squadcode")), Device::Tablet);
+        assert_eq!(device_of(&tag("runo")), Device::Tablet);
+        assert_eq!(device_of("<head>"), Device::Phone);
+    }
+
+    #[test]
+    fn a_prototype_script_from_before_the_rename_is_upgraded() {
+        let root = temp("proto-renamed");
+        seed(&root).unwrap();
+        let file = folder(&root).join(PROTOTYPE);
+        std::fs::write(&file, prototype_js().replace("__squadcodeUi", "__runoUi")).unwrap();
+        seed(&root).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), prototype_js());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-design-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-design-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1163,10 +1192,14 @@ mod tests {
         let root = temp("proto");
         seed(&root).unwrap();
         let file = folder(&root).join(PROTOTYPE);
-        assert!(std::fs::read_to_string(&file).unwrap().contains("__runoUi"));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("__squadcodeUi"));
         std::fs::write(&file, PROTOTYPE_JS_V1).unwrap();
         seed(&root).unwrap();
-        assert!(std::fs::read_to_string(&file).unwrap().contains("__runoUi"));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("__squadcodeUi"));
         assert_ne!(prototype_js_v2(), prototype_js());
         std::fs::write(&file, prototype_js_v2()).unwrap();
         seed(&root).unwrap();

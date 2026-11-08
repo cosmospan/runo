@@ -257,7 +257,8 @@ mod tests {
     use super::*;
 
     fn home(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-signin-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-signin-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

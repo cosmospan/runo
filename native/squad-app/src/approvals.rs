@@ -137,7 +137,7 @@ pub fn adopt_key(text: &str) {
     }
 }
 
-/// The flag that names the key file for `runo --mcp-memory`.
+/// The flag that names the key file for `SquadCode --mcp-memory`.
 pub const KEY_FILE_ARG: &str = "--approval-key-file";
 
 /// The argument Squad Code's MCP server is started with so it can check answers: the path of
@@ -565,7 +565,7 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "runo-approvals-{name}-{}-{}",
+            "squadcode-approvals-{name}-{}-{}",
             std::process::id(),
             new_id()
         ));
@@ -718,8 +718,8 @@ mod tests {
     }
 
     #[test]
-    fn a_key_file_outside_runos_folder_is_left_alone() {
-        let other = std::env::temp_dir().join(format!("runo-key-{}", new_id()));
+    fn a_key_file_outside_the_apps_folder_is_left_alone() {
+        let other = std::env::temp_dir().join(format!("squadcode-key-{}", new_id()));
         std::fs::write(&other, "x").unwrap();
         // Only a file in Squad Code's keys folder is read (and deleted).
         load_key_file(&other.to_string_lossy());

@@ -2967,7 +2967,7 @@ mod tests {
     }
 
     pub(super) fn quiet_store() -> Store {
-        // A demo store is never saved, so tests leave ~/.runo alone.
+        // A demo store is never saved, so tests leave ~/.squadcode alone.
         Store {
             demo: true,
             ..Default::default()

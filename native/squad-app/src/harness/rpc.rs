@@ -253,9 +253,9 @@ pub fn write_line(out: &Mutex<std::fs::File>, line: &str) {
     }
 }
 
-/// One line for `out` from the host itself: `{"runo": …}`.
+/// One line for `out` from the host itself: `{"squadcode": …}`.
 pub fn note(out: &Mutex<std::fs::File>, line: Value) {
-    write_line(out, &json!({ "runo": line }).to_string());
+    write_line(out, &json!({ "squadcode": line }).to_string());
 }
 
 /// Note in `turn/drift`, once each, a message type the driver doesn't know, so a
@@ -354,7 +354,9 @@ impl HostLines {
                 None => vec![AgentEvent::Text(format!("{line}\n"))],
             });
         }
-        let own = message?.get("runo")?;
+        // A turn a build from before the rename started still writes `{"runo": …}`.
+        let message = message?;
+        let own = message.get("squadcode").or_else(|| message.get("runo"))?;
         if let Some(sid) = own["session"].as_str() {
             if self.named {
                 return Some(vec![]);

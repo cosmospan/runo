@@ -7,8 +7,7 @@
 //! passed for 1a2b3c4" or "Release workflow failed: build (macos)".
 //!
 //! What to watch comes from the turn's own commands (`detect`): `git push` to the default
-//! branch or of a tag, `gh pr merge`, `gh release create`, or a line the thread writes,
-//! such as `runo-watch: main`, `runo-watch: tag v1.2.0` or `runo-watch: run 123`.
+//! branch or of a tag, `gh pr merge` and `gh release create`.
 //! A watched thread isn't running, so it holds no slot. What the watcher decides is in
 //! `decide` and `read_failed`, pure functions over the saved `RunWatch` and one read.
 

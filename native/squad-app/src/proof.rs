@@ -481,7 +481,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-proof-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-proof-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -598,7 +599,7 @@ mod tests {
         let dir = temp("infra");
         let d = dir.to_string_lossy().to_string();
         let limit = Duration::from_secs(20);
-        let missing = run_one(&d, "no-such-tool-for-runo-checks", limit, false, &[]);
+        let missing = run_one(&d, "no-such-tool-for-squadcode-checks", limit, false, &[]);
         assert!(!missing.ok);
         assert_eq!(missing.infra, "a tool is missing", "{missing:?}");
         let killed = run_one(&d, "kill -9 $$", limit, false, &[]);

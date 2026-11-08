@@ -4,12 +4,7 @@
 //!
 //! Threads talk back to the app through Squad Code's MCP server (`memory_mcp.rs`), which leaves
 //! one small event file per call in `events_dir()`, written under a temporary name and
-//! renamed so the app never reads half a file. Agents with no MCP write the same things as
-//! fenced `runo-…` blocks in their reply, which `TagFilter` takes out of the visible text.
-//!
-//! Crew's own chat is a session too (`CANVAS`), held read-only; it acts by ending a reply
-//! with a `runo-actions` block, which `parse_actions` and `within_limits` check before
-//! anything runs. This file holds the data and the rules; the app side is `crew_ui.rs`.
+//! renamed so the app never reads half a file.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -265,7 +260,7 @@ pub fn check_decision(decision: Decision) -> Result<Decision, String> {
 
 // ---------- Crew's own chat ----------
 
-/// What Crew asks Squad Code to do, from the `runo-actions` block that ends its reply.
+/// What Crew asks Squad Code to do.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(tag = "do", rename_all = "snake_case")]
 #[allow(clippy::enum_variant_names)] // the names are the wire format Crew writes

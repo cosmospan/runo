@@ -258,7 +258,7 @@ const DARK: [Palette; 9] = [
 
 const LIGHT: [Palette; 6] = [
     Palette {
-        id: "runo",
+        id: "squadcode",
         canvas: 0xffffff,
         rail: 0xe4e4e8,
         sheet: 0xf4f4f6,
@@ -402,8 +402,8 @@ pub struct Theme {
 /// The themes offered in Settings; the first is the default.
 pub const THEMES: [Theme; 10] = [
     Theme {
-        id: "runo",
-        light: "runo",
+        id: "squadcode",
+        light: "squadcode",
         dark: "tokyo-night",
     },
     Theme {
@@ -457,8 +457,14 @@ static PICK: AtomicU8 = AtomicU8::new(0);
 
 /// Pick the theme by id; an unknown id falls back to the default.
 pub fn set(id: &str) {
-    let i = THEMES.iter().position(|t| t.id == id).unwrap_or(0);
-    PICK.store(i as u8, Ordering::Relaxed);
+    PICK.store(index(id) as u8, Ordering::Relaxed);
+}
+
+/// Where theme `id` is in `THEMES`; the default when no theme has that id.
+fn index(id: &str) -> usize {
+    // Settings saved before the rename name the default theme `runo`.
+    let id = if id == "runo" { "squadcode" } else { id };
+    THEMES.iter().position(|t| t.id == id).unwrap_or(0)
 }
 
 fn palette(list: &'static [Palette], id: &str) -> &'static Palette {
@@ -491,6 +497,14 @@ fn all() -> impl Iterator<Item = (&'static Palette, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_default_theme_keeps_its_old_name() {
+        let tokyo = index("tokyo-night");
+        assert_ne!(tokyo, 0);
+        assert_eq!(index("runo"), index("squadcode"));
+        assert_eq!(THEMES[index("runo")].id, "squadcode");
+    }
 
     fn lum(c: u32) -> f32 {
         let ch = |s: u32| {

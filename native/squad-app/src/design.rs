@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use workspace::unix_now;
 
 /// Where a project keeps its references: beside the session attachments, out of git.
-pub(crate) const FOLDER: &str = ".runo/design";
+pub(crate) const FOLDER: &str = "design";
 const INDEX: &str = "references.json";
 
 /// One design reference: an image in the project's design folder and what it is for.
@@ -22,7 +22,7 @@ pub(crate) struct Reference {
 }
 
 pub(crate) fn folder(root: &Path) -> PathBuf {
-    root.join(FOLDER)
+    turns::project_folder(root).join(FOLDER)
 }
 
 /// The project's references, in the order they were added. Images put in the folder by
@@ -81,7 +81,7 @@ fn stamp() -> String {
 fn ready_folder(root: &Path) -> Option<PathBuf> {
     let dir = folder(root);
     std::fs::create_dir_all(&dir).ok()?;
-    turns::exclude_runo_folder(&root.to_string_lossy());
+    turns::exclude_own_folder(&root.to_string_lossy());
     Some(dir)
 }
 
@@ -127,7 +127,8 @@ mod tests {
     use std::prelude::v1::test;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-design-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-design-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

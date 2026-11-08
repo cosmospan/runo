@@ -375,7 +375,7 @@ pub fn foreign_config(dir: &Path, provider: &str, ours: &[(String, McpSpec)]) ->
 
 /// What Squad Code added to project files in a folder, so it can take it out again.
 fn added_record(dir: &Path) -> PathBuf {
-    dir.join(".runo").join("mcp-added.json")
+    crate::turns::project_folder(dir).join("mcp-added.json")
 }
 
 /// Merge `servers` into the project file `provider` reads in `dir`, for one run. A
@@ -449,10 +449,10 @@ pub fn write_project(dir: &Path, provider: &str, servers: &[(String, McpSpec)]) 
             "created_dir": created_dir.is_some(),
         }),
     );
-    crate::git::exclude_path(&folder, ".runo/");
+    crate::git::exclude_path(&folder, ".squadcode/");
     let _ = crate::safefs::write(
         dir,
-        ".runo/mcp-added.json",
+        ".squadcode/mcp-added.json",
         Value::Object(record).to_string().as_bytes(),
     );
     true
@@ -518,7 +518,7 @@ pub fn clean_project(dir: &Path) {
             }
         }
     }
-    let _ = crate::safefs::remove(dir, ".runo/mcp-added.json");
+    let _ = crate::safefs::remove(dir, ".squadcode/mcp-added.json");
 }
 
 /// The name Squad Code's own servers are listed under.
@@ -769,13 +769,13 @@ mod tests {
 
     #[test]
     fn settings_that_start_programs_are_found() {
-        let dir = std::env::temp_dir().join(format!("runo-foreign-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-foreign-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".cursor")).unwrap();
         let ours = vec![(
-            "runo".to_string(),
+            "squadcode".to_string(),
             McpSpec {
-                command: "/Applications/Squad Code.app/runo".into(),
+                command: "/Applications/Squad Code.app/SquadCode".into(),
                 args: vec!["--mcp".into()],
                 ..Default::default()
             },
@@ -783,7 +783,8 @@ mod tests {
         // Nothing, or only Squad Code's own servers exactly as Squad Code writes them: trusted.
         assert_eq!(foreign_config(&dir, "cursor", &ours), None);
         let mcp = dir.join(".cursor/mcp.json");
-        let list = serde_json::json!({"mcpServers": {"runo": ours[0].1.project_json("cursor")}});
+        let list =
+            serde_json::json!({"mcpServers": {"squadcode": ours[0].1.project_json("cursor")}});
         std::fs::write(&mcp, list.to_string()).unwrap();
         assert_eq!(foreign_config(&dir, "cursor", &ours), None);
         // A server Squad Code didn't add, or one that borrows Squad Code's name with another command.
@@ -793,7 +794,7 @@ mod tests {
             foreign_config(&dir, "cursor", &ours).as_deref(),
             Some(".cursor/mcp.json")
         );
-        std::fs::write(&mcp, planted.replace("\"x\"", "\"runo\"")).unwrap();
+        std::fs::write(&mcp, planted.replace("\"x\"", "\"squadcode\"")).unwrap();
         assert!(foreign_config(&dir, "cursor", &ours).is_some());
         std::fs::write(&mcp, "not json").unwrap();
         assert!(foreign_config(&dir, "cursor", &ours).is_some());
@@ -840,7 +841,7 @@ mod tests {
 
     #[test]
     fn reads_vscode_style_json_and_opencode() {
-        let dir = std::env::temp_dir().join(format!("runo-mcp-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-mcp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let vscode = dir.join("mcp.json");
         std::fs::write(
@@ -935,7 +936,7 @@ mod tests {
 
         // Squad Code's own servers need no switch, and win over a same-named one.
         let own = McpSpec {
-            command: "runo-tools".into(),
+            command: "squadcode-tools".into(),
             ..Default::default()
         };
         set_found(&[
@@ -952,14 +953,15 @@ mod tests {
         set_shared(&["Cursor/figma".into()]);
         let claude = shared_servers("claude", true);
         assert_eq!(claude.len(), 1);
-        assert_eq!(claude[0].1.command, "runo-tools");
+        assert_eq!(claude[0].1.command, "squadcode-tools");
         set_found(&[]);
         set_shared(&[]);
     }
 
     #[test]
-    fn project_files_get_runo_servers_for_one_turn() {
-        let dir = std::env::temp_dir().join(format!("runo-project-mcp-{}", std::process::id()));
+    fn project_files_get_our_servers_for_one_turn() {
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-project-mcp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let git = |args: &[&str]| {
@@ -972,7 +974,7 @@ mod tests {
         };
         git(&["init", "-q"]);
         let memory = McpSpec {
-            command: "/bin/runo".into(),
+            command: "/bin/squadcode".into(),
             args: vec!["--mcp-memory".into(), "/work".into()],
             ..Default::default()
         };
@@ -980,13 +982,19 @@ mod tests {
             url: "https://mcp.figma.com/mcp".into(),
             ..Default::default()
         };
-        let servers = vec![("runo".to_string(), memory), ("figma".to_string(), figma)];
+        let servers = vec![
+            ("squadcode".to_string(), memory),
+            ("figma".to_string(), figma),
+        ];
 
         // A new file is written, kept out of git, and removed after the turn.
         assert!(write_project(&dir, "cursor", &servers));
         let file = dir.join(".cursor/mcp.json");
         let written = read_json(&file).unwrap();
-        assert_eq!(written["mcpServers"]["runo"]["command"], "/bin/runo");
+        assert_eq!(
+            written["mcpServers"]["squadcode"]["command"],
+            "/bin/squadcode"
+        );
         let status = git(&["status", "--porcelain"]);
         assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
         clean_project(&dir);
@@ -1001,7 +1009,7 @@ mod tests {
         let merged = read_json(&settings).unwrap();
         assert_eq!(merged["theme"], "dark");
         assert_eq!(merged["mcpServers"]["figma"]["command"], "mine");
-        assert_eq!(merged["mcpServers"]["runo"]["args"][0], "--mcp-memory");
+        assert_eq!(merged["mcpServers"]["squadcode"]["args"][0], "--mcp-memory");
         // A later run rewrites rather than piling up.
         assert!(write_project(&dir, "gemini", &servers[..1]));
         clean_project(&dir);
@@ -1012,7 +1020,7 @@ mod tests {
         let factory = dir.join(".factory/mcp.json");
         let mut value = read_json(&factory).unwrap();
         assert_eq!(value["mcpServers"]["figma"]["type"], "http");
-        assert_eq!(value["mcpServers"]["runo"]["type"], "stdio");
+        assert_eq!(value["mcpServers"]["squadcode"]["type"], "stdio");
         value["mcpServers"]["linear"] = serde_json::json!({"type": "http", "url": "u"});
         std::fs::write(&factory, value.to_string()).unwrap();
         clean_project(&dir);

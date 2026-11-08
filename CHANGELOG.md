@@ -14,6 +14,15 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 - Environment variables start with `SQUADCODE_` instead of `RUNO_` (for example `SQUADCODE_DEMO=1`), and `RUNO_HOME` is no longer read: use `SQUADCODE_HOME`.
 - The app's folder is `native/squad-app` and its crate is `squadcode` (`cargo run -p squadcode`); the drawings crate is `squad-holo`.
 - On Linux the launcher is `squadcode.desktop` and names the window class the app uses, so docks pair the window with its icon.
+- The last places that still said "runo" now say Squad Code, and what an older build left behind keeps working:
+  - A project's `.runo` folder (design pictures, and the record of what was added to agents' project files) becomes `.squadcode` the first time it's used.
+  - New job worktrees go in `.squadcode-worktrees` beside the repository. Existing ones stay where they are.
+  - Squad Code's MCP server is named `squadcode` for the bots.
+  - Logs are named `squadcode-<time>.log`, and old `runo-` logs are pruned with the rest.
+  - The default theme is `squadcode`. Settings that name `runo` still pick it.
+  - Design screens are marked `squadcode:device`. Screens marked `runo:device` still read, and change to the new mark when their device changes.
+  - The architecture guide and exported tokens say "Written by Squad Code". A guide an older build wrote still updates.
+  - The agent registry reads `min_squadcode`, and still reads `min_runo`.
 
 ## [2.0.0-alpha.7] - 2026-11-08
 

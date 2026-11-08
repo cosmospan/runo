@@ -28,7 +28,7 @@ pub struct Isolated {
 /// The branch name for a job: `squad/<a few words of the title>`.
 pub fn branch_for(title: &str, id: u64) -> String {
     let slug = git::branch_slug(title);
-    let slug = slug.strip_prefix("runo/").unwrap_or(&slug).to_string();
+    let slug = slug.strip_prefix("squad/").unwrap_or(&slug).to_string();
     if slug.is_empty() {
         format!("squad/job-{id}")
     } else {
@@ -338,12 +338,13 @@ mod tests {
     }
 
     fn repo(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-work-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-work-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(
             dir.parent()
                 .unwrap()
-                .join(".runo-worktrees")
+                .join(".squadcode-worktrees")
                 .join(dir.file_name().unwrap()),
         );
         std::fs::create_dir_all(&dir).unwrap();

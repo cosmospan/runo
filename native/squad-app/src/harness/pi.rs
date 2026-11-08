@@ -1,6 +1,6 @@
 //! The Pi driver. Pi turns run under Squad Code's agent host as `pi --mode rpc`, Pi's own
 //! protocol of JSON records on stdin and stdout, instead of one `pi --mode json` run per
-//! prompt: `Squad Code --agent-host runo-turn <turn folder> --pi` reads `pi.json` from the
+//! prompt: `Squad Code --agent-host squadcode-turn <turn folder> --pi` reads `pi.json` from the
 //! turn folder and sends each prompt from `in`. A message sent while Pi works steers it
 //! (`steer`), so Pi reads it once its current tool call is done.
 //!
@@ -107,7 +107,7 @@ impl Pi<'_> {
     /// Send `command` with a new id, which is returned.
     fn send(&mut self, kind: &str, mut command: Value) -> String {
         self.next += 1;
-        let id = format!("runo-{kind}-{}", self.next);
+        let id = format!("squadcode-{kind}-{}", self.next);
         command["id"] = id.clone().into();
         command["type"] = kind.into();
         self.agent.send(&command);
@@ -644,10 +644,17 @@ mod tests {
         let events = feed(
             &mut p,
             &[
-                json!({"runo":{"session":"s-9"}}),
+                json!({"squadcode":{"session":"s-9"}}),
                 json!({"type":"session","id":"s-9"}),
             ],
         );
+        assert_eq!(events, [AgentEvent::Conversation("s-9".into())]);
+    }
+
+    #[test]
+    fn a_host_from_before_the_rename_is_still_read() {
+        let mut p = PiStream::new("/w");
+        let events = feed(&mut p, &[json!({"runo":{"session":"s-9"}})]);
         assert_eq!(events, [AgentEvent::Conversation("s-9".into())]);
     }
 }
@@ -658,7 +665,7 @@ mod host_tests {
     use std::path::PathBuf;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-pi-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-pi-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

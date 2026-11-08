@@ -13,7 +13,9 @@ use std::time::Duration;
 
 /// Marks Squad Code's wrapper in the process list, so an unrelated process that reused a pid is
 /// never mistaken for a turn.
-pub(crate) const MARK: &str = "runo-turn";
+pub(crate) const MARK: &str = "squadcode-turn";
+/// The mark turns started by a build from before the rename carry.
+const OLD_MARK: &str = "runo-turn";
 /// Runs the agent with its output in files, then records how it ended.
 const SCRIPT: &str = r#"d="$1"; shift; "$@" >"$d/out" 2>"$d/err" </dev/null; echo $? >"$d/exit.tmp"; mv "$d/exit.tmp" "$d/exit""#;
 
@@ -95,7 +97,10 @@ fn is_turn(pid: u32) -> bool {
             .stdin(Stdio::null())
             .stderr(Stdio::null())
             .output()
-            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains(MARK))
+            .is_ok_and(|o| {
+                let command = String::from_utf8_lossy(&o.stdout);
+                command.contains(MARK) || command.contains(OLD_MARK)
+            })
 }
 
 /// Stop a detached turn and everything it started.
@@ -341,7 +346,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("runo-detach-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-detach-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

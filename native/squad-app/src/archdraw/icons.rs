@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn pictures_are_copied_into_the_diagram_once() {
-        let root = std::env::temp_dir().join(format!("runo-icons-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-icons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let src = root.join("Docker logo.svg");
@@ -529,7 +529,7 @@ mod tests {
     fn exports_carry_their_pictures() {
         use super::super::editor::Editor;
         use super::super::io;
-        let root = std::env::temp_dir().join(format!("runo-icons-x-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-icons-x-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let src = root.join("docker.svg");

@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn a_handoff_lists_what_to_build_and_writes_the_tokens() {
-        let root = std::env::temp_dir().join(format!("runo-spec-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("squadcode-spec-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let d = super::super::model::folder(&root);
         std::fs::create_dir_all(d.join("screens")).unwrap();

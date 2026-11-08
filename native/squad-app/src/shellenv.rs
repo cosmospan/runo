@@ -519,7 +519,7 @@ mod tests {
 
     #[test]
     fn merge_keeps_shell_order_and_names_tools() {
-        let dir = std::env::temp_dir().join(format!("runo-merge-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-merge-{}", std::process::id()));
         let nvm_bin = dir.join("nvm/bin");
         let volta = dir.join("volta/bin");
         std::fs::create_dir_all(&nvm_bin).unwrap();
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn nvm_prefers_the_default_alias_then_newest() {
-        let dir = std::env::temp_dir().join(format!("runo-nvm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-nvm-{}", std::process::id()));
         for v in ["v18.20.1", "v20.11.0", "v22.3.0"] {
             std::fs::create_dir_all(dir.join("versions/node").join(v).join("bin")).unwrap();
         }
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn npmrc_prefix_expands_home() {
-        let dir = std::env::temp_dir().join(format!("runo-npmrc-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-npmrc-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".npmrc"), "registry=x\nprefix=~/.npm-global\n").unwrap();
         assert_eq!(npmrc_prefix(&dir), Some(dir.join(".npm-global")));

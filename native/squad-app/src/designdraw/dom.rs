@@ -13,7 +13,7 @@ pub(crate) type Path = Vec<usize>;
 /// Installed once per page before any other call; every call starts with it, so a reload
 /// just installs it again.
 pub(crate) const HELPER: &str = r#"
-if (!window.__runo) window.__runo = (() => {
+if (!window.__squadcode) window.__squadcode = (() => {
   const SKIP = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TITLE', 'TEMPLATE']);
   const kids = (el) => Array.from(el.children).filter((c) => !SKIP.has(c.tagName));
   // Markup as it's copied or shown, without the layer ids that tie it to this screen.
@@ -835,7 +835,7 @@ if (!window.__runo) window.__runo = (() => {
 /// A call on the helper, as an expression to evaluate.
 pub(crate) fn call(method: &str, args: &[Value]) -> String {
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-    format!("{HELPER}\nwindow.__runo.{method}({})", args.join(", "))
+    format!("{HELPER}\nwindow.__squadcode.{method}({})", args.join(", "))
 }
 
 pub(crate) fn pick(x: f32, y: f32) -> String {
@@ -1243,8 +1243,8 @@ mod tests {
     #[test]
     fn calls_quote_their_arguments() {
         let js = op(&vec![0, 2], "text", &[json!("Say \"hi\"\n")]);
-        assert!(js.ends_with(r#"window.__runo.op([0,2], "text", "Say \"hi\"\n")"#));
-        assert!(pick(10., 20.5).ends_with("window.__runo.pick(10.0, 20.5)"));
+        assert!(js.ends_with(r#"window.__squadcode.op([0,2], "text", "Say \"hi\"\n")"#));
+        assert!(pick(10., 20.5).ends_with("window.__squadcode.pick(10.0, 20.5)"));
     }
 
     #[test]

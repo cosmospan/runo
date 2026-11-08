@@ -62,7 +62,7 @@ fn tag(session: Option<u64>) -> String {
     match session {
         Some(id) => format!("session-{id}"),
         None => format!(
-            "runo-{}",
+            "squadcode-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis())

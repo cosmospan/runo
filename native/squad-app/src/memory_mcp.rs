@@ -1,4 +1,4 @@
-//! `runo --mcp-memory <folder>`: a small MCP server (JSON-RPC over stdio) that lets any
+//! `SquadCode --mcp-memory <folder>`: a small MCP server (JSON-RPC over stdio) that lets any
 //! agent read the session memory, search earlier sessions of the project and save notes,
 //! instead of having the whole history pasted into every prompt. It also offers the
 //! playbooks: as tools, and as MCP prompts that CLIs like Claude Code show as slash commands.
@@ -39,7 +39,7 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
             Ok(json!({
                 "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "runo", "version": env!("CARGO_PKG_VERSION") },
+                "serverInfo": { "name": "squadcode", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": "Squad Code's tools for this job, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it."
             }))
         }

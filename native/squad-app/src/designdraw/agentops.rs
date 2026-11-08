@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn calls_meet_the_canvas_in_a_folder() {
-        let base = std::env::temp_dir().join(format!("runo-ops-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("squadcode-ops-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         let b2 = base.clone();

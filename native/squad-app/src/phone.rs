@@ -1,18 +1,6 @@
-//! The phone bridge: a small HTTP API that Squad Code's mobile app talks to.
-//!
-//! It runs inside the app when it is turned on in Settings > Phone, or without a window
-//! from `runo --phone [address]`. Reads come straight from the saved state
-//! (`State::peek`) and the live approvals folder, so the phone sees what the desktop app
-//! sees. Permission requests are answered right away, the same way the corner card
-//! answers them. Everything that starts or stops an agent (a follow-up, a plan approval,
-//! answers to questions, Stop) is left in `~/.runo/phone-inbox`, and the running app
-//! picks it up within a couple of seconds and runs it as if it were typed.
-//!
-//! Every request needs `Authorization: Bearer <token>`. Each paired phone has its own
-//! token, kept in `~/.runo/phone.json` with its name, and its pairing link carries it;
-//! removing a phone revokes only its token. The bridge speaks plain HTTP, so by default
-//! it listens only on this computer's Tailscale address, or on this computer alone when
-//! there is none. Listening on every network takes an explicit choice.
+//! What the phone bridge used to share with the crew's server (`v2::server`): pairing
+//! tokens and checking them, which addresses to listen on (Tailscale first), and reading
+//! one plain HTTP request.
 
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr};

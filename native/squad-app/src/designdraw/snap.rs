@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn only_changed_screens_snap() {
-        let dir = std::env::temp_dir().join(format!("runo-snap-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-snap-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (a, b) = (dir.join("a.html"), dir.join("b.html"));
         let old = r#"<p style="color: #1c1917">a</p>"#;

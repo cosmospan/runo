@@ -213,8 +213,9 @@ struct Manifest {
     #[serde(default)]
     version: u64,
     /// The oldest Squad Code that understands this manifest.
-    #[serde(default)]
-    min_runo: String,
+    /// Named `min_runo` in manifests written before the rename.
+    #[serde(default, alias = "min_runo")]
+    min_squadcode: String,
     #[serde(default)]
     agents: Vec<Value>,
 }
@@ -235,8 +236,9 @@ pub fn verify(text: &[u8], signature: &str, key: &str) -> bool {
 /// written for a newer Squad Code.
 fn usable(text: &str) -> Option<u64> {
     let manifest: Manifest = serde_json::from_str(text).ok()?;
-    let runo = env!("CARGO_PKG_VERSION");
-    if !manifest.min_runo.is_empty() && crate::alerts::is_newer(&manifest.min_runo, runo) {
+    let ours = env!("CARGO_PKG_VERSION");
+    if !manifest.min_squadcode.is_empty() && crate::alerts::is_newer(&manifest.min_squadcode, ours)
+    {
         return None;
     }
     merge(text, None).ok()?;
@@ -438,6 +440,14 @@ mod tests {
         assert!(verify(b"{\"version\":2}\n", signature, public));
         assert!(!verify(b"{\"version\":3}\n", signature, public));
         assert!(!verify(b"x", "not base64!", public));
+    }
+
+    #[test]
+    fn a_manifest_for_a_newer_app_is_refused_under_either_name() {
+        for key in ["min_squadcode", "min_runo"] {
+            let text = format!(r#"{{"version":99,"{key}":"999.0.0","agents":[]}}"#);
+            assert!(usable(&text).is_none(), "{key}");
+        }
     }
 
     #[test]

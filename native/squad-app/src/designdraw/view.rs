@@ -277,7 +277,7 @@ type Job = Box<dyn FnOnce(&mut DesignCanvas, &mut Context<DesignCanvas>)>;
 
 pub(crate) struct DesignCanvas {
     root: PathBuf,
-    /// Pictures to design from, kept in `.runo/design`, and the ones going with the next ask.
+    /// Pictures to design from, kept in `.squadcode/design`, and the ones going with the next ask.
     refs: Vec<crate::design::Reference>,
     refs_picked: Vec<String>,
     refs_open: bool,
@@ -3299,18 +3299,21 @@ impl DesignCanvas {
         }
         let file = screen_path(&self.root, &id);
         if let Ok(html) = std::fs::read_to_string(&file) {
-            let tag = |d: Device| {
+            // `runo:device` is how builds from before the rename named it.
+            let tag = |name: &str, d: Device| {
                 format!(
-                    "name=\"runo:device\" content=\"{}\"",
+                    "name=\"{name}:device\" content=\"{}\"",
                     d.label().to_lowercase()
                 )
             };
+            let new = tag("squadcode", device);
             let mut out = html.clone();
             for d in Device::ALL {
-                out = out.replace(&tag(d), &tag(device));
+                out = out.replace(&tag("squadcode", d), &new);
+                out = out.replace(&tag("runo", d), &new);
             }
-            if out == html && !html.contains("runo:device") {
-                out = html.replacen("<head>", &format!("<head>\n<meta {}>", tag(device)), 1);
+            if !out.contains("squadcode:device") {
+                out = out.replacen("<head>", &format!("<head>\n<meta {new}>"), 1);
             }
             let _ = std::fs::write(&file, out);
         }
@@ -6836,7 +6839,8 @@ mod tests {
 
     #[test]
     fn undoing_an_ai_change_puts_the_folder_back() {
-        let dir = std::env::temp_dir().join(format!("runo-design-undo-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("squadcode-design-undo-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("screens")).unwrap();
         std::fs::write(dir.join("tokens.css"), "a").unwrap();

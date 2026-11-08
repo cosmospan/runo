@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn ids_split_across_reads_are_found_whole() {
-        let dir = std::env::temp_dir().join(format!("runo-ids-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("squadcode-ids-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bin");
         // An id that straddles the 4 MB read boundary, and one well inside.

@@ -489,7 +489,7 @@ impl Engine {
             .try_clone()
             .map_err(|e| e.to_string())?;
         std::thread::Builder::new()
-            .name("runo-cdp".into())
+            .name("squadcode-cdp".into())
             .spawn(move || read_loop(reader, writer, shared, seq, ids))
             .map_err(|e| e.to_string())?;
         engine.send("Target.setDiscoverTargets", json!({"discover": true}), None);
