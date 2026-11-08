@@ -29,6 +29,9 @@ All notable changes to Runo are documented here.
 ### Fixed
 
 - Saved jobs, threads and chats are no longer lost when `v2.json` can't be read. A file cut off by a crash, or saved by a newer Squad Code, used to be replaced by an empty store on the next save. Now a job or feed line this build can't read is left out on its own, the file is copied or moved aside first, Squad Code says so once, and a copy from before each launch (`v2.json.prev`) is used when the file is cut off. Saves are flushed to disk before they replace the old file.
+### Added
+
+- A short sound when something needs you: a bot asking for your OK or asking you to choose, a job done or ready to review, or a job that failed, each with its own sound. Pick how they sound in Settings > General > Alerts: Bubble (the default), Marimba, Pluck or Glass; picking one plays it. Nothing plays for the job or thread you're looking at, and several at once sound once. Sounds can be turned off, or each kind on its own. The sounds are made by Squad Code, so they are the same on Mac, Windows and Linux.
 
 ## [2.0.0-alpha.7] - 2026-11-08
 

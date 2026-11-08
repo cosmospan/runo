@@ -698,6 +698,9 @@ pub struct Shell {
     /// The Inbox count last frame, and when it last went up, for the badge's pop.
     inbox_seen: usize,
     inbox_at: Instant,
+    /// What needed the person at the last poll, so only something new chimes.
+    /// None until the first poll, which takes what is already there as heard.
+    heard: Option<std::collections::HashSet<String>>,
     /// When the newest chat line arrived, so it can slide in.
     chat_at: Instant,
     /// The changed file whose diff is open on a job's review, if any.
@@ -1412,6 +1415,7 @@ impl Shell {
             mode_pinned: false,
             inbox_seen: usize::MAX,
             inbox_at: Instant::now(),
+            heard: None,
             chat_at: Instant::now(),
             diff_open: None,
             diff_text: String::new(),
@@ -3090,6 +3094,7 @@ impl Shell {
         self.poll_machine(cx);
         self.poll_web(cx);
         let finished = self.crew.poll(&st, viewing);
+        self.chime(&st);
         self.poll_reading(cx);
         self.poll_follow_reading(cx);
         self.keep_warm(&st);
@@ -3124,6 +3129,61 @@ impl Shell {
                     &format!("{}: {}", j.label(), brain::tasks::facts(&j)),
                 );
             }
+        }
+    }
+
+    /// Plays a chime when something new needs the person: a bot asking for an OK
+    /// or a choice, a job that failed, or one finished or ready to review. Not for
+    /// what is on screen in the focused window, which the person sees anyway.
+    fn chime(&mut self, st: &crate::settings::AppSettings) {
+        if self.crew.store.demo {
+            return;
+        }
+        let active = self.active.load(std::sync::atomic::Ordering::Relaxed);
+        let thread_here = match self.place {
+            Place::Today => Some(self.crew.store.thread_here()),
+            _ => None,
+        };
+        let on_screen = |job: Option<u64>, thread: u64| {
+            active
+                && (job.is_some_and(|id| self.place == Place::Live(id))
+                    || (thread != 0 && thread_here == Some(thread)))
+        };
+        let mut now = std::collections::HashSet::new();
+        let mut fresh = Vec::new();
+        let mut note = |key: String, cue: crate::sounds::Cue, here: bool| {
+            if !here && !self.heard.as_ref().is_none_or(|heard| heard.contains(&key)) {
+                fresh.push(cue);
+            }
+            now.insert(key);
+        };
+        for j in &self.crew.store.jobs {
+            let here = on_screen(Some(j.id), j.thread);
+            if j.needs_you() {
+                let cue = match j.status {
+                    Status::Failed | Status::Interrupted => crate::sounds::Cue::Failed,
+                    _ => crate::sounds::Cue::Done,
+                };
+                note(format!("job:{}:{}", j.id, j.status.label()), cue, here);
+            }
+            // A running bot asking for an OK.
+            for r in self.crew.asks_for(j) {
+                note(format!("ask:{}", r.id), crate::sounds::Cue::NeedsYou, here);
+            }
+        }
+        // Peek asking a question back, with answers to pick.
+        for t in &self.crew.store.talks {
+            if t.answer.is_some() && !t.choices.is_empty() {
+                note(
+                    format!("talk:{}", t.id),
+                    crate::sounds::Cue::NeedsYou,
+                    on_screen(None, t.thread),
+                );
+            }
+        }
+        self.heard = Some(now);
+        if let Some(cue) = crate::sounds::pick(fresh, st) {
+            crate::sounds::play(cue, st);
         }
     }
 
