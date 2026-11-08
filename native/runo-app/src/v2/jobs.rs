@@ -219,6 +219,7 @@ pub fn start(
     job.engine = engine::label_of(i, &model);
     job.status = Status::Running;
     job.ended = None;
+    job.turn_began();
     job.seen = false;
     Ok(Runner {
         id: job.id,
@@ -307,6 +308,7 @@ impl Runner {
             }
         }
         job.ended = Some(now());
+        job.turn_ended();
         job.status = if self.stopped {
             Status::Stopped
         } else if ok {
