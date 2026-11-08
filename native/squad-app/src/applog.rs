@@ -148,26 +148,6 @@ pub fn format_line(time: &str, level: Level, area: &str, message: &str) -> Strin
     format!("{time} {:<5} [{area}] {text}\n", level.tag())
 }
 
-/// The line of a command's output that says what went wrong: the first that reads like an
-/// error, else the first that isn't blank. Cut to a sensible length.
-#[cfg(target_os = "macos")]
-pub fn gist(output: &str) -> String {
-    const WORDS: [&str; 6] = ["error", "fatal", "denied", "failed", "not found", "cannot"];
-    let lines = || output.lines().map(str::trim).filter(|l| !l.is_empty());
-    let line = lines()
-        .find(|l| {
-            let lower = l.to_lowercase();
-            WORDS.iter().any(|w| lower.contains(w))
-        })
-        .or_else(|| lines().next())
-        .unwrap_or("");
-    if line.chars().count() > 300 {
-        line.chars().take(300).collect::<String>() + "…"
-    } else {
-        line.to_string()
-    }
-}
-
 /// Prefixes of well-known API keys and tokens.
 const TOKEN_PREFIXES: [&str; 14] = [
     "github_pat_",
@@ -534,60 +514,6 @@ fn crash_report(thread: &str, message: &str, backtrace: &str) -> String {
         std::env::consts::ARCH,
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
     )
-}
-
-/// Mark a download as coming from the internet, as a browser would, so macOS checks
-/// its signature and notarization when it is opened.
-#[cfg(target_os = "macos")]
-fn mark_downloaded(path: &Path) -> Result<(), String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let ok = std::process::Command::new("xattr")
-        .args([
-            "-w",
-            "com.apple.quarantine",
-            &format!("0081;{now:x};Squad Code;"),
-        ])
-        .arg(path)
-        .status()
-        .is_ok_and(|s| s.success());
-    if !ok {
-        return Err("Could not mark the download for macOS to check.".into());
-    }
-    // A disk image can be checked now: refuse one Gatekeeper wouldn't open.
-    if path.extension().is_some_and(|e| e == "dmg") {
-        let out = std::process::Command::new("spctl")
-            .args([
-                "--assess",
-                "--type",
-                "open",
-                "--context",
-                "context:primary-signature",
-            ])
-            .arg(path)
-            .output()
-            .map_err(|e| format!("Could not run spctl: {e}"))?;
-        if !out.status.success() {
-            let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            warn(
-                "app-update",
-                format!("Gatekeeper rejected {}: {}", path.display(), gist(&why)),
-            );
-            return Err("macOS says the disk image isn't signed and notarized.".into());
-        }
-    }
-    Ok(())
-}
-
-/// Mark a download as coming from the internet (Mark of the Web), so Windows checks it
-/// with SmartScreen when it is opened.
-#[cfg(windows)]
-fn mark_downloaded(path: &Path) -> Result<(), String> {
-    let mut stream = path.as_os_str().to_owned();
-    stream.push(":Zone.Identifier");
-    std::fs::write(&stream, "[ZoneTransfer]\r\nZoneId=3\r\n")
-        .map_err(|e| format!("Could not mark the download for Windows to check: {e}"))
 }
 
 #[cfg(test)]

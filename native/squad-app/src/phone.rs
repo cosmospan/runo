@@ -3,7 +3,7 @@
 //! one plain HTTP request.
 
 use std::io::{BufRead, BufReader, Read};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 
 /// The longest request body accepted: prompts, answers and approvals are small.
 const BODY_MAX: usize = 256 * 1024;
@@ -69,7 +69,7 @@ pub(crate) fn addresses() -> Vec<IpAddr> {
             let addr = (*cur).ifa_addr;
             if !addr.is_null() && i32::from((*addr).sa_family) == libc::AF_INET {
                 let sin = &*(addr as *const libc::sockaddr_in);
-                out.push(IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                out.push(IpAddr::V4(std::net::Ipv4Addr::from(u32::from_be(
                     sin.sin_addr.s_addr,
                 ))));
             }

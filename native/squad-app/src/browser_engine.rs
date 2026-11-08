@@ -5,6 +5,10 @@
 //! descriptors (3 and 4) as NUL-separated JSON. Each Squad Code session gets its own page (target); the one on
 //! screen streams JPEG frames that are decoded here, off the UI thread.
 
+// Only the Linux design renderer drives the engine for now (see designdraw), so on
+// macOS and Windows most of it is unused until the Browser tab moves onto it.
+#![cfg_attr(any(target_os = "macos", windows), allow(dead_code))]
+
 use gpui_kit::RenderImage;
 use serde_json::{json, Value};
 use std::collections::HashMap;
