@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="native/squad-app/assets/icon/png/squadcode-256.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
+<img src="docs/images/icon.png" width="132" alt="Squad Code app icon: Peek, the crew lead, peeking up in violet outline with its ears up" />
 
 <h1>Squad Code</h1>
 
@@ -51,7 +51,7 @@ and you approve, send it back or throw it away right in the thread.
 <br />
 
 > [!NOTE]
-> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.7`). It's the app that used to be called Runo, rebuilt around a crew of bots. Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
+> **Squad Code 2.0 is in alpha** (`v2.0.0-alpha.7`). Expect rough edges, and please [open an issue](https://github.com/hyperhale/squadcode/issues) when you hit one. See [what's missing](#known-gaps) before you download.
 
 ## How it works
 
@@ -231,6 +231,19 @@ Squad Code still decides some things for itself: whether a job runs here or on y
 
 <img src="docs/images/mascot.png" alt="Settings, Mascot: a large live preview of Guard listening, the mood buttons under it, and the crew look and dress-a-bot options" width="920" />
 
+## The project file
+
+Put a `squad.toml` at the top of a repository (`squad project init` writes one from what Squad finds) and every job sets up the same way. Every key is optional.
+
+```toml
+setup = ["pnpm install"]            # run in each job's fresh worktree first
+copy = [".env.local"]               # ignored files each worktree gets a copy of
+run = "pnpm dev --port $PORT"       # how to start the app
+url = "http://localhost:$PORT"
+port = 3100                         # each job's app gets its own port from here
+checks = ["pnpm lint", "pnpm test"] # what Checker runs
+```
+
 ## Squad in a terminal
 
 Every job you can start in the window you can start from a terminal, including the one built into each job. `squad` is installed for you in `~/.squadcode/bin`.
@@ -258,6 +271,11 @@ squad brain why tidy up the old feature flags  # where Peek would send a job, an
 | `squad new --bot <name> <words…>` | A job for one bot |
 | `squad do <words…>` | Your engine picks the bot and the kind of job |
 | `squad approve <id>` / `discard <id>` / `stop <id>` | Approve a job waiting for review, throw its changes away, or stop it |
+| `squad later [<when> <words…>\|cancel <id>]` | Start a job later (tonight, 2am, in 2h, tomorrow at 7am), or list and cancel waiting ones |
+| `squad rewind <id> [n]` | Put a job back to before your message n |
+| `squad issue <ref>` / `squad linear key <key>` | Read a GitHub or Linear issue, or save a Linear key |
+| `squad lessons [forget <bot> <n>]` | What the bots learned from your reviews here |
+| `squad project [init]` | Show this project's `squad.toml`, or write a starting one |
 | `squad serve [--listen <address>\|tailscale]` | Run the crew here with no window ([below](#run-the-crew-on-a-server)) |
 | `squad pair [name]` / `devices` / `unpair <name>` | Pair a device with the server, list them, or cut one off |
 | `squad brain why <words…>` | Where Peek would send a job, and why |
@@ -364,7 +382,7 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up,
 <br />
 
 <div align="center">
-<img src="native/squad-app/assets/icon/png/squadcode-256.png" width="40" alt="" />
+<img src="docs/images/icon.png" width="40" alt="" />
 <br />
 <sub>Built in Rust for people who'd rather hand out the jobs than juggle the agents.</sub>
 </div>

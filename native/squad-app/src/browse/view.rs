@@ -34,6 +34,161 @@ pub struct Viewer {
     pub version: Arc<AtomicU64>,
 }
 
+/// An element picked on the page, to ask a bot to change.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Picked {
+    pub tag: String,
+    pub selector: String,
+    pub text: String,
+    pub html: String,
+    pub url: String,
+    /// Where it sits, when that helps find it: its table row or heading, and
+    /// the frame or shadow DOM it's inside.
+    pub where_: String,
+}
+
+impl Picked {
+    fn from_json(v: &Value) -> Picked {
+        let s = |k: &str| v[k].as_str().unwrap_or("").to_string();
+        Picked {
+            tag: s("tag"),
+            selector: s("sel"),
+            text: s("text"),
+            html: s("html"),
+            url: s("url"),
+            where_: s("where"),
+        }
+    }
+
+    /// "the button \u{201c}Pay now\u{201d}", for the bar under the page.
+    pub fn short(&self) -> String {
+        let kind = match self.tag.as_str() {
+            "a" => "link",
+            "button" => "button",
+            "input" | "textarea" | "select" => "field",
+            "img" | "svg" => "image",
+            "h1" | "h2" | "h3" | "h4" => "heading",
+            "p" | "span" | "label" => "text",
+            "nav" => "navigation",
+            "form" => "form",
+            _ => "part",
+        };
+        if self.text.is_empty() {
+            format!("this {kind} ({})", self.selector)
+        } else {
+            format!("the {kind} \u{201c}{}\u{201d}", self.text)
+        }
+    }
+
+    /// What the bot is told: where it is and what the person wants.
+    pub fn ask(&self, words: &str) -> String {
+        format!(
+            "On the page {url}, change {short}{where_}: {words}\n\nThe element: `{sel}`\n```html\n{html}\n```\nFind it in the code, make the change, and check it in the job's browser.",
+            url = self.url,
+            short = self.short(),
+            where_ = if self.where_.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", self.where_)
+            },
+            words = words.trim(),
+            sel = self.selector,
+            html = self.html,
+        )
+    }
+}
+
+/// Finds and describes the element at __X__, __Y__, outlining it briefly.
+const PICK_JS: &str = r##"(() => {
+  let x = __X__, y = __Y__, doc = document, el = doc.elementFromPoint(x, y);
+  const inside = [];
+  const esc = (v) => (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/[^\w-]/g, '\\$&');
+  const sel = (e) => {
+    const root = e.getRootNode();
+    const one = (s) => { try { return root.querySelectorAll(s).length === 1; } catch (_) { return false; } };
+    const parts = [];
+    while (e && e.nodeType === 1) {
+      const tag = e.tagName.toLowerCase();
+      if (e.id && !/^\d/.test(e.id) && e.id.length < 40) {
+        parts.unshift('#' + esc(e.id));
+        if (one(parts.join(' > '))) break;
+      } else {
+        let s = tag;
+        const attr = ['data-testid', 'data-test', 'data-cy', 'name', 'aria-label']
+          .find((a) => e.getAttribute(a));
+        if (attr) {
+          s += '[' + attr + '="' + e.getAttribute(attr).replace(/"/g, '\\"').slice(0, 60) + '"]';
+        } else {
+          const cls = [...e.classList].filter((c) => c.length < 30 && !/^\d/.test(c)).slice(0, 2);
+          if (cls.length) s += '.' + cls.map(esc).join('.');
+        }
+        const p = e.parentElement || (e.parentNode && e.parentNode.host ? null : e.parentNode);
+        if (p && p.children) {
+          const same = [...p.children].filter((c) => c.tagName === e.tagName);
+          if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(e) + 1) + ')';
+        }
+        parts.unshift(s);
+        // A bare tag alone says too little to find it in the code.
+        if (one(parts.join(' > ')) && (parts.length > 1 || s !== tag)) break;
+      }
+      if (parts.length >= 8) break;
+      e = e.parentElement;
+    }
+    return parts.join(' > ');
+  };
+  // Into same-origin frames and open shadow roots, to the element really there.
+  for (let i = 0; el && i < 10; i++) {
+    if (el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (inner && inner !== el) {
+        inside.push('the shadow DOM of `' + sel(el) + '`');
+        el = inner;
+        continue;
+      }
+    }
+    if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
+      let d = null;
+      try { d = el.contentDocument; } catch (_) {}
+      if (d) {
+        const r = el.getBoundingClientRect();
+        x -= r.left + el.clientLeft; y -= r.top + el.clientTop;
+        inside.push('the frame `' + sel(el) + '`' + (el.src ? ' (' + el.src + ')' : ''));
+        doc = d; el = d.elementFromPoint(x, y);
+        continue;
+      }
+    }
+    break;
+  }
+  if (!el) return null;
+  // A click on an icon or a word inside a button means the button.
+  if (el instanceof (doc.defaultView || window).SVGElement && el.ownerSVGElement) el = el.closest('svg') || el;
+  const act = el.closest && el.closest('a,button,label,summary,select,textarea,input,[role=button],[role=link],[role=tab],[role=menuitem]');
+  if (act && act !== el && act.contains(el)) {
+    let depth = 0;
+    for (let e = el; e && e !== act; e = e.parentElement) depth++;
+    if (depth <= 4) el = act;
+  }
+  const clean = (t) => (t || '').trim().replace(/\s+/g, ' ');
+  const text = clean(el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') ||
+    el.getAttribute('alt') || el.getAttribute('placeholder')).slice(0, 80);
+  // Where it sits: the row it's in, or the nearest heading of the box around it.
+  let near = '';
+  const row = el.closest('tr');
+  if (row && row !== el) near = 'in the table row “' + clean(row.innerText).slice(0, 80) + '”';
+  for (let a = el.parentElement, i = 0; !near && a && a !== doc.body && i < 6; a = a.parentElement, i++) {
+    const hs = [...a.querySelectorAll('h1,h2,h3,h4,h5,h6,[role=heading],legend,caption')]
+      .filter((h) => !el.contains(h) && (h.compareDocumentPosition(el) & 4) && clean(h.innerText));
+    const h = hs[hs.length - 1];
+    if (h) near = 'under “' + clean(h.innerText).slice(0, 60) + '”';
+  }
+  const html = el.outerHTML.slice(0, 400);
+  const was = el.style.outline;
+  el.style.outline = '3px solid #f59e0b';
+  setTimeout(() => { el.style.outline = was; }, 1600);
+  const where = [near, ...inside.reverse().map((s) => 'inside ' + s)].filter(Boolean).join(', ');
+  return { tag: el.tagName.toLowerCase(), sel: sel(el), text, html, url: location.href, where };
+})()"##;
+
 /// A point in the view (from its top-left) as page CSS pixels, when it's on the page.
 /// The page is fitted into `area` keeping its shape, and centred.
 pub fn to_page(local: (f32, f32), area: (f32, f32), css: (f32, f32)) -> Option<(f64, f64)> {
@@ -156,6 +311,40 @@ impl Viewer {
             "Input.dispatchMouseEvent",
             json!({"type": "mouseWheel", "x": x, "y": y, "deltaX": dx, "deltaY": dy}),
         );
+    }
+
+    /// What's on the page at `(x, y)` (CSS pixels), described for a bot: its
+    /// tag, a selector, its text and the start of its HTML. Outlines it on the
+    /// page for a moment so you see what was picked. Answers on another
+    /// thread.
+    pub fn pick_at(&self, (x, y): (f64, f64)) -> std::sync::mpsc::Receiver<Result<Picked, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (cdp, session) = {
+            let sh = self.locked();
+            (sh.cdp.clone(), sh.session.clone())
+        };
+        std::thread::spawn(move || {
+            let got = (|| -> Result<Picked, String> {
+                let cdp = cdp
+                    .filter(|_| !session.is_empty())
+                    .ok_or("the browser isn't ready")?;
+                let js = PICK_JS
+                    .replace("__X__", &x.to_string())
+                    .replace("__Y__", &y.to_string());
+                let r = cdp.call(
+                    "Runtime.evaluate",
+                    json!({"expression": js, "returnByValue": true}),
+                    &session,
+                )?;
+                let v = &r["result"]["value"];
+                if v.is_null() {
+                    return Err("nothing is there".into());
+                }
+                Ok(Picked::from_json(v))
+            })();
+            let _ = tx.send(got);
+        });
+        rx
     }
 
     pub fn insert_text(&self, text: &str) {
@@ -305,6 +494,42 @@ fn watch(
     shared.lock().unwrap_or_else(|e| e.into_inner()).state = Some(State::Live);
     version.fetch_add(1, Ordering::Relaxed);
     Ok(())
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    #[test]
+    fn a_picked_element_reads_plainly() {
+        let p = Picked::from_json(
+            &json!({"tag": "button", "sel": "form > button.pay", "text": "Pay now", "html": "<button class=\"pay\">Pay now</button>", "url": "http://localhost:3000/cart"}),
+        );
+        assert_eq!(p.short(), "the button \u{201c}Pay now\u{201d}");
+        let ask = p.ask("make it green");
+        assert!(
+            ask.contains("http://localhost:3000/cart")
+                && ask.contains("make it green")
+                && ask.contains("form > button.pay")
+        );
+    }
+
+    #[test]
+    fn where_it_sits_goes_into_the_ask() {
+        let p = Picked::from_json(
+            &json!({"tag": "button", "sel": "button.cta", "text": "Claim offer",
+            "where": "inside the shadow DOM of `main > promo-banner`"}),
+        );
+        assert!(p
+            .ask("make it bigger")
+            .contains("the button \u{201c}Claim offer\u{201d} (inside the shadow DOM of `main > promo-banner`): make it bigger"));
+    }
+
+    #[test]
+    fn the_pick_script_has_its_placeholders() {
+        assert!(PICK_JS.contains("__X__") && PICK_JS.contains("__Y__"));
+        assert!(PICK_JS.contains("shadowRoot") && PICK_JS.contains("contentDocument"));
+    }
 }
 
 #[cfg(test)]

@@ -465,6 +465,17 @@ pub fn now_secs() -> i64 {
     now()
 }
 
+/// How long ago `at` was, as "just now", "12m ago", "3h ago" or "2d ago".
+pub fn ago(at: i64, now: i64) -> String {
+    let secs = (now - at).max(0);
+    match secs {
+        s if s < 60 => "just now".into(),
+        s if s < 3600 => format!("{}m ago", s / 60),
+        s if s < 86_400 => format!("{}h ago", s / 3600),
+        s => format!("{}d ago", s / 86_400),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

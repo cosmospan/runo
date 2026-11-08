@@ -23,7 +23,8 @@ use crate::browse::view::{self, State, Viewer};
 use crate::browser_engine::{key_spec, modifier_bits, KeySpec};
 
 use super::remote;
-use super::ui::{self, c};
+use super::store::Status;
+use super::ui::{self, c, ca};
 use super::{Place, Shell};
 
 /// The fastest the picture is rebuilt: 60 times a second.
@@ -60,6 +61,12 @@ pub(super) struct Web {
     err: String,
     clicks: (Instant, usize),
     touched: Instant,
+    /// Point at it: the next click on the page picks what's there instead of
+    /// clicking it.
+    pointing: bool,
+    picking: Option<Receiver<Result<view::Picked, String>>>,
+    /// What was picked, for the bar asking what should change about it.
+    picked: Option<view::Picked>,
 }
 
 impl Web {
@@ -98,12 +105,18 @@ impl Web {
                 err: String::new(),
                 clicks: (Instant::now(), 0),
                 touched: Instant::now(),
+                pointing: false,
+                picking: None,
+                picked: None,
             },
             sub,
         )
     }
 
     fn stop(&mut self) {
+        self.pointing = false;
+        self.picking = None;
+        self.picked = None;
         self.view = None;
         self.tunnel = None;
         self.opening = None;
@@ -238,6 +251,22 @@ impl Shell {
                     cx.notify();
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => self.web.opening = None,
+                Err(_) => {}
+            }
+        }
+        if let Some(rx) = &self.web.picking {
+            match rx.try_recv() {
+                Ok(Ok(p)) => {
+                    self.web.picking = None;
+                    self.web.picked = Some(p);
+                    cx.notify();
+                }
+                Ok(Err(why)) => {
+                    self.web.picking = None;
+                    self.say(format!("Couldn't pick that: {why}."));
+                    cx.notify();
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.web.picking = None,
                 Err(_) => {}
             }
         }
@@ -499,6 +528,36 @@ impl Shell {
                             .bordered(false),
                     ),
             )
+            .when(!closed, |d| {
+                let on = self.web.pointing;
+                d.child(
+                    ui::ghost_i(
+                        "web-point",
+                        IconName::SquareMousePointer,
+                        if on {
+                            "Click the page…"
+                        } else {
+                            "Point at it"
+                        },
+                    )
+                    .when(on, |b| {
+                        b.bg(ca(ui::AMBER, 0.18)).text_color(c(ui::t_amber()))
+                    })
+                    .tooltip(|window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(
+                            "Click something on the page, then say what should change about it",
+                        )
+                        .build(window, cx)
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.web.pointing = !this.web.pointing;
+                        if this.web.pointing {
+                            this.web.picked = None;
+                        }
+                        cx.notify();
+                    })),
+                )
+            })
             .when(closed, |d| {
                 d.child(
                     ui::ghost_i("web-again", IconName::RotateCcw, "Open again").on_click(
@@ -521,6 +580,24 @@ impl Shell {
         let bounds = self.web.bounds.clone();
         let down = |button: &'static str| {
             cx.listener(move |this: &mut Self, ev: &MouseDownEvent, window, cx| {
+                // Pointing: this click picks what's under it, for a bot to change.
+                if this.web.pointing && button == "left" {
+                    if let (Some(at), Some(v)) = (this.web_point(ev.position), &this.web.view) {
+                        this.web.picking = Some(v.pick_at(at));
+                        this.pick_input
+                            .update(cx, |i, cx| i.set_value("", window, cx));
+                        this.web.pointing = false;
+                        this.web.picked = None;
+                        this.focus_moved = Instant::now();
+                        let input = this.pick_input.clone();
+                        window.on_next_frame(move |window, cx| {
+                            input.update(cx, |i, cx| i.focus(window, cx))
+                        });
+                    }
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
                 window.focus(&this.web.focus, cx);
                 this.web_mouse("mousePressed", ev.position, button, ev.modifiers);
                 cx.stop_propagation();
@@ -528,6 +605,9 @@ impl Shell {
         };
         let up = |button: &'static str| {
             cx.listener(move |this: &mut Self, ev: &MouseUpEvent, _, _| {
+                if this.web.picking.is_some() || this.web.picked.is_some() && button == "left" {
+                    return;
+                }
                 this.web_mouse("mouseReleased", ev.position, button, ev.modifiers);
             })
         };
@@ -540,6 +620,7 @@ impl Shell {
             .overflow_hidden()
             .bg(c(ui::bg()))
             .cursor_default()
+            .when(self.web.pointing, |d| d.cursor_crosshair())
             .on_mouse_down(MouseButton::Left, down("left"))
             .on_mouse_down(MouseButton::Middle, down("middle"))
             .on_mouse_down(MouseButton::Right, down("right"))
@@ -617,7 +698,125 @@ impl Shell {
                 )
             })
             .child(area)
+            .children(self.pick_bar(cx))
             .into_any_element()
+    }
+
+    /// The bar under the page while pointing or once something is picked.
+    fn pick_bar(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let bot = self
+            .crew
+            .store
+            .job(self.web.job)
+            .map(|j| j.bot.name())
+            .unwrap_or("the bot");
+        let bar = || {
+            div()
+                .flex_none()
+                .min_h(px(48.))
+                .px(px(16.))
+                .py(px(8.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .border_t_1()
+                .border_color(c(ui::line()))
+                .bg(c(ui::panel()))
+                .text_size(px(13.))
+        };
+        // While pointing, nothing is added under the page, so it doesn't move
+        // under the pointer; the bar comes once something is picked.
+        if self.web.picking.is_some() {
+            return Some(
+                bar()
+                    .child(
+                        Icon::new(IconName::SquareMousePointer)
+                            .size(px(15.))
+                            .text_color(c(ui::t_amber())),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_color(c(ui::body()))
+                            .child("Looking at what you picked…".to_string()),
+                    )
+                    .child(
+                        ui::ghost("web-point-cancel", "Cancel").on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.web.pointing = false;
+                                this.web.picking = None;
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            );
+        }
+        let picked = self.web.picked.clone()?;
+        Some(
+            bar()
+                .child(
+                    div()
+                        .flex_none()
+                        .max_w(px(300.))
+                        .truncate()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(ui::ink()))
+                        .child(format!("Change {}", picked.short())),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .h(px(32.))
+                        .px(px(10.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(8.))
+                        .bg(c(ui::bg()))
+                        .border_1()
+                        .border_color(ca(ui::AMBER, 0.5))
+                        .child(
+                            Input::new(&self.pick_input)
+                                .appearance(false)
+                                .bordered(false),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(format!("goes to {bot}")),
+                )
+                .child(ui::ghost("web-pick-cancel", "Cancel").on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.web.picked = None;
+                        this.pick_input
+                            .update(cx, |i, cx| i.set_value("", window, cx));
+                        cx.notify();
+                    },
+                ))),
+        )
+    }
+
+    /// Sends what should change about the picked element to the job's bot.
+    pub(super) fn send_pick(&mut self, words: String, cx: &mut Context<Self>) {
+        let Some(picked) = self.web.picked.take() else {
+            return;
+        };
+        let id = self.web.job;
+        let Some(job) = self.crew.store.job(id) else {
+            return;
+        };
+        if job.status == Status::Running {
+            self.say("It's still working. Pick it again once it finishes.");
+            self.web.picked = Some(picked);
+            cx.notify();
+            return;
+        }
+        let bot = job.bot.name();
+        self.say(format!("Sent to {bot}: change {}.", picked.short()));
+        self.follow_up(id, picked.ask(&words), cx);
     }
 }
 

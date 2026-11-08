@@ -31,6 +31,9 @@ struct Warm {
     lines: Arc<Mutex<Receiver<String>>>,
     /// End lines still to come from turns whose reply was already taken.
     owed: Arc<AtomicU32>,
+    /// The conversation as the engine last read it, so the next turn sends
+    /// only what's new.
+    said: Vec<String>,
     turns: u32,
 }
 
@@ -70,6 +73,10 @@ pub fn command(bin: &str, model: &str) -> Command {
         "",
         // Peek's reads stay out of the person's own Claude Code sessions.
         "--no-session-persistence",
+        // Peek's rules once, in place of Claude Code's own coding prompt,
+        // instead of in every turn: each read then carries only what changed.
+        "--system-prompt",
+        super::think::RULES,
     ]);
     if !model.trim().is_empty() {
         c.args(["--model", model.trim()]);
@@ -158,6 +165,7 @@ fn spawn(k: &str, bin: &str, model: &str, dir: &str) -> Option<Warm> {
             stdin,
             lines: Arc::new(Mutex::new(rx)),
             owed: Arc::new(AtomicU32::new(0)),
+            said: Vec::new(),
             turns: 0,
         })
     });
@@ -223,14 +231,27 @@ fn drop_if(k: &str) {
     }
 }
 
-/// Sends `prompt` to the warm engine for `dir`; its reply comes back on the
-/// receiver as `Event::Output(…)` within `limit`. None when the warm
-/// engine can't take it now; read cold then.
+/// The end of `now` the engine hasn't read yet: what follows the longest
+/// stretch that ends `before` and starts `now`. None when they don't join up
+/// (a new engine, or another thread), and the whole conversation goes.
+pub fn unseen<'a>(before: &[String], now: &'a [String]) -> Option<&'a [String]> {
+    (1..=now.len().min(before.len()))
+        .rev()
+        .find(|&k| before[before.len() - k..] == now[..k])
+        .map(|k| &now[k..])
+}
+
+/// Sends a turn to the warm engine for `dir`; its reply comes back on the
+/// receiver as `Event::Output(…)` within `limit`. `said` is the
+/// conversation now, and `turn(new_only, shown)` writes the turn showing
+/// `shown` of it: only the new part when the engine read the rest in an
+/// earlier turn. None when the warm engine can't take it now; read cold then.
 pub fn ask(
     bin: &str,
     model: &str,
     dir: &str,
-    prompt: &str,
+    said: &[String],
+    turn: &dyn Fn(bool, &[String]) -> String,
     limit: Duration,
 ) -> Option<Receiver<Event>> {
     let mut g = WARM.lock().ok()?;
@@ -247,9 +268,13 @@ pub fn ask(
             }
         }
     }
+    let prompt = match unseen(&w.said, said) {
+        Some(new) => turn(true, new),
+        None => turn(false, said),
+    };
     let sent = w
         .stdin
-        .write_all(message(prompt).as_bytes())
+        .write_all(message(&prompt).as_bytes())
         .and_then(|_| w.stdin.flush());
     if sent.is_err() {
         if let Some(w) = g.take() {
@@ -258,6 +283,7 @@ pub fn ask(
         return None;
     }
     w.turns += 1;
+    w.said = said.to_vec();
     let lines = w.lines.clone();
     let owed = w.owed.clone();
     let k = w.key.clone();
@@ -362,9 +388,32 @@ mod tests {
             "haiku",
             "--tools",
             "--no-session-persistence",
+            "--system-prompt",
         ] {
             assert!(args.iter().any(|a| a == want), "{want}");
         }
+    }
+
+    fn lines(words: &[&str]) -> Vec<String> {
+        words.iter().map(|w| w.to_string()).collect()
+    }
+
+    #[test]
+    fn a_turn_sends_only_what_the_engine_has_not_read() {
+        let before = lines(&["You: hi", "Peek: hello", "You: add a login page"]);
+        // Two new lines, the oldest dropping off the window.
+        let now = lines(&[
+            "Peek: hello",
+            "You: add a login page",
+            "Peek: Builder's on it.",
+            "You: thanks",
+        ]);
+        assert_eq!(unseen(&before, &now), Some(&now[2..]));
+        // Nothing new.
+        assert_eq!(unseen(&before, &before), Some(&before[3..]));
+        // Another thread, or a fresh engine: everything goes.
+        assert_eq!(unseen(&before, &lines(&["You: fix the footer"])), None);
+        assert_eq!(unseen(&[], &now), None);
     }
 
     /// A stand-in engine: a shell loop that answers each line with a result.
@@ -382,7 +431,15 @@ mod tests {
         let bin = script.to_string_lossy().into_owned();
         let d = dir.to_string_lossy().into_owned();
         for _ in 0..3 {
-            let rx = ask(&bin, "", &d, "hello", Duration::from_secs(10)).expect("warm");
+            let rx = ask(
+                &bin,
+                "",
+                &d,
+                &[],
+                &|_, _| "hello".to_string(),
+                Duration::from_secs(10),
+            )
+            .expect("warm");
             match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
                 Event::Output(Ok(r)) => {
                     assert_eq!(r, "ok");
@@ -413,20 +470,22 @@ fn real_reads() {
     .iter()
     {
         let crew = crate::v2::data::Member::CREW.to_vec();
-        let p = super::think::prompt(
-            text,
-            &super::think::Seen {
+        let seen = super::think::Seen {
                 project: "shop",
+                thread: "",
+                summary: "",
                 recent: &[],
                 crew: &crew,
                 running: &[],
                 worked: &[],
                 in_thread: &[],
                 server: "this computer, or the person's server vps (connected, with claude signed in). It doesn't have this project yet; Squad Code copies it there first, by itself. Squad Code picks where each job runs.",
-            },
-        );
+        };
+        let turn = |_: bool, shown: &[String]| {
+            super::think::turn(text, &seen, "The conversation so far:", shown)
+        };
         let at = Instant::now();
-        let rx = ask("claude", "haiku", &dir, &p, Duration::from_secs(40)).unwrap();
+        let rx = ask("claude", "haiku", &dir, &[], &turn, Duration::from_secs(40)).unwrap();
         let got = rx.recv_timeout(Duration::from_secs(45)).ok();
         let reply = match got {
             Some(Event::Output(r)) => format!("{r:?}"),
