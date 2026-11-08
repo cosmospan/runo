@@ -53,12 +53,12 @@ impl Shell {
             .flex()
             .flex_col()
             .child(
+                // Its details live in the one right sidebar, beside the Jobs list.
                 div()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .child(self.live_main(&job, cx))
-                    .child(self.live_side(&job, cx)),
+                    .child(self.live_main(&job, cx)),
             )
             .children(drawer)
             .into_any_element()
@@ -605,7 +605,9 @@ impl Shell {
             )
     }
 
-    fn live_side(&mut self, job: &Job, cx: &mut Context<Self>) -> impl IntoElement {
+    /// A job's details for the right sidebar: where it stands, its plan, the
+    /// files it changed and the bot's other jobs.
+    pub(super) fn job_details(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
         let mut plan = div().flex().flex_col().gap(px(10.));
         if job.plan.is_empty() {
             plan = plan.child(
@@ -820,16 +822,6 @@ impl Shell {
             );
         }
         div()
-            .id("live-side")
-            .w(px(320.))
-            .flex_none()
-            .h_full()
-            .overflow_y_scroll()
-            .border_l_1()
-            .border_color(c(ui::line2()))
-            .px(px(24.))
-            .pt(px(if cfg!(target_os = "macos") { 16. } else { 4. }))
-            .pb(px(24. + super::DOCK_ROOM))
             .flex()
             .flex_col()
             .child(section(

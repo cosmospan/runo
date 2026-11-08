@@ -524,6 +524,9 @@ pub struct Shell {
     list_git: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
+    /// On a job's page the one right sidebar shows that job's details (true)
+    /// or the Jobs panel (false). Opening a job from elsewhere starts on details.
+    side_job: bool,
     /// A thread waiting for you to confirm deleting it.
     deleting: Option<u64>,
     /// A bot with a chat or know-how of its own, waiting for you to confirm
@@ -1129,7 +1132,7 @@ impl Shell {
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
-            Ok("review") => store
+            Ok("review" | "review-jobs") => store
                 .jobs
                 .iter()
                 .find(|j| j.status == Status::Review && j.race == 0)
@@ -1209,6 +1212,7 @@ impl Shell {
             list_all: false,
             list_git: false,
             jobs_open: false,
+            side_job: true,
             deleting: None,
             removing: None,
             raw_open: Default::default(),
@@ -1329,6 +1333,11 @@ impl Shell {
                 shell.jobs_open = true;
                 shell.list_git = true;
             }
+            // A job open with the sidebar on its Jobs list.
+            Ok("review-jobs") => {
+                shell.jobs_open = true;
+                shell.side_job = false;
+            }
             Ok("setup") => {
                 let who = Member::all()
                     .into_iter()
@@ -1385,6 +1394,11 @@ impl Shell {
                 };
                 self.nav_to = to;
                 self.nav_at = Instant::now();
+            }
+            // Coming to a job from elsewhere: the sidebar starts on its details.
+            // Moving between jobs keeps whichever side you were looking at.
+            if matches!(place, Place::Live(_)) && !matches!(self.place, Place::Live(_)) {
+                self.side_job = true;
             }
             self.place = place;
             if let Place::Settings(pane) = place {
