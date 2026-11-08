@@ -7,6 +7,7 @@ All notable changes to Runo are documented here.
 ### Added
 
 - You choose where jobs run once a server is connected. A switch next to Send, and Where jobs run in My server, offer Squad picks, Always your server or Always this computer, and every job's feed says where it runs. With Always your server, a project the server doesn't have yet is copied there first.
+- Your server and this computer stay in step through git, the way cloud coding tools do it. Before a job runs on the server, Squad sends it your latest commits. When you approve a job that ran there, its branch comes back here and merges like any job (or becomes a pull request), and the server drops its copy. It all goes over Squad's SSH connection, so the server needs no GitHub login.
 - "Copy <project> there" in My server copies the open project to your server over SSH, with its git history. It no longer needs a git remote or a login to one; folders a project rebuilds (like node_modules and target) are left out.
 
 ### Changed
