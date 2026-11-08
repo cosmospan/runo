@@ -3360,3 +3360,257 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
         let _ = std::fs::remove_dir_all(&base);
     }
 }
+
+/// A job's whole life with a stand-in engine: started, asked to do more,
+/// merged or thrown away, and stopped part way.
+#[cfg(all(test, unix))]
+mod lifecycle_e2e {
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    /// A stand-in for Claude Code. It logs each call on one line next to itself,
+    /// writes the files its prompt names, and with SLOW-TASK takes its time.
+    const FAKE: &str = r#"#!/bin/bash
+all="$*"
+{ printf '%s' "$all" | tr '\n' ' '; echo; } >> "$(dirname "$0")/calls.log"
+if [[ "$all" == *"SLOW-TASK"* ]]; then sleep 30; fi
+if [[ "$all" == *"WRITE-A"* ]]; then echo a > a.txt; fi
+if [[ "$all" == *"WRITE-B"* ]]; then echo b > b.txt; fi
+sid="sess-life"
+echo "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"$sid\"}"
+echo "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Done.\"}]},\"session_id\":\"$sid\"}"
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Done.\",\"session_id\":\"$sid\"}"
+"#;
+
+    struct Bench {
+        base: PathBuf,
+        repo: PathBuf,
+        st: AppSettings,
+        folder: store::Folder,
+        rt: Runtime,
+    }
+
+    impl Drop for Bench {
+        fn drop(&mut self) {
+            for j in &self.rt.store.jobs {
+                if !j.worktree.is_empty() {
+                    let _ = crate::git::remove_worktree(&j.folder.path, &j.worktree);
+                }
+            }
+            let _ = std::fs::remove_dir_all(&self.base);
+        }
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .args(["-c", "user.email=t@t", "-c", "user.name=t"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    }
+
+    /// A git repository with one commit, and settings that run the stand-in.
+    fn bench(name: &str) -> Bench {
+        let base = std::env::temp_dir().join(format!("squad-life-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let fake = base.join("claude");
+        std::fs::write(&fake, FAKE).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        std::fs::write(repo.join("README.md"), "demo\n").unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "init"]);
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = if p.id == "claude" {
+                fake.to_string_lossy().into_owned()
+            } else {
+                "/nonexistent/squad-test-agent".into()
+            };
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let folder = store::Folder {
+            name: "repo".into(),
+            path: repo.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        Bench {
+            base,
+            repo,
+            st,
+            folder,
+            rt: Runtime::new(super::tests::quiet_store()),
+        }
+    }
+
+    impl Bench {
+        fn start(&mut self, task: &str) -> u64 {
+            let opened = self.rt.start_job(
+                &self.st,
+                Member::Builder,
+                Mode::Build,
+                task.into(),
+                self.folder.clone(),
+            );
+            let Opened::Job(id) = opened else {
+                panic!("expected a job, got {opened:?}");
+            };
+            id
+        }
+
+        /// Moves the crew along until nothing is running or being checked.
+        fn settle(&mut self) {
+            let t = Instant::now();
+            loop {
+                self.rt.poll(&self.st, None);
+                let checking = self.rt.store.jobs.iter().any(|j| j.checking);
+                if self.rt.runners.is_empty() && self.rt.checking.is_empty() && !checking {
+                    return;
+                }
+                assert!(
+                    t.elapsed() < Duration::from_secs(60),
+                    "the job never settled"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        fn job(&self, id: u64) -> store::Job {
+            self.rt.store.job(id).cloned().unwrap()
+        }
+
+        /// Moves the crew along until the stand-in has been called `n` times.
+        fn wait_for_calls(&mut self, n: usize) {
+            let t = Instant::now();
+            while self.calls().len() < n {
+                self.rt.poll(&self.st, None);
+                assert!(
+                    t.elapsed() < Duration::from_secs(20),
+                    "the engine never started"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            std::fs::read_to_string(self.base.join("calls.log"))
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect()
+        }
+    }
+
+    #[test]
+    fn a_job_goes_from_start_to_merged() {
+        let mut b = bench("merge");
+        let id = b.start("WRITE-A Add a file called a");
+        assert_eq!(b.job(id).status, Status::Running);
+        b.settle();
+
+        // It worked on its own branch, in its own worktree, and waits for review.
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Review, "feed: {:?}", job.feed);
+        assert!(job.branch.starts_with("squad/"), "branch {}", job.branch);
+        assert!(Path::new(&job.worktree).join("a.txt").is_file());
+        assert!(!b.repo.join("a.txt").exists(), "the checkout is untouched");
+        assert!(job.changes.iter().any(|c| c.path.ends_with("a.txt")));
+        assert_eq!(job.conversation, "sess-life");
+
+        // A follow-up goes on in the same worktree and the same conversation.
+        b.rt.follow_up(&b.st, id, "WRITE-B Also add b".into());
+        assert_eq!(b.job(id).status, Status::Running);
+        b.settle();
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Review, "feed: {:?}", job.feed);
+        assert!(job
+            .feed
+            .iter()
+            .any(|i| matches!(i, store::Item::You(t) if t == "WRITE-B Also add b")));
+        assert!(Path::new(&job.worktree).join("b.txt").is_file());
+        let calls = b.calls();
+        assert_eq!(calls.len(), 2, "calls: {calls:?}");
+        assert!(calls[1].contains("sess-life"), "not resumed: {}", calls[1]);
+
+        // Approving merges both files into main and clears the worktree away.
+        let worktree = job.worktree.clone();
+        b.rt.approve(id);
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Shipped, "feed: {:?}", job.feed);
+        assert!(job.worktree.is_empty());
+        assert!(!Path::new(&worktree).exists());
+        assert_eq!(
+            git(&b.repo, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(),
+            "main"
+        );
+        let files = git(&b.repo, &["ls-tree", "--name-only", "HEAD"]);
+        assert!(
+            files.contains("a.txt") && files.contains("b.txt"),
+            "{files}"
+        );
+    }
+
+    #[test]
+    fn a_discarded_job_leaves_the_checkout_as_it_was() {
+        let mut b = bench("discard");
+        let id = b.start("WRITE-A Add a file called a");
+        b.settle();
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Review, "feed: {:?}", job.feed);
+        b.rt.discard(id);
+        let after = b.job(id);
+        assert_eq!(after.status, Status::Discarded);
+        assert!(!Path::new(&job.worktree).exists());
+        assert!(git(&b.repo, &["branch", "--list", &job.branch])
+            .trim()
+            .is_empty());
+        assert!(!b.repo.join("a.txt").exists());
+        assert_eq!(git(&b.repo, &["status", "--porcelain"]).trim(), "");
+    }
+
+    #[test]
+    fn a_job_that_changes_nothing_has_nothing_to_review() {
+        let mut b = bench("nothing");
+        let id = b.start("Look around and change nothing");
+        b.settle();
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Done, "feed: {:?}", job.feed);
+        assert!(job.worktree.is_empty());
+        assert!(job
+            .feed
+            .iter()
+            .any(|i| matches!(i, store::Item::Note(n) if n.contains("didn't change"))));
+    }
+
+    #[test]
+    fn a_stopped_job_stops_and_can_carry_on() {
+        let mut b = bench("stop");
+        let id = b.start("SLOW-TASK WRITE-A Take your time");
+        // Wait for the stand-in to be called, so there's a turn to stop.
+        b.wait_for_calls(1);
+        b.rt.stop(id);
+        let t = Instant::now();
+        b.settle();
+        assert!(
+            t.elapsed() < Duration::from_secs(20),
+            "stopping took too long"
+        );
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Stopped, "feed: {:?}", job.feed);
+        assert!(b.rt.runners.is_empty());
+        // Carry on starts a new turn in the same worktree.
+        b.rt.carry_on(&b.st, id);
+        assert_eq!(b.job(id).status, Status::Running);
+        b.wait_for_calls(2);
+        b.rt.stop(id);
+        b.settle();
+        assert_eq!(b.job(id).status, Status::Stopped);
+        assert!(b.calls()[1].contains("Carry on"));
+    }
+}
