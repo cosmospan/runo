@@ -432,7 +432,7 @@ pub struct Shell {
     side_slim: bool,
     /// The thread on screen and when you last looked at it before opening it,
     /// for the feed's New line.
-    new_mark: (String, u64),
+    new_mark: (String, u64, u64),
     /// A job's own conversation, open beside its thread like a reply pane.
     reply_open: Option<u64>,
     /// The sidebar's sections folded open or shut, by name; unset, open.
@@ -1061,7 +1061,7 @@ impl Shell {
             history_filter: 0,
             folder_menu: false,
             side_slim: false,
-            new_mark: (String::new(), 0),
+            new_mark: (String::new(), 0, 0),
             reply_open: None,
             side_folds: HashMap::new(),
             toast: None,

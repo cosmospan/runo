@@ -598,9 +598,17 @@ impl Shell {
         let seen_key = format!("{}#{thread}", folder.path);
         if self.new_mark.0 != seen_key {
             let before = self.crew.store.seen_at.get(&seen_key).copied().unwrap_or(0);
-            self.new_mark = (seen_key, before);
+            self.new_mark = (seen_key, before, store::now());
         }
         let since = self.new_mark.1;
+        // When you came in: Peek's catch-up is posted then, and covers only
+        // what happened while you were away.
+        let arrived = self.new_mark.2;
+        let mut catch_up = if thread == 0 {
+            self.catch_up(&folder.path, since, arrived, cx)
+        } else {
+            None
+        };
         self.crew.store.mark_seen(&folder.path, thread);
         let mut entries: Vec<Entry> = self
             .crew
@@ -683,6 +691,17 @@ impl Shell {
                 marked = true;
                 feed = feed.child(divider("New", Some(ui::RED)));
             }
+            // The catch-up sits where it was posted, so what you say after
+            // it comes below it and it scrolls up with the rest.
+            if at > arrived {
+                if let Some(post) = catch_up.take() {
+                    if !marked {
+                        marked = true;
+                        feed = feed.child(divider("New", Some(ui::RED)));
+                    }
+                    feed = feed.child(post);
+                }
+            }
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
@@ -690,13 +709,11 @@ impl Shell {
             });
         }
 
-        if thread == 0 {
-            if let Some(post) = self.catch_up(&folder.path, since, cx) {
-                if !marked {
-                    feed = feed.child(divider("New", Some(ui::RED)));
-                }
-                feed = feed.child(post);
+        if let Some(post) = catch_up {
+            if !marked {
+                feed = feed.child(divider("New", Some(ui::RED)));
             }
+            feed = feed.child(post);
         }
 
         // Short threads sit at the bottom, next to the composer.
@@ -774,7 +791,13 @@ impl Shell {
     /// Peek's catch-up at the bottom of #general when you come back: what
     /// finished, failed or waits on you across the project since you last
     /// looked, and what's still running. Worked out each time, not stored.
-    fn catch_up(&mut self, path: &str, since: u64, cx: &mut Context<Self>) -> Option<Div> {
+    fn catch_up(
+        &mut self,
+        path: &str,
+        since: u64,
+        arrived: u64,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
         if since == 0 {
             return None;
         }
@@ -784,7 +807,8 @@ impl Shell {
             .into_iter()
             .filter(|j| j.folder.path == path)
             .collect();
-        let ended_since = |j: &&Job| j.ended.is_some_and(|e| e > since);
+        // Only what ended while you were away, not what you watched end.
+        let ended_since = |j: &&Job| j.ended.is_some_and(|e| e > since && e <= arrived);
         let done: Vec<String> = mine
             .iter()
             .filter(|j| ended_since(j) && matches!(j.status, Status::Done | Status::Shipped))
@@ -794,10 +818,15 @@ impl Shell {
             .iter()
             .filter(|j| ended_since(j) && j.status == Status::Failed)
             .count();
-        let review = mine.iter().filter(|j| j.status == Status::Review).count();
+        let review = mine
+            .iter()
+            .filter(|j| ended_since(j) && j.status == Status::Review)
+            .count();
+        // Running when you came in.
         let running = mine
             .iter()
-            .filter(|j| matches!(j.status, Status::Running | Status::Shipping))
+            .filter(|j| j.started <= arrived && j.ended.is_none_or(|e| e > arrived))
+            .filter(|j| !matches!(j.status, Status::Stopped | Status::Interrupted))
             .count();
         if done.is_empty() && failed == 0 && review == 0 {
             return None;
@@ -866,7 +895,7 @@ impl Shell {
                         .flex_col()
                         .gap(px(6.))
                         .child(
-                            byline("Peek", store::now()).child(
+                            byline("Peek", arrived).child(
                                 div()
                                     .px(px(6.))
                                     .rounded(px(5.))
