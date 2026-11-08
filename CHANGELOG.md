@@ -4,6 +4,10 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Peek reads each message with fewer tokens. Its warm Claude Code now gets Peek's rules once, as its system prompt in place of Claude Code's own coding prompt, instead of in every message. Each read sends only what changed: the crew, what's running, the new lines of the conversation and the message. Before, each of the 12 reads a warm engine takes repeated the full rules and the last 8 messages.
+
 ## [2.0.0-alpha.7] - 2026-11-08
 
 ### Added

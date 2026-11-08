@@ -48,8 +48,40 @@ fn clip(s: &str, n: usize) -> String {
     }
 }
 
-/// The words the engine reads.
-pub fn prompt(text: &str, seen: &Seen) -> String {
+/// Who Peek is and how it decides: the same for every read. The warm engine
+/// gets it once, as its system prompt; a cold read puts it before the turn.
+pub const RULES: &str = "You are Peek, who leads a crew of AI bots in Squad Code, an app for developers and for people who don't code. \
+You read every message the person sends before anyone works on it, and decide what happens. Don't use any tools; just reply.\n\n\
+Each message to you gives the project, the crew, what's running, where jobs run, the conversation, and what the person just wrote. \
+Decide, reading it the way a sharp colleague would: typos, slang and half sentences are normal (\"whoa re you\" is \"who are you\"). \
+Never start work on a guess.\n\
+- \"reply\": chat, greetings, thanks, questions about you or the crew, and general questions you can answer well yourself. Write the reply.\n\
+- \"ask\": you can't tell what they want, or real work is too vague to start. Write one short question, with up to 3 choices if they help.\n\
+- \"stop\": they want what's running stopped or cancelled.\n\
+- \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
+- \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything.\n\
+- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back. \
+If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
+If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
+Reply with JSON only, on one line:\n\
+{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}\n\
+Keep \"say\" warm, plain and short: two sentences at most, no markdown.";
+
+/// The conversation as the engine reads it: the last few messages, each
+/// clipped, oldest first.
+pub fn conversation(seen: &Seen) -> Vec<String> {
+    seen.recent
+        .iter()
+        .rev()
+        .take(8)
+        .rev()
+        .map(|(who, said)| format!("{who}: {}", clip(said, 300)))
+        .collect()
+}
+
+/// What changes from one read to the next. `conversation` is the part of
+/// the conversation to show, under `heading`.
+pub fn turn(text: &str, seen: &Seen, heading: &str, conversation: &[String]) -> String {
     let crew: Vec<String> = seen
         .crew
         .iter()
@@ -64,41 +96,19 @@ pub fn prompt(text: &str, seen: &Seen) -> String {
             )
         })
         .collect();
-    let recent: Vec<String> = seen
-        .recent
-        .iter()
-        .rev()
-        .take(8)
-        .rev()
-        .map(|(who, said)| format!("{who}: {}", clip(said, 300)))
-        .collect();
     let running = if seen.running.is_empty() {
         "nothing".to_string()
     } else {
         seen.running.join("; ")
     };
     format!(
-        "You are Peek, who leads a crew of AI bots in Squad Code, an app for developers and for people who don't code. \
-You read every message the person sends before anyone works on it, and decide what happens. Don't use any tools; just reply.\n\n\
-Project: {project}\n\
+        "Project: {project}\n\
 The crew:\n{crew}\n\
 Running right now: {running}\n\
 Where jobs run: {server}\n\
-The conversation so far:\n{recent}\n\n\
-The person just wrote: \"{text}\"\n\n\
-Decide, reading it the way a sharp colleague would: typos, slang and half sentences are normal (\"whoa re you\" is \"who are you\"). \
-Never start work on a guess.\n\
-- \"reply\": chat, greetings, thanks, questions about you or the crew, and general questions you can answer well yourself. Write the reply.\n\
-- \"ask\": you can't tell what they want, or real work is too vague to start. Write one short question, with up to 3 choices if they help.\n\
-- \"stop\": they want what's running stopped or cancelled.\n\
-- \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
-- \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything.\n\
-- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back. \
-If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
-If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
-Reply with JSON only, on one line:\n\
-{{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}}\n\
-Keep \"say\" warm, plain and short: two sentences at most, no markdown.",
+{heading}\n{conversation}\n\n\
+The person just wrote: \"{text}\"\n\
+Reply with the JSON decision only.",
         project = seen.project,
         server = if seen.server.is_empty() {
             "only this computer: no server is connected."
@@ -106,12 +116,20 @@ Keep \"say\" warm, plain and short: two sentences at most, no markdown.",
             seen.server
         },
         crew = crew.join("\n"),
-        recent = if recent.is_empty() {
+        conversation = if conversation.is_empty() {
             "(none)".to_string()
         } else {
-            recent.join("\n")
+            conversation.join("\n")
         },
         text = clip(text, 2000).replace('"', "'"),
+    )
+}
+
+/// Everything the engine reads for one message, for a cold read.
+pub fn prompt(text: &str, seen: &Seen) -> String {
+    format!(
+        "{RULES}\n\n{}",
+        turn(text, seen, "The conversation so far:", &conversation(seen))
     )
 }
 
@@ -197,7 +215,6 @@ pub fn ask(
         return Err(format!("{} isn't installed", p.name));
     }
     let model = crate::assistant::assistant_model(st, p.id);
-    let words = prompt(text, seen);
     // The warm engine answers in a second or two; a cold start takes six.
     if super::warm::can(p.id) {
         let bin = if configured.trim().is_empty() {
@@ -205,12 +222,28 @@ pub fn ask(
         } else {
             configured.trim().to_string()
         };
-        if let Some(rx) = super::warm::ask(&bin, &model, dir, &words, LIMIT, "v2-peek-reads".into())
-        {
+        let said = conversation(seen);
+        let turn_for = |new_only: bool, shown: &[String]| {
+            let heading = if new_only {
+                "New in the conversation since your last read:"
+            } else {
+                "The conversation so far:"
+            };
+            turn(text, seen, heading, shown)
+        };
+        if let Some(rx) = super::warm::ask(
+            &bin,
+            &model,
+            dir,
+            &said,
+            &turn_for,
+            LIMIT,
+            "v2-peek-reads".into(),
+        ) {
             return Ok(rx);
         }
     }
-    let command = agent::ask_command_on(p.id, &configured, &words, &model);
+    let command = agent::ask_command_on(p.id, &configured, &prompt(text, seen), &model);
     let (tx, rx) = channel();
     agent::oneshot_within("v2-peek-reads".into(), command, dir, LIMIT, tx);
     Ok(rx)
