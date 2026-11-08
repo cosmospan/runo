@@ -1354,6 +1354,8 @@ impl Shell {
                 shell.jobs_open = true;
                 shell.list_git = true;
             }
+            // The status bar's usage popover, open.
+            Ok("usage-open") => shell.usage_open = true,
             // A job open with the sidebar on its Jobs list.
             Ok("review-jobs") => {
                 shell.jobs_open = true;
