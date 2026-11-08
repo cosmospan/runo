@@ -29,6 +29,29 @@ pub enum Ask {
     Stop {
         id: u64,
     },
+    /// A job that starts at `at` (seconds since 1970), on the night shift.
+    Later {
+        text: String,
+        mode: Mode,
+        bot: String,
+        dir: String,
+        at: u64,
+    },
+    /// Takes a waiting job out of the line.
+    Cancel {
+        id: u64,
+    },
+    /// Rewinds a job to before its turn number `to` (1 is its first follow-up).
+    Rewind {
+        id: u64,
+        to: usize,
+    },
+    /// Forgets lesson `n` (from 1) that `bot` keeps in the project at `dir`.
+    Forget {
+        bot: String,
+        dir: String,
+        n: usize,
+    },
 }
 
 pub fn queue_path() -> PathBuf {
@@ -79,6 +102,19 @@ const HELP: &str = "squad: hand the crew jobs from a terminal.
   squad approve <id>          approve a job waiting for review
   squad discard <id>          throw a job's changes away
   squad stop <id>             stop a running job
+  squad later [<when> <words...>]
+                             jobs waiting to start, or one for the night
+                             shift: tonight, 2am, at 14:30, in 2h, tomorrow
+  squad later cancel <id>     take a waiting job out of the line
+  squad issue <n|KEY|link> [words...]
+                             a job for a GitHub or Linear issue; its pull
+                             request closes the issue when it merges
+  squad linear key <key>      connect Linear with a personal API key
+  squad rewind <id> [<n>]     the points a job can go back to, or go back
+                             to before its turn n
+  squad lessons [forget <bot> <n>]
+                             what the bots learned from your send-backs here
+  squad project [init]        what squad.toml says here, or write a starter
   squad browser <command>     use the browser of the job working in this
                              folder: open, look, click, type, press, back,
                              screenshot, eval (squad browser help)
@@ -103,6 +139,178 @@ Peek's routing:
   squad brain remove          turn Smart Peek off and delete its model
 
 Jobs run in the Squad Code app while it's open, or in `squad serve`.";
+
+fn cwd() -> String {
+    std::env::current_dir()
+        .map(|d| d.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// `squad later`: the waiting jobs, one for later, or cancelling one.
+fn later(args: &[String]) -> Result<String, String> {
+    if args.is_empty() {
+        let s = Store::load_view();
+        if s.later.is_empty() {
+            return Ok(
+                "Nothing is waiting. squad later tonight <words...> puts a job on the night shift."
+                    .into(),
+            );
+        }
+        let now = super::store::now();
+        return Ok(s
+            .later
+            .iter()
+            .map(|l| {
+                let when = if l.reading {
+                    "reading its issue".to_string()
+                } else if l.at == 0 {
+                    format!("when {} is free", l.bot.name())
+                } else {
+                    super::shift::when_words(l.at, now)
+                };
+                format!(
+                    "#{:<4} {:<10} {:<24} {}",
+                    l.id,
+                    l.bot.name(),
+                    when,
+                    l.label()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"));
+    }
+    if args[0] == "cancel" {
+        let id = args
+            .get(1)
+            .map(|s| s.trim_start_matches('#'))
+            .and_then(|s| s.parse().ok())
+            .ok_or("usage: squad later cancel <id>")?;
+        return push(&Ask::Cancel { id }).map(|_| format!("Taking #{id} out of the line."));
+    }
+    let typed = args.join(" ");
+    let (at, text) = super::shift::parse_when(&typed, chrono::Local::now())
+        .ok_or("Say when first: squad later tonight|2am|at 14:30|in 2h|tomorrow <words...>")?;
+    let r = super::brain::cli::route_do(&text)?;
+    push(&Ask::Later {
+        text,
+        mode: r.mode,
+        bot: r.bot.name().to_string(),
+        dir: cwd(),
+        at,
+    })?;
+    Ok(format!(
+        "{} starts it {}.",
+        r.bot.name(),
+        super::shift::when_words(at, super::store::now())
+    ))
+}
+
+/// `squad issue`: a job for an issue.
+fn issue(args: &[String]) -> Result<String, String> {
+    let what = args.first().cloned().unwrap_or_default();
+    let words = args.get(1..).unwrap_or_default().join(" ");
+    let r = super::issues::find(&format!("issue {what}"))
+        .or_else(|| super::issues::find(&what))
+        .ok_or_else(|| {
+            "usage: squad issue <number, Linear key like ENG-42, or link> [words...]".to_string()
+        })?;
+    let ask = match &r {
+        super::issues::Ref::GitHub(n, Some(url)) => format!("Fix issue {n} ({url})"),
+        super::issues::Ref::GitHub(n, None) => format!("Fix issue {n}"),
+        super::issues::Ref::Linear(k) => format!("Fix {k}"),
+    };
+    let text = format!("{ask}. {words}")
+        .trim()
+        .trim_end_matches('.')
+        .to_string();
+    let r2 = super::brain::cli::route_do(&text)?;
+    push(&Ask::New {
+        text,
+        mode: r2.mode,
+        bot: r2.bot.name().to_string(),
+        dir: cwd(),
+    })?;
+    Ok(format!(
+        "{} reads {} and starts on it in Squad Code.",
+        r2.bot.name(),
+        r.label()
+    ))
+}
+
+/// `squad lessons`: what the bots learned in this project, or forgetting one.
+fn lessons(args: &[String]) -> Result<String, String> {
+    let dir = cwd();
+    let s = Store::load_view();
+    let here = s
+        .folders
+        .iter()
+        .filter(|f| !f.path.is_empty() && std::path::Path::new(&dir).starts_with(&f.path))
+        .max_by_key(|f| f.path.len())
+        .map(|f| f.path.clone())
+        .unwrap_or(dir.clone());
+    if args.first().map(String::as_str) == Some("forget") {
+        let (Some(bot), Some(n)) = (args.get(1), args.get(2).and_then(|n| n.parse().ok())) else {
+            return Err("usage: squad lessons forget <bot> <n>".into());
+        };
+        return push(&Ask::Forget {
+            bot: bot.clone(),
+            dir: here,
+            n,
+        })
+        .map(|_| "Forgotten.".into());
+    }
+    let mut out = Vec::new();
+    for m in Member::all() {
+        let mine: Vec<&super::learn::Lesson> = s
+            .lessons
+            .iter()
+            .filter(|l| l.bot == m && l.folder == here)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        out.push(format!("{}:", m.name()));
+        for (i, l) in mine.iter().enumerate() {
+            out.push(format!("  {}. {}", i + 1, l.text));
+        }
+    }
+    Ok(if out.is_empty() {
+        "No lessons here yet. When you send work back with a reason, the bot keeps what's worth keeping.".into()
+    } else {
+        out.join("\n")
+    })
+}
+
+/// `squad project`: what the project file says, or writing a starter one.
+fn project(args: &[String]) -> Result<String, String> {
+    let dir = cwd();
+    let path = std::path::Path::new(&dir).join(super::project::FILE);
+    if args.first().map(String::as_str) == Some("init") {
+        if path.exists() {
+            return Err(format!("{} is already here.", super::project::FILE));
+        }
+        std::fs::write(&path, super::project::starter(&dir)).map_err(|e| e.to_string())?;
+        return Ok(format!(
+            "Wrote {}. Check it in so every job (and everyone's crew) sets up the same way.",
+            super::project::FILE
+        ));
+    }
+    match super::project::read(&dir)? {
+        None => Ok(format!(
+            "No {} here, so Squad works it out. squad project init writes one to start from.",
+            super::project::FILE
+        )),
+        Some(p) => Ok(format!(
+            "setup:  {}\ncopy:   {}\nrun:    {}\nurl:    {}\nport:   {}\nchecks: {}",
+            p.setup.join(", "),
+            p.copy.join(", "),
+            p.run,
+            p.url,
+            p.port,
+            p.checks.join(", ")
+        )),
+    }
+}
 
 /// One line per job for `ls`.
 pub fn line(j: &Job) -> String {
@@ -252,6 +460,34 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
+        "later" => later(&args[1..]),
+        "issue" => issue(&args[1..]),
+        "linear" => match (args.get(1).map(String::as_str), args.get(2)) {
+            (Some("key"), Some(key)) => super::issues::save_linear_key(key)
+                .map(|_| "Linear is connected. Name an issue like ENG-42 in a job.".into()),
+            _ => Err("usage: squad linear key <personal API key from Linear's settings>".into()),
+        },
+        "rewind" => id().and_then(|id| match args.get(2) {
+            None => {
+                let s = Store::load_view();
+                let j = s.job(id).ok_or(format!("No job #{id}."))?;
+                let points = super::rewind::points(j);
+                if points.is_empty() {
+                    return Ok(format!("#{id} has no turns to go back to."));
+                }
+                Ok(points
+                    .iter()
+                    .map(|k| format!("  {k}  before \u{201c}{}\u{201d}", j.marks[*k].said))
+                    .collect::<Vec<_>>()
+                    .join("\n"))
+            }
+            Some(n) => {
+                let to: usize = n.parse().map_err(|_| "usage: squad rewind <id> [<n>]")?;
+                push(&Ask::Rewind { id, to }).map(|_| format!("Rewinding #{id}."))
+            }
+        }),
+        "lessons" => lessons(&args[1..]),
+        "project" => project(&args[1..]),
         "brain" => super::brain::cli::main(&args[1..]),
         // The job's browser, from a shell: what engines without MCP use, and how the
         // desktop app finds a server job's browser (`browser port --dir …`).
@@ -325,5 +561,8 @@ mod tests {
         let line = serde_json::to_string(&a).unwrap();
         assert!(line.contains("\"do\":\"new\""));
         assert_eq!(serde_json::from_str::<Ask>(&line).unwrap(), a);
+        let r = Ask::Rewind { id: 4, to: 2 };
+        let line = serde_json::to_string(&r).unwrap();
+        assert_eq!(serde_json::from_str::<Ask>(&line).unwrap(), r);
     }
 }

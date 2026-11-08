@@ -236,7 +236,7 @@ fn run(
     let mut c = Conn { s };
     handshake(&mut c, password)?;
 
-    // ClientInit (shared, so Screen Sharing and Squad can both watch), ServerInit.
+    // ClientInit (shared, so more than one viewer can watch), ServerInit.
     c.put(&[1])?;
     let w = c.u16()? as u32;
     let h = c.u16()? as u32;

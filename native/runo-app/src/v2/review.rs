@@ -2,6 +2,8 @@
 //! checks, and the decision (approve, send back or discard).
 
 use gpui_kit::assets::IconName;
+use gpui_kit::component::input::Input;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -306,12 +308,14 @@ impl Shell {
                     })),
             );
             if open {
-                list = list.child(diff_view(&self.diff_text));
+                let text = self.diff_text.clone();
+                list = list.child(self.diff_lines(id, &f.path, &text, cx));
             }
         }
 
         // The decision. GitHub projects can switch to merging here, and back.
         let label = self.approve_label(job);
+        let notes = self.line_notes.iter().filter(|n| n.job == id).count();
         let way = self.way(job);
         let github = ship::remote_url(&job.folder.path).is_some_and(|u| ship::is_github(&u));
         let switch = match way {
@@ -341,13 +345,30 @@ impl Shell {
                         .on_click(cx.listener(move |this, _, _, cx| this.set_way(id, to, cx))),
                 )
             })
+            .when(notes > 0, |d| {
+                d.child(
+                    ui::ghost_i(
+                        ("send-notes", id as usize),
+                        IconName::MessageSquareReply,
+                        format!(
+                            "Send back with {notes} comment{}",
+                            if notes == 1 { "" } else { "s" }
+                        ),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.send_line_notes(id, cx))),
+                )
+            })
             .child(
                 div()
                     .flex_1()
                     .min_w(px(160.))
                     .text_size(px(12.))
                     .text_color(c(ui::faint()))
-                    .child("Or write below to send it back with changes."),
+                    .child(if notes > 0 {
+                        "Or write below to add more words."
+                    } else {
+                        "Click a line in a diff to comment on it, or write below to send it back."
+                    }),
             )
             // A clash card above already offers Discard; don't offer it twice.
             .when(job.conflict.is_empty(), |d| {
@@ -542,56 +563,297 @@ fn branch_chip(name: &str) -> Div {
         .child(name.to_string())
 }
 
-/// A unified diff, coloured line by line.
-fn diff_view(diff: &str) -> Div {
-    let mut body = div()
-        .py(px(6.))
-        .bg(c(ui::well()))
-        .border_t_1()
-        .border_color(c(ui::line2()))
-        .font_family(ui::MONO)
-        .text_size(px(11.5))
-        .line_height(px(18.));
-    let lines: Vec<&str> = diff.lines().skip_while(|l| !l.starts_with("@@")).collect();
-    if lines.is_empty() {
-        return body.child(
-            div()
-                .px(px(16.))
-                .text_color(c(ui::faint()))
-                .child("Couldn't show this file's changes here. Open the folder to look at it."),
-        );
-    }
-    for l in lines.iter().take(DIFF_LINES) {
-        let (fg, bg) = if l.starts_with('+') {
-            (ui::add(), Some(ca(ui::GREEN, 0.08)))
-        } else if l.starts_with('-') {
-            (ui::del(), Some(ca(ui::RED, 0.08)))
-        } else if l.starts_with("@@") {
-            (ui::faint(), None)
+/// A comment on one line of a job's diff, waiting to go back with Send back.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct LineNote {
+    pub job: u64,
+    pub path: String,
+    /// The line's place in the diff as shown, to draw the comment under it.
+    pub at: usize,
+    /// The line number in the changed file ("14"), or where a removed line
+    /// was ("14, removed").
+    pub line: String,
+    /// The line itself, as the diff shows it.
+    pub code: String,
+    pub text: String,
+}
+
+/// The lines of a unified diff from its first hunk, each with its number in
+/// the new file (for added and kept lines) or where it was (removed lines).
+pub(super) fn numbered(diff: &str) -> Vec<(String, &str)> {
+    let mut out = Vec::new();
+    let mut new_line = 0usize;
+    let mut started = false;
+    for l in diff.lines() {
+        if l.starts_with("@@") {
+            started = true;
+            // @@ -a,b +c,d @@
+            new_line = l
+                .split_whitespace()
+                .find(|w| w.starts_with('+'))
+                .and_then(|w| w[1..].split(',').next())
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(1);
+            out.push((String::new(), l));
+            continue;
+        }
+        if !started {
+            continue;
+        }
+        if l.starts_with('-') {
+            out.push((format!("{new_line}, removed"), l));
         } else {
-            (ui::body(), None)
+            out.push((new_line.to_string(), l));
+            new_line += 1;
+        }
+    }
+    out
+}
+
+/// What the bot is told for a set of line comments.
+pub(super) fn notes_message(notes: &[&LineNote]) -> String {
+    let mut out = String::from("Changes asked for on these lines of your diff:\n");
+    for n in notes {
+        let code = n.code.get(1..).unwrap_or("").trim();
+        let code: String = code.chars().take(100).collect();
+        out.push_str(&format!(
+            "\n- `{}:{}`{}: {}",
+            n.path,
+            n.line,
+            if code.is_empty() {
+                String::new()
+            } else {
+                format!(" (`{code}`)")
+            },
+            n.text.trim()
+        ));
+    }
+    out
+}
+
+impl Shell {
+    /// A job's diff for one file, coloured line by line; click a line to
+    /// comment on it.
+    fn diff_lines(&mut self, job: u64, path: &str, diff: &str, cx: &mut Context<Self>) -> Div {
+        let mut body = div()
+            .py(px(6.))
+            .bg(c(ui::well()))
+            .border_t_1()
+            .border_color(c(ui::line2()))
+            .font_family(ui::MONO)
+            .text_size(px(11.5))
+            .line_height(px(18.));
+        let lines = numbered(diff);
+        if lines.is_empty() {
+            return body.child(
+                div().px(px(16.)).text_color(c(ui::faint())).child(
+                    "Couldn't show this file's changes here. Open the folder to look at it.",
+                ),
+            );
+        }
+        let total = lines.len();
+        for (at, (num, l)) in lines.into_iter().take(DIFF_LINES).enumerate() {
+            let hunk = l.starts_with("@@");
+            let (fg, bg) = if l.starts_with('+') {
+                (ui::add(), Some(ca(ui::GREEN, 0.08)))
+            } else if l.starts_with('-') {
+                (ui::del(), Some(ca(ui::RED, 0.08)))
+            } else if hunk {
+                (ui::faint(), None)
+            } else {
+                (ui::body(), None)
+            };
+            let picked = self
+                .line_at
+                .as_ref()
+                .is_some_and(|(j, p, a)| *j == job && p == path && *a == at);
+            let p = path.to_string();
+            body = body.child(
+                div()
+                    .id(SharedString::from(format!("dl-{job}-{path}-{at}")))
+                    .px(px(16.))
+                    .flex()
+                    .gap(px(10.))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_color(c(fg))
+                    .when_some(bg, |d, bg| d.bg(bg))
+                    .when(picked, |d| d.bg(ca(ui::AMBER, 0.16)))
+                    .when(!hunk, |d| {
+                        d.cursor_pointer()
+                            .hover(|s| s.bg(ca(ui::AMBER, 0.10)))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.line_at = Some((job, p.clone(), at));
+                                // The box is drawn on the next frame: focus it then.
+                                this.focus_moved = std::time::Instant::now();
+                                let input = this.line_input.clone();
+                                window.on_next_frame(move |window, cx| {
+                                    input.update(cx, |i, cx| i.focus(window, cx))
+                                });
+                                cx.notify();
+                            }))
+                    })
+                    .child(
+                        div()
+                            .w(px(34.))
+                            .flex_none()
+                            .text_color(c(ui::faint()))
+                            .child(num.split(',').next().unwrap_or("").to_string()),
+                    )
+                    .child(if l.is_empty() {
+                        " ".to_string()
+                    } else {
+                        l.to_string()
+                    }),
+            );
+            // Comments already on this line.
+            for (i, note) in self
+                .line_notes
+                .iter()
+                .enumerate()
+                .filter(|(_, x)| x.job == job && x.path == path && x.at == at)
+            {
+                let text = note.text.clone();
+                body = body.child(
+                    div()
+                        .mx(px(16.))
+                        .my(px(3.))
+                        .px(px(10.))
+                        .py(px(5.))
+                        .rounded(px(8.))
+                        .bg(ca(ui::AMBER, 0.12))
+                        .border_1()
+                        .border_color(ca(ui::AMBER, 0.35))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .font_family("Geist")
+                        .text_size(px(12.5))
+                        .text_color(c(ui::ink()))
+                        .child(
+                            Icon::new(IconName::MessageSquare)
+                                .size(px(12.))
+                                .text_color(c(ui::t_amber())),
+                        )
+                        .child(div().flex_1().min_w_0().child(text))
+                        .child(
+                            ui::icon_btn(SharedString::from(format!("dn-{job}-{i}")), IconName::X)
+                                .size(px(20.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if i < this.line_notes.len() {
+                                        this.line_notes.remove(i);
+                                    }
+                                    cx.notify();
+                                })),
+                        ),
+                );
+            }
+            // The box to write one, under the picked line.
+            if picked {
+                body = body.child(
+                    div()
+                        .mx(px(16.))
+                        .my(px(4.))
+                        .h(px(32.))
+                        .px(px(10.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .rounded(px(8.))
+                        .bg(c(ui::panel()))
+                        .border_1()
+                        .border_color(ca(ui::AMBER, 0.5))
+                        .font_family("Geist")
+                        .text_size(px(12.5))
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Input::new(&self.line_input)
+                                    .appearance(false)
+                                    .bordered(false),
+                            ),
+                        )
+                        .child(
+                            ui::ghost(SharedString::from(format!("dl-cancel-{job}")), "Cancel")
+                                .h(px(24.))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.line_at = None;
+                                    cx.notify();
+                                })),
+                        ),
+                );
+            }
+        }
+        if total > DIFF_LINES {
+            body = body.child(
+                div()
+                    .px(px(16.))
+                    .text_color(c(ui::faint()))
+                    .child(format!("{} more lines", total - DIFF_LINES)),
+            );
+        }
+        body
+    }
+
+    /// Adds the comment typed on the picked line.
+    pub(super) fn add_line_note(&mut self, text: String, cx: &mut Context<Self>) {
+        let Some((job, path, at)) = self.line_at.take() else {
+            return;
         };
-        body = body.child(
-            div()
-                .px(px(16.))
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .text_color(c(fg))
-                .when_some(bg, |d, bg| d.bg(bg))
-                .child(if l.is_empty() {
-                    " ".to_string()
-                } else {
-                    l.to_string()
-                }),
+        let lines = numbered(&self.diff_text);
+        let Some((line, code)) = lines.get(at).map(|(n, l)| (n.clone(), l.to_string())) else {
+            return;
+        };
+        self.line_notes.push(LineNote {
+            job,
+            path,
+            at,
+            line,
+            code,
+            text,
+        });
+        cx.notify();
+    }
+
+    /// Sends a job back with its line comments, as one message.
+    pub(super) fn send_line_notes(&mut self, id: u64, cx: &mut Context<Self>) {
+        let notes: Vec<&LineNote> = self.line_notes.iter().filter(|n| n.job == id).collect();
+        if notes.is_empty() {
+            return;
+        }
+        let text = notes_message(&notes);
+        self.line_notes.retain(|n| n.job != id);
+        self.line_at = None;
+        self.diff_open = None;
+        self.follow_up(id, text, cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{notes_message, numbered, LineNote};
+
+    #[test]
+    fn lines_are_numbered_from_their_hunk() {
+        let diff = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -10,3 +12,4 @@ fn x\n keep\n-old\n+new\n+more\n";
+        let n = numbered(diff);
+        let nums: Vec<&str> = n.iter().map(|(a, _)| a.as_str()).collect();
+        assert_eq!(nums, vec!["", "12", "13, removed", "13", "14"]);
+    }
+
+    #[test]
+    fn comments_read_as_one_message() {
+        let a = LineNote {
+            job: 1,
+            path: "src/a.ts".into(),
+            at: 2,
+            line: "14".into(),
+            code: "+  const total = price * 1.2".into(),
+            text: "Use the tax helper".into(),
+        };
+        let msg = notes_message(&[&a]);
+        assert!(
+            msg.contains("`src/a.ts:14` (`const total = price * 1.2`): Use the tax helper"),
+            "{msg}"
         );
     }
-    if lines.len() > DIFF_LINES {
-        body = body.child(
-            div()
-                .px(px(16.))
-                .text_color(c(ui::faint()))
-                .child(format!("{} more lines", lines.len() - DIFF_LINES)),
-        );
-    }
-    body
 }

@@ -58,6 +58,10 @@ pub fn isolate(folder: &str, title: &str, id: u64) -> Result<Option<Isolated>, S
     let worktree = git::add_worktree(folder, &branch, start)?;
     // Local secrets and config a fresh checkout lacks (.worktreeinclude).
     let _ = git::copy_included(folder, &worktree);
+    // And the ones the project file asks for.
+    if let Some(p) = super::project::load(&worktree) {
+        super::project::copy_files(&p, folder, &worktree);
+    }
     Ok(Some(Isolated {
         branch,
         worktree,
@@ -98,8 +102,17 @@ pub fn diff(job: &Job, path: &str) -> String {
     git::file_diff_context(&job.worktree, path, false, against)
 }
 
-/// The project's checks for the folder, as Checker would run them.
+/// The project's checks for the folder, as Checker would run them: the
+/// ones its `squad.toml` names, else the ones Squad finds.
 pub fn checks_for(dir: &str) -> Vec<String> {
+    match super::project::load(dir) {
+        Some(p) if !p.checks.is_empty() => p.checks,
+        _ => detect_checks(dir),
+    }
+}
+
+/// The checks Squad finds in the folder by itself.
+pub fn detect_checks(dir: &str) -> Vec<String> {
     proof::detect(Path::new(dir))
 }
 
@@ -543,10 +556,19 @@ mod tests {
     }
 }
 
+/// How to start the app in `dir` for job `id` (0 for the project itself),
+/// and the address it serves on: what the project's `squad.toml` says,
+/// else what Squad finds.
+pub fn start_command(dir: &str, id: u64) -> Option<(String, Option<String>)> {
+    super::project::load(dir)
+        .and_then(|p| p.start(id))
+        .or_else(|| detect_start(dir))
+}
+
 /// How to start the app in `dir`, and the address it serves on when the
 /// code names a port: `npm run dev`, `npm start`, `cargo run`… None when
 /// Squad Code can't tell.
-pub fn start_command(dir: &str) -> Option<(String, Option<String>)> {
+pub fn detect_start(dir: &str) -> Option<(String, Option<String>)> {
     let d = Path::new(dir);
     let read = |name: &str| std::fs::read_to_string(d.join(name)).unwrap_or_default();
     let port_in = |text: &str| -> Option<String> {
@@ -654,10 +676,10 @@ mod start_tests {
             "const PORT = process.env.PORT || 3000;\napp.listen(PORT)",
         )
         .unwrap();
-        let (cmd, url) = start_command(dir.to_str().unwrap()).unwrap();
+        let (cmd, url) = start_command(dir.to_str().unwrap(), 0).unwrap();
         assert_eq!(cmd, "npm start");
         assert_eq!(url.as_deref(), Some("http://localhost:3000"));
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(start_command("/definitely/not/here").is_none());
+        assert!(start_command("/definitely/not/here", 0).is_none());
     }
 }
