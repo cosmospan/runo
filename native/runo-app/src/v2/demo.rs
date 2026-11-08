@@ -440,6 +440,20 @@ pub fn seed() -> Store {
             .into_iter()
             .map(|(id, at)| (format!("{}#{id}", folder.path), at))
             .collect(),
+        summaries: vec![super::brain::summary::Summary {
+            folder: folder.path.clone(),
+            thread: 1,
+            text: "For:\n- Building gift cards and coupons into checkout\n\
+                   Decided:\n- Discounts come off before tax\n- Gift cards can't buy other gift cards\n\
+                   Open:\n- Should a coupon and a gift card stack?\n\
+                   Preferences:\n- Keep checkout to one page"
+                .into(),
+            notes: vec!["Launch is Friday: no new payment providers".into()],
+            covers: 9,
+            upto: t - 1_500,
+            updates: 2,
+            at: t - 1_400,
+        }],
         talks: vec![super::store::Talk {
             id: 1,
             folder: folder.path.clone(),

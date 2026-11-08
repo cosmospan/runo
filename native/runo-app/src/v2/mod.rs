@@ -547,6 +547,8 @@ pub struct Shell {
     gone: Option<menu::Gone>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
+    /// The thread's "About this thread" panel is open.
+    about_open: bool,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
     /// words, and where it would go.
     confirming: Option<(u64, String, brain::route::Route)>,
@@ -1241,6 +1243,7 @@ impl Shell {
             menu_hot: None,
             gone: None,
             raw_open: Default::default(),
+            about_open: false,
             confirming: None,
             reading: None,
             reading_since: None,
@@ -1705,8 +1708,12 @@ impl Shell {
                 .collect();
             let (worked, in_thread) = self.bots_here();
             let server = self.server_note(&folder);
+            let thread = self.crew.store.thread_label(here);
+            let summary = self.crew.store.summary_brief(&folder, here);
             let seen = brain::think::Seen {
                 project: &project,
+                thread: &thread,
+                summary: &summary,
                 recent: &recent,
                 crew: &crew,
                 running: &running,
@@ -1769,6 +1776,8 @@ impl Shell {
         let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
+            thread: "",
+            summary: "",
             recent: &recent,
             crew: &crew,
             running: &[],
@@ -2290,6 +2299,26 @@ impl Shell {
                     self.archive_thread(self.crew.store.thread_now, cx);
                     return;
                 }
+                "note" => {
+                    let Some(folder) = self.crew.store.folder().map(|f| f.path.clone()) else {
+                        self.say("Pick a project folder first.");
+                        return;
+                    };
+                    if arg.is_empty() {
+                        self.say("Write the note, like /note this thread is for discussion, not building.");
+                        return;
+                    }
+                    let here = self.crew.store.thread_here();
+                    let label = self.crew.store.thread_label(here);
+                    self.crew.store.summary_mut(&folder, here).notes.push(arg);
+                    self.crew.store.save();
+                    self.about_open = true;
+                    self.say(format!(
+                        "Pinned to #{label}. Every bot here reads it, and it wins over the summary."
+                    ));
+                    cx.notify();
+                    return;
+                }
                 "plan" => plan = true,
                 "race" => race = 2,
                 "ask" => {
@@ -2298,7 +2327,7 @@ impl Shell {
                 }
                 _ => {
                     self.say(format!(
-                        "There's no /{cmd}. Try /plan, /race, /ask, /thread, /rename, /archive or /delete."
+                        "There's no /{cmd}. Try /plan, /race, /ask, /note, /thread, /rename, /archive or /delete."
                     ));
                     return;
                 }
