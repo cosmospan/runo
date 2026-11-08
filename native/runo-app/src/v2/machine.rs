@@ -334,8 +334,79 @@ pub fn parse_desktop(out: &str) -> Option<(u16, String)> {
     Some((port?, pass.filter(|p| !p.is_empty())?))
 }
 
-/// Starts the server's desktop (installing it the first time) and opens a
-/// tunnel to it, on a thread of its own.
+/// What the server has for showing a screen.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Desktop {
+    /// The desktop it already has (`startxfce4`, `gnome-session`, …), or "".
+    pub session: String,
+    /// The packages missing; empty when the screen is ready to start.
+    pub need: Vec<String>,
+    /// Whether Squad can install them: root or sudo without a password, and
+    /// apt-get or dnf.
+    pub can_install: bool,
+}
+
+impl Desktop {
+    pub fn ready(&self) -> bool {
+        self.need.is_empty()
+    }
+
+    /// The desktop's name for people.
+    pub fn name(&self) -> &'static str {
+        match self.session.as_str() {
+            "startxfce4" => "Xfce",
+            "mate-session" => "MATE",
+            "startlxqt" => "LXQt",
+            "startlxde" => "LXDE",
+            "gnome-session" => "GNOME",
+            "startplasma-x11" => "KDE Plasma",
+            _ => "",
+        }
+    }
+}
+
+/// Reads what `MODE=check` printed.
+pub fn parse_check(out: &str) -> Desktop {
+    let mut d = Desktop::default();
+    let (mut root, mut pm) = (false, false);
+    for line in out.lines() {
+        match line.split_once('=') {
+            Some(("session", v)) => d.session = v.trim().to_string(),
+            Some(("need", v)) => d.need = v.split_whitespace().map(str::to_string).collect(),
+            Some(("root", v)) => root = v.trim() == "1",
+            Some(("pm", v)) => pm = matches!(v.trim(), "apt" | "dnf"),
+            _ => {}
+        }
+    }
+    d.can_install = root && pm;
+    d
+}
+
+/// Looks at what the server has, without changing anything.
+pub fn check_desktop(cfg: Config) -> Receiver<Result<Desktop, String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let got =
+            remote::run_script(&cfg, &format!("MODE=check\n{DESKTOP}")).map(|o| parse_check(&o));
+        let _ = tx.send(got);
+    });
+    rx
+}
+
+/// Installs the desktop and the screen tools. Only after the person said yes.
+pub fn install_desktop(cfg: Config) -> Receiver<Result<Desktop, String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let got = remote::run_script(&cfg, &format!("MODE=install\n{DESKTOP}")).and_then(|_| {
+            remote::run_script(&cfg, &format!("MODE=check\n{DESKTOP}")).map(|o| parse_check(&o))
+        });
+        let _ = tx.send(got);
+    });
+    rx
+}
+
+/// Starts the server's desktop and opens a tunnel to it, on a thread of its
+/// own. It never installs anything: that's [`install_desktop`], asked first.
 pub fn screen(cfg: Config) -> Receiver<Result<Screen, String>> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
@@ -407,6 +478,28 @@ mod tests {
         assert_eq!(span(3 * 86400), "3 days");
         assert_eq!(size(512 * 1024), "512 MB");
         assert_eq!(size(3 * 1024 * 1024), "3.0 GB");
+    }
+
+    #[test]
+    fn reads_what_the_server_has() {
+        let d = parse_check(
+            "session=\nneed= xvfb x11vnc xfce4 xfce4-terminal dbus-x11\nroot=1\npm=apt\n",
+        );
+        assert!(!d.ready());
+        assert!(d.can_install);
+        assert_eq!(d.need[0], "xvfb");
+        let d = parse_check("session=gnome-session\nneed= x11vnc\nroot=0\npm=apt\n");
+        assert_eq!(d.name(), "GNOME");
+        assert!(!d.can_install);
+        let d = parse_check("session=startxfce4\nneed=\nroot=1\npm=none\n");
+        assert!(d.ready());
+        assert!(!d.can_install);
+    }
+
+    #[test]
+    fn nothing_installs_without_a_yes() {
+        // Starting (no mode) stops at what's missing; only MODE=install installs.
+        assert!(DESKTOP.contains(r#"[ "${MODE:-start}" = install ] || fail "missing:$need""#));
     }
 
     #[test]

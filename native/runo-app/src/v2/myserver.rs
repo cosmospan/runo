@@ -716,11 +716,13 @@ impl Shell {
                     .child(log(&self.server_brain_log, self.server_brain_failed)),
             );
         }
+        let desktop = self.desktop_card(cx);
         div()
             .flex()
             .flex_col()
             .gap(px(space::M))
             .child(card("YOUR SERVER").child(status).child(projects_row).child(run_row))
+            .children(desktop)
             .child(brain)
             .child(card("HOW JOBS PICK A SIDE").child(line_row(
                 format!("Here or on {label}"),

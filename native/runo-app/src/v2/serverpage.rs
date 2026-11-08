@@ -15,6 +15,7 @@ use gpui_kit::*;
 
 use super::machine::{self, Act};
 use super::prefs::Pane;
+use super::remote;
 use super::store::Status;
 use super::ui::{self, c, space};
 use super::{term, Place, Shell};
@@ -178,6 +179,9 @@ impl Shell {
                 }
             }
         }
+        if self.poll_desktop(cx) {
+            changed = true;
+        }
         if let Some(rx) = &self.server_screen_rx {
             match rx.try_recv() {
                 Ok(Ok(screen)) => {
@@ -185,6 +189,13 @@ impl Shell {
                     self.server_screen_rx = None;
                     self.screen_view = None;
                     self.watch_screen(cx);
+                    changed = true;
+                }
+                Ok(Err(why)) if why.starts_with("missing:") => {
+                    // Something it needs isn't there: look again, and ask.
+                    self.server_screen_rx = None;
+                    self.server_desktop_want = true;
+                    self.check_desktop();
                     changed = true;
                 }
                 Ok(Err(why)) => {
@@ -246,15 +257,219 @@ impl Shell {
             }
         }
         self.server_screen = None;
-        let Some(link) = &self.crew.link else {
+        let Some(link) = &mut self.crew.link else {
             return;
         };
+        // No desktop there yet: ask before installing one.
+        if self.server_desktop.as_ref().is_some_and(|d| !d.ready()) {
+            link.cfg.no_desktop = false;
+            remote::set_no_desktop(false);
+            self.server_desktop_want = true;
+            self.go(Place::Server, cx);
+            return;
+        }
         self.server_screen_rx = Some(machine::screen(link.cfg.clone()));
-        self.say(format!(
-            "Getting {}'s screen ready. The first time, Squad installs a light desktop there, which takes a few minutes.",
-            link.cfg.label()
-        ));
         cx.notify();
+    }
+
+    fn check_desktop(&mut self) {
+        if let Some(link) = &self.crew.link {
+            self.server_desktop_host = link.cfg.host.clone();
+            self.server_desktop_err.clear();
+            self.server_desktop_rx = Some(machine::check_desktop(link.cfg.clone()));
+        }
+    }
+
+    /// Looks at the server's desktop once it answers (so right after
+    /// connecting), and reads what the look or an install found.
+    fn poll_desktop(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(link) = &self.crew.link else {
+            self.server_desktop = None;
+            self.server_desktop_host.clear();
+            self.server_desktop_rx = None;
+            return false;
+        };
+        if self.server_desktop_rx.is_none()
+            && self.server_desktop_host != link.cfg.host
+            && link.up()
+        {
+            self.server_desktop = None;
+            self.check_desktop();
+            return false;
+        }
+        let Some(rx) = &self.server_desktop_rx else {
+            return false;
+        };
+        let got = match rx.try_recv() {
+            Ok(got) => got,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(_) => {
+                self.server_desktop_rx = None;
+                return true;
+            }
+        };
+        self.server_desktop_rx = None;
+        let installed = std::mem::take(&mut self.server_desktop_installing);
+        let (label, declined) = self
+            .crew
+            .link
+            .as_ref()
+            .map(|l| (l.cfg.label(), l.cfg.no_desktop))
+            .unwrap_or_default();
+        match got {
+            Ok(d) => {
+                let ready = d.ready();
+                let first = self.server_desktop.is_none() && !installed;
+                self.server_desktop = Some(d);
+                if ready && (installed || self.server_desktop_want) {
+                    if installed {
+                        self.say(format!(
+                            "{label} has a desktop now, and its screen opens in Squad."
+                        ));
+                    }
+                    if std::mem::take(&mut self.server_desktop_want) {
+                        self.open_server_screen(cx);
+                    }
+                } else if !ready && first && !declined && !self.server_desktop_want {
+                    self.say(format!(
+                        "{label} has no desktop for watching its screen yet. Squad can install a light one if you'd like: see Your server."
+                    ));
+                }
+            }
+            Err(why) => {
+                self.server_desktop_err = why;
+                self.server_desktop_want = false;
+            }
+        }
+        true
+    }
+
+    /// The ask: install a light desktop and the screen tools on the server,
+    /// shown while it has none (and the person hasn't said not now).
+    pub(super) fn desktop_card(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let link = self.crew.link.as_ref()?;
+        let d = self.server_desktop.clone()?;
+        let installing = self.server_desktop_installing;
+        if d.ready() || (link.cfg.no_desktop && !self.server_desktop_want && !installing) {
+            return None;
+        }
+        let label = link.cfg.label();
+        let (title, line) = if d.session.is_empty() {
+            (
+                format!("{label} has no desktop yet"),
+                "To watch its screen (and see what a bot opens there), it needs a light desktop: Xfce on a virtual screen, and x11vnc to share it. About 300–500 MB, a few minutes. It's shared only through Squad's SSH tunnel, with a password; nothing opens to the internet.".to_string(),
+            )
+        } else {
+            (
+                format!("{label} has {}, but not the screen tools", if d.name().is_empty() { "a desktop" } else { d.name() }),
+                "To watch its screen, Squad adds a virtual screen (Xvfb) and x11vnc to share it, a few MB. It's shared only through Squad's SSH tunnel, with a password; nothing opens to the internet.".to_string(),
+            )
+        };
+        let what = format!("Installs: {}", d.need.join(" "));
+        let mut body = div()
+            .px(px(18.))
+            .py(px(14.))
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .border_t_1()
+            .border_color(c(ui::line2()))
+            .child(
+                div()
+                    .text_size(px(13.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(ui::ink()))
+                    .child(title),
+            )
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .child(line),
+            )
+            .child(
+                div()
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .text_color(c(ui::faint()))
+                    .child(what),
+            );
+        if !self.server_desktop_err.is_empty() {
+            body = body.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::t_red()))
+                    .child(format!("Didn't work: {}", self.server_desktop_err)),
+            );
+        }
+        let buttons = if d.can_install {
+            div()
+                .flex()
+                .gap(px(8.))
+                .child(
+                    ui::solid_i(
+                        "desktop-install",
+                        IconName::Download,
+                        if installing { "Installing… (a few minutes)" } else { "Install it" },
+                    )
+                    .when(installing, |d| d.opacity(0.6))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if this.server_desktop_installing || this.server_desktop_rx.is_some() {
+                            return;
+                        }
+                        let Some(link) = &this.crew.link else {
+                            return;
+                        };
+                        this.server_desktop_installing = true;
+                        this.server_desktop_err.clear();
+                        this.server_desktop_rx = Some(machine::install_desktop(link.cfg.clone()));
+                        cx.notify();
+                    })),
+                )
+                .when(!installing, |d| {
+                    d.child(ui::ghost("desktop-not-now", "Not now").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            if let Some(link) = &mut this.crew.link {
+                                link.cfg.no_desktop = true;
+                            }
+                            remote::set_no_desktop(true);
+                            this.server_desktop_want = false;
+                            this.say("OK. If you want its screen later, press See its screen and Squad asks again.".to_string());
+                            cx.notify();
+                        },
+                    )))
+                })
+        } else {
+            let cmd = format!(
+                "sudo apt-get install -y --no-install-recommends {}",
+                d.need.join(" ")
+            );
+            body = body.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .child("Squad can't install it here: that needs root, or sudo without a password, and apt-get or dnf. Run this once on the server (the terminal above works), then check again:"),
+            )
+            .child(
+                div()
+                    .p(px(10.))
+                    .rounded(px(8.))
+                    .bg(c(ui::term().bg))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .text_color(c(ui::term().fg))
+                    .child(cmd),
+            );
+            div().flex().gap(px(8.)).child(
+                ui::ghost_i("desktop-check", IconName::RotateCcw, "Check again").on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.check_desktop();
+                        cx.notify();
+                    }),
+                ),
+            )
+        };
+        Some(card("ITS SCREEN").child(body.child(buttons)))
     }
 
     /// The button that shows the server's screen, as it stands.
@@ -455,6 +670,7 @@ impl Shell {
                         ),
                     ),
             );
+        let desktop = self.desktop_card(cx);
         let mut machine_card = card("YOUR SERVER").child(head);
         if self.server_out.iter().any(|(h, _, _)| !h.starts_with("$ ")) {
             machine_card = machine_card.child(self.server_answers(false));
@@ -737,6 +953,7 @@ impl Shell {
             .flex_col()
             .gap(px(space::M))
             .child(machine_card.children(gauges))
+            .children(desktop)
             .child(jobs_card)
             .child(procs_card)
             .child(run_card)

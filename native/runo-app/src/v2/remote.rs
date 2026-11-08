@@ -57,6 +57,8 @@ pub struct Config {
     pub key: String,
     /// Where jobs run: "" lets Squad pick, "server" or "here" is the person's choice.
     pub run: String,
+    /// The person said "Not now" to installing a desktop for its screen.
+    pub no_desktop: bool,
 }
 
 impl Config {
@@ -97,6 +99,14 @@ fn save(c: &Config) -> Result<(), String> {
 pub fn set_run(run: &str) {
     if let Some(mut c) = load() {
         c.run = run.to_string();
+        let _ = save(&c);
+    }
+}
+
+/// Keeps whether the person turned down a desktop on the server.
+pub fn set_no_desktop(no: bool) {
+    if let Some(mut c) = load() {
+        c.no_desktop = no;
         let _ = save(&c);
     }
 }
@@ -831,6 +841,7 @@ fn setup(
         token: v["token"].as_str().unwrap_or("").to_string(),
         key,
         run: String::new(),
+        no_desktop: false,
     };
     if cfg.token.is_empty() {
         return Err("Pairing failed: the server sent no token.".into());

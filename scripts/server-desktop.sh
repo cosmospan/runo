@@ -8,10 +8,13 @@
 #   password, so nothing is opened to the internet: the app reaches it through
 #   an SSH tunnel.
 #
-# Installing needs root or sudo without a password; once installed, any login
-# can start it. It's safe to run again: what's running is left alone. Lines
-# it prints: `say: <progress>`, then `port=<vnc port>` and `pass=<password>`
-# last.
+# MODE=check only says what's there (session=, need=, root=, pm=). Nothing
+# is installed unless MODE=install, which the app sends only after the
+# person said yes; installing needs root or sudo without a password. Without
+# a mode it starts the screen, and stops with `error: missing: …` when
+# something isn't installed. It's safe to run again: what's running is left
+# alone. Lines it prints: `say: <progress>`, then `port=<vnc port>` and
+# `pass=<password>` last.
 set -eu
 
 say() { printf 'say: %s\n' "$*"; }
@@ -26,29 +29,49 @@ chmod 700 "$dir"
 
 [ "$(uname -s)" = Linux ] || fail "this server runs $(uname -s); the desktop needs Linux."
 
+# What's there already. Any of these desktops will do; Xfce is what Squad
+# installs when there's none.
+session=""
+for s in startxfce4 mate-session startlxqt startlxde gnome-session startplasma-x11; do
+  if command -v "$s" >/dev/null 2>&1; then session=$s; break; fi
+done
 need=""
 command -v Xvfb >/dev/null 2>&1 || need="$need xvfb"
 command -v x11vnc >/dev/null 2>&1 || need="$need x11vnc"
-command -v startxfce4 >/dev/null 2>&1 || need="$need xfce4 xfce4-terminal dbus-x11"
+[ -n "$session" ] || need="$need xfce4 xfce4-terminal dbus-x11"
+command -v dbus-launch >/dev/null 2>&1 || case "$need" in *dbus-x11*) ;; *) need="$need dbus-x11" ;; esac
+if [ "$(id -u)" = 0 ]; then R=""; elif sudo -n true 2>/dev/null; then R="sudo -n"; else R=none; fi
+if command -v apt-get >/dev/null 2>&1; then pm=apt; elif command -v dnf >/dev/null 2>&1; then pm=dnf; else pm=none; fi
 
+# MODE=check: say what's there and stop. Nothing is installed or started.
+if [ "${MODE:-start}" = check ]; then
+  echo "session=$session"
+  echo "need=$need"
+  echo "root=$([ "$R" = none ] && echo 0 || echo 1)"
+  echo "pm=$pm"
+  exit 0
+fi
+
+# Installing only happens when the person said yes (MODE=install).
 if [ -n "$need" ]; then
-  if [ "$(id -u)" = 0 ]; then R=""; elif sudo -n true 2>/dev/null; then R="sudo -n"; else
-    fail "installing a desktop needs root, or sudo without a password. Install these once yourself:$need"
-  fi
-  if command -v apt-get >/dev/null 2>&1; then
+  [ "${MODE:-start}" = install ] || fail "missing:$need"
+  [ "$R" != none ] || fail "installing a desktop needs root, or sudo without a password. Install these once yourself:$need"
+  if [ "$pm" = apt ]; then
     say "Installing a light desktop there (a few minutes the first time)…"
     $R apt-get update -qq >/dev/null 2>&1 || true
     # shellcheck disable=SC2086
     DEBIAN_FRONTEND=noninteractive $R apt-get install -y -qq --no-install-recommends $need >/dev/null 2>&1 \
       || fail "apt-get couldn't install:$need"
-  elif command -v dnf >/dev/null 2>&1; then
+  elif [ "$pm" = dnf ]; then
     say "Installing a light desktop there (a few minutes the first time)…"
-    $R dnf install -y -q xorg-x11-server-Xvfb x11vnc @xfce-desktop-environment >/dev/null 2>&1 \
+    $R dnf install -y -q xorg-x11-server-Xvfb x11vnc dbus-x11 @xfce-desktop-environment >/dev/null 2>&1 \
       || fail "dnf couldn't install the desktop"
   else
     fail "no apt-get or dnf here. Install Xvfb, x11vnc and Xfce yourself, then try again."
   fi
+  [ -n "$session" ] || session=startxfce4
 fi
+[ "${MODE:-start}" = install ] && { echo "installed=1"; exit 0; }
 
 # A password for the screen, made once and readable only by you. The tunnel
 # already keeps strangers out; this keeps out other logins on the server.
@@ -68,7 +91,7 @@ if ! running xvfb; then
 fi
 if ! running session; then
   say "Starting the desktop…"
-  DISPLAY=":$DISPLAY_NUM" nohup dbus-launch --exit-with-session startxfce4 >"$dir/session.log" 2>&1 &
+  DISPLAY=":$DISPLAY_NUM" nohup dbus-launch --exit-with-session "$session" >"$dir/session.log" 2>&1 &
   echo $! > "$dir/session.pid"
   sleep 2
 fi

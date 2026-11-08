@@ -585,6 +585,16 @@ pub struct Shell {
     /// that keeps it reachable.
     server_screen_rx: Option<std::sync::mpsc::Receiver<Result<machine::Screen, String>>>,
     server_screen: Option<machine::Screen>,
+    /// What the server has for showing its screen, read once it answers:
+    /// for which server, the reading or install under way, whether that's an
+    /// install, why it failed, and whether the person asked for the screen
+    /// (so it opens once the desktop is in).
+    server_desktop: Option<machine::Desktop>,
+    server_desktop_host: String,
+    server_desktop_rx: Option<std::sync::mpsc::Receiver<Result<machine::Desktop, String>>>,
+    server_desktop_installing: bool,
+    server_desktop_err: String,
+    server_desktop_want: bool,
     /// Watching that screen in Squad: the connection, the picture and the
     /// frame it was made from, pictures to let go of, where it's drawn and
     /// the focus that sends keys to it.
@@ -1174,6 +1184,12 @@ impl Shell {
             server_cmd,
             server_screen_rx: None,
             server_screen: None,
+            server_desktop: None,
+            server_desktop_host: String::new(),
+            server_desktop_rx: None,
+            server_desktop_installing: false,
+            server_desktop_err: String::new(),
+            server_desktop_want: false,
             screen_view: None,
             screen_img: None,
             screen_seen: u64::MAX,
