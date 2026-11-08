@@ -3125,15 +3125,20 @@ impl Shell {
 
     /// A small avatar, like the ones beside chat lines: still, so it costs nothing.
     fn avatar(&mut self, who: Member, size: f32) -> Img {
-        let image = self.holos.image(
+        img(self.avatar_image(who, size)).size(px(size)).flex_none()
+    }
+
+    /// The still picture behind `avatar`, for views that draw it themselves,
+    /// like a bot's hover card.
+    fn avatar_image(&mut self, who: Member, size: f32) -> Arc<RenderImage> {
+        self.holos.image(
             mascot::figure(who, Mood::Idle),
             size,
             Framing::Bust,
             2.0,
             self.scale,
             false,
-        );
-        img(image).size(px(size)).flex_none()
+        )
     }
 
     fn inbox_count(&self) -> usize {

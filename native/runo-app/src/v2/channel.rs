@@ -1123,10 +1123,14 @@ impl Shell {
             .filter(|b| self.crew.store.busy(**b).is_some())
             .count();
         let mut faces = div().flex().items_center();
+        let shell = cx.entity().downgrade();
         for (i, b) in bots.iter().take(5).enumerate() {
             let f = self.avatar(*b, 20.);
+            let card = self.bot_card(*b, &here, thread, shell.clone());
             faces = faces.child(
                 div()
+                    .id(("channel-face", i))
+                    .hoverable_tooltip(move |_, cx| cx.new(|_| card.clone()).into())
                     .when(i > 0, |d| d.ml(px(-5.)))
                     .size(px(24.))
                     .flex()
@@ -1209,6 +1213,41 @@ impl Shell {
                         cx.notify();
                     })),
             )
+    }
+
+    /// What a face in the bar shows on hover: who the bot is, what it's on,
+    /// and its last job in this thread, each a link.
+    fn bot_card(
+        &mut self,
+        who: Member,
+        here: &str,
+        thread: u64,
+        shell: WeakEntity<Shell>,
+    ) -> BotCard {
+        let face = self.avatar_image(who, 40.);
+        let (state, tone) = self.status_of(who);
+        let store = &self.crew.store;
+        let mut jobs = Vec::new();
+        let now = store.busy(who);
+        if let Some(j) = now {
+            jobs.push(CardJob::of("Working on", j));
+        }
+        let last = store
+            .jobs_in(here, thread)
+            .into_iter()
+            .rev()
+            .find(|j| j.bot == who && Some(j.id) != now.map(|n| n.id));
+        if let Some(j) = last {
+            jobs.push(CardJob::of("Last job here", j));
+        }
+        BotCard {
+            shell,
+            who,
+            face,
+            state,
+            tone,
+            jobs,
+        }
     }
 
     /// A question asked in the thread, and the bot's answer under it.
@@ -1344,12 +1383,8 @@ impl Shell {
             .folder()
             .map(|f| f.path.clone())
             .unwrap_or_default();
+        // Who's here shows once, as faces in the bar above; here it's words.
         let bots = self.crew.store.members(&here, thread);
-        let mut faces = div().flex().items_center();
-        for (i, b) in bots.iter().take(8).enumerate() {
-            let f = self.avatar(*b, 26.);
-            faces = faces.child(div().when(i > 0, |d| d.ml(px(-6.))).child(f));
-        }
         let names: Vec<&str> = bots.iter().map(|b| b.name()).collect();
         let who = if bots.len() == 1 {
             "Peek is here. Bring a bot in with @, like @Builder, or Peek brings one in when there's work."
@@ -1371,18 +1406,10 @@ impl Shell {
             // No rule under the intro: the first day's line follows it.
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .child(
-                        div()
-                            .text_size(px(24.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(ui::ink()))
-                            .child(format!("#{name}")),
-                    )
-                    .child(div().flex_1())
-                    .child(faces),
+                    .text_size(px(24.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::ink()))
+                    .child(format!("#{name}")),
             )
             .child(
                 div()
@@ -2758,5 +2785,205 @@ mod card_tests {
         assert!(!mashed("Add gift cards"));
         assert!(!mashed("can you build a simple node js app and run it"));
         assert!(!mashed("hi"));
+    }
+}
+
+/// One job on a bot's hover card.
+#[derive(Clone)]
+struct CardJob {
+    id: u64,
+    heading: &'static str,
+    title: String,
+    word: String,
+    tone: (u32, u32, u32),
+}
+
+impl CardJob {
+    fn of(heading: &'static str, j: &Job) -> Self {
+        let raw = if j.short.trim().is_empty() {
+            &j.title
+        } else {
+            &j.short
+        };
+        let first = raw.lines().next().unwrap_or("").trim();
+        let title = if first.chars().count() > 64 {
+            format!("{}\u{2026}", first.chars().take(63).collect::<String>())
+        } else {
+            first.to_string()
+        };
+        let (word, tone) = status_of(j);
+        Self {
+            id: j.id,
+            heading,
+            title,
+            word,
+            tone,
+        }
+    }
+}
+
+/// The small card a bot's face in a thread's bar opens on hover, like a
+/// profile card in Slack: its face, name and job, then links to what it's on
+/// and to its chat.
+#[derive(Clone)]
+pub(super) struct BotCard {
+    shell: WeakEntity<Shell>,
+    who: Member,
+    face: std::sync::Arc<RenderImage>,
+    state: String,
+    tone: u32,
+    jobs: Vec<CardJob>,
+}
+
+impl Render for BotCard {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        let who = self.who;
+        let accent = who.accent();
+        let head = div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(
+                div()
+                    .size(px(44.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(10.))
+                    .bg(ca(accent, 0.1))
+                    .child(img(self.face.clone()).size(px(40.))),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child(who.name()),
+                            )
+                            .child(role_tag(
+                                if who == Member::Fin {
+                                    "Lead".to_string()
+                                } else {
+                                    who.role().to_string()
+                                },
+                                accent,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(5.))
+                            .text_size(px(12.))
+                            .text_color(c(ui::muted()))
+                            .child(div().size(px(6.)).rounded_full().bg(c(self.tone)))
+                            .child(self.state.clone()),
+                    ),
+            );
+        let mut card = div()
+            .id("bot-card")
+            .w(px(272.))
+            .p(px(12.))
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .rounded(px(12.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .font_family("Geist")
+            .shadow(vec![BoxShadow {
+                color: hsla(0., 0., 0., 0.12),
+                offset: point(px(0.), px(6.)),
+                blur_radius: px(18.),
+                spread_radius: px(0.),
+                inset: false,
+            }])
+            // Clicks on the card stay on the card, not the bar under it.
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(head)
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .line_height(px(17.))
+                    .text_color(c(ui::muted()))
+                    .child(who.pitch()),
+            );
+        for (k, j) in self.jobs.iter().enumerate() {
+            let shell = self.shell.clone();
+            let id = j.id;
+            card = card.child(
+                div()
+                    .id(("bot-card-job", k))
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .cursor_pointer()
+                    .hover(|s| s.border_color(c(ui::line_hi())).bg(c(ui::hover())))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_size(px(11.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::faint()))
+                                    .child(j.heading),
+                            )
+                            .child(super::home::pill(&j.word, j.tone)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(px(13.))
+                                    .text_color(c(ui::ink()))
+                                    .child(j.title.clone()),
+                            )
+                            .child(
+                                Icon::new(IconName::ArrowRight)
+                                    .size(px(13.))
+                                    .text_color(c(ui::faint())),
+                            ),
+                    )
+                    .on_click(move |_, _, cx| {
+                        let _ = shell.update(cx, |s, cx| s.open_job(id, cx));
+                    }),
+            );
+        }
+        let shell = self.shell.clone();
+        card.child(
+            ui::ghost("bot-card-chat", format!("Message {}", who.name()))
+                .h(px(30.))
+                .on_click(move |_, _, cx| {
+                    let _ = shell.update(cx, |s, cx| s.go(Place::Chat(who), cx));
+                }),
+        )
     }
 }
