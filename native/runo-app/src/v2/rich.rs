@@ -238,7 +238,7 @@ impl Shell {
             let ranges: Vec<Range<usize>> = p.acts.iter().map(|(r, _)| r.clone()).collect();
             let acts: Vec<Act> = p.acts.iter().map(|(_, a)| a.clone()).collect();
             for a in &acts {
-                if !all.contains(a) {
+                if !all.iter().any(|b| same(a, b, dir)) {
                     all.push(a.clone());
                 }
             }
@@ -311,19 +311,7 @@ impl Shell {
                 }
             }
             Act::File(p) => {
-                let path = if p.starts_with('/') {
-                    p.clone()
-                } else if let Some(rest) = p.strip_prefix("~/") {
-                    std::env::var("HOME")
-                        .map(|h| format!("{h}/{rest}"))
-                        .unwrap_or_else(|_| p.clone())
-                } else {
-                    format!(
-                        "{}/{}",
-                        dir.trim_end_matches('/'),
-                        p.trim_start_matches("./")
-                    )
-                };
+                let path = file_path(p, dir);
                 if std::path::Path::new(&path).exists() {
                     cx.open_url(&format!("file://{path}"));
                 } else {
@@ -332,6 +320,33 @@ impl Shell {
             }
         }
         cx.notify();
+    }
+}
+
+/// Where a file a message names is: as written when absolute, under the
+/// home folder for `~/`, else in `dir`.
+fn file_path(p: &str, dir: &str) -> String {
+    if p.starts_with('/') {
+        p.to_string()
+    } else if let Some(rest) = p.strip_prefix("~/") {
+        std::env::var("HOME")
+            .map(|h| format!("{h}/{rest}"))
+            .unwrap_or_else(|_| p.to_string())
+    } else {
+        format!(
+            "{}/{}",
+            dir.trim_end_matches('/'),
+            p.trim_start_matches("./")
+        )
+    }
+}
+
+/// Whether two things to do are the same: a file named twice, once by its
+/// name and once by its whole path, is one file.
+fn same(a: &Act, b: &Act, dir: &str) -> bool {
+    match (a, b) {
+        (Act::File(x), Act::File(y)) => file_path(x, dir) == file_path(y, dir),
+        _ => a == b,
     }
 }
 
@@ -347,7 +362,17 @@ fn shell_quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, parse, Act};
+    use super::{classify, parse, same, Act};
+
+    #[test]
+    fn a_file_named_twice_is_one_file() {
+        let dir = "/Users/a/dev/sandbox";
+        let short = Act::File("index.html".into());
+        let long = Act::File("/Users/a/dev/sandbox/index.html".into());
+        assert!(same(&short, &long, dir));
+        assert!(same(&Act::File("./index.html".into()), &long, dir));
+        assert!(!same(&Act::File("other/index.html".into()), &long, dir));
+    }
 
     #[test]
     fn a_web_route_is_not_a_file() {
