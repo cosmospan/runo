@@ -762,6 +762,8 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
+/// How tall the bar across the top is, the sidebar's top strip included.
+pub(super) const TOP_H: f32 = 54.;
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {

@@ -248,120 +248,163 @@ impl Shell {
 }
 
 impl Shell {
-    /// The Git side of the Jobs panel, for one project and thread: where the
-    /// folder stands against its remote, the branches the crew works on, and
-    /// what to watch out for before approving.
+    /// The Git side of the right sidebar, for one project and thread: the
+    /// folder's branch and how it stands against its remote, what to watch out
+    /// for, uncommitted files, the crew's branches and the latest commits.
     pub(super) fn git_side(
         &mut self,
         folder: &str,
         jobs: &[Job],
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let mut body = div()
+        let body = div()
             .id("git-side")
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .px(px(16.))
-            .pb(px(16.))
+            .px(px(20.))
+            .pb(px(24. + super::DOCK_ROOM))
             .flex()
-            .flex_col()
-            .gap(px(12.));
-        let panel = || {
+            .flex_col();
+        let quiet = |text: &str| {
             div()
-                .p(px(12.))
-                .rounded(px(12.))
-                .bg(c(ui::panel()))
-                .border_1()
-                .border_color(c(ui::line()))
-                .flex()
-                .flex_col()
-                .gap(px(8.))
+                .text_size(px(12.5))
+                .line_height(px(18.))
+                .text_color(c(ui::faint()))
+                .child(text.to_string())
         };
 
-        // Where the folder stands.
         let repo = self.crew.repos.get(folder).cloned();
+        let Some(repo) = repo else {
+            return body.child(section("This folder", quiet("Looking at git\u{2026}")));
+        };
+        if !repo.is_repo {
+            return body.child(section(
+                "This folder",
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child(
+                                Icon::new(IconName::FolderOpen)
+                                    .size(px(14.))
+                                    .text_color(c(ui::muted())),
+                            )
+                            .child("Not a git repository"),
+                    )
+                    .child(quiet(
+                        "Jobs here change your files directly. With git, each job \
+                         gets its own branch and waits for your OK before it merges.",
+                    )),
+            ));
+        }
+
+        // The folder: its branch, then how it stands, as small chips.
+        let st = &repo.state;
+        let host = if st.host.is_empty() {
+            st.remote.clone()
+        } else {
+            st.host.clone()
+        };
+        let mut chips: Vec<(u32, String)> = Vec::new();
+        if st.remote.is_empty() {
+            chips.push((ui::muted(), "No remote".into()));
+        } else if st.behind == 0 && st.ahead == 0 {
+            chips.push((ui::t_green(), format!("Up to date with {host}")));
+        } else {
+            if st.behind > 0 {
+                chips.push((ui::t_amber(), format!("\u{2193}{} to pull", st.behind)));
+            }
+            if st.ahead > 0 {
+                chips.push((ui::t_blue(), format!("\u{2191}{} to push", st.ahead)));
+            }
+        }
+        chips.push(match repo.changed {
+            0 => (ui::t_green(), "Clean".into()),
+            1 => (ui::t_amber(), "1 file changed".into()),
+            n => (ui::t_amber(), format!("{n} files changed")),
+        });
         let path = folder.to_string();
-        let mut top = panel().child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(
-                    Icon::new(IconName::GitBranch)
-                        .size(px(14.))
-                        .text_color(c(ui::muted())),
-                )
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .font_family(ui::MONO)
-                        .text_size(px(13.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(ui::ink()))
-                        .child(match &repo {
-                            Some(r) if !r.state.branch.is_empty() => r.state.branch.clone(),
-                            Some(_) => "no branch".to_string(),
-                            None => "\u{2026}".to_string(),
-                        }),
-                )
-                .child(div().flex_1())
-                .when(
-                    repo.as_ref().is_some_and(|r| !r.state.remote.is_empty()),
-                    |d| {
+        let head = div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        Icon::new(IconName::GitBranch)
+                            .size(px(15.))
+                            .text_color(c(ui::muted())),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .font_family(ui::MONO)
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child(if st.branch.is_empty() {
+                                "detached HEAD".to_string()
+                            } else {
+                                st.branch.clone()
+                            }),
+                    )
+                    .when(!st.remote.is_empty(), |d| {
                         d.child(
-                            ui::ghost_i("git-fetch", IconName::RotateCw, "Refresh")
-                                .h(px(26.))
+                            ui::icon_btn("git-fetch", IconName::RotateCw)
+                                .size(px(26.))
+                                .tooltip(move |window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "Fetch from the remote",
+                                    )
+                                    .build(window, cx)
+                                })
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.crew.fetch(&path);
                                     cx.notify();
                                 })),
                         )
-                    },
-                ),
-        );
-        let words = match &repo {
-            None => "Looking at git\u{2026}".to_string(),
-            Some(r) => {
-                let mut parts = Vec::new();
-                if r.state.remote.is_empty() {
-                    parts.push("No remote: approved jobs merge here".to_string());
-                } else {
-                    let host = if r.state.host.is_empty() {
-                        r.state.remote.clone()
-                    } else {
-                        r.state.host.clone()
-                    };
-                    parts.push(match r.state.behind {
-                        0 => format!("Up to date with {host}"),
-                        n => format!("\u{2193}{n} new on {host}"),
-                    });
-                    if r.state.ahead > 0 {
-                        parts.push(format!("\u{2191}{} not sent", r.state.ahead));
-                    }
-                }
-                parts.push(if r.dirty {
-                    "your folder has changes".to_string()
-                } else {
-                    "your folder is clean".to_string()
-                });
-                parts.join(" \u{b7} ")
-            }
-        };
-        top = top.child(
-            div()
-                .text_size(px(12.))
-                .text_color(c(if repo.as_ref().is_some_and(|r| r.state.behind > 0) {
-                    ui::t_amber()
-                } else {
-                    ui::muted()
-                }))
-                .child(words),
-        );
-        body = body.child(top);
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(6.))
+                    .children(chips.into_iter().map(|(col, word)| {
+                        div()
+                            .h(px(22.))
+                            .px(px(8.))
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .rounded(px(6.))
+                            .bg(ca(col, 0.10))
+                            .border_1()
+                            .border_color(ca(col, 0.22))
+                            .text_size(px(11.5))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(col))
+                            .child(div().size(px(6.)).rounded_full().bg(c(col)))
+                            .child(word)
+                    })),
+            );
+        let mut body = body.child(section("This folder", head));
 
-        // The crew's branches.
+        // The crew's branches, and what to watch out for across them.
         let branched: Vec<&Job> = jobs
             .iter()
             .filter(|j| {
@@ -372,105 +415,6 @@ impl Shell {
                     )
             })
             .collect();
-        let mut list = panel().child(ui::heading("Branches", None, Some(branched.len())));
-        if branched.is_empty() {
-            list = list.child(
-                div()
-                    .text_size(px(12.5))
-                    .text_color(c(ui::faint()))
-                    .child("No job is working on a branch right now."),
-            );
-        }
-        for j in &branched {
-            let id = j.id;
-            let dot = match j.status {
-                Status::Running => ui::t_blue(),
-                Status::Shipping => ui::t_green(),
-                _ => ui::t_amber(),
-            };
-            let mut right = vec![format!("#{id}")];
-            if j.ahead > 0 {
-                right.push(match j.ahead {
-                    1 => "1 commit".to_string(),
-                    n => format!("{n} commits"),
-                });
-            }
-            if j.pr_number > 0 {
-                right.push(format!("PR #{}", j.pr_number));
-            }
-            let mut notes: Vec<(u32, String)> = Vec::new();
-            if !j.held.is_empty() {
-                notes.push((ui::t_red(), "held by the seatbelt".into()));
-            }
-            for (other, _) in &j.clash_with {
-                notes.push((ui::t_violet(), format!("clashes with #{other}")));
-            }
-            if j.behind > 0 {
-                let base = if j.base.is_empty() {
-                    "its base"
-                } else {
-                    &j.base
-                };
-                notes.push((ui::t_amber(), format!("{} behind {base}", j.behind)));
-            }
-            list = list.child(
-                div()
-                    .id(("git-branch", id as usize))
-                    .px(px(6.))
-                    .py(px(5.))
-                    .mx(px(-6.))
-                    .rounded(px(7.))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .text_size(px(12.5))
-                            .child(div().size(px(6.)).flex_none().rounded_full().bg(c(dot)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .truncate()
-                                    .font_family(ui::MONO)
-                                    .text_size(px(12.))
-                                    .text_color(c(ui::body()))
-                                    .child(j.branch.clone()),
-                            )
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .text_size(px(11.5))
-                                    .text_color(c(ui::faint()))
-                                    .child(right.join(" \u{b7} ")),
-                            ),
-                    )
-                    .when(!notes.is_empty(), |d| {
-                        d.child(
-                            div()
-                                .pl(px(14.))
-                                .flex()
-                                .flex_wrap()
-                                .gap(px(8.))
-                                .text_size(px(11.5))
-                                .children(
-                                    notes
-                                        .into_iter()
-                                        .map(|(col, n)| div().text_color(c(col)).child(n)),
-                                ),
-                        )
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
-            );
-        }
-        body = body.child(list);
-
-        // What to watch out for before approving.
         let mut watch: Vec<(u32, String, u64)> = Vec::new();
         for j in &branched {
             if !j.held.is_empty() {
@@ -506,41 +450,221 @@ impl Shell {
                 first.id,
             ));
         }
-        let mut outs = panel().child(ui::heading("Watch-outs", None, None));
-        if watch.is_empty() {
-            outs = outs.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .text_size(px(12.5))
-                    .text_color(c(ui::t_green()))
-                    .child(Icon::new(IconName::ShieldCheck).size(px(13.)))
-                    .child("Nothing to watch out for."),
-            );
+        if !watch.is_empty() {
+            let mut outs = div().flex().flex_col().gap(px(6.));
+            for (n, (col, words, id)) in watch.into_iter().enumerate() {
+                outs = outs.child(
+                    div()
+                        .id(("git-watch", n))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .px(px(10.))
+                        .py(px(7.))
+                        .rounded(px(8.))
+                        .bg(ca(col, 0.08))
+                        .border_1()
+                        .border_color(ca(col, 0.20))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(ca(col, 0.14)))
+                        .text_size(px(12.5))
+                        .text_color(c(ui::body()))
+                        .child(div().size(px(6.)).flex_none().rounded_full().bg(c(col)))
+                        .child(div().min_w_0().truncate().child(words))
+                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                );
+            }
+            body = body.child(section("Watch out", outs));
         }
-        for (n, (col, words, id)) in watch.into_iter().enumerate() {
-            outs = outs.child(
+
+        // Uncommitted files in your folder.
+        if repo.changed > 0 {
+            let mut files = div().flex().flex_col().gap(px(2.));
+            for (code, file) in &repo.changes {
+                let col = match code.as_str() {
+                    "??" | "A" => ui::add(),
+                    "D" => ui::del(),
+                    _ => ui::t_amber(),
+                };
+                let letter = if code == "??" { "U" } else { code.as_str() };
+                files = files.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(10.))
+                        .py(px(3.))
+                        .child(
+                            div()
+                                .w(px(14.))
+                                .flex_none()
+                                .font_family(ui::MONO)
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(col))
+                                .child(letter.chars().take(1).collect::<String>()),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .font_family(ui::MONO)
+                                .text_size(px(12.))
+                                .text_color(c(ui::body()))
+                                .child(file.clone()),
+                        ),
+                );
+            }
+            if repo.changed > repo.changes.len() {
+                files = files.child(quiet(&format!(
+                    "and {} more",
+                    repo.changed - repo.changes.len()
+                )));
+            }
+            body = body.child(section_n("Not committed", repo.changed, files));
+        }
+
+        // The crew's branches.
+        let mut list = div().flex().flex_col().gap(px(2.));
+        if branched.is_empty() {
+            list = list.child(quiet(
+                "No job has a branch open. Each job gets its own when it starts.",
+            ));
+        }
+        for j in &branched {
+            let id = j.id;
+            let dot = match j.status {
+                Status::Running => ui::t_blue(),
+                Status::Shipping => ui::t_green(),
+                _ => ui::t_amber(),
+            };
+            let mut right = vec![format!("#{id}")];
+            if j.ahead > 0 {
+                right.push(match j.ahead {
+                    1 => "1 commit".to_string(),
+                    n => format!("{n} commits"),
+                });
+            }
+            if j.pr_number > 0 {
+                right.push(format!("PR #{}", j.pr_number));
+            }
+            list = list.child(
                 div()
-                    .id(("git-watch", n))
+                    .id(("git-branch", id as usize))
                     .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .px(px(6.))
-                    .py(px(4.))
-                    .mx(px(-6.))
-                    .rounded(px(7.))
+                    .flex_col()
+                    .gap(px(2.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .mx(px(-8.))
+                    .rounded(px(8.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(ui::hover())))
-                    .text_size(px(12.5))
-                    .text_color(c(ui::body()))
-                    .child(div().size(px(6.)).flex_none().rounded_full().bg(c(col)))
-                    .child(div().min_w_0().truncate().child(words))
+                    .map(|d| super::motion::hover_fill(d, None, ui::hover()))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(div().size(px(6.)).flex_none().rounded_full().bg(c(dot)))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .font_family(ui::MONO)
+                                    .text_size(px(12.))
+                                    .text_color(c(ui::ink()))
+                                    .child(j.branch.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_size(px(11.5))
+                                    .text_color(c(ui::faint()))
+                                    .child(right.join(" \u{b7} ")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .pl(px(14.))
+                            .truncate()
+                            .text_size(px(11.5))
+                            .text_color(c(ui::muted()))
+                            .child(format!("{} \u{b7} {}", j.bot.name(), j.label())),
+                    )
                     .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
             );
         }
-        body.child(outs)
+        body = body.child(section_n("Crew branches", branched.len(), list));
+
+        // The latest commits on your branch.
+        let mut log = div().flex().flex_col().gap(px(2.));
+        if repo.commits.is_empty() {
+            log = log.child(quiet("No commits yet."));
+        }
+        for (hash, subject, when) in &repo.commits {
+            log = log.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .py(px(4.))
+                    .child(
+                        Icon::new(IconName::GitCommitHorizontal)
+                            .size(px(13.))
+                            .flex_none()
+                            .text_color(c(ui::faint())),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(12.5))
+                                    .text_color(c(ui::ink()))
+                                    .child(subject.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap(px(6.))
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::faint()))
+                                    .child(div().font_family(ui::MONO).child(hash.clone()))
+                                    .child("\u{b7}")
+                                    .child(when.clone()),
+                            ),
+                    ),
+            );
+        }
+        let on = if st.branch.is_empty() {
+            "Recent commits".to_string()
+        } else {
+            format!("Recent commits on {}", st.branch)
+        };
+        body.child(section(&on, log))
     }
+}
+
+/// One block of the Git side: its heading, its body, a hairline under it.
+fn section(title: &str, inner: Div) -> Div {
+    super::live::section(title, inner)
+}
+
+/// A block whose heading carries a count on the right.
+fn section_n(title: &str, n: usize, inner: Div) -> Div {
+    div()
+        .py(px(18.))
+        .border_b_1()
+        .border_color(c(ui::line2()))
+        .flex()
+        .flex_col()
+        .gap(px(10.))
+        .child(ui::heading(title, None, Some(n)))
+        .child(inner)
 }
 
 #[cfg(test)]

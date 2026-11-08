@@ -1,6 +1,7 @@
 //! Home's working half: a strip of numbers, and the job list beside a job.
 
 use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use runo_holo::{Framing, Mood};
@@ -114,7 +115,7 @@ pub(super) fn cost(summary: &str) -> Option<f64> {
 }
 
 /// How wide the job list beside a job is.
-const LIST_W: f32 = 360.;
+pub(super) const LIST_W: f32 = 360.;
 
 impl Shell {
     /// A page with the job list beside it: the split view every job page uses.
@@ -262,118 +263,163 @@ impl Shell {
             );
         }
 
-        let head = div()
+        // Tabs across the top, like a document's: an icon, a word, a count,
+        // and a line under the one you're on.
+        let needs_n = needs.len();
+        let tabs = [
+            (0u8, IconName::Info, "Details", None),
+            (1, IconName::ListTodo, "Jobs", Some(all.len())),
+            (2, IconName::GitBranch, "Git", None),
+        ];
+        let mut tab_row = div()
             .flex_none()
-            .px(px(16.))
-            .pt(px(16.))
-            .pb(px(12.))
+            .h(px(44.))
+            .px(px(12.))
             .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(
+            .items_end()
+            .gap(px(4.))
+            .border_b_1()
+            .border_color(c(ui::line2()));
+        for (k, icon, label, n) in tabs {
+            if k == 0 && on_job.is_none() {
+                continue;
+            }
+            let on = side == k;
+            let git = k == 2;
+            tab_row = tab_row.child(
                 div()
+                    .id(("list-side", k as usize))
+                    .relative()
+                    .h(px(44.))
+                    .px(px(10.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .children(
-                        [(0u8, "Details"), (1, "Jobs"), (2, "Git")]
-                            .into_iter()
-                            .filter(|(k, _)| *k != 0 || on_job.is_some())
-                            .map(|(k, label)| {
-                                let on = side == k;
-                                let git = k == 2;
-                                div()
-                                    .id(("list-side", k as usize))
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(5.))
-                                    .cursor_pointer()
-                                    .text_size(px(17.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(if on { ui::ink() } else { ui::faint() }))
-                                    .when(!on, |d| d.hover(|s| s.text_color(c(ui::muted()))))
-                                    .child(label)
-                                    .when(k == 1, |d| {
-                                        d.child(
-                                            div()
-                                                .text_size(px(12.))
-                                                .font_weight(FontWeight::NORMAL)
-                                                .text_color(c(ui::faint()))
-                                                .child(all.len().to_string()),
-                                        )
-                                    })
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        if k == 0 {
-                                            this.side_job = true;
-                                        } else {
-                                            this.side_job = false;
-                                            this.jobs_open = true;
-                                            this.list_git = git;
-                                            if git {
-                                                this.crew.look_at_git_soon();
-                                            }
-                                        }
-                                        cx.notify();
-                                    }))
-                            }),
-                    )
-                    .child(div().flex_1())
-                    .when(side != 0, |d| {
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .text_size(px(13.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(if on { ui::ink() } else { ui::muted() }))
+                    .when(!on, |d| d.hover(|s| s.text_color(c(ui::ink()))))
+                    .child(Icon::new(icon).size(px(14.)))
+                    .child(label)
+                    .when_some(n.filter(|n| *n > 0), |d, n| {
                         d.child(
                             div()
-                                .id("list-scope")
+                                .px(px(6.))
+                                .h(px(18.))
                                 .flex()
                                 .items_center()
-                                .p(px(2.))
-                                .rounded(px(8.))
-                                .bg(c(ui::press()))
-                                .text_size(px(11.5))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .cursor_pointer()
-                                .children(
-                                    [
-                                        (false, format!("#{thread_name}")),
-                                        (true, "All".to_string()),
-                                    ]
-                                    .map(|(all, label)| {
-                                        let on = self.list_all == all;
-                                        div()
-                                            .max_w(px(120.))
-                                            .truncate()
-                                            .px(px(8.))
-                                            .h(px(22.))
-                                            .flex()
-                                            .items_center()
-                                            .rounded(px(6.))
-                                            .map(|d| {
-                                                if on {
-                                                    d.bg(c(ui::raised())).text_color(c(ui::ink()))
-                                                } else {
-                                                    d.text_color(c(ui::muted()))
-                                                }
-                                            })
-                                            .child(label)
-                                    }),
-                                )
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.list_all = !this.list_all;
-                                    cx.notify();
-                                })),
+                                .rounded(px(9.))
+                                .bg(c(if on { ui::press() } else { ui::well() }))
+                                .text_size(px(11.))
+                                .text_color(c(ui::muted()))
+                                .child(n.to_string()),
                         )
-                        .child(
-                            ui::icon_btn("list-all", IconName::ListFilter)
-                                .size(px(28.))
-                                .tooltip(|window, cx| {
-                                    gpui_kit::component::tooltip::Tooltip::new("All jobs")
-                                        .build(window, cx)
-                                })
-                                .on_click(
-                                    cx.listener(|this, _, _, cx| this.go(Place::History, cx)),
-                                ),
+                    })
+                    // A dot on Jobs when something waits on you and you're elsewhere.
+                    .when(k == 1 && !on && needs_n > 0, |d| {
+                        d.child(div().size(px(6.)).rounded_full().bg(c(ui::t_amber())))
+                    })
+                    .when(on, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .left(px(8.))
+                                .right(px(8.))
+                                .bottom(px(-1.))
+                                .h(px(2.))
+                                .rounded_t(px(2.))
+                                .bg(c(ui::ink())),
                         )
-                    }),
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if k == 0 {
+                            this.side_job = true;
+                        } else {
+                            this.side_job = false;
+                            this.jobs_open = true;
+                            this.list_git = git;
+                            if git {
+                                this.crew.look_at_git_soon();
+                            }
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
+
+        // Under the tabs, on Jobs and Git: which jobs they cover (this thread
+        // or all of them) and the way to the full list.
+        let scope = div()
+            .id("list-scope")
+            .flex()
+            .items_center()
+            .p(px(2.))
+            .rounded(px(8.))
+            .bg(c(ui::press()))
+            .text_size(px(11.5))
+            .font_weight(FontWeight::SEMIBOLD)
+            .cursor_pointer()
+            .children(
+                [
+                    (false, format!("#{thread_name}")),
+                    (true, "All threads".to_string()),
+                ]
+                .map(|(all, label)| {
+                    let on = self.list_all == all;
+                    div()
+                        .max_w(px(140.))
+                        .truncate()
+                        .px(px(9.))
+                        .h(px(22.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.))
+                        .map(|d| {
+                            if on {
+                                d.bg(c(ui::raised())).text_color(c(ui::ink()))
+                            } else {
+                                d.text_color(c(ui::muted()))
+                            }
+                        })
+                        .child(label)
+                }),
             )
-            .when(side == 1, |d| d.child(filters));
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.list_all = !this.list_all;
+                cx.notify();
+            }));
+        let tools = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(scope)
+            .child(div().flex_1())
+            .when(side == 1, |d| {
+                d.child(
+                    ui::ghost_i("list-all", IconName::ListFilter, "All jobs")
+                        .h(px(26.))
+                        .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
+                )
+            });
+        let head = div()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .child(tab_row)
+            .when(side != 0, |d| {
+                d.child(
+                    div()
+                        .px(px(16.))
+                        .pt(px(12.))
+                        .pb(px(if side == 1 { 4. } else { 0. }))
+                        .flex()
+                        .flex_col()
+                        .gap(px(10.))
+                        .child(tools)
+                        .when(side == 1, |d| d.child(filters)),
+                )
+            });
 
         let mut body = div()
             .id("job-list")
@@ -437,7 +483,7 @@ impl Shell {
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
-                        .px(px(24.))
+                        .px(px(20.))
                         .pb(px(24. + super::DOCK_ROOM))
                         .child(self.job_details(job, cx)),
                 ),

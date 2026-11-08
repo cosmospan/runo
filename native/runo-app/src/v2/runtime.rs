@@ -125,8 +125,16 @@ struct GitLook {
 /// uncommitted work.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RepoLine {
+    /// False for a folder that isn't a git repository: there is nothing else.
+    pub is_repo: bool,
     pub state: crate::git::RepoState,
     pub dirty: bool,
+    /// Uncommitted files (git's status letters and the path), the first few.
+    pub changes: Vec<(String, String)>,
+    /// How many files are uncommitted in all.
+    pub changed: usize,
+    /// The newest commits on the checked-out branch: hash, subject, how long ago.
+    pub commits: Vec<(String, String, String)>,
 }
 
 impl Runtime {
@@ -1558,11 +1566,20 @@ impl Runtime {
         std::thread::spawn(move || {
             let repos = folders
                 .into_iter()
-                .filter(|f| crate::git::is_repo(f))
                 .map(|f| {
+                    // A folder that isn't a repository is noted too, so the Git
+                    // side can say so rather than wait for a look that never comes.
+                    if !crate::git::is_repo(&f) {
+                        return (f, RepoLine::default());
+                    }
+                    let (changes, changed) = crate::git::changed_paths(&f, 8);
                     let line = RepoLine {
+                        is_repo: true,
                         state: crate::git::repo_state(&f),
-                        dirty: crate::git::has_uncommitted(&f) == Some(true),
+                        dirty: changed > 0,
+                        changes,
+                        changed,
+                        commits: crate::git::log_lines(&f, 6),
                     };
                     (f, line)
                 })
