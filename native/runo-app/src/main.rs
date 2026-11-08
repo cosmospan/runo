@@ -9775,6 +9775,22 @@ fn main() {
         println!("{password}");
         return;
     }
+    // `--version` and `--help` answer and quit, before anything that could open a
+    // window: on a server without a display a window would just hang.
+    match std::env::args().nth(1).as_deref() {
+        Some("--version" | "-V") => {
+            println!("Squad Code {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        Some("--help" | "-h") => {
+            println!(
+                "Squad Code {}\n\nUsage: SquadCode [v2 <command> | --version]\n\nWith no arguments it opens the app. `SquadCode v2 help` lists the crew's terminal commands.",
+                env!("CARGO_PKG_VERSION")
+            );
+            return;
+        }
+        _ => {}
+    }
     startup::begin();
     // `runo --mcp-memory <folder> [--thread <id>]`: serve the memory tools to an agent,
     // without a window; a Crew thread also gets the tools it reports through.
