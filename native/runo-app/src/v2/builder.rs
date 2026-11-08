@@ -31,7 +31,7 @@ pub enum Stage {
     /// Saying what the bot is for.
     #[default]
     Describe,
-    /// The engine is reading the project.
+    /// The engine is drafting the bot.
     Drafting,
     /// Looking over the draft, or a bot's setup.
     Review,
@@ -49,6 +49,8 @@ pub struct Editing {
     pub engine: BotEngine,
     /// Skill files, connected apps, permissions; the words are in the boxes.
     pub setup: Setup,
+    /// The project folder it's tied to, or empty for every project.
+    pub project: String,
     /// Something to fix before it can be saved, or a skill that didn't come back.
     pub error: Option<String>,
 }
@@ -147,6 +149,7 @@ impl Shell {
     ) {
         self.crew.cancel_draft();
         self.maker_like = like;
+        self.maker_here = false;
         self.maker_edit = None;
         self.maker_stage = Stage::Describe;
         self.clear_maker(window, cx);
@@ -200,8 +203,14 @@ impl Shell {
             tint,
             engine,
             setup,
+            project: super::data::project_of(who),
             error: None,
         });
+        self.maker_here = self
+            .maker_edit
+            .as_ref()
+            .is_some_and(|e| !e.project.is_empty());
+        self.find_on_computer();
         self.maker_stage = Stage::Review;
         self.maker_open = true;
         cx.notify();
@@ -215,9 +224,58 @@ impl Shell {
         cx.notify();
     }
 
+    /// Skills and apps on this computer, plus the project's own when the
+    /// bot is tied to it.
     fn find_on_computer(&mut self) {
-        let dir = self.crew.store.folder().map(|f| f.path.clone());
+        let dir = self.maker_folder().map(|f| f.path);
         self.maker_found = crate::settings::discover(dir.as_deref());
+    }
+
+    /// The project the bot being made is tied to, or None for every project.
+    fn maker_folder(&self) -> Option<crate::v2::store::Folder> {
+        if !self.maker_here {
+            return None;
+        }
+        let tied = self
+            .maker_edit
+            .as_ref()
+            .map(|e| e.project.as_str())
+            .unwrap_or("");
+        if tied.is_empty() {
+            return self.crew.store.folder().cloned();
+        }
+        let known = self
+            .crew
+            .store
+            .folders
+            .iter()
+            .find(|f| f.path == tied)
+            .cloned();
+        Some(known.unwrap_or_else(|| crate::v2::store::Folder {
+            name: tied.rsplit(['/', '\\']).next().unwrap_or(tied).to_string(),
+            path: tied.to_string(),
+            ship: String::new(),
+        }))
+    }
+
+    /// Ties the bot to the open project, or frees it for every project.
+    fn set_here(&mut self, here: bool, cx: &mut Context<Self>) {
+        self.maker_here = here && self.crew.store.folder().is_some();
+        let path = if self.maker_here {
+            self.maker_edit
+                .as_ref()
+                .map(|e| e.project.clone())
+                .filter(|p| !p.is_empty())
+                .or_else(|| self.crew.store.folder().map(|f| f.path.clone()))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if let Some(e) = self.maker_edit.as_mut() {
+            e.project = path;
+        }
+        self.find_on_computer();
+        cx.notify();
     }
 
     fn clear_maker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -269,7 +327,8 @@ impl Shell {
         }
         let name = self.maker_name.read(cx).value().trim().to_string();
         let st = cx.global::<AppSettings>().clone();
-        self.crew.draft_bot(&st, &about, &name);
+        let folder = self.maker_folder();
+        self.crew.draft_bot(&st, &about, &name, folder.as_ref());
         self.maker_stage = Stage::Drafting;
         cx.notify();
     }
@@ -338,8 +397,9 @@ impl Shell {
             id,
             like,
             tint: was.as_ref().map_or(self.maker.0, |e| e.tint),
-            engine: was.map(|e| e.engine).unwrap_or_default(),
+            engine: was.as_ref().map(|e| e.engine.clone()).unwrap_or_default(),
             setup,
+            project: self.maker_folder().map(|f| f.path).unwrap_or_default(),
             error: None,
         });
         self.maker_stage = Stage::Review;
@@ -412,11 +472,19 @@ impl Shell {
             return;
         }
         let bot = self.maker_name.read(cx).value().trim().to_string();
+        if self.maker_edit.is_none() {
+            return;
+        }
         let st = cx.global::<AppSettings>().clone();
+        let folder = self.maker_folder();
+        let error = self
+            .crew
+            .draft_skill(&st, &text, &bot, folder.as_ref())
+            .err();
         let Some(e) = self.maker_edit.as_mut() else {
             return;
         };
-        e.error = self.crew.draft_skill(&st, &text, &bot).err();
+        e.error = error;
         cx.notify();
     }
 
@@ -474,8 +542,16 @@ impl Shell {
         let look = [mascot::colour_index(e.tint), 0, 0, 0];
         match e.who {
             None => {
-                self.crew
-                    .add_reviewed(e.id, &name, &role, e.like, (skills, rules), look, setup);
+                self.crew.add_reviewed(
+                    e.id,
+                    &name,
+                    &role,
+                    e.like,
+                    (skills, rules),
+                    look,
+                    setup,
+                    e.project.clone(),
+                );
                 self.say(format!("{name} joined the crew."));
             }
             Some(Member::Made(id)) => {
@@ -486,6 +562,7 @@ impl Shell {
                     m.skills = skills;
                     m.rules = rules;
                     m.look[0] = look[0];
+                    m.project = e.project.clone();
                 }
                 super::data::set_made(&self.crew.store.made);
                 self.crew.set_setup(who, setup);
@@ -528,6 +605,23 @@ impl Shell {
         }
     }
 
+    /// Every project, or only the open one.
+    fn scope_pills(&self, cx: &mut Context<Self>) -> Div {
+        let tied = self.maker_folder().map(|f| f.name);
+        let open = self.crew.store.folder().map(|f| f.name.clone());
+        let mut row = div().flex().flex_wrap().gap(px(6.)).child(
+            ui::pill("mk-all", "Every project", tied.is_none())
+                .on_click(cx.listener(|this, _, _, cx| this.set_here(false, cx))),
+        );
+        if let Some(name) = tied.or(open) {
+            row = row.child(
+                ui::pill("mk-here", format!("Only in {name}"), self.maker_here)
+                    .on_click(cx.listener(|this, _, _, cx| this.set_here(true, cx))),
+            );
+        }
+        row
+    }
+
     fn drafter_label(&self, cx: &Context<Self>) -> String {
         let st = cx.global::<AppSettings>();
         let (i, model) = brain::maker::drafter(st);
@@ -535,12 +629,8 @@ impl Shell {
     }
 
     fn describe_view(&mut self, cx: &mut Context<Self>) -> Div {
-        let project = self
-            .crew
-            .store
-            .folder()
-            .map(|f| f.name.clone())
-            .unwrap_or_default();
+        let tied = self.maker_folder().map(|f| f.name);
+        let scope = self.scope_pills(cx);
         let mut starters = div().grid().grid_cols(4).gap(px(10.));
         for (i, (title, line, about)) in STARTERS.into_iter().enumerate() {
             starters = starters.child(
@@ -609,7 +699,7 @@ impl Shell {
             .gap(px(18.))
             .child(page_head(
                 "Make a bot",
-                "Say what it's for. Your engine reads the project and drafts the rest: its instructions, skills, connected apps, permissions and memory. You review it before it joins.",
+                "Say what it's for. Your engine drafts the rest: its instructions, skills, connected apps, permissions and memory. You review it before it joins.",
                 ui::ghost("mk-cancel", "Cancel")
                     .on_click(cx.listener(|this, _, _, cx| this.close_maker(cx)))
                     .into_any_element(),
@@ -644,6 +734,14 @@ impl Shell {
                                     .items_center()
                                     .gap(px(10.))
                                     .child(field("NAME", &self.maker_name, 220.))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.))
+                                            .child(ui::caption("WORKS IN"))
+                                            .child(scope),
+                                    )
                                     .child(div().flex_1())
                                     .child(
                                         div()
@@ -664,21 +762,15 @@ impl Shell {
                 div()
                     .text_size(px(12.))
                     .text_color(c(ui::faint()))
-                    .child(if project.is_empty() {
-                        "Open a project and the draft will fit its code. Without one, the bot is set up from your words.".to_string()
-                    } else {
-                        format!("It reads the build files, CI, tests and docs in {project}, and the skills and connected apps already on this computer. It changes no files.")
+                    .child(match tied {
+                        None => "A bot works in every project. It's drafted from your words and the skills and connected apps already on this computer, without reading any project. Pick Only in a project to fit it to that project's code.".to_string(),
+                        Some(project) => format!("It only joins {project}. The draft reads the build files, CI, tests and docs there, and the skills and connected apps already on this computer. It changes no files."),
                     }),
             )
     }
 
     fn drafting_view(&mut self, cx: &mut Context<Self>) -> Div {
-        let project = self
-            .crew
-            .store
-            .folder()
-            .map(|f| f.name.clone())
-            .unwrap_or_default();
+        let tied = self.maker_folder().map(|f| f.name);
         let drafter = self.drafter_label(cx);
         let about = self.maker_about.read(cx).value().to_string();
         let dots = ".".repeat(1 + (self.now() * 2.) as usize % 3);
@@ -688,7 +780,11 @@ impl Shell {
             .gap(px(18.))
             .child(page_head(
                 "Make a bot",
-                "Your engine is reading the project and drafting the bot.",
+                if tied.is_some() {
+                    "Your engine is reading the project and drafting the bot."
+                } else {
+                    "Your engine is drafting the bot."
+                },
                 ui::ghost("mk-stop", "Cancel")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.crew.cancel_draft();
@@ -713,7 +809,10 @@ impl Shell {
                         div()
                             .text_size(px(15.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child(format!("Reading {project} with {drafter}{dots}")),
+                            .child(match &tied {
+                                Some(project) => format!("Reading {project} with {drafter}{dots}"),
+                                None => format!("Drafting with {drafter}{dots}"),
+                            }),
                     )
                     .child(
                         div()
@@ -772,6 +871,7 @@ impl Shell {
                     ));
             }
         }
+        let scope = self.scope_pills(cx);
         let head = ui::card()
             .p(px(18.))
             .flex()
@@ -821,6 +921,14 @@ impl Shell {
                                 .child(div().w(px(84.)).flex_none().child(ui::caption("WORKS LIKE")))
                                 .child(kinds),
                         )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(10.))
+                                .child(div().w(px(84.)).flex_none().child(ui::caption("WORKS IN")))
+                                .child(scope),
+                        )
                     })
                     .when(e.setup.drafted, |d| {
                         d.child(
@@ -831,7 +939,11 @@ impl Shell {
                                 .text_size(px(12.))
                                 .text_color(c(ui::muted()))
                                 .child(Icon::new(IconName::Sparkles).size(px(12.)).text_color(c(ui::VIOLET)))
-                                .child("Drafted by your engine from the project. Change anything below."),
+                                .child(if e.project.is_empty() {
+                                    "Drafted by your engine. Change anything below."
+                                } else {
+                                    "Drafted by your engine from the project. Change anything below."
+                                }),
                         )
                     }),
             )
