@@ -309,10 +309,14 @@ impl Shell {
         self.term_open = None;
         self.home_pick = None;
         self.inbox_pick = None;
+        // What the real store still has to write goes out before it's set aside.
+        self.crew.store.flush(true);
         self.crew.store = if on {
             super::demo::seed()
         } else {
-            super::store::Store::load()
+            let mut s = super::store::Store::load();
+            s.deferred = true;
+            s
         };
         self.go(super::Place::Today, cx);
         self.say(if on {

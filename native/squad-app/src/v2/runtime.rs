@@ -19,7 +19,11 @@ use super::data::{Member, Mode};
 use super::store::{self, Said, Status, Store, Talk};
 use super::{brain, cli, engine, goal, jobs, ship, trouble, work};
 
+mod more;
+
 type Landing = Receiver<Result<(), String>>;
+/// A pull request read again, with its review feedback.
+type Reviewed = (crate::github::PrStatus, Vec<crate::github::Feedback>);
 
 /// What starting something opened, so a client can go and show it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +32,9 @@ pub enum Opened {
     Race(u64),
     /// The bot is still on another job, which this one waits for.
     Busy(u64),
+    /// It waits to start (for its bot, a time, or its issue to be read), by
+    /// its id in `Store::later`.
+    Waiting(u64),
 }
 
 /// One bot's message to another, on its way.
@@ -43,8 +50,26 @@ struct Relay {
     whole: String,
 }
 
+/// A thread's summary being written by Peek's engine.
+struct Summing {
+    folder: String,
+    thread: u64,
+    /// The messages it will cover once written.
+    covers: usize,
+    upto: u64,
+    /// Written afresh from the thread, not updated.
+    fresh: bool,
+    rx: Receiver<crate::agent::Event>,
+}
+
 pub struct Runtime {
     pub store: Store,
+    /// A thread summary being written, one at a time.
+    summing: Option<Summing>,
+    /// When summaries were last checked for being due.
+    summed_at: Option<Instant>,
+    /// A thread whose summary the person asked to write afresh now.
+    pub summary_now: Option<(String, u64)>,
     /// Jobs' agent processes while they run.
     pub runners: Vec<jobs::Runner>,
     /// A question on its way to a bot's engine.
@@ -110,6 +135,19 @@ pub struct Runtime {
     pub repos: HashMap<String, RepoLine>,
     /// Fetches from the remote running now.
     fetching: Vec<Receiver<()>>,
+    /// When the night shift last looked at the jobs waiting to start.
+    shift_at: Instant,
+    /// Issues being read for waiting jobs, by their id in `Store::later`.
+    reading: Vec<(u64, Receiver<Result<super::issues::Issue, String>>)>,
+    /// Review feedback being read from open pull requests, by job.
+    feedback: Vec<(u64, Receiver<Reviewed>)>,
+    /// Pull requests whose new review feedback is waiting to be read, by job.
+    feedback_due: Vec<(u64, crate::github::PrStatus)>,
+    /// Lessons the engine is looking for in a send-back: the job and what
+    /// the person said.
+    learning: Vec<(u64, Receiver<crate::agent::Event>)>,
+    /// Shipper pushing a review fix to an open pull request, by job.
+    updating: Vec<(u64, Receiver<ship::Step>)>,
 }
 
 /// What one git look found: each job's commits ahead and behind, and the
@@ -125,14 +163,25 @@ struct GitLook {
 /// uncommitted work.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RepoLine {
+    /// False for a folder that isn't a git repository: there is nothing else.
+    pub is_repo: bool,
     pub state: crate::git::RepoState,
     pub dirty: bool,
+    /// Uncommitted files (git's status letters and the path), the first few.
+    pub changes: Vec<(String, String)>,
+    /// How many files are uncommitted in all.
+    pub changed: usize,
+    /// The newest commits on the checked-out branch: hash, subject, how long ago.
+    pub commits: Vec<(String, String, String)>,
 }
 
 impl Runtime {
     pub fn new(store: Store) -> Self {
         Runtime {
             store,
+            summing: None,
+            summed_at: None,
+            summary_now: None,
             runners: Vec::new(),
             asking: None,
             asking_talk: None,
@@ -164,6 +213,12 @@ impl Runtime {
             git_looked: Instant::now() - Duration::from_secs(3600),
             repos: HashMap::new(),
             fetching: Vec::new(),
+            shift_at: Instant::now() - Duration::from_secs(3600),
+            reading: Vec::new(),
+            feedback: Vec::new(),
+            feedback_due: Vec::new(),
+            learning: Vec::new(),
+            updating: Vec::new(),
         }
     }
 
@@ -242,10 +297,21 @@ impl Runtime {
         text: String,
         folder: store::Folder,
     ) -> Opened {
+        // An issue it names is read first; the job starts once it's in.
+        if let Some(r) = super::issues::find(&text) {
+            let id = self.queue_later(bot, mode, text, folder, 0);
+            self.say(format!(
+                "Reading {} first. {} starts as soon as it's read.",
+                r.label(),
+                bot.name()
+            ));
+            return Opened::Waiting(id);
+        }
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
+            self.queue_later(bot, mode, text, folder, 0);
             self.say(format!(
-                "{} is still on \u{201c}{title}\u{201d}. This one waits for you to try again.",
+                "{} is still on \u{201c}{title}\u{201d}. This one is next in line and starts as soon as it's free.",
                 bot.name()
             ));
             return Opened::Busy(id);
@@ -307,6 +373,17 @@ impl Runtime {
             }
             job.goal = goal;
             job.context = context;
+        }
+        // What was said in the thread before the ask, so the bot works with
+        // the thread's context, not the one line alone. A plan's parts carry
+        // the plan instead.
+        if job.goal == 0 {
+            let talk = self
+                .store
+                .thread_context(&job.folder.path, job.thread, text);
+            if !talk.is_empty() {
+                job.context = format!("{talk}\n\n{}", job.context).trim().to_string();
+            }
         }
         // Threads the person points at with #, as a short digest each.
         let refs = brain::digest::context_for(text, &self.store.jobs);
@@ -796,6 +873,9 @@ impl Runtime {
         let Some(job) = self.store.job_mut(id) else {
             return;
         };
+        // Sent back from review in the person's own words: there may be a
+        // lesson in it for the bot.
+        let sent_back = note.is_none() && job.status == Status::Review;
         match note {
             None => job.feed.push(store::Item::You(text.clone())),
             Some(n) if !n.is_empty() => job.feed.push(store::Item::Note(n)),
@@ -803,6 +883,28 @@ impl Runtime {
         }
         // The last turn's recap no longer tells how it ends.
         job.recap.clear();
+        job.resume_at = 0;
+        // After a rewind the engine starts fresh: tell it what still stands.
+        let text = if job.rewound {
+            job.rewound = false;
+            super::rewind::context(job, &text)
+        } else {
+            text
+        };
+        if sent_back {
+            let said = job
+                .feed
+                .last()
+                .and_then(|i| match i {
+                    store::Item::You(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            self.learn_from(st, id, &said);
+        }
+        let Some(job) = self.store.job_mut(id) else {
+            return;
+        };
         let text = if refs.is_empty() {
             text
         } else {
@@ -1086,6 +1188,14 @@ impl Runtime {
                 } else {
                     text
                 };
+                if super::issues::find(&text).is_some() || self.store.busy(who).is_some() {
+                    self.queue_later(who, mode, text.clone(), folder, 0);
+                    self.say(format!(
+                        "{} has a job from the terminal in line: \u{201c}{text}\u{201d}.",
+                        who.name()
+                    ));
+                    return;
+                }
                 let job = self.make_job(st, who, mode, &text, folder, None, None);
                 self.say(format!(
                     "{} took a job from the terminal: \u{201c}{}\u{201d}.",
@@ -1098,6 +1208,42 @@ impl Runtime {
             cli::Ask::Approve { id } => self.approve(id),
             cli::Ask::Discard { id } => self.discard(id),
             cli::Ask::Stop { id } => self.stop(id),
+            cli::Ask::Later {
+                text,
+                mode,
+                bot,
+                dir,
+                at,
+            } => {
+                let folder = self.folder_for(&dir);
+                let who = Member::all()
+                    .into_iter()
+                    .find(|m| m.name() == bot)
+                    .or_else(|| Member::doer_for(mode))
+                    .unwrap_or(Member::for_mode(mode));
+                let when = super::shift::when_words(at, store::now());
+                self.queue_later(who, mode, text.clone(), folder, at);
+                self.say(format!(
+                    "{} starts \u{201c}{text}\u{201d} {when}, from the terminal.",
+                    who.name()
+                ));
+            }
+            cli::Ask::Cancel { id } => {
+                self.cancel_later(id);
+            }
+            cli::Ask::Rewind { id, to } => {
+                if let Err(why) = self.rewind(id, to) {
+                    self.say(why);
+                }
+            }
+            cli::Ask::Forget { bot, dir, n } => {
+                if let Some(who) = Member::all()
+                    .into_iter()
+                    .find(|m| m.name().eq_ignore_ascii_case(&bot))
+                {
+                    self.forget_lesson(who, &dir, n.saturating_sub(1));
+                }
+            }
         }
     }
 
@@ -1558,11 +1704,20 @@ impl Runtime {
         std::thread::spawn(move || {
             let repos = folders
                 .into_iter()
-                .filter(|f| crate::git::is_repo(f))
                 .map(|f| {
+                    // A folder that isn't a repository is noted too, so the Git
+                    // side can say so rather than wait for a look that never comes.
+                    if !crate::git::is_repo(&f) {
+                        return (f, RepoLine::default());
+                    }
+                    let (changes, changed) = crate::git::changed_paths(&f, 8);
                     let line = RepoLine {
+                        is_repo: true,
                         state: crate::git::repo_state(&f),
-                        dirty: crate::git::has_uncommitted(&f) == Some(true),
+                        dirty: changed > 0,
+                        changes,
+                        changed,
+                        commits: crate::git::log_lines(&f, 6),
                     };
                     (f, line)
                 })
@@ -1830,6 +1985,7 @@ impl Runtime {
         });
         let mut merge_now = Vec::new();
         let mut landed = Vec::new();
+        let mut due_feedback = Vec::new();
         for (id, pr) in seen {
             let Some(pr) = pr else { continue };
             let busy = self.landing.iter().any(|(j, ..)| *j == id);
@@ -1839,6 +1995,24 @@ impl Runtime {
             j.pr_number = pr.number;
             j.pr_line = ship::checks_line(&pr);
             j.pr_state = pr.state.clone();
+            // New review feedback from the repository's people goes to the
+            // job's bot. What was there before Squad started watching for it
+            // stays with you.
+            if pr.state == "OPEN" {
+                if j.pr_seen.is_empty() {
+                    j.pr_seen = pr
+                        .voices
+                        .iter()
+                        .map(|v| v.at.clone())
+                        .max()
+                        .unwrap_or_else(|| "0".into());
+                } else if let Some(at) = crate::prwatch::new_feedback(&pr, &j.pr_seen) {
+                    if !j.answering && !busy {
+                        j.pr_seen = at;
+                        due_feedback.push((id, pr.clone()));
+                    }
+                }
+            }
             for name in &pr.failed {
                 if !j.pr_failed.contains(name) {
                     j.pr_failed.push(name.clone());
@@ -1854,12 +2028,18 @@ impl Runtime {
                 "CLOSED" => landed.push((id, false)),
                 _ => {
                     let green = pr.failed.is_empty() && pr.pending == 0;
-                    if j.auto_merge && green && pr.mergeable != "CONFLICTING" && !busy {
+                    if j.auto_merge
+                        && green
+                        && pr.mergeable != "CONFLICTING"
+                        && !busy
+                        && !j.answering
+                    {
                         merge_now.push(id);
                     }
                 }
             }
         }
+        self.feedback_due.extend(due_feedback);
         for id in merge_now {
             if let Some(j) = self.store.job_mut(id) {
                 j.feed.push(store::Item::By(
@@ -1923,6 +2103,145 @@ impl Runtime {
             }
             self.say(msg);
             self.store.save();
+        }
+    }
+
+    // ---------- thread summaries ----------
+
+    /// Whether a thread's summary is being written now.
+    pub fn summing(&self, folder: &str, thread: u64) -> bool {
+        self.summing
+            .as_ref()
+            .is_some_and(|s| s.folder == folder && s.thread == thread)
+    }
+
+    /// Keeps each thread's summary current, in the background and one at a
+    /// time: it takes in a written summary, then, every few seconds, starts
+    /// the next one that's due in the project open now.
+    fn poll_summaries(&mut self, st: &AppSettings) {
+        if let Some(s) = &self.summing {
+            let reply = match s.rx.try_recv() {
+                Ok(crate::agent::Event::Output(r)) => r.ok(),
+                Ok(_) | Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => None,
+            };
+            let Some(s) = self.summing.take() else {
+                return;
+            };
+            let text = reply
+                .map(|r| brain::summary::clean(&crate::agent::strip_ansi(&r)))
+                .unwrap_or_default();
+            // A summary that didn't come back keeps the old one; it's tried
+            // again once more is said.
+            if !text.is_empty() {
+                let sum = self.store.summary_mut(&s.folder, s.thread);
+                sum.text = text;
+                sum.covers = s.covers;
+                sum.upto = s.upto;
+                sum.updates = if s.fresh { 0 } else { sum.updates + 1 };
+                sum.at = store::now();
+                self.store.save();
+            }
+            return;
+        }
+        let now_asked = self.summary_now.is_some();
+        if cfg!(test)
+            || self.store.demo
+            || (!now_asked
+                && self
+                    .summed_at
+                    .is_some_and(|at| at.elapsed() < Duration::from_secs(15)))
+        {
+            return;
+        }
+        self.summed_at = Some(Instant::now());
+        let Some(folder) = self.store.folder().cloned() else {
+            return;
+        };
+        let mut threads = vec![0];
+        threads.extend(
+            self.store
+                .threads
+                .iter()
+                .filter(|t| t.folder == folder.path && !t.archived)
+                .map(|t| t.id),
+        );
+        // Asked for now: that thread first, written afresh.
+        let asked = self
+            .summary_now
+            .take()
+            .filter(|(f, _)| *f == folder.path)
+            .map(|(_, t)| t);
+        if let Some(t) = asked {
+            threads.retain(|x| *x != t);
+            threads.insert(0, t);
+        }
+        for thread in threads {
+            // Not while a question here waits for its answer: the answer
+            // would land among words already summed up.
+            let waiting = self.store.talks.iter().any(|t| {
+                t.folder == folder.path
+                    && self.store.thread_for(&folder.path, t.thread) == thread
+                    && t.answer.is_none()
+            });
+            if waiting {
+                continue;
+            }
+            let said = self.store.said_in(&folder.path, thread);
+            let sum = self
+                .store
+                .summary(&folder.path, thread)
+                .cloned()
+                .unwrap_or_default();
+            let new = said.len().saturating_sub(sum.covers);
+            let ended = self
+                .store
+                .jobs_in(&folder.path, thread)
+                .iter()
+                .any(|j| j.ended.is_some_and(|e| e > sum.at));
+            let forced = asked == Some(thread) && !said.is_empty();
+            if !forced && !brain::summary::due(new, ended) {
+                continue;
+            }
+            let fresh = forced || sum.text.is_empty() || sum.updates >= brain::summary::REBUILD;
+            let take = if fresh { 60 } else { new.max(1) };
+            let input: Vec<(String, String)> = said
+                .iter()
+                .skip(said.len().saturating_sub(take))
+                .map(|(_, who, w)| (who.clone(), w.clone()))
+                .collect();
+            let label = self.store.thread_label(thread);
+            let prompt = brain::summary::prompt(
+                &folder.name,
+                &label,
+                if fresh { "" } else { &sum.text },
+                &sum.notes,
+                &input,
+            );
+            let i = crate::settings::assistant_provider(st);
+            let p = &crate::agent::PROVIDERS[i];
+            let configured = st.agent(p.id).binary;
+            if !crate::agent::available(p.bin, &configured) {
+                return;
+            }
+            let model = crate::settings::assistant_model(st, p.id);
+            let command = crate::agent::ask_command_on(p.id, &configured, &prompt, &model);
+            let (tx, rx) = std::sync::mpsc::channel();
+            crate::agent::oneshot_within(
+                command,
+                &folder.path,
+                Duration::from_secs(90),
+                tx,
+            );
+            self.summing = Some(Summing {
+                folder: folder.path.clone(),
+                thread,
+                covers: said.len(),
+                upto: said.last().map(|m| m.0).unwrap_or(0),
+                fresh,
+                rx,
+            });
+            return;
         }
     }
 
@@ -2026,14 +2345,9 @@ impl Runtime {
             ));
             history.push((false, format!("Got it, I've read #{label}.")));
         }
-        for t in self.store.talks.iter().filter(|t| {
-            t.folder == folder.path && t.thread == thread && t.bot == who && !t.question.is_empty()
-        }) {
-            if let Some(a) = t.answer.as_ref().filter(|a| !a.note) {
-                history.push((true, t.question.clone()));
-                history.push((false, a.text.clone()));
-            }
-        }
+        // The thread's notes, summary, jobs and latest messages, so a reply
+        // like "no, this is for discussion" makes sense.
+        let talk_so_far = self.store.thread_context(&folder.path, thread, &text);
         let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
         let mut talk = Talk {
             id,
@@ -2052,11 +2366,11 @@ impl Runtime {
         } else {
             // Jobs named with #12 or #their-slug: a short digest of each goes first.
             let digest = super::brain::digest::context_for(&text, &self.store.jobs);
-            let asked = if digest.is_empty() {
-                text.clone()
-            } else {
-                format!("{digest}\n\n{text}")
-            };
+            let asked = [talk_so_far, digest, text.clone()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
             match engine::Ask::start(st, who, &folder, &asked, &history) {
                 Ok(ask) => {
                     self.asking = Some(ask);
@@ -2135,6 +2449,7 @@ impl Runtime {
     /// is the job a client has open, which counts as seen when it ends. Returns
     /// the jobs whose runs ended, for the client to say so.
     pub fn poll(&mut self, st: &AppSettings, viewing: Option<u64>) -> Vec<u64> {
+        self.poll_summaries(st);
         // Requests from running jobs' agents, read about once a second.
         if self.asks_at.elapsed() > Duration::from_millis(800) {
             self.asks_at = Instant::now();
@@ -2241,6 +2556,12 @@ impl Runtime {
         if !finished.is_empty() {
             self.runners.retain(|r| !finished.contains(&r.id));
             for id in &finished {
+                // A fix for review comments goes to its pull request; a turn
+                // that ran out of plan waits for it, or moves engines.
+                if self.after_answering(*id) || self.after_running_out(st, *id) {
+                    self.peek(st, *id, true);
+                    continue;
+                }
                 self.begin_review(*id);
                 self.peek(st, *id, true);
                 self.post_turn(*id);
@@ -2255,6 +2576,9 @@ impl Runtime {
         self.poll_draft();
         self.poll_goals(st);
         self.poll_queue(st);
+        self.poll_shift(st);
+        self.poll_feedback(st);
+        self.poll_learning();
         self.poll_bringing();
         finished.extend(self.poll_remote(st));
         finished
@@ -3100,6 +3424,52 @@ mod tests {
         assert!(matches!(job.feed.last(), Some(store::Item::Error(_))));
         assert!(rt.runners.is_empty());
         assert!(rt.poll(&st, None).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_job_reads_what_was_said_in_its_thread() {
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = "/nonexistent/squad-test-agent".into();
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let dir = std::env::temp_dir().join(format!("squad-ctx-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut rt = Runtime::new(quiet_store());
+        let folder = store::Folder {
+            name: "t".into(),
+            path: dir.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let thread = rt.store.thread_here();
+        rt.store.talks.push(Talk {
+            id: 1,
+            folder: folder.path.clone(),
+            thread,
+            bot: Member::Fin,
+            question: "research teams sign up with a university email".into(),
+            answer: Some(Said::bot(
+                "Got it, .edu addresses only.".into(),
+                String::new(),
+            )),
+            at: store::now(),
+            choices: Vec::new(),
+        });
+        let opened = rt.start_job(
+            &st,
+            Member::Builder,
+            Mode::Build,
+            "add the sign-up page".into(),
+            folder,
+        );
+        let Opened::Job(id) = opened else {
+            panic!("expected a job, got {opened:?}");
+        };
+        let ctx = &rt.store.job(id).unwrap().context;
+        assert!(ctx.contains("university email") && ctx.contains(".edu addresses"));
+        assert!(!ctx.contains("add the sign-up page"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

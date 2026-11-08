@@ -196,3 +196,78 @@ pub fn run_id(url: &str) -> Option<u64> {
 fn s(v: &Value) -> String {
     v.as_str().unwrap_or("").to_string()
 }
+
+/// One piece of review feedback for the agent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Feedback {
+    pub author: String,
+    /// What it is: "review (changes requested)", "comment" or "comment on `src/a.rs:3`".
+    pub kind: String,
+    pub body: String,
+    pub trusted: bool,
+}
+
+/// Review feedback on a pull request, for the agent: reviews and conversation comments
+/// from `gh pr view --json reviews,comments`, and line comments from
+/// `gh api repos/{owner}/{repo}/pulls/{n}/comments`, each marked trusted or not for a
+/// pull request opened by `pr_author`.
+pub fn review_feedback(view: &str, line_comments: &str, pr_author: &str) -> Vec<Feedback> {
+    let mut out = Vec::new();
+    let mut add = |author: String, association: String, kind: String, body: &str| {
+        out.push(Feedback {
+            trusted: trusted_author(&author, &association, pr_author),
+            author,
+            kind,
+            body: body.trim().to_string(),
+        });
+    };
+    let v: Value = serde_json::from_str(view).unwrap_or_default();
+    for r in v["reviews"].as_array().into_iter().flatten() {
+        let body = s(&r["body"]);
+        if r["state"] != "APPROVED" && !body.trim().is_empty() {
+            let state = s(&r["state"]).to_lowercase().replace('_', " ");
+            add(
+                s(&r["author"]["login"]),
+                s(&r["authorAssociation"]),
+                format!("review ({state})"),
+                &body,
+            );
+        }
+    }
+    for c in v["comments"].as_array().into_iter().flatten() {
+        let body = s(&c["body"]);
+        if !body.trim().is_empty() {
+            add(
+                s(&c["author"]["login"]),
+                s(&c["authorAssociation"]),
+                "comment".into(),
+                &body,
+            );
+        }
+    }
+    for c in items(line_comments) {
+        let body = s(&c["body"]);
+        if body.trim().is_empty() {
+            continue;
+        }
+        let line = c["line"].as_u64().or(c["original_line"].as_u64());
+        let place = match line {
+            Some(n) => format!("{}:{n}", s(&c["path"])),
+            None => s(&c["path"]),
+        };
+        add(
+            s(&c["user"]["login"]),
+            s(&c["author_association"]),
+            format!("comment on `{place}`"),
+            &body,
+        );
+    }
+    out
+}
+
+fn items(json: &str) -> Vec<Value> {
+    serde_json::from_str::<Value>(json)
+        .ok()
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default()
+}

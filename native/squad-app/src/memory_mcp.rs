@@ -40,7 +40,7 @@ pub fn handle_thread(dir: &str, thread: Option<u64>, request: &Value) -> Option<
                 "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
                 "capabilities": { "tools": {} },
                 "serverInfo": { "name": "runo", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Squad Code's tools for this job, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it."
+                "instructions": "Squad Code's tools for this job, and a browser. To try a web page (such as the app you're building on localhost), use browser_open and the other browser_ tools: they drive this job's own headless browser inside Squad Code, where the person can watch, and read pages as short text outlines; don't open an outside browser or install Playwright for it. For design work, design_theme gives a starting theme from a mood and design_check runs design checks (contrast, tap targets, overflow, values off the theme) on the page in that browser."
             }))
         }
         "ping" => Ok(json!({})),
@@ -101,7 +101,8 @@ fn tools() -> Value {
                 },
                 "required": ["tool_name", "input"]
             }
-        }
+        },
+        crate::browse::design::theme_tool()
     ])
 }
 
@@ -304,6 +305,7 @@ fn call(dir: &str, name: &str, args: &Value) -> Value {
             args,
             crate::approvals::wait(),
         ),
+        crate::browse::design::THEME => crate::browse::design::call_theme(args),
         design if design.starts_with("design_") => crate::designdraw::agentops::call(
             &crate::designdraw::agentops::folder(),
             dir,

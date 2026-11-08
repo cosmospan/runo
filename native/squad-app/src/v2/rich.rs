@@ -721,6 +721,9 @@ pub fn bubble(kind: Option<Kind>, body: impl IntoElement) -> Div {
                 .gap(px(7.))
                 .px(px(16.))
                 .py(px(7.))
+                // Its own top corners: the bubble's clip is square, so the
+                // colour would show past the bubble's rounded corner.
+                .rounded_t(px(15.))
                 .bg(c(tone.1))
                 .border_b_1()
                 .border_color(c(tone.2))

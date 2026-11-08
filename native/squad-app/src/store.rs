@@ -694,7 +694,11 @@ pub fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let written = options.open(&tmp).and_then(|mut file| file.write_all(data));
+    // Flushed to disk before the rename, so a crash or power cut right after
+    // leaves the old file or the new one, never an empty one.
+    let written = options
+        .open(&tmp)
+        .and_then(|mut file| file.write_all(data).and_then(|_| file.sync_all()));
     match written.and_then(|_| std::fs::rename(&tmp, path)) {
         Ok(()) => Ok(()),
         Err(e) => {

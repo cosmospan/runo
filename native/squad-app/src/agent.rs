@@ -316,6 +316,7 @@ fn unasked_tools(spec: &RunSpec) -> Vec<&'static str> {
         return Vec::new();
     }
     let mut tools: Vec<&'static str> = crate::browse::tools::TOOLS.to_vec();
+    tools.push(crate::browse::design::THEME);
     if spec.thread != 0 {
         tools.extend(crate::memory_mcp::THREAD_TOOLS);
     }

@@ -562,9 +562,10 @@ impl Loss {
         }
     }
 
-    /// Whether removing it loses anything, so it's worth asking first.
+    /// Whether removing it loses anything for good, so it's worth asking first.
     pub(super) fn any(&self) -> bool {
-        self.messages > 0 || self.skills > 0 || self.rules > 0
+        // A bot you made can't be brought back once it's gone.
+        self.messages > 0 || self.skills > 0 || self.rules > 0 || self.made
     }
 
     /// The lines the confirm dialog lists, one per thing that goes.
