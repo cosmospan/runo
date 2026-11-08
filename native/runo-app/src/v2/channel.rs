@@ -1117,6 +1117,10 @@ impl Shell {
         let reading = self.reading_talk() == Some(t.id);
         let waiting = t.answer.is_none() && (self.crew.asking_talk == Some(t.id) || reading);
         let accent = t.bot.accent();
+        let offer = t
+            .answer
+            .as_ref()
+            .and_then(|a| self.job_offer(t.bot, a, super::chat::OfferAt::Talk(t.id), cx));
         let answer: Div = match &t.answer {
             Some(a) if a.note => super::live::note_line(&a.text),
             Some(a) => div()
@@ -1142,7 +1146,8 @@ impl Shell {
                             .text_color(c(ui::faint()))
                             .child(via),
                     )
-                }),
+                })
+                .children(offer),
             None if waiting => {
                 let secs = if reading {
                     self.reading_since.map(|at| at.elapsed().as_secs())

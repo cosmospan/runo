@@ -11,9 +11,18 @@ use runo_holo::{Framing, Mood};
 use super::channel::{self, Msg};
 use super::data::Member;
 use super::live::{note_line, plain, typing};
+use super::store::Said;
 use super::ui::{self, c, ca};
 use super::Pane;
 use super::{Place, Shell};
+
+/// Where an answer with a job offer lives: a line in a bot's DM (who, when,
+/// the words), or a question's answer in a thread.
+#[derive(Clone)]
+pub(super) enum OfferAt {
+    Dm(Member, u64, String),
+    Talk(u64),
+}
 
 impl Shell {
     pub(super) fn chat(&mut self, who: Member, cx: &mut Context<Self>) -> AnyElement {
@@ -82,11 +91,13 @@ impl Shell {
                 div().py(px(4.)).child(note_line(&m.text))
             } else {
                 let words = self.rich(format!("dm-{i}"), &plain(&m.text), &dir, cx);
+                let offer = self.job_offer(who, m, OfferAt::Dm(who, m.at, m.text.clone()), cx);
                 let said = div()
                     .text_size(px(14.))
                     .line_height(px(21.))
                     .text_color(c(ui::body()))
-                    .child(words);
+                    .child(words)
+                    .children(offer);
                 let line = self.bot_line(who, super::text_mood(&m.text), m.at, said, m.via.clone());
                 self.message(
                     key,
@@ -121,37 +132,6 @@ impl Shell {
                         .child(format!("reading the code \u{b7} {secs}s")),
                 );
             body = body.child(self.bot_line(who, Mood::Thinking, 0, dots, None));
-        }
-        if !log.is_empty() && !thinking && !matches!(who.like(), Member::Explainer | Member::Fin) {
-            // Turn the conversation into work: a made bot takes the job itself.
-            let mode = who.mode();
-            let last_q = log.iter().rev().find(|m| m.mine).map(|m| m.text.clone());
-            if let Some(q) = last_q {
-                let doer = if who.is_made() {
-                    who
-                } else {
-                    Member::for_mode(mode)
-                };
-                body = body.child(div().pl(px(46.)).pt(px(4.)).flex().gap(px(8.)).child(
-                    ui::ghost("hand-off", format!("Make it a job for {}", doer.name())).on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            let route = super::brain::route::Route {
-                                mode,
-                                bot: doer,
-                                sure: 1.0,
-                                why: String::new(),
-                                by: "dm".into(),
-                                site: String::new(),
-                            };
-                            this.hand_to(route, q.clone(), cx);
-                            // The job's card lands in this DM.
-                            if doer == who {
-                                this.go(Place::Chat(who), cx);
-                            }
-                        }),
-                    ),
-                ));
-            }
         }
         let len = log.len() + usize::from(thinking);
         if len != self.chat_len {
@@ -436,11 +416,38 @@ impl Shell {
                             .flex_1()
                             .text_size(px(12.))
                             .text_color(c(ui::faint()))
-                            .child(format!(
-                                "Message {}. Nothing changes until you make it a job.",
-                                who.name()
-                            )),
+                            .child(if ready {
+                                format!(
+                                    "Send asks {}. Start a job has it change the code.",
+                                    who.name()
+                                )
+                            } else {
+                                format!(
+                                    "{} reads the code and answers. Nothing changes unless you start a job.",
+                                    who.name()
+                                )
+                            }),
                     )
+                    .when(ready, |d| {
+                        d.child(
+                            ui::ghost("chat-job", "Start a job")
+                                .h(px(28.))
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "Skip the chat: the bot works on these words in its own copy of the code, and you review the changes.",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    let text = this.chat_input.read(cx).value().trim().to_string();
+                                    if !text.is_empty() {
+                                        this.chat_input
+                                            .update(cx, |i, cx| i.set_value("", window, cx));
+                                        this.job_from_dm(who, text, cx);
+                                    }
+                                })),
+                        )
+                    })
                     .child(
                         div()
                             .h(px(28.))
@@ -513,5 +520,202 @@ impl Shell {
             );
         }
         asks
+    }
+
+    /// Who does a job a bot offered, and as what kind of work: the bot itself
+    /// when it writes code, else the crew member for that work.
+    fn offer_doer(bot: Member, task: &str) -> (Member, super::data::Mode) {
+        if bot.mode().writes() {
+            return (bot, bot.mode());
+        }
+        let mode = match super::data::Mode::guess(task) {
+            m if m.writes() => m,
+            _ => super::data::Mode::Build,
+        };
+        (
+            Member::doer_for(mode).unwrap_or(Member::for_mode(mode)),
+            mode,
+        )
+    }
+
+    /// The job a bot offers under its answer: what it would do, what a job
+    /// is, and Start or Not now. Once taken, a one-line receipt in its place,
+    /// so the same offer never starts two jobs.
+    pub(super) fn job_offer(
+        &mut self,
+        bot: Member,
+        said: &Said,
+        at: OfferAt,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        if said.job.is_empty() || said.note || said.job_off {
+            return None;
+        }
+        let key = match &at {
+            OfferAt::Dm(who, when, _) => format!("{}-{when}", who.name()),
+            OfferAt::Talk(id) => format!("talk-{id}"),
+        };
+        if said.job_taken {
+            let id = said.job_id;
+            let words = if id > 0 {
+                format!("Started as job #{id}")
+            } else {
+                "Handed to the crew".to_string()
+            };
+            let mut chip = div()
+                .id(SharedString::from(format!("offer-done-{key}")))
+                .mt(px(8.))
+                .h(px(26.))
+                .px(px(10.))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .rounded_full()
+                .bg(c(ui::well()))
+                .text_size(px(12.5))
+                .text_color(c(ui::muted()))
+                .child(Icon::new(IconName::Check).size(px(13.)))
+                .child(words);
+            if id > 0 {
+                chip = chip
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())))
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::VIOLET))
+                            .child("Open"),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Live(id), cx)));
+            }
+            return Some(div().flex().child(chip));
+        }
+        let (doer, _) = Self::offer_doer(bot, &said.job);
+        let task = said.job.clone();
+        let (go_at, off_at) = (at.clone(), at);
+        Some(
+            div()
+                .mt(px(10.))
+                .px(px(14.))
+                .py(px(12.))
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .rounded(px(12.))
+                .bg(ca(ui::VIOLET, 0.06))
+                .border_1()
+                .border_color(ca(ui::VIOLET, 0.28))
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::VIOLET))
+                        .child(format!("{} can do this as a job", doer.name())),
+                )
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(task.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .child(format!(
+                            "{} works on its own copy of the code. You review the changes before anything lands.",
+                            doer.name()
+                        )),
+                )
+                .child(
+                    div()
+                        .pt(px(8.))
+                        .flex()
+                        .gap(px(8.))
+                        .child(
+                            ui::solid(SharedString::from(format!("offer-go-{key}")), "Start the job")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.take_job_offer(bot, task.clone(), go_at.clone(), cx)
+                                })),
+                        )
+                        .child(
+                            ui::ghost(SharedString::from(format!("offer-off-{key}")), "Not now")
+                                .border_color(gpui::transparent_black())
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if let Some(s) = this.offer_said(&off_at) {
+                                        s.job_off = true;
+                                    }
+                                    this.crew.store.save();
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        )
+    }
+
+    /// The answer an offer sits under.
+    fn offer_said(&mut self, at: &OfferAt) -> Option<&mut Said> {
+        match at {
+            OfferAt::Dm(who, when, text) => self.crew.store.dm_line_mut(*who, *when, text),
+            OfferAt::Talk(id) => self
+                .crew
+                .store
+                .talks
+                .iter_mut()
+                .find(|t| t.id == *id)
+                .and_then(|t| t.answer.as_mut()),
+        }
+    }
+
+    /// Starts the job a bot offered, once: the offer becomes its receipt.
+    fn take_job_offer(&mut self, bot: Member, task: String, at: OfferAt, cx: &mut Context<Self>) {
+        if self.offer_said(&at).is_none_or(|s| s.job_taken) {
+            return;
+        }
+        let id = self.start_dm_job(bot, task, cx);
+        if id.is_none() && self.sampling {
+            return;
+        }
+        if let Some(s) = self.offer_said(&at) {
+            s.job_taken = true;
+            s.job_id = id.unwrap_or(0);
+        }
+        self.crew.store.save();
+        // The job's card lands in this DM.
+        if let OfferAt::Dm(who, ..) = at {
+            self.go(Place::Chat(who), cx);
+        }
+        cx.notify();
+    }
+
+    /// "Start a job" in a DM's box: the words go straight to work.
+    fn job_from_dm(&mut self, who: Member, text: String, cx: &mut Context<Self>) {
+        self.start_dm_job(who, text, cx);
+        self.go(Place::Chat(who), cx);
+        cx.notify();
+    }
+
+    /// Hands `task` to the bot that does it for `bot`, and returns the job it
+    /// started, if one did (a plan or a missing bot goes another way).
+    fn start_dm_job(&mut self, bot: Member, task: String, cx: &mut Context<Self>) -> Option<u64> {
+        let (doer, mode) = Self::offer_doer(bot, &task);
+        let before = self.crew.store.jobs.iter().map(|j| j.id).max().unwrap_or(0);
+        let route = super::brain::route::Route {
+            mode,
+            bot: doer,
+            sure: 1.0,
+            why: String::new(),
+            by: "dm".into(),
+            site: String::new(),
+        };
+        self.hand_to(route, task, cx);
+        self.crew
+            .store
+            .jobs
+            .iter()
+            .map(|j| j.id)
+            .filter(|id| *id > before)
+            .max()
     }
 }

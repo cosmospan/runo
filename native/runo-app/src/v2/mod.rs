@@ -539,6 +539,11 @@ pub struct Shell {
     reading: Option<Reading>,
     /// When Peek's engine started reading it.
     reading_since: Option<std::time::Instant>,
+    /// The bot the message being read named with @: it answers or does the
+    /// work, whichever Peek decides.
+    reading_for: Option<Member>,
+    /// While Peek's decision is acted on: the bot named with @, who answers.
+    answer_by: Option<Member>,
     /// Terminals running an app Squad Code started for the person.
     serving: Vec<u64>,
     /// When Peek's engine was last made sure of being warm.
@@ -1215,6 +1220,8 @@ impl Shell {
             confirming: None,
             reading: None,
             reading_since: None,
+            reading_for: None,
+            answer_by: None,
             serving: Vec::new(),
             warmed_at: None,
             run_wanted: None,
@@ -1550,6 +1557,18 @@ impl Shell {
                 }
             }
         }
+        // In a thread Peek still reads it, so "@Pixel who are you" gets an
+        // answer from Pixel, and only real work becomes Pixel's job.
+        if self.place == Place::Today
+            && !rest.starts_with('/')
+            && !rest.trim().is_empty()
+            && !self.sampling
+            && self.crew.store.folder().is_some()
+            && self.reading.is_none()
+        {
+            self.crew.store.save();
+            return self.peek_reads(rest, Some(who), cx);
+        }
         let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
         self.target = Some(who);
         self.mode = who.mode();
@@ -1574,6 +1593,12 @@ impl Shell {
         if skip {
             return self.hand_over_inner(text, cx);
         }
+        self.peek_reads(text, None, cx)
+    }
+
+    /// Peek's engine reads `text`; `pinned` is the bot it was addressed to
+    /// with @, if any.
+    fn peek_reads(&mut self, text: String, pinned: Option<Member>, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);
         let folder = self
             .crew
@@ -1601,6 +1626,7 @@ impl Shell {
         if self.sampling {
             return self.hand_over_inner(text, cx);
         }
+        self.reading_for = pinned;
         {
             let project = self
                 .crew
@@ -1636,8 +1662,30 @@ impl Shell {
                     self.reading_since = Some(std::time::Instant::now());
                     cx.notify();
                 }
-                Err(why) => self.engine_missed(&st, text, &why, None, cx),
+                Err(why) => self.read_missed(&st, text, &why, None, cx),
             }
+        }
+    }
+
+    /// Peek's engine couldn't read `text`. Addressed to a bot with @, the bot
+    /// answers it, read-only; else Peek says so and offers to try again.
+    fn read_missed(
+        &mut self,
+        st: &crate::settings::AppSettings,
+        text: String,
+        why: &str,
+        pending: Option<u64>,
+        cx: &mut Context<Self>,
+    ) {
+        match self.reading_for.take() {
+            Some(who) => {
+                if let Some(id) = pending {
+                    self.crew.store.talks.retain(|t| t.id != id);
+                }
+                self.crew.ask_in_thread(st, who, text);
+                cx.notify();
+            }
+            None => self.engine_missed(st, text, why, pending, cx),
         }
     }
 
@@ -1832,6 +1880,12 @@ impl Shell {
         match decided {
             Some((f, say)) => {
                 let via = format!("{} \u{b7} {took:.1}s", brain::think::engine_name(&st));
+                let pinned = self.reading_for.take();
+                let f = match pinned {
+                    Some(who) => brain::front::pinned(f, who, &text),
+                    None => f,
+                };
+                self.answer_by = pinned;
                 self.act_on(
                     f,
                     text,
@@ -1840,13 +1894,14 @@ impl Shell {
                     Some(via),
                     cx,
                 );
+                self.answer_by = None;
             }
             None => {
                 let why = match (failed, err) {
                     (true, Some(e)) => e,
                     _ => "its answer didn't make sense".to_string(),
                 };
-                self.engine_missed(&st, text, &why, Some(talk), cx);
+                self.read_missed(&st, text, &why, Some(talk), cx);
             }
         }
     }
@@ -1897,7 +1952,7 @@ impl Shell {
             brain::front::Front::Answer { question, .. } => {
                 drop_pending(self);
                 if !self.sample_guard(cx) {
-                    let who = self.ask_who();
+                    let who = self.answer_by.unwrap_or_else(|| self.ask_who());
                     self.crew.ask_in_thread(&st, who, question);
                 }
                 cx.notify();
