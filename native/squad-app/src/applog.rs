@@ -150,6 +150,7 @@ pub fn format_line(time: &str, level: Level, area: &str, message: &str) -> Strin
 
 /// The line of a command's output that says what went wrong: the first that reads like an
 /// error, else the first that isn't blank. Cut to a sensible length.
+#[cfg(target_os = "macos")]
 pub fn gist(output: &str) -> String {
     const WORDS: [&str; 6] = ["error", "fatal", "denied", "failed", "not found", "cannot"];
     let lines = || output.lines().map(str::trim).filter(|l| !l.is_empty());
