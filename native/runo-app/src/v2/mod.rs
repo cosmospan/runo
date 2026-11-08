@@ -27,6 +27,7 @@ mod jobs;
 mod live;
 mod machine;
 mod mascot;
+mod menu;
 mod motion;
 mod myserver;
 mod palette;
@@ -538,6 +539,12 @@ pub struct Shell {
     /// A bot with a chat or know-how of its own, waiting for you to confirm
     /// taking it off the crew.
     removing: Option<Member>,
+    /// The open right-click menu: where it was clicked and on what.
+    menu: Option<(Point<Pixels>, menu::Ctx)>,
+    /// The menu entry picked with the arrow keys.
+    menu_hot: Option<usize>,
+    /// A project waiting for you to confirm removing it, or deleting its folder.
+    gone: Option<menu::Gone>,
     /// Running job cards showing their raw commands.
     raw_open: std::collections::HashSet<u64>,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
@@ -1230,6 +1237,9 @@ impl Shell {
             side_job: true,
             deleting: None,
             removing: None,
+            menu: None,
+            menu_hot: None,
+            gone: None,
             raw_open: Default::default(),
             confirming: None,
             reading: None,
@@ -3359,9 +3369,20 @@ impl Render for Shell {
             .capture_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 let m = &e.keystroke.modifiers;
                 let key = e.keystroke.key.as_str();
-                if (this.deleting.is_some() || this.removing.is_some()) && key == "escape" {
+                if this.menu.is_some() && !m.platform && !m.control {
+                    if this.menu_key(key, window, cx) {
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
+                if (this.deleting.is_some() || this.removing.is_some() || this.gone.is_some())
+                    && key == "escape"
+                {
                     this.deleting = None;
                     this.removing = None;
+                    if !this.gone.as_ref().is_some_and(|g| g.busy) {
+                        this.gone = None;
+                    }
                     cx.notify();
                     cx.stop_propagation();
                     return;
@@ -3486,6 +3507,8 @@ impl Render for Shell {
             .when(self.palette, |d| d.child(self.palette_view(cx)))
             .children(self.delete_dialog(cx).map(|d| dialog(d, "delete")))
             .children(self.remove_dialog(cx).map(|d| dialog(d, "remove")))
+            .children(self.gone_dialog(cx).map(|d| dialog(d, "gone")))
+            .children(self.menu_view(cx))
             // Painted last: with RUNO_FRAME_STATS set, the frame's timing is noted.
             .child(
                 canvas(|_, _, _| (), |_, _, _, _| crate::framestats::painted())

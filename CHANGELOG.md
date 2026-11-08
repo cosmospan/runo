@@ -4,6 +4,15 @@ All notable changes to Runo are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Right-click menus across the app. A project's tile offers Open, New thread, Open terminal here, Copy path, Show in Finder, Remove from Squad Code and Delete folder from disk. A thread offers Open, Mark as read, Copy name, Rename, Archive and Delete. A bot offers Message, Rename or edit (Edit setup for the built-in crew), Show on the Crew page and Remove from crew. A job's row or card, and every message about one, offers Open, Stop or Run again, a terminal in its folder, Show in Finder, Open pull request and Copy branch name. Any message offers Copy text, Reply, Quote in reply and, for your own, Edit and send again. Arrow keys, Enter and Escape work in every menu.
+- Remove a project from Squad Code, or delete its folder from disk. Removing only takes it off the list; the folder stays and adding it again brings its threads and jobs back. Deleting moves the whole folder to the Trash (never deletes for good), after a confirm that shows its full path, warns about uncommitted changes, and needs a tick before Move to Trash works. It refuses while a job runs there, and never touches your home folder, the top of the disk, or folders like Desktop and Documents.
+
+### Changed
+
+- Removing a bot you made always asks first, since it can't be brought back.
+
 ## [2.0.0-alpha.7] - 2026-11-08
 
 ### Added
