@@ -54,10 +54,13 @@ impl Shell {
         // line between days as in a thread.
         let mut jobs = jobs.into_iter().peekable();
         let mut day = String::new();
-        let mut day_line = |at: u64, body: Div| -> Div {
+        self.streak = None;
+        // A line between days, which also starts a new run of messages.
+        let day_line = |this: &mut Self, day: &mut String, at: u64, body: Div| -> Div {
             let label = channel::day_label(at);
-            if at > 0 && !label.is_empty() && label != day {
-                day = label.clone();
+            if at > 0 && !label.is_empty() && label != *day {
+                *day = label.clone();
+                this.streak = None;
                 return body.child(channel::divider(&label, None));
             }
             body
@@ -72,22 +75,25 @@ impl Shell {
         let mut asked = String::new();
         for (i, m) in log.iter().enumerate() {
             while let Some(j) = jobs.next_if(|j| m.at > 0 && j.started <= m.at) {
-                body = day_line(j.started, body);
+                body = day_line(self, &mut day, j.started, body);
                 body = body.child(self.job_entry(&j, cx));
             }
-            body = day_line(m.at, body);
+            body = day_line(self, &mut day, m.at, body);
             let k = if i == last { fresh } else { 1.0 };
             let key = format!("dm-{}-{}-{i}", who.name(), m.at);
             let row: Div = if m.mine {
                 asked = m.text.clone();
+                let lead = !self.continues("You", m.at);
                 self.message(
                     key,
                     m.text.clone(),
                     Msg::Mine(m.text.clone()),
-                    channel::mine(m.text.clone(), m.at),
+                    (!lead).then_some(m.at),
+                    channel::mine(m.text.clone(), m.at, lead),
                     cx,
                 )
             } else if m.note {
+                self.streak = None;
                 div().py(px(4.)).child(note_line(&m.text))
             } else {
                 let words = self.rich(format!("dm-{i}"), &plain(&m.text), &dir, cx);
@@ -98,11 +104,20 @@ impl Shell {
                     .text_color(c(ui::body()))
                     .child(words)
                     .children(offer);
-                let line = self.bot_line(who, super::text_mood(&m.text), m.at, said, m.via.clone());
+                let lead = !self.continues(who.name(), m.at);
+                let line = self.bot_line(
+                    who,
+                    super::text_mood(&m.text),
+                    m.at,
+                    lead,
+                    said,
+                    m.via.clone(),
+                );
                 self.message(
                     key,
                     plain(&m.text),
                     Msg::Answer(who, asked.clone()),
+                    (!lead).then_some(m.at),
                     line,
                     cx,
                 )
@@ -110,7 +125,7 @@ impl Shell {
             body = body.child(ui::rise(row, k));
         }
         for j in jobs {
-            body = day_line(j.started, body);
+            body = day_line(self, &mut day, j.started, body);
             body = body.child(self.job_entry(&j, cx));
         }
         if thinking {
@@ -131,7 +146,8 @@ impl Shell {
                         .text_color(c(ui::muted()))
                         .child(format!("reading the code \u{b7} {secs}s")),
                 );
-            body = body.child(self.bot_line(who, Mood::Thinking, 0, dots, None));
+            let lead = !self.continues(who.name(), super::store::now());
+            body = body.child(self.bot_line(who, Mood::Thinking, 0, lead, dots, None));
         }
         let len = log.len() + usize::from(thinking);
         if len != self.chat_len {
@@ -179,58 +195,29 @@ impl Shell {
         who: Member,
         mood: Mood,
         at: u64,
+        lead: bool,
         said: Div,
         via: Option<String>,
     ) -> Div {
-        let face = self.face(who, mood, 34.);
-        let accent = who.accent();
-        let mut by = if at > 0 {
-            channel::byline(who.name(), at)
-        } else {
-            channel::byline(who.name(), super::store::now())
-        };
-        by = by.child(
-            div()
-                .px(px(6.))
-                .rounded(px(5.))
-                .bg(ca(accent, 0.12))
-                .text_size(px(11.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
-                .child(who.role()),
-        );
-        div()
+        let head = lead.then(|| {
+            let at = if at > 0 { at } else { super::store::now() };
+            (
+                self.face(who, mood, 34.).into_any_element(),
+                channel::byline(who.name(), at)
+                    .child(channel::role_tag(who.role(), who.accent()))
+                    .children(via.clone().map(channel::engine_note)),
+            )
+        });
+        // A line that carries on a run has no byline: its engine goes under it.
+        let under = via.filter(|_| !lead);
+        let words = div()
             .flex()
-            .gap(px(12.))
-            .py(px(8.))
-            .child(
-                div()
-                    .size(px(34.))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(face),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .child(by)
-                    .child(said)
-                    .when_some(via, |d, via| {
-                        d.child(
-                            div()
-                                .pt(px(2.))
-                                .text_size(px(11.))
-                                .text_color(c(ui::faint()))
-                                .child(via),
-                        )
-                    }),
-            )
+            .flex_col()
+            .child(said)
+            .when_some(under, |d, via| {
+                d.child(channel::engine_note(via).pt(px(2.)))
+            });
+        channel::line(head, words)
     }
 
     /// The DM's header line, as a thread's: who, what it's doing, which
