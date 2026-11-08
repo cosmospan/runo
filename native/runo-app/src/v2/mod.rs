@@ -2898,7 +2898,7 @@ impl Shell {
     /// Moves the crew along, then says what happened: what it wants said, and
     /// jobs that ended while the person was looking elsewhere.
     fn poll(&mut self, cx: &mut Context<Self>) {
-        let st = Self::app_settings(cx);
+        // Borrowed, not cloned: this runs up to 60 times a second.
         let viewing = match self.place {
             Place::Live(id) => Some(id),
             _ => None,
@@ -2906,10 +2906,12 @@ impl Shell {
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
-        let finished = self.crew.poll(&st, viewing);
+        let finished = self
+            .crew
+            .poll(cx.global::<crate::settings::AppSettings>(), viewing);
         self.poll_reading(cx);
         self.poll_follow_reading(cx);
-        self.keep_warm(&st);
+        self.keep_warm(cx.global::<crate::settings::AppSettings>());
         for note in std::mem::take(&mut self.crew.notes) {
             self.say(note);
         }
