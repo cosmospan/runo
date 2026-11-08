@@ -606,6 +606,44 @@ pub fn has_uncommitted(dir: &str) -> Option<bool> {
         .map(|s| !s.trim().is_empty())
 }
 
+/// The last `n` commits on the checked-out branch: short hash, subject and how
+/// long ago, newest first. Empty for a repository with no commits yet.
+pub fn log_lines(dir: &str, n: usize) -> Vec<(String, String, String)> {
+    git(
+        dir,
+        &[
+            "log",
+            &format!("-{n}"),
+            "--no-decorate",
+            "--format=%h%x1f%s%x1f%cr",
+        ],
+    )
+    .unwrap_or_default()
+    .lines()
+    .filter_map(|l| {
+        let mut p = l.splitn(3, '\x1f');
+        Some((
+            p.next()?.to_string(),
+            p.next()?.to_string(),
+            p.next().unwrap_or("").to_string(),
+        ))
+    })
+    .collect()
+}
+
+/// Uncommitted files: git's two-letter status and the path, at most `n` of
+/// them, and how many there are in all.
+pub fn changed_paths(dir: &str, n: usize) -> (Vec<(String, String)>, usize) {
+    let out = git(dir, &["status", "--porcelain"]).unwrap_or_default();
+    let all: Vec<&str> = out.lines().filter(|l| l.len() > 3).collect();
+    let some = all
+        .iter()
+        .take(n)
+        .map(|l| (l[..2].trim().to_string(), l[3..].trim().to_string()))
+        .collect();
+    (some, all.len())
+}
+
 /// Delete a branch. Without `force` git refuses when it holds unmerged work.
 pub fn delete_branch(repo: &str, branch: &str, force: bool) -> Result<(), String> {
     git(repo, &["branch", if force { "-D" } else { "-d" }, branch]).map(|_| ())
