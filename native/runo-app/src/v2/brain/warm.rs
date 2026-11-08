@@ -429,6 +429,7 @@ fn real_reads() {
             &super::think::Seen {
                 project: "shop",
                 thread: "",
+                summary: "",
                 recent: &[],
                 crew: &crew,
                 running: &[],

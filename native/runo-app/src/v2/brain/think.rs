@@ -27,6 +27,9 @@ pub struct Seen<'a> {
     pub project: &'a str,
     /// The thread's name, like "tech-discussion"; empty when there is none.
     pub thread: &'a str,
+    /// The thread's running summary and the person's notes on it; empty
+    /// when it has none yet.
+    pub summary: &'a str,
     /// The conversation so far, oldest first, as (who, words).
     pub recent: &'a [(String, String)],
     /// The bots on the crew.
@@ -84,6 +87,7 @@ pub fn prompt(text: &str, seen: &Seen) -> String {
 You read every message the person sends before anyone works on it, and decide what happens. Don't use any tools; just reply.\n\n\
 Project: {project}\n\
 Thread: {thread}\n\
+{summary}
 The crew:\n{crew}\n\
 Running right now: {running}\n\
 Where jobs run: {server}\n\
@@ -108,6 +112,11 @@ Reply with JSON only, on one line:\n\
 {{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}}\n\
 Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to four when you're taking part in a discussion.",
         project = seen.project,
+        summary = if seen.summary.trim().is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", seen.summary.trim())
+        },
         thread = if seen.thread.is_empty() {
             "(none)".to_string()
         } else {
@@ -290,6 +299,7 @@ mod tests {
             &Seen {
                 project: "shop",
                 thread: "tech-discussion",
+                summary: "",
                 recent: &[],
                 crew: &c,
                 running: &[],
@@ -312,6 +322,7 @@ mod tests {
             &Seen {
                 project: "shop",
                 thread: "",
+                summary: "",
                 recent: &recent,
                 crew: &c,
                 running: &running,

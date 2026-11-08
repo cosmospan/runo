@@ -31,6 +31,7 @@ fn decide_here(
     let seen = super::think::Seen {
         project: &f.name,
         thread: "",
+        summary: "",
         recent: &[],
         crew: &crew,
         running: &[],

@@ -43,8 +43,26 @@ struct Relay {
     whole: String,
 }
 
+/// A thread's summary being written by Peek's engine.
+struct Summing {
+    folder: String,
+    thread: u64,
+    /// The messages it will cover once written.
+    covers: usize,
+    upto: u64,
+    /// Written afresh from the thread, not updated.
+    fresh: bool,
+    rx: Receiver<crate::agent::Event>,
+}
+
 pub struct Runtime {
     pub store: Store,
+    /// A thread summary being written, one at a time.
+    summing: Option<Summing>,
+    /// When summaries were last checked for being due.
+    summed_at: Option<Instant>,
+    /// A thread whose summary the person asked to write afresh now.
+    pub summary_now: Option<(String, u64)>,
     /// Jobs' agent processes while they run.
     pub runners: Vec<jobs::Runner>,
     /// A question on its way to a bot's engine.
@@ -133,6 +151,9 @@ impl Runtime {
     pub fn new(store: Store) -> Self {
         Runtime {
             store,
+            summing: None,
+            summed_at: None,
+            summary_now: None,
             runners: Vec::new(),
             asking: None,
             asking_talk: None,
@@ -312,22 +333,11 @@ impl Runtime {
         // the thread's context, not the one line alone. A plan's parts carry
         // the plan instead.
         if job.goal == 0 {
-            let said: Vec<String> = self
+            let talk = self
                 .store
-                .recent(&job.folder.path, job.thread)
-                .into_iter()
-                .filter(|(_, w)| w.trim() != text.trim())
-                .map(|(who, w)| format!("{who}: {}", w.chars().take(400).collect::<String>()))
-                .collect();
-            if !said.is_empty() {
-                job.context = format!(
-                    "What was said in #{} before this job, oldest first, for context:\n{}\n\n{}",
-                    self.store.thread_label(job.thread),
-                    said.join("\n"),
-                    job.context
-                )
-                .trim()
-                .to_string();
+                .thread_context(&job.folder.path, job.thread, text);
+            if !talk.is_empty() {
+                job.context = format!("{talk}\n\n{}", job.context).trim().to_string();
             }
         }
         // Threads the person points at with #, as a short digest each.
@@ -1948,6 +1958,146 @@ impl Runtime {
         }
     }
 
+    // ---------- thread summaries ----------
+
+    /// Whether a thread's summary is being written now.
+    pub fn summing(&self, folder: &str, thread: u64) -> bool {
+        self.summing
+            .as_ref()
+            .is_some_and(|s| s.folder == folder && s.thread == thread)
+    }
+
+    /// Keeps each thread's summary current, in the background and one at a
+    /// time: it takes in a written summary, then, every few seconds, starts
+    /// the next one that's due in the project open now.
+    fn poll_summaries(&mut self, st: &AppSettings) {
+        if let Some(s) = &self.summing {
+            let reply = match s.rx.try_recv() {
+                Ok(crate::agent::Event::Output(_, r)) => r.ok(),
+                Ok(_) | Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => None,
+            };
+            let Some(s) = self.summing.take() else {
+                return;
+            };
+            let text = reply
+                .map(|r| brain::summary::clean(&crate::agent::strip_ansi(&r)))
+                .unwrap_or_default();
+            // A summary that didn't come back keeps the old one; it's tried
+            // again once more is said.
+            if !text.is_empty() {
+                let sum = self.store.summary_mut(&s.folder, s.thread);
+                sum.text = text;
+                sum.covers = s.covers;
+                sum.upto = s.upto;
+                sum.updates = if s.fresh { 0 } else { sum.updates + 1 };
+                sum.at = store::now();
+                self.store.save();
+            }
+            return;
+        }
+        let now_asked = self.summary_now.is_some();
+        if cfg!(test)
+            || self.store.demo
+            || (!now_asked
+                && self
+                    .summed_at
+                    .is_some_and(|at| at.elapsed() < Duration::from_secs(15)))
+        {
+            return;
+        }
+        self.summed_at = Some(Instant::now());
+        let Some(folder) = self.store.folder().cloned() else {
+            return;
+        };
+        let mut threads = vec![0];
+        threads.extend(
+            self.store
+                .threads
+                .iter()
+                .filter(|t| t.folder == folder.path && !t.archived)
+                .map(|t| t.id),
+        );
+        // Asked for now: that thread first, written afresh.
+        let asked = self
+            .summary_now
+            .take()
+            .filter(|(f, _)| *f == folder.path)
+            .map(|(_, t)| t);
+        if let Some(t) = asked {
+            threads.retain(|x| *x != t);
+            threads.insert(0, t);
+        }
+        for thread in threads {
+            // Not while a question here waits for its answer: the answer
+            // would land among words already summed up.
+            let waiting = self.store.talks.iter().any(|t| {
+                t.folder == folder.path
+                    && self.store.thread_for(&folder.path, t.thread) == thread
+                    && t.answer.is_none()
+            });
+            if waiting {
+                continue;
+            }
+            let said = self.store.said_in(&folder.path, thread);
+            let sum = self
+                .store
+                .summary(&folder.path, thread)
+                .cloned()
+                .unwrap_or_default();
+            let new = said.len().saturating_sub(sum.covers);
+            let ended = self
+                .store
+                .jobs_in(&folder.path, thread)
+                .iter()
+                .any(|j| j.ended.is_some_and(|e| e > sum.at));
+            let forced = asked == Some(thread) && !said.is_empty();
+            if !forced && !brain::summary::due(new, ended) {
+                continue;
+            }
+            let fresh = forced || sum.text.is_empty() || sum.updates >= brain::summary::REBUILD;
+            let take = if fresh { 60 } else { new.max(1) };
+            let input: Vec<(String, String)> = said
+                .iter()
+                .skip(said.len().saturating_sub(take))
+                .map(|(_, who, w)| (who.clone(), w.clone()))
+                .collect();
+            let label = self.store.thread_label(thread);
+            let prompt = brain::summary::prompt(
+                &folder.name,
+                &label,
+                if fresh { "" } else { &sum.text },
+                &sum.notes,
+                &input,
+            );
+            let i = crate::assistant::assistant_provider(st);
+            let p = &crate::agent::PROVIDERS[i];
+            let configured = st.agent(p.id).binary;
+            if !crate::agent::available(p.bin, &configured) {
+                return;
+            }
+            let model = crate::assistant::assistant_model(st, p.id);
+            let command = crate::agent::ask_command_on(p.id, &configured, &prompt, &model);
+            let (tx, rx) = std::sync::mpsc::channel();
+            crate::agent::oneshot_within(
+                "v2-summary".into(),
+                command,
+                &folder.path,
+                Duration::from_secs(90),
+                tx,
+            );
+            self.summing = Some(Summing {
+                folder: folder.path.clone(),
+                thread,
+                covers: said.len(),
+                upto: said.last().map(|m| m.0).unwrap_or(0),
+                fresh,
+                rx,
+            });
+            return;
+        }
+    }
+
     // ---------- questions ----------
 
     /// Asks `who` for real, on its own engine, in the current folder.
@@ -2048,23 +2198,9 @@ impl Runtime {
             ));
             history.push((false, format!("Got it, I've read #{label}.")));
         }
-        // What's been said in this thread, by the person and every bot, so a
-        // reply like "no, this is for discussion" makes sense.
-        let said = self.store.recent(&folder.path, thread);
-        let talk_so_far = (!said.is_empty()).then(|| {
-            let lines: Vec<String> = said
-                .iter()
-                .map(|(who, words)| {
-                    let words: String = words.chars().take(600).collect();
-                    format!("{who}: {words}")
-                })
-                .collect();
-            format!(
-                "The conversation in #{} so far, oldest first:\n{}",
-                self.store.thread_label(thread),
-                lines.join("\n")
-            )
-        });
+        // The thread's notes, summary, jobs and latest messages, so a reply
+        // like "no, this is for discussion" makes sense.
+        let talk_so_far = self.store.thread_context(&folder.path, thread, &text);
         let id = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
         let mut talk = Talk {
             id,
@@ -2083,7 +2219,7 @@ impl Runtime {
         } else {
             // Jobs named with #12 or #their-slug: a short digest of each goes first.
             let digest = super::brain::digest::context_for(&text, &self.store.jobs);
-            let asked = [talk_so_far.unwrap_or_default(), digest, text.clone()]
+            let asked = [talk_so_far, digest, text.clone()]
                 .into_iter()
                 .filter(|s| !s.is_empty())
                 .collect::<Vec<_>>()
@@ -2166,6 +2302,7 @@ impl Runtime {
     /// is the job a client has open, which counts as seen when it ends. Returns
     /// the jobs whose runs ended, for the client to say so.
     pub fn poll(&mut self, st: &AppSettings, viewing: Option<u64>) -> Vec<u64> {
+        self.poll_summaries(st);
         // Requests from running jobs' agents, read about once a second.
         if self.asks_at.elapsed() > Duration::from_millis(800) {
             self.asks_at = Instant::now();
