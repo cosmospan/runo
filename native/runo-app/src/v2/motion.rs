@@ -167,6 +167,26 @@ pub fn panel<E: Styled>(el: E, key: u64, dx: f32, dy: f32) -> E {
     slide(el, shown(key, BASE, 0.0), dx, dy)
 }
 
+/// A drawer rising from the bottom edge: it slides `dy` pixels up into place,
+/// fully opaque, inside a slot of its own that clips it. Nothing under or below
+/// it (a translucent status bar, say) ever shows through or gets covered while
+/// it moves; the drawer just appears to come up out of its slot.
+pub fn drawer<E: Styled + IntoElement>(el: E, key: u64, dy: f32) -> Div {
+    let k = shown(key, BASE, 0.0).clamp(0.0, 1.0);
+    let el = el.relative();
+    let el = if k >= 1.0 {
+        el
+    } else {
+        el.top(px(dy * (1. - k)))
+    };
+    div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .overflow_hidden()
+        .child(el)
+}
+
 /// A slow breath, 0 → 1 → 0 every [`BREATH`] seconds, for something live;
 /// a steady 1 with motion off. Ask for frames while it shows with
 /// [`breathing`].
