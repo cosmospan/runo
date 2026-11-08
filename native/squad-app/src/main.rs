@@ -21,7 +21,6 @@ mod copies;
 mod cove;
 mod coveserver;
 mod crew;
-mod db;
 mod design;
 #[allow(dead_code)]
 mod designdraw;
@@ -32,7 +31,6 @@ mod framestats;
 mod gemini;
 mod git;
 mod github;
-mod handoff;
 mod hardware;
 mod harness;
 mod health;

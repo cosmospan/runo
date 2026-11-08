@@ -28,21 +28,6 @@ pub fn binary() -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// Whether this machine's `cove` takes `--auto-pause` (Cove 0.1 with pause support).
-/// Asked once.
-pub fn has_auto_pause() -> bool {
-    static ANSWER: OnceLock<bool> = OnceLock::new();
-    *ANSWER.get_or_init(|| {
-        binary().is_some_and(|bin| {
-            Command::new(bin)
-                .args(["exec", "--help"])
-                .stdin(std::process::Stdio::null())
-                .output()
-                .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("--auto-pause"))
-        })
-    })
-}
-
 /// Whether this machine's Cove server answers now (not cached).
 fn answers() -> bool {
     binary().is_some_and(|bin| {

@@ -431,7 +431,10 @@ mod tests {
     fn commands_come_out_of_their_code_span() {
         assert_eq!(
             split_code("run `cargo test -p squadcode`"),
-            ("run".to_string(), Some("cargo test -p squadcode".to_string()))
+            (
+                "run".to_string(),
+                Some("cargo test -p squadcode".to_string())
+            )
         );
         assert_eq!(
             split_code("edit src/main.rs"),

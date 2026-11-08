@@ -308,22 +308,14 @@ fn mcp_servers(spec: &RunSpec) -> Vec<(String, crate::mcp::McpSpec)> {
     out
 }
 
-/// Runo's own tools an agent may call without being asked: memory and reading
-/// playbooks, and a thread's reports back. Starting a playbook as a new session asks.
+/// Squad Code's own tools an agent may call without being asked: the job's own
+/// headless browser, inside Squad (nothing outside it changes), and a thread's reports
+/// back.
 fn unasked_tools(spec: &RunSpec) -> Vec<&'static str> {
     if spec.memory.is_none() {
         return Vec::new();
     }
-    let mut tools = vec![
-        "read_memory",
-        "search_history",
-        "save_note",
-        "list_playbooks",
-        "get_playbook",
-        "list_connections",
-    ];
-    // The job's own headless browser, inside Squad: nothing outside it changes.
-    tools.extend(crate::browse::tools::TOOLS);
+    let mut tools: Vec<&'static str> = crate::browse::tools::TOOLS.to_vec();
     if spec.thread != 0 {
         tools.extend(crate::memory_mcp::THREAD_TOOLS);
     }
@@ -1936,7 +1928,9 @@ mod arg_tests {
                 "stream-json"
             ]
         );
-        assert!(live.get_envs().any(|(k, v)| k == "SQUAD_TEST_X" && v.is_some()));
+        assert!(live
+            .get_envs()
+            .any(|(k, v)| k == "SQUAD_TEST_X" && v.is_some()));
         // Without a trailing prompt there's nothing to move.
         let mut bare = Command::new("claude");
         bare.args(["-p", "hi"]);

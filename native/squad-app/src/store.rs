@@ -527,45 +527,7 @@ fn yes() -> bool {
     true
 }
 
-impl Automation {
-    /// The description, or the prompt's first sentence when there is none.
-    pub fn summary(&self) -> String {
-        let text = if self.description.trim().is_empty() {
-            let p = self.prompt.trim();
-            match p.find(". ") {
-                Some(end) => &p[..=end],
-                None => p.lines().next().unwrap_or(""),
-            }
-        } else {
-            self.description.trim()
-        };
-        let mut out: String = text.chars().take(100).collect();
-        if text.chars().count() > 100 {
-            out.push('…');
-        }
-        out
-    }
-
-    /// A name usable as a slash command or MCP prompt: `Find bugs` → `find-bugs`.
-    pub fn slug(&self) -> String {
-        let mut out = String::new();
-        for c in self.name.trim().chars() {
-            if c.is_alphanumeric() {
-                out.extend(c.to_lowercase());
-            } else if !out.ends_with('-') && !out.is_empty() {
-                out.push('-');
-            }
-        }
-        while out.ends_with('-') {
-            out.pop();
-        }
-        if out.is_empty() {
-            format!("playbook-{}", self.id)
-        } else {
-            out
-        }
-    }
-}
+impl Automation {}
 
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Layout {
@@ -621,37 +583,6 @@ pub fn today() -> String {
 }
 
 impl State {}
-
-/// Where agents and the `runo` command leave requests for the running app.
-pub fn inbox_dir() -> PathBuf {
-    data_dir().join("inbox")
-}
-
-/// A request to start a playbook, left in the inbox by Runo's MCP server.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PlaybookRequest {
-    pub playbook: u64,
-    pub project: u64,
-    /// Who asked, such as "claude-code".
-    pub from: String,
-    /// The folder of the session that asked.
-    #[serde(default)]
-    pub dir: String,
-}
-
-/// Leave a request in `inbox`. Written under a temporary name and renamed, so the app
-/// never reads half a file.
-pub fn send_request(inbox: &Path, request: &PlaybookRequest) -> std::io::Result<()> {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let name = format!("{stamp}-{}", std::process::id());
-    write_private(
-        &inbox.join(format!("{name}.json")),
-        &serde_json::to_vec(request)?,
-    )
-}
 
 /// Read a JSON file, or the default when it is missing. A file that exists but cannot be
 /// parsed is moved aside first, so the next save cannot silently overwrite the user's data,
@@ -999,14 +930,6 @@ impl State {
             migrate_check_level(project);
         }
         state
-    }
-
-    /// Read the saved state without changing anything, for other processes such as
-    /// Runo's MCP server.
-    pub fn peek() -> Self {
-        crate::persist::read(&state_path())
-            .map(|(state, ..)| state)
-            .unwrap_or_default()
     }
 }
 

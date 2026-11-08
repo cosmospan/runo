@@ -1133,6 +1133,29 @@ pub fn discover(project_dir: Option<&str>) -> Discovered {
     found
 }
 
+/// The engine Peek reads messages with: the one chosen in Settings, or the
+/// default engine.
+pub(crate) fn assistant_provider(st: &AppSettings) -> usize {
+    let id = if st.assistant_agent.is_empty() {
+        &st.default_provider
+    } else {
+        &st.assistant_agent
+    };
+    crate::agent::PROVIDERS
+        .iter()
+        .position(|p| p.id == id)
+        .unwrap_or(0)
+}
+
+/// The model Peek reads on: the one chosen in Settings, or a small, fast one
+/// where Squad Code knows one.
+pub(crate) fn assistant_model(st: &AppSettings, provider: &str) -> String {
+    match st.assistant_model.as_str() {
+        "" if provider == "claude" => "haiku".to_string(),
+        m => m.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{frontmatter, mix, scan_mcp, scan_skills, AppSettings};
@@ -1291,28 +1314,5 @@ mod tests {
         let old: AppSettings =
             serde_json::from_str(r#"{"theme":"dark","share_cargo_target":false}"#).unwrap();
         assert_eq!(old.theme, "dark");
-    }
-}
-
-/// The engine Peek reads messages with: the one chosen in Settings, or the
-/// default engine.
-pub(crate) fn assistant_provider(st: &AppSettings) -> usize {
-    let id = if st.assistant_agent.is_empty() {
-        &st.default_provider
-    } else {
-        &st.assistant_agent
-    };
-    crate::agent::PROVIDERS
-        .iter()
-        .position(|p| p.id == id)
-        .unwrap_or(0)
-}
-
-/// The model Peek reads on: the one chosen in Settings, or a small, fast one
-/// where Squad Code knows one.
-pub(crate) fn assistant_model(st: &AppSettings, provider: &str) -> String {
-    match st.assistant_model.as_str() {
-        "" if provider == "claude" => "haiku".to_string(),
-        m => m.to_string(),
     }
 }

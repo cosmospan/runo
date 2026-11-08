@@ -304,7 +304,7 @@ fn follow(target: Target, turn: PathBuf, pid: u32, mut child: Option<Child>, tx:
                 .chain(
                     read_lines(&turn.join("err"), &mut err, ended)
                         .into_iter()
-                        .map(|l| Event::Err(l)),
+                        .map(Event::Err),
                 );
             for event in lines {
                 if tx.send(event).is_err() {

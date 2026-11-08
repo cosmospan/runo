@@ -204,7 +204,12 @@ impl Shell {
 
     fn inbox_detail(&mut self, j: &Job, cx: &mut Context<Self>) -> impl IntoElement {
         let id = j.id;
-        let face = self.bot(j.bot, squad_holo::Mood::Idle, 56., squad_holo::Framing::Bust);
+        let face = self.bot(
+            j.bot,
+            squad_holo::Mood::Idle,
+            56.,
+            squad_holo::Framing::Bust,
+        );
         let headline = match j.status {
             Status::Review => format!("{} has changes for you to review", j.bot.name()),
             Status::Done if j.files.is_empty() => format!("{} finished", j.bot.name()),
