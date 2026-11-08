@@ -968,11 +968,12 @@ fn spawn(id: u64, spec: &RunSpec) -> Result<pty::Shell, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{answers, find_url, keeps_running, spawn, Run, RunSpec};
+    use super::{find_url, keeps_running};
 
     #[cfg(unix)]
     #[test]
     fn a_server_runs_hidden_and_says_where_it_is() {
+        use super::{answers, spawn, Run, RunSpec};
         let dir = std::env::temp_dir();
         let port = 20000 + (std::process::id() % 20000) as u16;
         let spec = RunSpec {
