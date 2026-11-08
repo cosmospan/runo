@@ -53,46 +53,11 @@ fn clip(s: &str, n: usize) -> String {
     }
 }
 
-/// The words the engine reads.
-pub fn prompt(text: &str, seen: &Seen) -> String {
-    let crew: Vec<String> = seen
-        .crew
-        .iter()
-        .filter(|m| **m != Member::Fin)
-        .map(|m| {
-            format!(
-                "- {} ({} work): {} [{}]",
-                m.name(),
-                m.mode().label().to_lowercase(),
-                m.role(),
-                Joins::of(*m, seen.worked, seen.in_thread).note()
-            )
-        })
-        .collect();
-    let recent: Vec<String> = seen
-        .recent
-        .iter()
-        .rev()
-        .take(8)
-        .rev()
-        .map(|(who, said)| format!("{who}: {}", clip(said, 300)))
-        .collect();
-    let running = if seen.running.is_empty() {
-        "nothing".to_string()
-    } else {
-        seen.running.join("; ")
-    };
-    format!(
-        "You are Peek, who leads a crew of AI bots in Squad Code, an app for developers and for people who don't code. \
+/// Who Peek is and how it decides: the same for every read. The warm engine
+/// gets it once, as its system prompt; a cold read puts it before the turn.
+pub const RULES: &str = "You are Peek, who leads a crew of AI bots in Squad Code, an app for developers and for people who don't code. \
 You read every message the person sends before anyone works on it, and decide what happens. Don't use any tools; just reply.\n\n\
-Project: {project}\n\
-Thread: {thread}\n\
-{summary}
-The crew:\n{crew}\n\
-Running right now: {running}\n\
-Where jobs run: {server}\n\
-The conversation so far:\n{recent}\n\n\
-The person just wrote: \"{text}\"\n\n\
+Each message to you gives the project, the thread and its summary, the crew, what's running, where jobs run, the conversation, and what the person just wrote. \
 Decide, reading it the way a sharp colleague would: typos, slang and half sentences are normal (\"whoa re you\" is \"who are you\"). \
 Never start work on a guess.\n\
 Not every message is about the code. A thread can be for discussion, planning or talk among the team, and its name often says so. \
@@ -109,8 +74,53 @@ If they say it's a discussion, believe them.\n\
 If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
 If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
 Reply with JSON only, on one line:\n\
-{{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}}\n\
-Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to four when you're taking part in a discussion.",
+{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}\n\
+Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to four when you're taking part in a discussion.";
+
+/// The conversation as the engine reads it: the last few messages, each
+/// clipped, oldest first.
+pub fn conversation(seen: &Seen) -> Vec<String> {
+    seen.recent
+        .iter()
+        .rev()
+        .take(8)
+        .rev()
+        .map(|(who, said)| format!("{who}: {}", clip(said, 300)))
+        .collect()
+}
+
+/// What changes from one read to the next. `conversation` is the part of
+/// the conversation to show, under `heading`.
+pub fn turn(text: &str, seen: &Seen, heading: &str, conversation: &[String]) -> String {
+    let crew: Vec<String> = seen
+        .crew
+        .iter()
+        .filter(|m| **m != Member::Fin)
+        .map(|m| {
+            format!(
+                "- {} ({} work): {} [{}]",
+                m.name(),
+                m.mode().label().to_lowercase(),
+                m.role(),
+                Joins::of(*m, seen.worked, seen.in_thread).note()
+            )
+        })
+        .collect();
+    let running = if seen.running.is_empty() {
+        "nothing".to_string()
+    } else {
+        seen.running.join("; ")
+    };
+    format!(
+        "Project: {project}\n\
+Thread: {thread}\n\
+{summary}\
+The crew:\n{crew}\n\
+Running right now: {running}\n\
+Where jobs run: {server}\n\
+{heading}\n{conversation}\n\n\
+The person just wrote: \"{text}\"\n\
+Reply with the JSON decision only.",
         project = seen.project,
         summary = if seen.summary.trim().is_empty() {
             String::new()
@@ -128,12 +138,20 @@ Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to
             seen.server
         },
         crew = crew.join("\n"),
-        recent = if recent.is_empty() {
+        conversation = if conversation.is_empty() {
             "(none)".to_string()
         } else {
-            recent.join("\n")
+            conversation.join("\n")
         },
         text = clip(text, 2000).replace('"', "'"),
+    )
+}
+
+/// Everything the engine reads for one message, for a cold read.
+pub fn prompt(text: &str, seen: &Seen) -> String {
+    format!(
+        "{RULES}\n\n{}",
+        turn(text, seen, "The conversation so far:", &conversation(seen))
     )
 }
 
@@ -219,7 +237,6 @@ pub fn ask(
         return Err(format!("{} isn't installed", p.name));
     }
     let model = crate::assistant::assistant_model(st, p.id);
-    let words = prompt(text, seen);
     // The warm engine answers in a second or two; a cold start takes six.
     if super::warm::can(p.id) {
         let bin = if configured.trim().is_empty() {
@@ -227,12 +244,28 @@ pub fn ask(
         } else {
             configured.trim().to_string()
         };
-        if let Some(rx) = super::warm::ask(&bin, &model, dir, &words, LIMIT, "v2-peek-reads".into())
-        {
+        let said = conversation(seen);
+        let turn_for = |new_only: bool, shown: &[String]| {
+            let heading = if new_only {
+                "New in the conversation since your last read:"
+            } else {
+                "The conversation so far:"
+            };
+            turn(text, seen, heading, shown)
+        };
+        if let Some(rx) = super::warm::ask(
+            &bin,
+            &model,
+            dir,
+            &said,
+            &turn_for,
+            LIMIT,
+            "v2-peek-reads".into(),
+        ) {
             return Ok(rx);
         }
     }
-    let command = agent::ask_command_on(p.id, &configured, &words, &model);
+    let command = agent::ask_command_on(p.id, &configured, &prompt(text, seen), &model);
     let (tx, rx) = channel();
     agent::oneshot_within("v2-peek-reads".into(), command, dir, LIMIT, tx);
     Ok(rx)
