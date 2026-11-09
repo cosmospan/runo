@@ -151,6 +151,7 @@ pub fn format_line(time: &str, level: Level, area: &str, message: &str) -> Strin
 /// The line of a command's output that says what went wrong: the first that reads like an
 /// error, else the first that isn't blank. Cut to a sensible length.
 #[cfg(target_os = "macos")]
+#[allow(dead_code)] // Only mark_downloaded uses it, and nothing calls that yet.
 pub fn gist(output: &str) -> String {
     const WORDS: [&str; 6] = ["error", "fatal", "denied", "failed", "not found", "cannot"];
     let lines = || output.lines().map(str::trim).filter(|l| !l.is_empty());
@@ -539,6 +540,7 @@ fn crash_report(thread: &str, message: &str, backtrace: &str) -> String {
 /// Mark a download as coming from the internet, as a browser would, so macOS checks
 /// its signature and notarization when it is opened.
 #[cfg(target_os = "macos")]
+#[allow(dead_code)] // Kept for the updater's downloads; nothing calls it yet.
 fn mark_downloaded(path: &Path) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

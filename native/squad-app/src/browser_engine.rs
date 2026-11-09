@@ -4,6 +4,8 @@
 //! it is one) with `--remote-debugging-pipe`, so CDP runs over two inherited file
 //! descriptors (3 and 4) as NUL-separated JSON. Each Squad Code session gets its own page (target); the one on
 //! screen streams JPEG frames that are decoded here, off the UI thread.
+// Outside Linux only part of this is used, so the rest reads as unused there.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 use gpui_kit::RenderImage;
 use serde_json::{json, Value};
