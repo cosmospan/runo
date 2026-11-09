@@ -214,56 +214,48 @@ impl Shell {
         cx.notify();
     }
 
-    /// Runs the app the crew made, and keeps it running: in job `id`'s own
-    /// terminal when given (its branch), else the project's. Says how to
-    /// open and stop it, on the job's card, and returns those words. None
-    /// when Squad Code can't tell how to start it.
+    /// Runs the app the crew made, and keeps it running: job `id`'s branch
+    /// when given, else the project's folder. It runs inside Squad, never in
+    /// your terminal, and shows as a card: under Peek's message `talk` when
+    /// given, else in the job. Returns what Peek says about it. None when
+    /// Squad Code can't tell how to start it.
     pub(super) fn run_app(
         &mut self,
         job: Option<u64>,
-        window: &mut Window,
+        talk: Option<u64>,
         cx: &mut Context<Self>,
     ) -> Option<String> {
-        let (term, dir, jid) = match job.and_then(|id| self.crew.store.job(id)) {
-            Some(j) => (j.id, j.dir().to_string(), j.id),
-            None => {
-                let f = self.crew.store.folder()?;
-                (project_id(self.crew.store.current), f.path.clone(), 0)
-            }
+        let folder = self.crew.store.folder()?.path.clone();
+        let (dir, jid) = match job.and_then(|id| self.crew.store.job(id)) {
+            Some(j) => (j.dir().to_string(), j.id),
+            None => (folder.clone(), 0),
         };
         let (cmd, url) = super::work::start_command(&dir, jid)?;
-        self.term_run(term, &cmd, window, cx);
-        if !self.serving.contains(&term) {
-            self.serving.push(term);
-        }
-        let open = match &url {
-            Some(u) => format!(" Open {u} once it says it's ready."),
-            None => " It prints its address when it's ready.".to_string(),
+        let spec = super::apps::RunSpec {
+            cmd: cmd.clone(),
+            dir,
+            folder,
+            job: (jid != 0).then_some(jid),
+            talk,
+            hint: url,
+            keeps: true,
+            remote: None,
+            setup: false,
         };
-        let line = format!(
-            "Started `{cmd}` in the terminal below, and it keeps running.{open} Say \u{201c}stop app\u{201d} to stop it."
-        );
-        if let Some(j) = job.and_then(|id| self.crew.store.job_mut(id)) {
-            j.feed.push(super::store::Item::Note(line.clone()));
+        let line = match self.start_run(spec, cx) {
+            Ok(_) => format!(
+                "Started {cmd} for you. It runs here in Squad: the card shows its address once it's up, and its output. Say \u{201c}stop app\u{201d} or press Stop to end it."
+            ),
+            Err(why) => format!("I couldn't start {cmd}: {why}"),
+        };
+        if talk.is_none() {
+            if let Some(j) = job.and_then(|id| self.crew.store.job_mut(id)) {
+                j.feed.push(super::store::Item::Note(line.clone()));
+            }
         }
         self.crew.store.save();
         cx.notify();
         Some(line)
-    }
-
-    /// Stops the apps `run_app` started, as Ctrl-C in their terminals.
-    /// Returns how many it stopped.
-    pub(super) fn stop_apps(&mut self) -> usize {
-        let mut n = 0;
-        for id in std::mem::take(&mut self.serving) {
-            if let Some(t) = self.terms.get(&id) {
-                if !t.exited() {
-                    t.write(b"\x03");
-                    n += 1;
-                }
-            }
-        }
-        n
     }
 
     /// Types a command into the drawer's shell and runs it.

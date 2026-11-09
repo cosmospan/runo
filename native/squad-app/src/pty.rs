@@ -22,6 +22,8 @@ pub struct Shell {
     master: Box<dyn MasterPty + Send>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     exited: Arc<AtomicBool>,
+    /// How the program ended: 0 still running (or unknown), 1 success, 2 failure.
+    outcome: Arc<AtomicU8>,
     size: Mutex<(u16, u16)>,
     /// When the person last typed, in the same clock.
     last_input: AtomicU64,
@@ -276,6 +278,7 @@ impl Shell {
             master: pair.master,
             child,
             exited,
+            outcome,
             size: Mutex::new((rows, cols)),
             last_input: AtomicU64::new(0),
         };
@@ -340,6 +343,19 @@ impl Shell {
 
     pub fn exited(&self) -> bool {
         self.exited.load(Ordering::Acquire)
+    }
+
+    /// Whether the program ended well: None while it runs, or when its
+    /// status couldn't be read.
+    pub fn succeeded(&self) -> Option<bool> {
+        if !self.exited() {
+            return None;
+        }
+        match self.outcome.load(Ordering::Acquire) {
+            1 => Some(true),
+            2 => Some(false),
+            _ => None,
+        }
     }
 
     pub fn kill(&self) {

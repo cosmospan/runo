@@ -1111,24 +1111,54 @@ fn signs_out(line: &str) -> bool {
     !elsewhere && broad.iter().any(|s| lower.contains(s))
 }
 
-/// How to sign an agent in, as "Codex isn't signed in. Open a terminal and run …".
+/// The command that signs an agent in. Squad runs it itself, as a card you
+/// can type to, never in your terminal.
+pub fn sign_in_cmd(provider: &str) -> Option<&'static str> {
+    Some(match provider {
+        "claude" => "claude",
+        "codex" => "codex login",
+        "gemini" => "gemini",
+        "qwen" => "qwen",
+        "copilot" => "copilot",
+        "amp" => "amp login",
+        "cursor" => "cursor-agent login",
+        "droid" => "droid",
+        "opencode" => "opencode auth login",
+        "grok" => "grok login",
+        "antigravity" => "agy",
+        _ => return None,
+    })
+}
+
+/// How to sign an agent in, as "Codex isn't signed in. Press Sign in …".
 pub fn sign_in_help(provider: &str) -> String {
     let name = self::provider(provider).name;
-    let how = match provider {
-        "claude" => "Open a terminal, run `claude` and type `/login`, or set ANTHROPIC_API_KEY under Settings > Claude Code > Environment.",
-        "codex" => "Open a terminal and run `codex login`, or set OPENAI_API_KEY under Settings > Codex > Environment.",
-        "gemini" => "Open a terminal and run `gemini` to sign in, or set GEMINI_API_KEY under Settings > Gemini > Environment.",
-        "qwen" => "Open a terminal and run `qwen` to sign in, or set an API key under Settings > Qwen Code > Environment.",
-        "copilot" => "Open a terminal, run `copilot` and type `/login`, or set GH_TOKEN under Settings > Copilot > Environment.",
-        "amp" => "Open a terminal and run `amp login`, or set AMP_API_KEY under Settings > Amp > Environment.",
-        "cursor" => "Open a terminal and run `cursor-agent login`, or set CURSOR_API_KEY under Settings > Cursor > Environment.",
-        "droid" => "Open a terminal and run `droid` to sign in, or set FACTORY_API_KEY under Settings > Droid > Environment.",
-        "opencode" => "Open a terminal and run `opencode auth login`.",
-        "grok" => "Open a terminal and run `grok login` to sign in with your SuperGrok or X Premium+ subscription, or set XAI_API_KEY under Settings > Grok > Environment.",
-        "antigravity" => "Open a terminal and run `agy` to sign in to your Google account in a browser (Antigravity CLI has no `login` subcommand), or set GEMINI_API_KEY under Settings > Antigravity > Environment.",
-        _ => "Sign in to it in a terminal, then try again.",
+    let key = match provider {
+        "claude" => " Or set ANTHROPIC_API_KEY under Settings > Claude Code > Environment.",
+        "codex" => " Or set OPENAI_API_KEY under Settings > Codex > Environment.",
+        "gemini" => " Or set GEMINI_API_KEY under Settings > Gemini > Environment.",
+        "qwen" => " Or set an API key under Settings > Qwen Code > Environment.",
+        "copilot" => " Or set GH_TOKEN under Settings > Copilot > Environment.",
+        "amp" => " Or set AMP_API_KEY under Settings > Amp > Environment.",
+        "cursor" => " Or set CURSOR_API_KEY under Settings > Cursor > Environment.",
+        "droid" => " Or set FACTORY_API_KEY under Settings > Droid > Environment.",
+        "grok" => " Or set XAI_API_KEY under Settings > Grok > Environment.",
+        "antigravity" => " Or set GEMINI_API_KEY under Settings > Antigravity > Environment.",
+        _ => "",
     };
-    format!("{name} isn't signed in. {how}")
+    match sign_in_cmd(provider) {
+        Some(cmd) => {
+            let then = if matches!(provider, "claude" | "copilot") {
+                " and type /login"
+            } else {
+                ""
+            };
+            format!(
+                "{name} isn't signed in. Press Sign in and Squad runs {cmd} for you, right here{then}; follow what it asks.{key}"
+            )
+        }
+        None => format!("{name} isn't signed in. Sign in to it, then try again.{key}"),
+    }
 }
 
 /// The flag an agent's one-shot ask takes a model with, if it takes one.

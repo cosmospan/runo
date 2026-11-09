@@ -394,7 +394,6 @@ impl Shell {
             };
             let copy = cmd.clone();
             let run = cmd.clone();
-            let has_folder = self.crew.store.folder().is_some();
             rows = rows.child(
                 div()
                     .flex()
@@ -426,20 +425,14 @@ impl Shell {
                     .child(ui::ghost(("install-copy", n), "Copy").on_click(cx.listener(
                         move |this, _, _, cx| {
                             cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
-                            this.say("Copied. Paste it in a terminal, then sign in once.");
+                            this.say("Copied.");
                             cx.notify();
                         },
                     )))
-                    .when(has_folder, |d| {
-                        d.child(
-                            ui::ghost(("install-run", n), "Run it").on_click(cx.listener(
-                                move |this, _, window, cx| {
-                                    let id = super::term::project_id(this.crew.store.current);
-                                    this.term_run(id, &run, window, cx);
-                                },
-                            )),
-                        )
-                    }),
+                    .child(
+                        ui::ghost(("install-run", n), "Install")
+                            .on_click(cx.listener(move |this, _, _, cx| this.run_setup(&run, cx))),
+                    ),
             );
         }
         ui::card()
@@ -475,9 +468,10 @@ impl Shell {
                     .text_size(px(12.5))
                     .line_height(px(18.))
                     .text_color(c(ui::muted()))
-                    .child("Any one is enough. Claude Code is the one most people start with. After it installs, run it once in a terminal to sign in."),
+                    .child("Any one is enough. Claude Code is the one most people start with. Install runs right here; sign in once when it asks."),
             )
             .child(rows)
+            .children(self.setup_runs(cx))
     }
 
     /// Whether a getting-started step is done, counting the engine check the
