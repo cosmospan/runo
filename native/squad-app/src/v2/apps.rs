@@ -203,6 +203,11 @@ fn program(spec: &RunSpec) -> pty::Program {
 /// listens on ("listening on port 3000"). 0.0.0.0 and 127.0.0.1 read as
 /// localhost.
 pub fn find_url(text: &str) -> Option<String> {
+    find_link(text).or_else(|| said_port(text))
+}
+
+/// An address written out in the output: a link, or host and port.
+fn find_link(text: &str) -> Option<String> {
     for word in text.split_whitespace() {
         let Some(at) = word.find("http://").or_else(|| word.find("https://")) else {
             continue;
@@ -226,6 +231,23 @@ pub fn find_url(text: &str) -> Option<String> {
         let tail = if tail == "/" { "" } else { tail };
         return Some(format!("{scheme}://localhost:{digits}{tail}"));
     }
+    // "0.0.0.0:8080->80/tcp" from Docker, "listening on 127.0.0.1:4000".
+    for word in text.split_whitespace() {
+        let rest = ["localhost:", "127.0.0.1:", "0.0.0.0:", "[::]:"]
+            .iter()
+            .find_map(|h| word.strip_prefix(h));
+        if let Some(rest) = rest {
+            let digits: String = rest.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+            if (2..=5).contains(&digits.len()) {
+                return Some(format!("http://localhost:{digits}"));
+            }
+        }
+    }
+    None
+}
+
+/// A port the output only mentions in words: "listening on port 3000".
+fn said_port(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     for pat in [
         "listening on port ",
@@ -274,6 +296,7 @@ pub fn keeps_running(cmd: &str) -> bool {
         "runserver",
         "http.server",
         "cargo run",
+        "go run",
         "compose up",
         "docker run",
         "uvicorn",
@@ -281,13 +304,27 @@ pub fn keeps_running(cmd: &str) -> bool {
         "flask run",
         "rails s",
         "rails server",
+        "artisan serve",
+        "phx.server",
         "next dev",
+        "ng serve",
         "vite",
         "nodemon",
+        "flutter run",
+        "expo start",
+        "react-native start",
+        "streamlit run",
+        "jupyter",
+        "hugo server",
+        "jekyll serve",
+        "dotnet run",
+        "bootrun",
+        "spring-boot:run",
     ]
     .iter()
     .any(|k| c.contains(k))
         || c == "npm start"
+        || c.ends_with("npm start")
 }
 
 impl Shell {
@@ -399,7 +436,15 @@ impl Shell {
                 .is_none_or(|at| at.elapsed() > Duration::from_millis(500))
             {
                 r.read_at = Some(Instant::now());
-                let said = find_url(&r.lines().join("\n"));
+                // With an address known ahead (a Compose file's port, say),
+                // only a written-out address replaces it: "port 5432" in a
+                // database's log isn't where the app is.
+                let text = r.lines().join("\n");
+                let said = if r.spec.hint.is_some() {
+                    find_link(&text)
+                } else {
+                    find_url(&text)
+                };
                 if said.is_some() && said != r.url {
                     r.url = said;
                     r.up = false;
@@ -1047,6 +1092,14 @@ mod tests {
                 .as_deref(),
             Some("http://localhost:3000")
         );
+        assert_eq!(
+            find_url("web-1  | 0.0.0.0:8080->80/tcp").as_deref(),
+            Some("http://localhost:8080")
+        );
+        assert_eq!(
+            find_url("lib/main.dart is being served at http://localhost:8080").as_deref(),
+            Some("http://localhost:8080")
+        );
         assert_eq!(find_url("see https://github.com/x/y for help"), None);
         assert_eq!(find_url("compiled 12 files"), None);
     }
@@ -1056,6 +1109,9 @@ mod tests {
         assert!(keeps_running("npm run dev"));
         assert!(keeps_running("npm start"));
         assert!(keeps_running("python3 -m http.server 8000"));
+        assert!(keeps_running("docker compose up"));
+        assert!(keeps_running("flutter run -d chrome"));
+        assert!(keeps_running("go run ."));
         assert!(!keeps_running("npm test"));
         assert!(!keeps_running("cargo build"));
     }
