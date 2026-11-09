@@ -6,6 +6,9 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ### Added
 
+- Plans can be reordered and reassigned before they start: each step has Move up, and clicking a step's bot hands it to the next one.
+- The welcome screen offers to install an engine it can't find, with the same command Engines uses.
+- Alt+Up and Alt+Down move to the thread or bot above or below in the rail; with Shift they skip to the next one with something unread.
 - Talk to a job while it works. What you type on a running job's page waits above its box ("Goes to Guard when this turn ends"), with a cross to take each line back, and reaches the bot as its next turn once this one ends and its checks are back.
 - Needs you works from the keyboard: the arrows (or J and K) move through the list, Enter opens the job, A approves changes that can go, and E marks the rest seen. Changes ready to review get an Approve button beside Send back at the bottom.
 - Long threads keep their history: a thread opens on its newest 30 messages and jobs, and Show earlier above them brings back the ones before, 30 at a time, without jumping away from where you are.
@@ -24,6 +27,11 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ### Changed
 
+- Plans read as plans: their cards say Discard, Edit plan and Start the job, a failed plan says Discard, and a job that is part of a plan says "Plan: part 2 of 4".
+- A race no longer marks a try whose checks fail as fastest or cheapest, as long as another try passes.
+- With more than six bots, the direct messages list folds the quiet ones under "N more bots".
+- Appearance shows Solid and Frosted first; Engines shows your engines before Add an engine; the welcome screen points at #general.
+- Try again is hidden while a job ships.
 - The direct messages list says what a bot's jobs want from you: "asks you" only while a bot waits on your yes, "to review" when its changes wait for you, and "stopped" when its job stopped with a problem. Before, all three said "asks you". The Crew page uses the same words.
 - Totals say what they count: All jobs gives the jobs kept and what was spent on them, Usage says its spend and jobs are for the last 30 days, and an engine's spend in Engines is for today, the same day the status bar counts.
 - A job's time reads 4m 20s in its Details, not 260s.

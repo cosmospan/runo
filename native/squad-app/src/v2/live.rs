@@ -133,11 +133,11 @@ impl Shell {
                     .find(|g| g.id == gid)
                     .and_then(|g| {
                         let k = g.steps.iter().position(|s| s.job == job.id)?;
-                        Some(format!("Part {} of {}", k + 1, g.steps.len()))
+                        Some(format!("Plan: part {} of {}", k + 1, g.steps.len()))
                     })
-                    .unwrap_or_else(|| "Goal".into());
+                    .unwrap_or_else(|| "Plan".into());
                 d.child(
-                    ui::ghost("to-goal", label)
+                    ui::ghost_i("to-goal", IconName::ListTodo, label)
                         .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Goal(gid), cx))),
                 )
             })
@@ -182,7 +182,10 @@ impl Shell {
             .when(
                 !running
                     && super::trouble::trouble(job).is_none()
-                    && !matches!(job.status, Status::Done | Status::Review | Status::Shipped),
+                    && !matches!(
+                        job.status,
+                        Status::Done | Status::Review | Status::Shipping | Status::Shipped
+                    ),
                 |d| {
                     let id = job.id;
                     d.child(

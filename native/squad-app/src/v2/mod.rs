@@ -3660,6 +3660,17 @@ impl Render for Shell {
                 if this.term_focus.is_focused(window) && !m.platform {
                     return;
                 }
+                // Alt+Up and Alt+Down step through the threads (with Shift,
+                // only the unread ones), like Slack.
+                if m.alt
+                    && !(m.platform || m.control)
+                    && matches!(key, "up" | "down")
+                    && this.place != Place::Welcome
+                    && this.step_thread(key == "down", m.shift, cx)
+                {
+                    cx.stop_propagation();
+                    return;
+                }
                 // Needs you works from the keyboard while no box has focus.
                 if this.place == Place::Inbox
                     && !(m.platform || m.control || m.alt || m.shift)

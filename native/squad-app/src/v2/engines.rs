@@ -54,7 +54,7 @@ pub(super) fn choice(
 }
 
 /// The command that installs agent `id`'s command-line tool here.
-fn install_cmd(id: &str) -> Option<String> {
+pub(super) fn install_cmd(id: &str) -> Option<String> {
     crate::registry::spec(id).and_then(|s| {
         s.install
             .npm
@@ -391,7 +391,6 @@ impl Shell {
                             "Engines on this computer",
                             "Install a new one, update one, or pick the default for new jobs.",
                         ))
-                        .children(add)
                     })
                     .when(none_ready && !brains_tab, |d| {
                         d.child(
@@ -410,6 +409,8 @@ impl Shell {
                                 .child(list)
                                 .child(detail),
                         )
+                        // The engines you have come first; the ones you could add follow.
+                        .children(add)
                         .child(brain)
                     }),
             )
@@ -418,7 +419,7 @@ impl Shell {
 
     /// Runs an install or update in the terminal drawer, so you watch it and
     /// can answer if it asks; with no folder open, copies it instead.
-    fn run_setup(&mut self, cmd: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn run_setup(&mut self, cmd: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.crew.store.folder().is_some() {
             let id = super::term::project_id(self.crew.store.current);
             self.term_run(id, cmd, window, cx);

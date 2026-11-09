@@ -2496,7 +2496,7 @@ impl Shell {
                             .child("Nothing starts until you say so."),
                     )
                     .child(
-                        ui::ghost(("plan-drop", id as usize), "Drop")
+                        ui::ghost(("plan-drop", id as usize), "Discard")
                             .h(px(28.))
                             .on_click(cx.listener(move |this, _, _, cx| this.drop_goal(id, cx))),
                     )
@@ -2508,9 +2508,15 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::solid(("plan-start", id as usize), "Start the crew")
-                            .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
+                        ui::solid(
+                            ("plan-start", id as usize),
+                            match g.steps.len() {
+                                1 => "Start the job".to_string(),
+                                n => format!("Start {n} jobs"),
+                            },
+                        )
+                        .h(px(28.))
+                        .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
                     ),
             ),
             State::Planning => None,

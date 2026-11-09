@@ -367,7 +367,7 @@ impl Shell {
                     .child(if notes > 0 {
                         "Or write below to add more words."
                     } else {
-                        "Click a line in a diff to comment on it, or write below to send it back."
+                        "Open a file to see its diff and comment on a line, or write below to send it back."
                     }),
             )
             // A clash card above already offers Discard; don't offer it twice.
