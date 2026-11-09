@@ -538,6 +538,8 @@ pub struct Shell {
     list_git: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
+    /// The right sidebar hidden on a job's page, from its toggle in the top bar.
+    right_closed: bool,
     /// On a job's page the one right sidebar shows that job's details (true)
     /// or the Jobs panel (false). Opening a job from elsewhere starts on details.
     side_job: bool,
@@ -799,6 +801,18 @@ fn doze_after() -> Duration {
 pub(super) const DOCK_ROOM: f32 = 16.;
 /// How tall the bar across the top is, the sidebar's top strip included.
 pub(super) const TOP_H: f32 = 54.;
+/// Where the Mac window buttons sit: their left edge, and the top of their
+/// frames (16pt tall), so they centre on the top bar's row. The three are
+/// 14pt wide and 20pt apart, 54pt in all, so from here they centre over the
+/// icon rail and the Peek logo under them.
+pub(super) const LIGHTS_X: f32 = (sidebar::RAIL - 54.) / 2.;
+pub(super) const LIGHTS_Y: f32 = (TOP_H - 16.) / 2.;
+
+/// Whether the window has Mac window buttons in its top-left corner. Off a
+/// Mac, `SQUADCODE_FAKE_LIGHTS` draws stand-ins, for screenshots taken on Linux.
+pub(super) fn has_lights() -> bool {
+    cfg!(target_os = "macos") || std::env::var_os("SQUADCODE_FAKE_LIGHTS").is_some()
+}
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
@@ -1315,6 +1329,7 @@ impl Shell {
             list_all: false,
             list_git: false,
             jobs_open: false,
+            right_closed: false,
             side_job: true,
             deleting: None,
             removing: None,
@@ -3872,7 +3887,7 @@ pub fn open_window(cx: &mut App) {
         titlebar: Some(TitlebarOptions {
             title: Some("Squad Code".into()),
             appears_transparent: cfg!(target_os = "macos"),
-            traffic_light_position: Some(point(px(16.), px(16.))),
+            traffic_light_position: Some(point(px(LIGHTS_X), px(LIGHTS_Y))),
         }),
         app_id: Some("squadcode".into()),
         window_background: background(),

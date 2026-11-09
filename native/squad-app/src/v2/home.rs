@@ -130,7 +130,12 @@ impl Shell {
         // job's details or the Jobs panel; elsewhere it is the Jobs panel, only
         // when you open it from the top bar.
         let on_job = pick.and_then(|id| self.crew.store.job(id).cloned());
-        let list = (on_job.is_some() || self.jobs_open).then(|| {
+        let list = (if on_job.is_some() {
+            !self.right_closed
+        } else {
+            self.jobs_open
+        })
+        .then(|| {
             // Slides in from the right edge when opened.
             motion::panel(
                 div()
