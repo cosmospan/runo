@@ -369,6 +369,10 @@ pub struct Job {
     /// When it carries on by itself after its engine's plan resets; 0 when
     /// it isn't waiting.
     pub resume_at: u64,
+    /// What the person said while it was working, sent as its next turn once
+    /// this one ends.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub queued: Vec<String>,
     /// Times it was picked up again after running out of plan.
     pub resumes: u8,
     /// It started on the night shift: when its engine runs out, another
@@ -470,6 +474,7 @@ impl Default for Job {
             marks: Vec::new(),
             rewound: false,
             resume_at: 0,
+            queued: Vec::new(),
             resumes: 0,
             shift: false,
             issue: String::new(),

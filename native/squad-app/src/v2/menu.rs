@@ -698,15 +698,32 @@ impl Shell {
         let Some(f) = self.crew.store.folders.iter().find(|f| f.path == path) else {
             return;
         };
+        let path = f.path.clone();
         self.gone = Some(Gone {
-            path: f.path.clone(),
+            path: path.clone(),
             name: f.name.clone(),
             disk,
             sure: false,
-            unsaved: if disk { unsaved_files(&f.path) } else { 0 },
+            unsaved: 0,
             busy: false,
         });
         cx.notify();
+        // Counting unsaved files runs git, which can take a while in a big
+        // repository: the confirm opens straight away and the count joins it.
+        if disk {
+            let dir = path.clone();
+            let task = cx.background_spawn(async move { unsaved_files(&dir) });
+            cx.spawn(async move |this, cx| {
+                let n = task.await;
+                let _ = this.update(cx, |this, cx| {
+                    if let Some(g) = this.gone.as_mut().filter(|g| g.path == path) {
+                        g.unsaved = n;
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
+        }
     }
 
     /// Jobs still working in the project at `path`.

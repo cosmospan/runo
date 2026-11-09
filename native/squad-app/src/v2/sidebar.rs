@@ -887,20 +887,34 @@ impl Shell {
         for who in members {
             let (word, _) = self.status_of(who);
             let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
-            let asks = !busy
-                && self
-                    .crew
-                    .store
-                    .jobs
-                    .iter()
-                    .any(|j| j.bot == who && j.needs_you());
+            // What the bot's jobs want from you, most pressing first: a
+            // question or permission it's waiting on, changes to review, a
+            // job that stopped with a problem.
+            let mine = || self.crew.store.jobs.iter().filter(move |j| j.bot == who);
+            let asking =
+                mine().any(|j| j.status == Status::Running && !self.crew.asks_for(j).is_empty());
+            let review = mine().any(|j| j.status == Status::Review);
+            let stopped = mine()
+                .any(|j| j.needs_you() && matches!(j.status, Status::Failed | Status::Interrupted));
+            let asks = asking || (!busy && (review || stopped));
+            let dot = if asking || review {
+                ui::AMBER
+            } else if asks {
+                ui::RED
+            } else {
+                ui::BLUE
+            };
             let mood = self.side_mood(who);
             let face = self.bot(who, mood, 24., squad_holo::Framing::Bust);
             let on = place == Place::Chat(who);
-            let (word, tint) = if asks {
+            let (word, tint) = if asking {
                 ("asks you".to_string(), ui::t_amber())
             } else if busy {
                 (word, ui::t_blue())
+            } else if review {
+                ("to review".to_string(), ui::t_amber())
+            } else if stopped {
+                ("stopped".to_string(), ui::t_red())
             } else if who == Member::Fin {
                 ("lead".to_string(), ui::faint())
             } else {
@@ -922,7 +936,7 @@ impl Shell {
                                         .bottom(px(-2.))
                                         .size(px(9.))
                                         .rounded_full()
-                                        .bg(c(if asks { ui::AMBER } else { ui::BLUE }))
+                                        .bg(c(dot))
                                         .border_2()
                                         .border_color(c(ground())),
                                 )

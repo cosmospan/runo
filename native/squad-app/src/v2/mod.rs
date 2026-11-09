@@ -444,6 +444,8 @@ pub struct Shell {
     chat_len: usize,
     thread_scroll: ScrollHandle,
     thread_key: u64,
+    /// The thread whose earlier pages are open, and how many more pages.
+    thread_more: (String, usize),
     /// Who spoke last in the chat being drawn, and when: a run of messages
     /// from one author shows their face and name once.
     streak: Option<(String, u64)>,
@@ -1281,6 +1283,7 @@ impl Shell {
             chat_len: 0,
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
+            thread_more: (String::new(), 0),
             streak: None,
             maker: (squad_holo::Tint::VIOLET, squad_holo::fin::ROLES[6].outfit),
             history_filter: 0,
@@ -3274,14 +3277,13 @@ impl Shell {
                 who.accent(),
             );
         }
-        if self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .any(|j| j.bot == who && j.needs_you())
+        let mine = || self.crew.store.jobs.iter().filter(move |j| j.bot == who);
+        if mine().any(|j| j.status == Status::Review) {
+            return ("to review".into(), ui::AMBER);
+        }
+        if mine().any(|j| j.needs_you() && matches!(j.status, Status::Failed | Status::Interrupted))
         {
-            return ("needs you".into(), ui::AMBER);
+            return ("stopped".into(), ui::RED);
         }
         (who.role().to_lowercase(), ui::faint())
     }
@@ -3656,6 +3658,15 @@ impl Render for Shell {
                 }
                 // Control keys belong to the shell while the terminal has focus.
                 if this.term_focus.is_focused(window) && !m.platform {
+                    return;
+                }
+                // Needs you works from the keyboard while no box has focus.
+                if this.place == Place::Inbox
+                    && !(m.platform || m.control || m.alt || m.shift)
+                    && this.focus.is_focused(window)
+                    && this.inbox_key(key, cx)
+                {
+                    cx.stop_propagation();
                     return;
                 }
                 if !(m.platform || m.control) || m.shift || m.alt {
