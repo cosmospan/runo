@@ -96,13 +96,16 @@ impl Shell {
                 (IconName::Wallet, ui::t_violet()),
                 "Spend",
                 format!("${spend:.2}"),
-                "reported by engines".into(),
+                "last 30 days, jobs only".into(),
             ))
             .child(ui::stat(
                 (IconName::LayoutDashboard, ui::t_blue()),
                 "Jobs",
                 recent.len().to_string(),
-                format!("{} running", self.crew.store.running().count()),
+                format!(
+                    "last 30 days \u{b7} {} running",
+                    self.crew.store.running().count()
+                ),
             ))
             .child(ui::stat(
                 (IconName::CircleCheck, ui::t_green()),

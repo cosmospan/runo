@@ -1476,9 +1476,7 @@ impl Shell {
                 .flex()
                 .flex_col()
                 .gap(px(space::L))
-                .child(window)
-                .child(picture)
-                .child(backdrop)
+                // Themes first: the choice most people come here for.
                 .child(
                     div()
                         .flex()
@@ -1504,7 +1502,10 @@ impl Shell {
                             "A see-through window over your desktop, blurred like frosted glass.",
                         ))
                         .child(frosted),
-                ),
+                )
+                .child(window)
+                .child(picture)
+                .child(backdrop),
         )
     }
 

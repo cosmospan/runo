@@ -863,7 +863,14 @@ impl Runtime {
             return;
         };
         if job.status == Status::Running {
-            self.say("It's still working. Add this once it finishes.");
+            // The person's words wait for this turn to end, then go as the
+            // next one; Squad Code's own asks are dropped as before.
+            if note.is_none() {
+                job.queued.push(text);
+                self.store.save();
+            } else {
+                self.say("It's still working. Add this once it finishes.");
+            }
             return;
         }
         if note.is_none() {
@@ -2571,12 +2578,50 @@ impl Runtime {
         self.poll_draft();
         self.poll_goals(st);
         self.poll_queue(st);
+        self.poll_queued(st);
         self.poll_shift(st);
         self.poll_feedback(st);
         self.poll_learning();
         self.poll_bringing();
         finished.extend(self.poll_remote(st));
         finished
+    }
+
+    /// Words the person added while a job worked, sent as its next turn once
+    /// the turn has ended and its checks are back. A turn waiting for its
+    /// engine's plan to reset keeps them until it carries on.
+    fn poll_queued(&mut self, st: &AppSettings) {
+        let ready: Vec<u64> = self
+            .store
+            .jobs
+            .iter()
+            .filter(|j| {
+                !j.queued.is_empty()
+                    && j.status != Status::Running
+                    && !j.checking
+                    && j.resume_at == 0
+                    && !matches!(j.status, Status::Discarded | Status::Shipped)
+            })
+            .map(|j| j.id)
+            .filter(|id| !self.runners.iter().any(|r| r.id == *id))
+            .collect();
+        for id in ready {
+            let Some(job) = self.store.job_mut(id) else {
+                continue;
+            };
+            let text = std::mem::take(&mut job.queued).join("\n\n");
+            self.send_on(st, id, text, None);
+        }
+    }
+
+    /// Takes back one of the words waiting for a job's next turn.
+    pub fn unqueue(&mut self, id: u64, n: usize) {
+        if let Some(job) = self.store.job_mut(id) {
+            if n < job.queued.len() {
+                job.queued.remove(n);
+                self.store.save();
+            }
+        }
     }
 
     /// The @mentions in a finished job's last reply, posted in its thread and
@@ -3466,6 +3511,35 @@ mod tests {
         assert!(ctx.contains("university email") && ctx.contains(".edu addresses"));
         assert!(!ctx.contains("add the sign-up page"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn words_for_a_running_job_wait_for_its_next_turn() {
+        let mut rt = Runtime::new(quiet_store());
+        rt.store.jobs.push(store::Job {
+            id: 9,
+            bot: Member::Builder,
+            status: Status::Running,
+            ..Default::default()
+        });
+        let st = AppSettings::default();
+        rt.follow_up(&st, 9, "use the blue button".into());
+        rt.follow_up(&st, 9, "and keep the old one".into());
+        let job = rt.store.job(9).unwrap();
+        assert_eq!(job.queued, ["use the blue button", "and keep the old one"]);
+        assert!(job.feed.is_empty());
+        assert!(rt.notes.is_empty());
+        // Still running, or done with its checks still going: they keep waiting.
+        rt.poll_queued(&st);
+        assert_eq!(rt.store.job(9).unwrap().queued.len(), 2);
+        let job = rt.store.job_mut(9).unwrap();
+        job.status = Status::Review;
+        job.checking = true;
+        rt.poll_queued(&st);
+        assert_eq!(rt.store.job(9).unwrap().queued.len(), 2);
+        // Taken back one at a time.
+        rt.unqueue(9, 0);
+        assert_eq!(rt.store.job(9).unwrap().queued, ["and keep the old one"]);
     }
 
     #[test]

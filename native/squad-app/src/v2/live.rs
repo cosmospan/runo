@@ -147,11 +147,11 @@ impl Shell {
                     .find(|g| g.id == gid)
                     .and_then(|g| {
                         let k = g.steps.iter().position(|s| s.job == job.id)?;
-                        Some(format!("Part {} of {}", k + 1, g.steps.len()))
+                        Some(format!("Plan: part {} of {}", k + 1, g.steps.len()))
                     })
-                    .unwrap_or_else(|| "Goal".into());
+                    .unwrap_or_else(|| "Plan".into());
                 d.child(
-                    ui::ghost("to-goal", label)
+                    ui::ghost_i("to-goal", IconName::ListTodo, label)
                         .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Goal(gid), cx))),
                 )
             })
@@ -196,7 +196,10 @@ impl Shell {
             .when(
                 !running
                     && super::trouble::trouble(job).is_none()
-                    && !matches!(job.status, Status::Done | Status::Review | Status::Shipped),
+                    && !matches!(
+                        job.status,
+                        Status::Done | Status::Review | Status::Shipping | Status::Shipped
+                    ),
                 |d| {
                     let id = job.id;
                     d.child(
@@ -605,7 +608,7 @@ impl Shell {
             self.live_scroll.scroll_to_bottom();
         }
         let input_hint = if running {
-            "It's working. You can add to the job when it finishes."
+            "It's working. What you add now goes to it when this turn ends."
         } else if job.status == Status::Review {
             "Send it back: say what to change…"
         } else {
@@ -633,6 +636,7 @@ impl Shell {
                     .px(px(30.))
                     .pb(px(super::DOCK_ROOM))
                     .pt(px(6.))
+                    .children(self.queued_strip(job, cx))
                     .child(
                         ui::card()
                             .rounded(px(18.))
@@ -641,13 +645,11 @@ impl Shell {
                             .flex()
                             .items_center()
                             .gap(px(10.))
-                            .when(running, |d| d.opacity(0.6))
                             .child(
-                                div().flex_1().text_size(px(14.)).child(
-                                    Input::new(&self.live_input)
-                                        .appearance(false)
-                                        .disabled(running),
-                                ),
+                                div()
+                                    .flex_1()
+                                    .text_size(px(14.))
+                                    .child(Input::new(&self.live_input).appearance(false)),
                             )
                             .child(
                                 div()
@@ -657,6 +659,56 @@ impl Shell {
                             ),
                     ),
             )
+    }
+
+    /// What you've added while the job works, waiting for its next turn, each
+    /// with a cross to take it back.
+    fn queued_strip(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        if job.queued.is_empty() {
+            return None;
+        }
+        let id = job.id;
+        let mut list = div().flex().flex_col().gap(px(4.)).mb(px(8.));
+        list = list.child(
+            div()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child(format!("Goes to {} when this turn ends", job.bot.name())),
+        );
+        for (n, text) in job.queued.iter().enumerate() {
+            list = list.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(12.))
+                    .py(px(6.))
+                    .rounded(px(10.))
+                    .bg(c(ui::hover()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(13.))
+                            .text_color(c(ui::ink()))
+                            .child(text.clone()),
+                    )
+                    .child(
+                        div()
+                            .id(("unqueue", n))
+                            .cursor_pointer()
+                            .text_color(c(ui::faint()))
+                            .hover(|s| s.text_color(c(ui::ink())))
+                            .child(Icon::new(IconName::Close).size(px(12.)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.crew.unqueue(id, n);
+                                cx.notify();
+                            })),
+                    ),
+            );
+        }
+        Some(list)
     }
 
     /// A job's details for the right sidebar: where it stands, its plan, the
@@ -835,11 +887,18 @@ impl Shell {
         }
         // "4s · 1 turn · $0.07 · 59% from cache" as small tiles.
         let stats: Vec<String> = if job.summary.is_empty() {
-            vec![store::span(job.seconds())]
+            vec![store::span(job.seconds()).replace(' ', "\u{a0}")]
         } else {
             job.summary
                 .split(" \u{b7} ")
                 .map(|p| p.trim().to_string())
+                // An engine's "260s" reads as "4m 20s", like everywhere else.
+                .map(
+                    |p| match p.strip_suffix('s').and_then(|n| n.parse::<u64>().ok()) {
+                        Some(secs) => store::span(secs).replace(' ', "\u{a0}"),
+                        None => p,
+                    },
+                )
                 .collect()
         };
         let mut stats_grid = div().flex().flex_wrap().gap(px(6.));

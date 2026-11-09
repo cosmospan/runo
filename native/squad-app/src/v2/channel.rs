@@ -39,6 +39,9 @@ pub(super) const COMMANDS: [(&str, &str); 9] = [
 /// How wide the chat column reads at most.
 const COLUMN: f32 = 760.;
 
+/// How many entries a thread shows at first, and adds with each "Show earlier".
+const THREAD_PAGE: usize = 30;
+
 /// One thing in the thread, by when it happened.
 enum Entry {
     Job(Box<Job>),
@@ -774,48 +777,51 @@ impl Shell {
             None
         };
         self.crew.store.mark_seen(&folder.path, thread);
-        let mut entries: Vec<Entry> = self
-            .crew
-            .store
-            .jobs_in(&folder.path, thread)
-            .into_iter()
-            .filter(|j| j.goal == 0 && (j.race == 0 || j.race == j.id))
-            .cloned()
-            .map(|j| Entry::Job(Box::new(j)))
-            .collect();
-        entries.extend(
-            self.crew
-                .store
-                .goals
-                .iter()
-                .filter(|g| {
-                    g.folder.path == folder.path
-                        && self.crew.store.thread_for(&folder.path, g.thread) == thread
-                })
-                .cloned()
-                .map(Entry::Plan),
-        );
-        entries.extend(
-            self.crew
-                .store
-                .talks
-                .iter()
-                .filter(|t| {
-                    t.folder == folder.path
-                        && self.crew.store.thread_for(&folder.path, t.thread) == thread
-                })
-                .cloned()
-                .map(Entry::Talk),
-        );
+        // What's in the thread, by index and time only: this runs on every
+        // frame, so only the entries that are drawn get copied.
+        #[derive(Clone, Copy)]
+        enum Slot {
+            Job(usize),
+            Plan(usize),
+            Talk(usize),
+        }
+        let store = &self.crew.store;
+        let mut slots: Vec<(u64, bool, Slot)> = Vec::new();
+        for (i, j) in store.jobs.iter().enumerate() {
+            if j.folder.path == folder.path
+                && j.goal == 0
+                && (j.race == 0 || j.race == j.id)
+                && store.thread_for(&folder.path, j.thread) == thread
+            {
+                slots.push((j.started, true, Slot::Job(i)));
+            }
+        }
+        for (i, g) in store.goals.iter().enumerate() {
+            if g.folder.path == folder.path && store.thread_for(&folder.path, g.thread) == thread {
+                slots.push((g.started, true, Slot::Plan(i)));
+            }
+        }
+        for (i, t) in store.talks.iter().enumerate() {
+            if t.folder == folder.path && store.thread_for(&folder.path, t.thread) == thread {
+                slots.push((t.at, false, Slot::Talk(i)));
+            }
+        }
         // In the same second, a bot's message comes before the job it starts.
-        entries.sort_by_key(|e| (e.at(), !matches!(e, Entry::Talk(_))));
-        let total = entries.len();
-        // The last 30 things, newest at the bottom beside the composer.
-        let shown: Vec<Entry> = entries.into_iter().skip(total.saturating_sub(30)).collect();
-
-        // Jump to the newest when the thread, or what's in it, changes. A plain
-        // top-down list with its own scroll: a bottom-up one let the wheel run
-        // past the last message into empty space.
+        slots.sort_by_key(|(at, not_talk, _)| (*at, *not_talk));
+        let total = slots.len();
+        // The newest page, newest at the bottom beside the composer; "Show
+        // earlier" above it adds a page at a time.
+        let thread_id = format!("{}#{thread}", folder.path);
+        if self.thread_more.0 != thread_id {
+            self.thread_more = (thread_id, 0);
+        }
+        let want = THREAD_PAGE + self.thread_more.1 * THREAD_PAGE;
+        let first = total.saturating_sub(want);
+        let earlier = first;
+        // Jump to the newest when the thread, or what's in it, changes. Only
+        // the newest page counts, so showing earlier entries keeps your place.
+        // A plain top-down list with its own scroll: a bottom-up one let the
+        // wheel run past the last message into empty space.
         let key = {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -826,15 +832,24 @@ impl Shell {
             for r in &self.runs {
                 r.shape().hash(&mut h);
             }
-            for e in &shown {
-                e.at().hash(&mut h);
-                if let Entry::Job(j) = e {
+            for (at, _, slot) in &slots[total.saturating_sub(THREAD_PAGE)..] {
+                at.hash(&mut h);
+                if let Slot::Job(i) = slot {
+                    let j = &store.jobs[*i];
                     j.feed.len().hash(&mut h);
                     (j.status as u8).hash(&mut h);
                 }
             }
             h.finish()
         };
+        let shown: Vec<Entry> = slots[first..]
+            .iter()
+            .map(|(_, _, slot)| match *slot {
+                Slot::Job(i) => Entry::Job(Box::new(store.jobs[i].clone())),
+                Slot::Plan(i) => Entry::Plan(store.goals[i].clone()),
+                Slot::Talk(i) => Entry::Talk(store.talks[i].clone()),
+            })
+            .collect();
         if key != self.thread_key {
             self.thread_key = key;
             // Again on the next few frames: the scroll only knows the last
@@ -874,6 +889,33 @@ impl Shell {
             .flex()
             .flex_col()
             .child(self.thread_intro(thread, &name, empty, total));
+        if earlier > 0 {
+            let n = earlier.min(THREAD_PAGE);
+            feed = feed.child(
+                div().w_full().flex().justify_center().py(px(10.)).child(
+                    div()
+                        .id("thread-earlier")
+                        .px(px(12.))
+                        .py(px(5.))
+                        .rounded_full()
+                        .border_1()
+                        .border_color(c(ui::line()))
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                        .child(if earlier > n {
+                            format!("Show {n} earlier \u{b7} {earlier} more in this thread")
+                        } else {
+                            format!("Show {n} earlier")
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.thread_more.1 += 1;
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
         let mut day = String::new();
         let mut marked = since == 0;
         self.streak = None;
@@ -2498,7 +2540,7 @@ impl Shell {
                             .child("Nothing starts until you say so."),
                     )
                     .child(
-                        ui::ghost(("plan-drop", id as usize), "Drop")
+                        ui::ghost(("plan-drop", id as usize), "Discard")
                             .h(px(28.))
                             .on_click(cx.listener(move |this, _, _, cx| this.drop_goal(id, cx))),
                     )
@@ -2510,9 +2552,15 @@ impl Shell {
                             ),
                     )
                     .child(
-                        ui::solid(("plan-start", id as usize), "Start the crew")
-                            .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
+                        ui::solid(
+                            ("plan-start", id as usize),
+                            match g.steps.len() {
+                                1 => "Start the job".to_string(),
+                                n => format!("Start {n} jobs"),
+                            },
+                        )
+                        .h(px(28.))
+                        .on_click(cx.listener(move |this, _, _, cx| this.start_goal(id, cx))),
                     ),
             ),
             State::Planning => None,

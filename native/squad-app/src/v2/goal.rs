@@ -293,7 +293,7 @@ impl Shell {
                 .flex_col()
                 .gap(px(6.))
                 .child(ui::caption(format!(
-                    "GOAL \u{b7} {}",
+                    "PLAN \u{b7} {}",
                     goal.folder.name.to_uppercase()
                 )))
                 .child(
@@ -342,7 +342,7 @@ impl Shell {
             }
             State::Failed => {
                 head = head.child(
-                    ui::ghost("goal-drop", "Remove")
+                    ui::ghost("goal-drop", "Discard")
                         .on_click(cx.listener(move |this, _, _, cx| this.drop_goal(id, cx))),
                 );
             }
@@ -407,18 +407,75 @@ impl Shell {
                                     .truncate()
                                     .child(s.title.clone()),
                             )
-                            .child(
+                            .child({
+                                let ready = goal.state == State::Ready;
                                 div()
+                                    .id(("goal-kind", k))
                                     .text_size(px(11.5))
                                     .text_color(c(ui::faint()))
-                                    .child(format!("{} \u{b7} {}", s.mode.label(), who.name())),
-                            ),
+                                    .child(format!(
+                                        "{} \u{b7} {}{}",
+                                        s.mode.label(),
+                                        who.name(),
+                                        if ready { "  \u{2192} change" } else { "" }
+                                    ))
+                                    // Before it starts, a click moves the step to
+                                    // the next kind of job, and so the next bot.
+                                    .when(ready, |d| {
+                                        d.cursor_pointer()
+                                            .hover(|s| s.text_color(c(ui::ink())))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                if let Some(st) = this
+                                                    .crew
+                                                    .store
+                                                    .goals
+                                                    .iter_mut()
+                                                    .find(|g| g.id == id)
+                                                    .and_then(|g| g.steps.get_mut(k))
+                                                {
+                                                    let all = super::data::Mode::ALL;
+                                                    let at = all
+                                                        .iter()
+                                                        .position(|m| *m == st.mode)
+                                                        .unwrap_or(0);
+                                                    st.mode = all[(at + 1) % all.len()];
+                                                }
+                                                this.crew.store.save();
+                                                cx.notify();
+                                            }))
+                                    })
+                            }),
                     )
                     .child(pill)
                     .when(job_id != 0, |d| {
                         d.child(ui::ghost(("goal-open", k), "Open").h(px(28.)).on_click(
                             cx.listener(move |this, _, _, cx| this.go(Place::Live(job_id), cx)),
                         ))
+                    })
+                    .when(goal.state == State::Ready && goal.steps.len() > 1, |d| {
+                        d.child(
+                            div()
+                                .id(("goal-up", k))
+                                // The first keeps the room, so the rows line up.
+                                .when(k == 0, |d| d.opacity(0.))
+                                .px(px(8.))
+                                .text_size(px(12.))
+                                .text_color(c(ui::faint()))
+                                .cursor_pointer()
+                                .hover(|s| s.text_color(c(ui::ink())))
+                                .child("Move up")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if let Some(g) =
+                                        this.crew.store.goals.iter_mut().find(|g| g.id == id)
+                                    {
+                                        if k > 0 && k < g.steps.len() {
+                                            g.steps.swap(k - 1, k);
+                                        }
+                                    }
+                                    this.crew.store.save();
+                                    cx.notify();
+                                })),
+                        )
                     })
                     .when(goal.state == State::Ready && goal.steps.len() > 1, |d| {
                         d.child(

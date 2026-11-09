@@ -11,6 +11,73 @@ use super::ui::{self, c, ca};
 use super::Shell;
 
 impl Shell {
+    /// The jobs in Needs you, in the order the list shows them.
+    pub(super) fn inbox_ids(&self) -> Vec<u64> {
+        self.crew
+            .store
+            .listed()
+            .into_iter()
+            .filter(|j| j.needs_you())
+            .map(|j| j.id)
+            .collect()
+    }
+
+    /// Needs you from the keyboard: arrows (or J and K) move, Enter opens the
+    /// job, A approves changes that can go, E marks the rest seen. True when
+    /// the key was used.
+    pub(super) fn inbox_key(&mut self, key: &str, cx: &mut Context<Self>) -> bool {
+        let ids = self.inbox_ids();
+        if ids.is_empty() {
+            return false;
+        }
+        let at = self
+            .inbox_pick
+            .and_then(|p| ids.iter().position(|i| *i == p))
+            .unwrap_or(0);
+        let id = ids[at];
+        match key {
+            "down" | "j" => self.inbox_pick = Some(ids[(at + 1).min(ids.len() - 1)]),
+            "up" | "k" => self.inbox_pick = Some(ids[at.saturating_sub(1)]),
+            "enter" => self.open_job(id, cx),
+            "a" => {
+                let Some(j) = self.crew.store.job(id) else {
+                    return false;
+                };
+                let failing = !j.checking
+                    && super::work::verdict(&j.checks, false).1 == super::work::Verdict::Fail;
+                if j.status != Status::Review
+                    || j.changes.is_empty()
+                    || !j.conflict.is_empty()
+                    || failing
+                {
+                    return false;
+                }
+                self.inbox_pick = ids
+                    .get(at + 1)
+                    .or(at.checked_sub(1).and_then(|p| ids.get(p)))
+                    .copied();
+                self.approve(id, cx);
+            }
+            "e" => {
+                let Some(j) = self.crew.store.job_mut(id) else {
+                    return false;
+                };
+                if j.status == Status::Review {
+                    return false;
+                }
+                j.seen = true;
+                self.inbox_pick = ids
+                    .get(at + 1)
+                    .or(at.checked_sub(1).and_then(|p| ids.get(p)))
+                    .copied();
+                self.crew.store.save();
+            }
+            _ => return false,
+        }
+        cx.notify();
+        true
+    }
+
     /// Inbox: what needs you on the left, the picked item on the right with what
     /// the bot said, what it changed, and what you can do about it.
     pub(super) fn inbox(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -391,10 +458,10 @@ impl Shell {
                             .text_color(c(ui::muted()))
                             .child(match j.status {
                                 Status::Review => {
-                                    "Approve it on the card above, or send it back with changes."
+                                    "\u{2191}\u{2193} to move \u{b7} A approves \u{b7} Enter opens the job to send it back."
                                 }
-                                Status::Done => "Look it over, then mark it seen or ask for more.",
-                                _ => "Open the job to see where it stopped, or ask it to carry on.",
+                                Status::Done => "\u{2191}\u{2193} to move \u{b7} E marks it seen \u{b7} Enter opens the job.",
+                                _ => "\u{2191}\u{2193} to move \u{b7} E marks it seen \u{b7} Enter opens the job to carry on.",
                             }),
                     )
                     .child(
@@ -408,6 +475,10 @@ impl Shell {
                         )
                         .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
                     )
+                    .when(j.status == Status::Review && !j.changes.is_empty(), |d| {
+                        let label = self.approve_label(j);
+                        d.child(self.approve_button("inbox-approve", j, label, cx))
+                    })
                     .when(j.status != Status::Review, |d| {
                         d.child(
                             ui::solid_i("inbox-seen", IconName::Check, "Mark as seen").on_click(
@@ -438,10 +509,36 @@ impl Shell {
             );
         }
         let query = self.history_input.read(cx).value().to_lowercase();
-        let everything: Vec<Job> = self.crew.store.listed().into_iter().cloned().collect();
+        // This runs on every frame: the cards need a job's fields but not its
+        // whole conversation, so each job is copied with only its last few
+        // feed lines (enough for what it's doing now).
+        let order: Vec<u64> = self.crew.store.listed().into_iter().map(|j| j.id).collect();
+        let mut light: std::collections::HashMap<u64, Job> =
+            std::collections::HashMap::with_capacity(order.len());
+        {
+            let want: std::collections::HashSet<u64> = order.iter().copied().collect();
+            for j in self
+                .crew
+                .store
+                .jobs
+                .iter_mut()
+                .filter(|j| want.contains(&j.id))
+            {
+                let feed = std::mem::take(&mut j.feed);
+                let mut copy = j.clone();
+                copy.feed = feed[feed.len().saturating_sub(8)..].to_vec();
+                j.feed = feed;
+                light.insert(copy.id, copy);
+            }
+        }
+        let everything: Vec<Job> = order.iter().filter_map(|id| light.remove(id)).collect();
+        let words: Vec<&str> = query.split_whitespace().collect();
         let all: Vec<Job> = everything
             .iter()
             .filter(|j| {
+                if words.is_empty() {
+                    return true;
+                }
                 let hay = format!(
                     "{} {} {} {} {}",
                     j.title,
@@ -451,7 +548,7 @@ impl Shell {
                     j.mode.label()
                 )
                 .to_lowercase();
-                query.split_whitespace().all(|w| hay.contains(w))
+                words.iter().all(|w| hay.contains(w))
             })
             .cloned()
             .collect();
@@ -474,12 +571,12 @@ impl Shell {
             said.push(format!("{n_need} waiting on you"));
         }
         said.push(format!(
-            "{} {} in all",
+            "{} {} kept",
             everything.len(),
             if everything.len() == 1 { "job" } else { "jobs" }
         ));
         if spend > 0.0 {
-            said.push(format!("${spend:.2} spent"));
+            said.push(format!("${spend:.2} spent on them"));
         }
 
         let filter = self.history_filter.min(4);

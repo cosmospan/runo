@@ -78,7 +78,7 @@ flowchart LR
 ```
 
 - **Just talk.** Type in a thread the way you'd message a teammate. Peek decides whether to answer, ask back, or turn it into jobs. `@` brings a bot in, `#` points at another thread, and `/` has the rest: `/plan`, `/race`, `/ask`, `/thread`, `/rename`, `/archive`.
-- **Plans before work.** For anything bigger than one step, Peek posts a plan card: the steps and the bot for each. Nothing starts until you press **Start the crew**.
+- **Plans before work.** For anything bigger than one step, Peek posts a plan card: the steps and the bot for each. Nothing starts until you press its **Start** button.
 - **Your checkout is never touched.** Every job that changes files gets its own branch (`squad/<slug>`) and worktree, so several jobs run side by side without stepping on each other.
 - **Proven before you look.** When a job finishes, Checker runs the project's checks in its worktree, and the job card shows the result next to the diff.
 - **Bring your own agents.** Squad Code drives the agent CLIs you already have installed and signed in. It never sells or proxies tokens, and every bot can run on a different engine and model.
@@ -146,7 +146,7 @@ Try one job on two or three engines at once (`/race`), each on its own branch, a
 
 <img src="docs/images/goal.png" alt="A plan, Let customers save their cart and come back to it, split into four jobs for Builder, Checker and Guard, with Discard and Start 4 jobs" />
 
-Something too big for one job? Peek splits it into two to six jobs, each for the right bot. Drop what you don't want and start it: the jobs run one after another, each building on the last.
+Something too big for one job? Peek splits it into two to six jobs, each for the right bot. Remove a step, move it up or hand it to another bot, then start it: the jobs run one after another, each building on the last.
 
 </td>
 </tr>

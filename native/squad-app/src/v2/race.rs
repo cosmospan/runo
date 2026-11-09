@@ -35,6 +35,14 @@ pub fn marks(tries: &[Job]) -> Vec<Marks> {
         }
         return out;
     }
+    // A try whose checks failed isn't in the running for best: its speed or
+    // price shouldn't sell it over one that works.
+    let fails = |j: &Job| !j.checking && work::verdict(&j.checks, false).1 == Verdict::Fail;
+    let done: Vec<&Job> = if done.iter().any(|j| !fails(j)) {
+        done.into_iter().filter(|j| !fails(j)).collect()
+    } else {
+        done
+    };
     let fastest = done.iter().map(|j| j.seconds()).min();
     let cheapest = done
         .iter()
@@ -425,6 +433,19 @@ mod tests {
         running.status = Status::Running;
         let m = marks(&[try_(1, 90, "0.30", 40), running]);
         assert!(!m[0].fastest && !m[1].fastest);
+    }
+
+    #[test]
+    fn a_try_that_fails_its_checks_wins_nothing() {
+        let mut quick = try_(1, 60, "0.05", 5);
+        quick.checks = vec![crate::proof::CheckRun {
+            command: "cargo test".into(),
+            ok: false,
+            ..Default::default()
+        }];
+        let m = marks(&[quick, try_(2, 200, "0.40", 50)]);
+        assert!(!m[0].fastest && !m[0].cheapest && !m[0].smallest);
+        assert!(m[1].fastest && m[1].cheapest && m[1].smallest);
     }
 
     #[test]

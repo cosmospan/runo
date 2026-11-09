@@ -692,7 +692,7 @@ impl Shell {
             .child(
                 row("side-crew", place == Place::Crew)
                     .child(Icon::new(IconName::Users).size(px(16.)))
-                    .child("Your crew")
+                    .child("Crew")
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
             )
             // Your server, once there is one, with a dot for whether it answers.
@@ -893,23 +893,58 @@ impl Shell {
             .into_iter()
             .filter(|m| m.on_crew())
             .collect();
+        // A big crew folds its quiet bots away: the ones with nothing going on,
+        // no conversation yet and not open. Peek always shows.
+        let fold_quiet =
+            members.len() > 6 && !self.side_folds.get("crew-all").copied().unwrap_or(false);
+        let mut hidden = 0usize;
         for who in members {
-            let (word, _) = self.status_of(who);
-            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
-            let asks = !busy
-                && self
+            if fold_quiet
+                && who != Member::Fin
+                && place != Place::Chat(who)
+                && self.crew.store.busy(who).is_none()
+                && !self.thinking(who)
+                && self.crew.store.chats.get(&who).is_none_or(|c| c.is_empty())
+                && !self
                     .crew
                     .store
                     .jobs
                     .iter()
-                    .any(|j| j.bot == who && j.needs_you());
+                    .any(|j| j.bot == who && (j.needs_you() || j.status == Status::Review))
+            {
+                hidden += 1;
+                continue;
+            }
+            let (word, _) = self.status_of(who);
+            let busy = self.crew.store.busy(who).is_some() || self.thinking(who);
+            // What the bot's jobs want from you, most pressing first: a
+            // question or permission it's waiting on, changes to review, a
+            // job that stopped with a problem.
+            let mine = || self.crew.store.jobs.iter().filter(move |j| j.bot == who);
+            let asking =
+                mine().any(|j| j.status == Status::Running && !self.crew.asks_for(j).is_empty());
+            let review = mine().any(|j| j.status == Status::Review);
+            let stopped = mine()
+                .any(|j| j.needs_you() && matches!(j.status, Status::Failed | Status::Interrupted));
+            let asks = asking || (!busy && (review || stopped));
+            let dot = if asking || review {
+                ui::AMBER
+            } else if asks {
+                ui::RED
+            } else {
+                ui::BLUE
+            };
             let mood = self.side_mood(who);
             let face = self.bot(who, mood, 24., squad_holo::Framing::Bust);
             let on = place == Place::Chat(who);
-            let (word, tint) = if asks {
+            let (word, tint) = if asking {
                 ("asks you".to_string(), ui::t_amber())
             } else if busy {
                 (word, ui::t_blue())
+            } else if review {
+                ("to review".to_string(), ui::t_amber())
+            } else if stopped {
+                ("stopped".to_string(), ui::t_red())
             } else if who == Member::Fin {
                 ("lead".to_string(), ui::faint())
             } else {
@@ -931,7 +966,7 @@ impl Shell {
                                         .bottom(px(-2.))
                                         .size(px(9.))
                                         .rounded_full()
-                                        .bg(c(if asks { ui::AMBER } else { ui::BLUE }))
+                                        .bg(c(dot))
                                         .border_2()
                                         .border_color(c(ground())),
                                 )
@@ -956,6 +991,40 @@ impl Shell {
                         self.on_menu(super::menu::Ctx::Bot(who), cx),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.go(Place::Chat(who), cx))),
+            );
+        }
+        let all_open = self.side_folds.get("crew-all").copied().unwrap_or(false);
+        if hidden > 0 || all_open {
+            list = list.child(
+                row("side-more-bots", false)
+                    .text_color(c(ui::faint()))
+                    .child(
+                        div()
+                            .size(px(18.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                Icon::new(if all_open {
+                                    IconName::ChevronUp
+                                } else {
+                                    IconName::ChevronDown
+                                })
+                                .size(px(12.)),
+                            ),
+                    )
+                    .child(if all_open {
+                        "Show fewer".to_string()
+                    } else if hidden == 1 {
+                        "1 more bot".to_string()
+                    } else {
+                        format!("{hidden} more bots")
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.side_folds.insert("crew-all".into(), !all_open);
+                        cx.notify();
+                    })),
             );
         }
         list.child(
@@ -1047,6 +1116,51 @@ impl Shell {
 
     /// Each live thread in the project at `path`, #general first: its id,
     /// name, jobs running and jobs waiting on you.
+    /// Alt+Up and Alt+Down move to the thread above or below; with Shift too,
+    /// to the next or previous one with something unread. True when it moved.
+    pub(super) fn step_thread(
+        &mut self,
+        down: bool,
+        unread_only: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(path) = self.crew.store.folder().map(|f| f.path.clone()) else {
+            return false;
+        };
+        let ids: Vec<u64> = self
+            .thread_rows_in(&path)
+            .into_iter()
+            .map(|r| r.0)
+            .collect();
+        if ids.is_empty() {
+            return false;
+        }
+        let here = self.crew.store.thread_here();
+        let at = if self.place == Place::Today {
+            ids.iter().position(|i| *i == here)
+        } else {
+            None
+        };
+        let n = ids.len();
+        let order: Vec<usize> = match (at, down) {
+            (Some(a), true) => (1..n).map(|k| (a + k) % n).collect(),
+            (Some(a), false) => (1..n).map(|k| (a + n - k) % n).collect(),
+            (None, true) => (0..n).collect(),
+            (None, false) => (0..n).rev().collect(),
+        };
+        let next = order
+            .into_iter()
+            .map(|k| ids[k])
+            .find(|id| !unread_only || self.crew.store.unread(&path, *id));
+        let Some(id) = next else {
+            return false;
+        };
+        self.crew.store.thread_now = id;
+        self.crew.store.save();
+        self.go(Place::Today, cx);
+        true
+    }
+
     fn thread_rows_in(&self, path: &str) -> Vec<(u64, String, usize, usize)> {
         let store = &self.crew.store;
         let mut ids: Vec<(u64, String)> = vec![(0, "general".into())];

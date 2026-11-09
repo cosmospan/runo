@@ -4,7 +4,8 @@
 //! it is one) with `--remote-debugging-pipe`, so CDP runs over two inherited file
 //! descriptors (3 and 4) as NUL-separated JSON. Each Squad Code session gets its own page (target); the one on
 //! screen streams JPEG frames that are decoded here, off the UI thread.
-
+// Outside Linux only part of this is used, so the rest reads as unused there.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 // Only the Linux design renderer drives the engine for now (see designdraw), so on
 // macOS and Windows most of it is unused until the Browser tab moves onto it.
 #![cfg_attr(any(target_os = "macos", windows), allow(dead_code))]

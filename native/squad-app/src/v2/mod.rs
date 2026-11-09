@@ -447,6 +447,8 @@ pub struct Shell {
     thread_key: u64,
     /// Frames left to keep the thread at its newest after it changed.
     thread_settle: u8,
+    /// The thread whose earlier pages are open, and how many more pages.
+    thread_more: (String, usize),
     /// Who spoke last in the chat being drawn, and when: a run of messages
     /// from one author shows their face and name once.
     streak: Option<(String, u64)>,
@@ -1307,6 +1309,7 @@ impl Shell {
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
             thread_settle: 0,
+            thread_more: (String::new(), 0),
             streak: None,
             maker: (squad_holo::Tint::VIOLET, squad_holo::fin::ROLES[6].outfit),
             history_filter: 0,
@@ -3316,14 +3319,13 @@ impl Shell {
                 who.accent(),
             );
         }
-        if self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .any(|j| j.bot == who && j.needs_you())
+        let mine = || self.crew.store.jobs.iter().filter(move |j| j.bot == who);
+        if mine().any(|j| j.status == Status::Review) {
+            return ("to review".into(), ui::AMBER);
+        }
+        if mine().any(|j| j.needs_you() && matches!(j.status, Status::Failed | Status::Interrupted))
         {
-            return ("needs you".into(), ui::AMBER);
+            return ("stopped".into(), ui::RED);
         }
         (who.role().to_lowercase(), ui::faint())
     }
@@ -3708,6 +3710,26 @@ impl Render for Shell {
                 }
                 // Control keys belong to the shell while the terminal has focus.
                 if this.term_focus.is_focused(window) && !m.platform {
+                    return;
+                }
+                // Alt+Up and Alt+Down step through the threads (with Shift,
+                // only the unread ones), like Slack.
+                if m.alt
+                    && !(m.platform || m.control)
+                    && matches!(key, "up" | "down")
+                    && this.place != Place::Welcome
+                    && this.step_thread(key == "down", m.shift, cx)
+                {
+                    cx.stop_propagation();
+                    return;
+                }
+                // Needs you works from the keyboard while no box has focus.
+                if this.place == Place::Inbox
+                    && !(m.platform || m.control || m.alt || m.shift)
+                    && this.focus.is_focused(window)
+                    && this.inbox_key(key, cx)
+                {
+                    cx.stop_propagation();
                     return;
                 }
                 if !(m.platform || m.control) || m.shift || m.alt {

@@ -54,7 +54,7 @@ pub(super) fn choice(
 }
 
 /// The command that installs agent `id`'s command-line tool here.
-fn install_cmd(id: &str) -> Option<String> {
+pub(super) fn install_cmd(id: &str) -> Option<String> {
     crate::registry::spec(id).and_then(|s| {
         s.install
             .npm
@@ -393,7 +393,6 @@ impl Shell {
                             "Install a new one, update one, or pick the default for new jobs.",
                         ))
                         .children(setup)
-                        .children(add)
                     })
                     .when(none_ready && !brains_tab, |d| {
                         d.child(
@@ -412,6 +411,8 @@ impl Shell {
                                 .child(list)
                                 .child(detail),
                         )
+                        // The engines you have come first; the ones you could add follow.
+                        .children(add)
                         .child(brain)
                     }),
             )
@@ -843,7 +844,7 @@ impl Shell {
             .store
             .jobs
             .iter()
-            .filter(|j| j.agent == id && super::store::now().saturating_sub(j.started) < 86_400)
+            .filter(|j| j.agent == id && j.started / 86_400 == super::store::now() / 86_400)
             .filter_map(|j| super::home::cost(&j.summary))
             .sum::<f64>()
             + 0.0;
@@ -885,7 +886,7 @@ impl Shell {
                         )
                         .child(div().text_size(px(12.5)).text_color(c(ui::muted())).child(
                             format!(
-                                "{} \u{b7} {} \u{b7} {jobs} jobs \u{b7} ${spent:.2} today",
+                                "{} \u{b7} {} \u{b7} {jobs} jobs in all \u{b7} ${spent:.2} today",
                                 vendor(id),
                                 if ok { "ready" } else { "not installed" }
                             ),

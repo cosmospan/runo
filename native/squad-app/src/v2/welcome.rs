@@ -2,7 +2,7 @@
 //! a folder. Two short steps, both skippable, shown once. The crew starts with
 //! just Fin, who leads it: Fin answers questions and offers the other bots as
 //! jobs need them, and any bot can be added or made on Crew. What to do first
-//! is on the Jobs page, which opens next.
+//! is in #general, which opens next.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -144,7 +144,7 @@ impl Shell {
                 },
             ))
         };
-        let mark = self.bot(Member::Builder, Mood::Signature, 56., Framing::Bust);
+        let mark = self.bot(Member::Fin, Mood::Signature, 56., Framing::Bust);
         let left = div()
             .w(px(320.))
             .flex_none()
@@ -176,7 +176,7 @@ impl Shell {
                             .text_size(px(13.))
                             .line_height(px(19.))
                             .text_color(c(ui::muted()))
-                            .child("Two quick checks, then you're on Jobs with a few ideas for a first job. Both can be changed later."),
+                            .child("Two quick checks, then you're in #general with Peek, ready for a first job. Both can be changed later."),
                     ),
             )
             .child(steps)
@@ -188,7 +188,7 @@ impl Shell {
                     .text_color(c(ui::muted()))
                     .cursor_pointer()
                     .hover(|s| s.text_color(c(ui::ink())))
-                    .child("Skip setup and go to Jobs")
+                    .child("Skip setup and go to #general")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.finish_setup(cx);
                         this.go(Place::Today, cx);
@@ -239,7 +239,7 @@ impl Shell {
         let ready: Vec<usize> = (0..crate::agent::PROVIDERS.len())
             .filter(|i| super::engine::ready(&st, *i))
             .collect();
-        let hero = self.bot(Member::Builder, Mood::Idle, 150., Framing::Full);
+        let hero = self.bot(Member::Fin, Mood::Idle, 150., Framing::Full);
         let mut list = div().flex().flex_wrap().gap(px(8.));
         // The installed agents first, then the three most people use, greyed.
         let common = ["claude", "codex", "gemini"];
@@ -270,7 +270,17 @@ impl Shell {
                     .child(if ok { "✓" } else { "○" })
                     .child(p.name)
                     .when(!ok, |d| {
-                        d.child(div().text_size(px(11.)).child("not found"))
+                        // Missing: one click runs its install inside Squad.
+                        match super::engines::install_cmd(p.id) {
+                            Some(cmd) => d
+                                .cursor_pointer()
+                                .hover(|s| s.border_color(c(ui::faint())).text_color(c(ui::ink())))
+                                .child(div().text_size(px(11.)).child("not found \u{b7} install"))
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.run_setup(&cmd, cx)),
+                                ),
+                            None => d.child(div().text_size(px(11.)).child("not found")),
+                        }
                     }),
             );
         }
@@ -357,7 +367,7 @@ impl Shell {
         let words = if self.crew.store.folders.is_empty() {
             "Pick the project the crew should work in. You can add more folders later, or drop one onto the window."
         } else {
-            "The crew works in one project folder at a time. Pick one here, or add another. You can switch any time from Jobs."
+            "The crew works in one project folder at a time. Pick one here, or add another. You can add or switch projects any time from the rail on the left."
         };
         card_with(
             hero,
