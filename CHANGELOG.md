@@ -4,6 +4,12 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ## [Unreleased]
 
+## [2.0.0-alpha.9] - 2026-11-09
+
+### Fixed
+
+- The Mac builds of 2.0.0-alpha.8 failed to build, so that release has no Mac downloads. Smart Peek's llama-server is now built without OpenSSL, which it never needed, so both Mac builds go through.
+
 ## [2.0.0-alpha.8] - 2026-11-09
 
 ### Added
