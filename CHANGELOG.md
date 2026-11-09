@@ -4,6 +4,8 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ## [Unreleased]
 
+## [2.0.0-alpha.8] - 2026-11-09
+
 ### Added
 
 - Plans can be reordered and reassigned before they start: each step has Move up, and clicking a step's bot hands it to the next one.
