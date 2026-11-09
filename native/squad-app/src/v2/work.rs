@@ -616,11 +616,30 @@ pub fn detect_start(dir: &str) -> Option<(String, Option<String>)> {
         .map(|f| read(f))
         .collect::<Vec<_>>()
         .join("\n");
+        // The port a framework serves on when nothing says otherwise.
+        let usual = |script: &str| -> Option<String> {
+            let port = [
+                ("vite", 5173),
+                ("next", 3000),
+                ("react-scripts", 3000),
+                ("ng serve", 4200),
+                ("astro", 4321),
+                ("nuxt", 3000),
+                ("remix", 3000),
+                ("gatsby", 8000),
+                ("expo start", 8081),
+                ("webpack serve", 8080),
+                ("vue-cli-service serve", 8080),
+            ]
+            .iter()
+            .find(|(k, _)| script.contains(k))?
+            .1;
+            Some(format!("http://localhost:{port}"))
+        };
         if let Some(dev) = scripts["dev"].as_str() {
-            let url = port_in(dev).or_else(|| port_in(&code)).or_else(|| {
-                dev.contains("vite")
-                    .then(|| "http://localhost:5173".to_string())
-            });
+            let url = port_in(dev)
+                .or_else(|| port_in(&code))
+                .or_else(|| usual(dev));
             return Some((format!("{pm} run dev"), url));
         }
         if let Some(start) = scripts["start"].as_str() {
@@ -629,7 +648,16 @@ pub fn detect_start(dir: &str) -> Option<(String, Option<String>)> {
             } else {
                 format!("{pm} start")
             };
-            return Some((cmd, port_in(start).or_else(|| port_in(&code))));
+            let url = port_in(start)
+                .or_else(|| port_in(&code))
+                .or_else(|| usual(start));
+            return Some((cmd, url));
+        }
+        if let Some(serve) = scripts["serve"].as_str() {
+            return Some((
+                format!("{pm} run serve"),
+                port_in(serve).or_else(|| usual(serve)),
+            ));
         }
         if !main.is_empty() || d.join("server.js").exists() {
             let file = if main.is_empty() { "server.js" } else { main };
@@ -650,11 +678,120 @@ pub fn detect_start(dir: &str) -> Option<(String, Option<String>)> {
             return Some((format!("python {f}"), port_in(&read(f))));
         }
     }
+    if d.join("go.mod").exists() {
+        let main = read("main.go");
+        return Some(("go run .".into(), port_in(&main).or_else(|| go_port(&main))));
+    }
+    if d.join("pubspec.yaml").exists() && read("pubspec.yaml").contains("flutter") {
+        // A Flutter app with a web build serves it, so it opens in Squad's
+        // browser; otherwise it runs on whatever device there is.
+        if d.join("web").is_dir() {
+            return Some((
+                "flutter run -d web-server --web-port 8080".into(),
+                Some("http://localhost:8080".into()),
+            ));
+        }
+        return Some(("flutter run".into(), None));
+    }
+    if d.join("config/routes.rb").exists() {
+        return Some((
+            "bin/rails server".into(),
+            Some("http://localhost:3000".into()),
+        ));
+    }
+    if d.join("artisan").exists() {
+        return Some((
+            "php artisan serve".into(),
+            Some("http://localhost:8000".into()),
+        ));
+    }
+    if d.join("mix.exs").exists() && read("mix.exs").contains("phoenix") {
+        return Some((
+            "mix phx.server".into(),
+            Some("http://localhost:4000".into()),
+        ));
+    }
+    for f in [
+        "compose.yaml",
+        "compose.yml",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    ] {
+        if d.join(f).exists() {
+            return Some(("docker compose up".into(), compose_port(&read(f))));
+        }
+    }
+    if d.join("Dockerfile").exists() {
+        let file = read("Dockerfile");
+        let port = file
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("EXPOSE "))
+            .and_then(|p| p.split_whitespace().next())
+            .map(|p| p.trim_end_matches("/tcp").to_string())
+            .filter(|p| p.parse::<u16>().is_ok());
+        let name = d
+            .file_name()
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_else(|| "app".into())
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect::<String>();
+        let publish = port
+            .as_ref()
+            .map(|p| format!(" -p {p}:{p}"))
+            .unwrap_or_default();
+        return Some((
+            format!("docker build -t {name} . && docker run --rm{publish} {name}"),
+            port.map(|p| format!("http://localhost:{p}")),
+        ));
+    }
     if d.join("index.html").exists() {
         return Some((
             "python3 -m http.server 8000".into(),
             Some("http://localhost:8000".into()),
         ));
+    }
+    None
+}
+
+/// The port a Go server listens on, from `":8080"` in its code.
+fn go_port(code: &str) -> Option<String> {
+    let at = code.find("\":")?;
+    let digits: String = code[at + 2..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    (2..=5)
+        .contains(&digits.len())
+        .then(|| format!("http://localhost:{digits}"))
+}
+
+/// The first port a Compose file publishes, from `- "8080:80"`.
+fn compose_port(text: &str) -> Option<String> {
+    let mut in_ports = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("ports:") {
+            in_ports = true;
+            continue;
+        }
+        if !in_ports {
+            continue;
+        }
+        let Some(item) = t.strip_prefix('-') else {
+            in_ports = false;
+            continue;
+        };
+        let item = item.trim().trim_matches(|c| c == '"' || c == '\'');
+        // "8080:80", "127.0.0.1:8080:80", "3000"
+        let parts: Vec<&str> = item.split(':').collect();
+        let host = match parts.len() {
+            1 => parts[0],
+            n => parts[n - 2],
+        };
+        if host.parse::<u16>().is_ok() {
+            return Some(format!("http://localhost:{host}"));
+        }
     }
     None
 }
@@ -682,5 +819,62 @@ mod start_tests {
         assert_eq!(url.as_deref(), Some("http://localhost:3000"));
         let _ = std::fs::remove_dir_all(&dir);
         assert!(start_command("/definitely/not/here", 0).is_none());
+    }
+
+    #[test]
+    fn other_kinds_of_app_start_too() {
+        let dir = std::env::temp_dir().join(format!("squad-kinds-{}", std::process::id()));
+        let fresh = |name: &str| {
+            let d = dir.join(name);
+            std::fs::create_dir_all(&d).unwrap();
+            d
+        };
+        let d = fresh("compose");
+        std::fs::write(
+            d.join("docker-compose.yml"),
+            "services:\n  web:\n    build: .\n    ports:\n      - \"8080:80\"\n  db:\n    image: postgres\n",
+        )
+        .unwrap();
+        let (cmd, url) = start_command(d.to_str().unwrap(), 0).unwrap();
+        assert_eq!(cmd, "docker compose up");
+        assert_eq!(url.as_deref(), Some("http://localhost:8080"));
+
+        let d = fresh("flutter");
+        std::fs::write(
+            d.join("pubspec.yaml"),
+            "dependencies:\n  flutter:\n    sdk: flutter\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(d.join("web")).unwrap();
+        let (cmd, url) = start_command(d.to_str().unwrap(), 0).unwrap();
+        assert!(cmd.starts_with("flutter run"), "{cmd}");
+        assert_eq!(url.as_deref(), Some("http://localhost:8080"));
+
+        let d = fresh("react");
+        std::fs::write(
+            d.join("package.json"),
+            r#"{"scripts":{"start":"react-scripts start"}}"#,
+        )
+        .unwrap();
+        let (cmd, url) = start_command(d.to_str().unwrap(), 0).unwrap();
+        assert_eq!(cmd, "npm start");
+        assert_eq!(url.as_deref(), Some("http://localhost:3000"));
+
+        let d = fresh("go");
+        std::fs::write(d.join("go.mod"), "module x\n").unwrap();
+        std::fs::write(d.join("main.go"), "http.ListenAndServe(\":9090\", nil)").unwrap();
+        let (cmd, url) = start_command(d.to_str().unwrap(), 0).unwrap();
+        assert_eq!(cmd, "go run .");
+        assert_eq!(url.as_deref(), Some("http://localhost:9090"));
+
+        let d = fresh("docker");
+        std::fs::write(d.join("Dockerfile"), "FROM nginx\nEXPOSE 80\n").unwrap();
+        let (cmd, url) = start_command(d.to_str().unwrap(), 0).unwrap();
+        assert_eq!(
+            cmd,
+            "docker build -t docker . && docker run --rm -p 80:80 docker"
+        );
+        assert_eq!(url.as_deref(), Some("http://localhost:80"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

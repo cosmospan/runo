@@ -3,6 +3,7 @@
 //! installed offers another engine; a stopped job can carry on; a branch that
 //! clashes with its base can be handed back to the bot to bring up to date.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -188,6 +189,11 @@ impl Shell {
                 },
             ),
         };
+        let setup = if matches!(t, Trouble::SignIn) {
+            self.setup_runs(cx)
+        } else {
+            Vec::new()
+        };
         let mut buttons = div().flex().flex_wrap().gap(px(8.));
         match &t {
             Trouble::Conflict(_) => {
@@ -227,6 +233,17 @@ impl Shell {
                         ui::solid("trouble-other", format!("Run on {name} instead")).on_click(
                             cx.listener(move |this, _, _, cx| this.rerun(id, Some(i), cx)),
                         ),
+                    );
+                }
+                // Signing in runs inside Squad, its card right here.
+                let login = crate::agent::PROVIDERS
+                    .iter()
+                    .find(|p| p.name == engine)
+                    .and_then(|p| crate::agent::sign_in_cmd(p.id));
+                if let (Trouble::SignIn, Some(cmd)) = (&t, login) {
+                    buttons = buttons.child(
+                        ui::solid_i("trouble-signin", IconName::LogIn, "Sign in")
+                            .on_click(cx.listener(move |this, _, _, cx| this.run_setup(cmd, cx))),
                     );
                 }
                 if matches!(t, Trouble::Failed(_) | Trouble::Limit(_)) {
@@ -282,7 +299,8 @@ impl Shell {
                             .child("No other engine is ready on this computer. Add one in Engines to switch."),
                     )
                 })
-                .child(buttons),
+                .child(buttons)
+                .when(matches!(t, Trouble::SignIn), |d| d.children(setup)),
         )
     }
 }
@@ -312,7 +330,7 @@ mod tests {
         ));
         assert_eq!(
             trouble(&failed(
-                "Codex isn't signed in. Open a terminal and run `codex login`."
+                "Codex isn't signed in. Press Sign in and Squad runs codex login for you, right here."
             )),
             Some(Trouble::SignIn)
         );

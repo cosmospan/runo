@@ -18,7 +18,8 @@ use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The icon rail's width, the labelled panel's beside it, and the two together.
-pub(super) const RAIL: f32 = 60.;
+/// The rail is wide enough to hold the Mac window buttons above it, centred.
+pub(super) const RAIL: f32 = 72.;
 pub(super) const PANEL: f32 = 236.;
 pub(super) const WIDTH: f32 = RAIL + PANEL;
 
@@ -385,14 +386,30 @@ impl Shell {
             .w_full()
             .flex()
             .items_center()
-            .pl(px(if cfg!(target_os = "macos") {
-                78.
-            } else {
-                RAIL + 10.
-            }))
+            .relative()
+            // The window buttons sit over the rail, so the name lines up with
+            // the panel below it either way.
+            .pl(px(RAIL + 10.))
             .pr(px(10.))
             .border_b_1()
-            .border_color(c(ui::line2()));
+            .border_color(c(ui::line2()))
+            // Stand-ins for the Mac window buttons, for screenshots off a Mac.
+            .when(!cfg!(target_os = "macos") && super::has_lights(), |d| {
+                d.children(
+                    [0xff5f57u32, 0xfebc2e, 0x28c840]
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, col)| {
+                            div()
+                                .absolute()
+                                .left(px(super::LIGHTS_X + 1. + i as f32 * 20.))
+                                .top(px(super::LIGHTS_Y + 2.))
+                                .size(px(12.))
+                                .rounded_full()
+                                .bg(c(col))
+                        }),
+                )
+            });
         if self.side_slim {
             return band;
         }
@@ -412,26 +429,18 @@ impl Shell {
             .items_center()
             .gap(px(2.))
             .child(
+                // One line, so it sits on the same centre line as the window
+                // buttons and the top bar; the folder's path is on hover.
                 div()
+                    .id("side-project")
                     .flex_1()
                     .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .truncate()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(ui::ink()))
-                            .child(project),
-                    )
-                    .child(
-                        div()
-                            .truncate()
-                            .text_size(px(11.))
-                            .text_color(c(ui::faint()))
-                            .child(where_),
-                    ),
+                    .truncate()
+                    .text_size(px(14.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::ink()))
+                    .child(project)
+                    .tooltip(tip(where_)),
             )
             .child(
                 small_btn("side-search", IconName::Search)
@@ -1265,7 +1274,7 @@ impl Shell {
         // The right sidebar shows on a job's page, and beside a thread when
         // the Jobs panel is open.
         let right_open = match self.place {
-            Place::Live(id) => self.crew.store.job(id).is_some(),
+            Place::Live(id) => self.crew.store.job(id).is_some() && !self.right_closed,
             Place::Today => self.jobs_open,
             _ => false,
         };
@@ -1381,92 +1390,12 @@ impl Shell {
                     .gap(px(10.))
                     .when(right_open, |d| {
                         d.w(px(super::home::LIST_W))
-                            .px(px(16.))
+                            .pl(px(16.))
+                            // The toggle keeps its place whether the sidebar is open or not.
+                            .pr(px(20.))
                             .bg(c(ui::ground()))
                             .border_l_1()
                             .border_color(c(ui::line()))
-                    })
-                    // The Jobs panel toggle: what's running and what needs you, at a glance.
-                    .child({
-                        let asks = self.inbox_count();
-                        // On a job's page the sidebar is always there; the toggle says
-                        // whether it shows the Jobs list rather than the job's details.
-                        let on_job = matches!(self.place, Place::Live(_));
-                        let open = if on_job {
-                            !self.side_job
-                        } else {
-                            self.jobs_open
-                        };
-                        div()
-                            .id("top-jobs")
-                            .h(px(30.))
-                            .px(px(10.))
-                            .flex()
-                            .items_center()
-                            .gap(px(7.))
-                            .rounded(px(8.))
-                            .border_1()
-                            .text_size(px(12.5))
-                            .font_weight(FontWeight::MEDIUM)
-                            .cursor_pointer()
-                            .map(|d| {
-                                if open {
-                                    d.bg(c(ui::hover()))
-                                        .border_color(c(ui::line_hi()))
-                                        .text_color(c(ui::ink()))
-                                } else {
-                                    d.border_color(c(ui::line()))
-                                        .text_color(c(ui::muted()))
-                                        .hover(|s| s.text_color(c(ui::ink())))
-                                }
-                            })
-                            .child(Icon::new(IconName::PanelRight).size(px(14.)))
-                            .child("Jobs")
-                            .when(running > 0, |d| {
-                                d.child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(4.))
-                                        .text_color(c(ui::t_blue()))
-                                        .child(
-                                            div().size(px(6.)).rounded_full().bg(c(ui::t_blue())),
-                                        )
-                                        .child(running.to_string()),
-                                )
-                            })
-                            .when(asks > 0, |d| {
-                                d.child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(4.))
-                                        .text_color(c(ui::t_amber()))
-                                        .child(
-                                            div().size(px(6.)).rounded_full().bg(c(ui::t_amber())),
-                                        )
-                                        .child(asks.to_string()),
-                                )
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if on_job {
-                                    // Swap the one sidebar between the job and the list.
-                                    this.side_job = !this.side_job;
-                                    if !this.side_job {
-                                        this.jobs_open = true;
-                                    }
-                                    cx.notify();
-                                    return;
-                                }
-                                this.jobs_open = !this.jobs_open;
-                                // The panel sits beside a thread or a job: open it there.
-                                if this.jobs_open
-                                    && !matches!(this.place, Place::Today | Place::Live(_))
-                                {
-                                    this.go(Place::Today, cx);
-                                }
-                                cx.notify();
-                            }))
                     })
                     // Search, as a quiet field: the palette finds places, bots and jobs.
                     .child(
@@ -1508,7 +1437,86 @@ impl Shell {
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.open_palette(window, cx)),
                             ),
-                    ),
+                    )
+                    // The right sidebar's toggle, at the window's right edge like
+                    // the left one's at its left: its icon shows the panel it opens.
+                    // A dot says something waits on you, or that the crew is working.
+                    .child({
+                        let asks = self.inbox_count();
+                        let on_job = matches!(self.place, Place::Live(_));
+                        let dot = if asks > 0 {
+                            Some(ui::t_amber())
+                        } else if running > 0 {
+                            Some(ui::t_blue())
+                        } else {
+                            None
+                        };
+                        let mut say = if right_open {
+                            "Hide the right sidebar".to_string()
+                        } else {
+                            "Show the right sidebar: jobs, git and files".to_string()
+                        };
+                        if asks > 0 {
+                            say.push_str(&format!("\n{asks} waiting on you"));
+                        }
+                        if running > 0 {
+                            say.push_str(&format!("\n{running} running"));
+                        }
+                        div()
+                            .id("top-right-panel")
+                            .relative()
+                            .size(px(30.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(8.))
+                            .cursor_pointer()
+                            .text_color(c(if right_open { ui::ink() } else { ui::muted() }))
+                            .when(right_open, |d| d.bg(c(ui::press())))
+                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                            .child(
+                                Icon::new(if right_open {
+                                    IconName::PanelRightClose
+                                } else {
+                                    IconName::PanelRightOpen
+                                })
+                                .size(px(17.)),
+                            )
+                            .when_some(dot, |d, col| {
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .top(px(4.))
+                                        .right(px(4.))
+                                        .size(px(7.))
+                                        .rounded_full()
+                                        .border_1()
+                                        .border_color(c(if right_open {
+                                            ui::ground()
+                                        } else {
+                                            ui::bg()
+                                        }))
+                                        .bg(c(col)),
+                                )
+                            })
+                            .tooltip(tip(say))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if on_job {
+                                    this.right_closed = !this.right_closed;
+                                    cx.notify();
+                                    return;
+                                }
+                                this.jobs_open = !this.jobs_open;
+                                // The panel sits beside a thread or a job: open it there.
+                                if this.jobs_open
+                                    && !matches!(this.place, Place::Today | Place::Live(_))
+                                {
+                                    this.go(Place::Today, cx);
+                                }
+                                cx.notify();
+                            }))
+                    }),
             )
     }
 }

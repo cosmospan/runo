@@ -48,6 +48,19 @@ impl Shell {
             );
         };
         let drawer = self.term_drawer(&job, cx);
+        // What Squad runs for this job (its app, a command from its words),
+        // under it, whatever its feed scrolls to.
+        let runs = self.job_runs(id, cx);
+        let runs = (!runs.is_empty()).then(|| {
+            div()
+                .flex_none()
+                .px(px(20.))
+                .pb(px(10.))
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .children(runs)
+        });
         div()
             .size_full()
             .flex()
@@ -60,6 +73,7 @@ impl Shell {
                     .flex()
                     .child(self.live_main(&job, cx)),
             )
+            .children(runs)
             .children(drawer)
             .into_any_element()
     }

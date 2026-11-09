@@ -828,6 +828,10 @@ impl Shell {
             folder.path.hash(&mut h);
             name.hash(&mut h);
             total.hash(&mut h);
+            // A run's card appearing, or opening up, makes the thread longer.
+            for r in &self.runs {
+                r.shape().hash(&mut h);
+            }
             for (at, _, slot) in &slots[total.saturating_sub(THREAD_PAGE)..] {
                 at.hash(&mut h);
                 if let Slot::Job(i) = slot {
@@ -848,8 +852,36 @@ impl Shell {
             .collect();
         if key != self.thread_key {
             self.thread_key = key;
+            // Again on the next few frames: the scroll only knows the last
+            // frame's height, and what just arrived (a card) is taller.
+            self.thread_settle = 3;
+        }
+        if self.thread_settle > 0 {
+            self.thread_settle -= 1;
             self.thread_scroll.scroll_to_bottom();
         }
+        // Apps whose card is at the bottom of the thread already don't need
+        // their line over the composer too.
+        let near: Vec<u64> = {
+            let (talks, jobs): (Vec<u64>, Vec<u64>) = shown
+                .iter()
+                .rev()
+                .take(3)
+                .map(|e| match e {
+                    Entry::Talk(t) => (t.id, 0),
+                    Entry::Job(j) => (0, j.id),
+                    Entry::Plan(_) => (0, 0),
+                })
+                .unzip();
+            self.runs
+                .iter()
+                .filter(|r| {
+                    r.spec.talk.is_some_and(|t| talks.contains(&t))
+                        || (r.spec.talk.is_none() && r.spec.job.is_some_and(|j| jobs.contains(&j)))
+                })
+                .map(|r| r.id)
+                .collect()
+        };
         let empty = shown.is_empty();
         let mut feed = div()
             .w_full()
@@ -973,6 +1005,7 @@ impl Shell {
                             .flex()
                             .flex_col()
                             .gap(px(8.))
+                            .children(self.runs_strip(&folder.path, &near, cx))
                             .children(self.waiting_strip(&folder.path, thread, cx))
                             .children(offer)
                             .children(self.slash_strip(cx))
@@ -1685,7 +1718,13 @@ impl Shell {
                     .children(via.map(engine_note)),
             )
         });
-        let said = div().flex().flex_col().child(answer).children(choices);
+        let runs = self.talk_runs(t.id, cx);
+        let said = div()
+            .flex()
+            .flex_col()
+            .child(answer)
+            .children(choices)
+            .children(runs);
         div()
             .flex()
             .flex_col()
@@ -1915,7 +1954,8 @@ impl Shell {
                         .child(said),
                 )
             })
-            .child(div().when(running, |d| d.mt(px(4.))).child(body));
+            .child(div().when(running, |d| d.mt(px(4.))).child(body))
+            .children(self.job_runs(j.id, cx));
         let yours = asked_by_you.then(|| {
             self.message(
                 format!("you-job-{}", j.id),
@@ -2343,11 +2383,15 @@ impl Shell {
         let id = g.id;
         let mood = match g.state {
             State::Planning => Mood::Thinking,
-            State::Ready | State::Paused => Mood::NeedsYou,
-            State::Done => Mood::Idle,
-            _ => Mood::Idle,
+            // A plan ready to start is good news, not a worry.
+            State::Ready | State::Done => Mood::Done,
+            State::Paused | State::Failed => Mood::NeedsYou,
+            State::Running => Mood::Working,
         };
-        let face = self.bot(Member::Fin, mood, 34., Framing::Bust);
+        // Drawn still: an eased face here shared its slot with Peek on the
+        // rail, which is the same size, so the two moods swapped every frame
+        // and the face flickered.
+        let face = self.face(Member::Fin, mood, 34.);
         let said = match g.state {
             State::Planning => "Reading the code to plan this.".to_string(),
             State::Ready => "Here's my plan. Start it when it looks right.".to_string(),

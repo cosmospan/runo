@@ -270,16 +270,15 @@ impl Shell {
                     .child(if ok { "✓" } else { "○" })
                     .child(p.name)
                     .when(!ok, |d| {
-                        // Missing: one click copies its install command (or runs
-                        // it in the terminal once a folder is open).
+                        // Missing: one click runs its install inside Squad.
                         match super::engines::install_cmd(p.id) {
                             Some(cmd) => d
                                 .cursor_pointer()
                                 .hover(|s| s.border_color(c(ui::faint())).text_color(c(ui::ink())))
                                 .child(div().text_size(px(11.)).child("not found \u{b7} install"))
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.run_setup(&cmd, window, cx)
-                                })),
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.run_setup(&cmd, cx)),
+                                ),
                             None => d.child(div().text_size(px(11.)).child("not found")),
                         }
                     }),

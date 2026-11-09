@@ -27,7 +27,7 @@ pub enum Front {
     /// "stop app", "cancel that", "kill the server": stop what's running
     /// here, with no new job.
     Stop,
-    /// "run the app": Squad Code starts it in the terminal and keeps it up,
+    /// "run the app": Squad Code starts it itself, as a card, and keeps it up,
     /// with no job.
     RunApp,
 }

@@ -1,5 +1,5 @@
 //! A bot's words, made actionable: links and local ports open in the browser,
-//! commands run in the terminal drawer, files open, and `code` reads as code.
+//! commands run inside Squad as a card of their own, files open, and `code` reads as code.
 //! Under the text, the things you'd act on sit as chips, so nothing needs
 //! copying out of a message.
 
@@ -231,6 +231,18 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> Div {
         let key: SharedString = key.into();
+        // Where these words were said, so a command run from them shows its
+        // card there: Peek's message ("talk-12"), a job's feed ("feed-7-…").
+        let from: (Option<u64>, Option<u64>) = {
+            let num = |s: &str| s.split('-').next().and_then(|n| n.parse::<u64>().ok());
+            if let Some(rest) = key.strip_prefix("talk-") {
+                (num(rest), None)
+            } else if let Some(rest) = key.strip_prefix("feed-") {
+                (None, num(rest))
+            } else {
+                (None, None)
+            }
+        };
         let me = cx.entity().downgrade();
         let there = self.rich_there.clone();
         let mut out = div().flex().flex_col().gap(px(8.));
@@ -319,7 +331,10 @@ impl Shell {
                     if let Some(a) = acts.get(i) {
                         let a = a.clone();
                         let dir = dir.clone();
-                        let _ = me.update(cx, |this, cx| this.act_where(&a, &dir, on, window, cx));
+                        let _ = me.update(cx, |this, cx| {
+                            this.act_from = from;
+                            this.act_where(&a, &dir, on, window, cx)
+                        });
                     }
                 }),
             );
@@ -350,6 +365,7 @@ impl Shell {
                         .child(Icon::new(icon).size(px(13.)).text_color(c(ui::muted())))
                         .child(label)
                         .on_click(cx.listener(move |this, _, window, cx| {
+                            this.act_from = from;
                             this.act_where(&a, &dir, on, window, cx)
                         })),
                 );
@@ -361,7 +377,7 @@ impl Shell {
 
     /// Does what a message offered: on the server when `there` (`dir` is then
     /// the job's folder on the server), here otherwise.
-    fn act_where(
+    pub(super) fn act_where(
         &mut self,
         a: &Act,
         dir: &str,
@@ -409,8 +425,26 @@ impl Shell {
                 None => cx.open_url(u),
             },
             Act::Run(cmd) => {
-                let line = format!("cd {} && {cmd}", super::remote::quoted(dir));
-                self.term_run(super::term::SERVER, &line, window, cx);
+                let (talk, job) = std::mem::take(&mut self.act_from);
+                let spec = super::apps::RunSpec {
+                    cmd: cmd.clone(),
+                    dir: dir.to_string(),
+                    folder: self
+                        .crew
+                        .store
+                        .folder()
+                        .map(|f| f.path.clone())
+                        .unwrap_or_default(),
+                    job: job.or(self.job_in_view()),
+                    talk,
+                    hint: None,
+                    keeps: super::apps::keeps_running(cmd),
+                    remote: Some(cfg),
+                    setup: false,
+                };
+                if let Err(why) = self.start_run(spec, cx) {
+                    self.say(format!("Couldn't run it on the server: {why}"));
+                }
             }
             Act::File(_) => {
                 self.say("That file is on the server until you approve the job.");
@@ -480,22 +514,36 @@ impl Shell {
     }
 
     /// Does what a message offered.
-    pub(super) fn act(&mut self, a: &Act, dir: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn act(&mut self, a: &Act, dir: &str, _window: &mut Window, cx: &mut Context<Self>) {
         match a {
             // The app a job made opens in that job's browser, inside Squad.
             Act::Link(u) => match self.job_in_view().filter(|_| local_port(u).is_some()) {
                 Some(id) => self.open_job_browser(id, Some(u.clone()), cx),
                 None => cx.open_url(u),
             },
+            // Runs inside Squad, as a card where it was offered: never in
+            // your terminal, which stays yours.
             Act::Run(cmd) => {
-                if self.crew.store.folder().is_some() {
-                    let id = super::term::project_id(self.crew.store.current);
-                    let line = if dir.is_empty() {
-                        cmd.clone()
-                    } else {
-                        format!("cd {} && {cmd}", shell_quote(dir))
+                let (talk, job) = std::mem::take(&mut self.act_from);
+                if let Some(folder) = self.crew.store.folder().map(|f| f.path.clone()) {
+                    let spec = super::apps::RunSpec {
+                        cmd: cmd.clone(),
+                        dir: if dir.is_empty() {
+                            folder.clone()
+                        } else {
+                            dir.to_string()
+                        },
+                        folder,
+                        job: job.or(self.job_in_view()),
+                        talk,
+                        hint: None,
+                        keeps: super::apps::keeps_running(cmd),
+                        remote: None,
+                        setup: false,
                     };
-                    self.term_run(id, &line, window, cx);
+                    if let Err(why) = self.start_run(spec, cx) {
+                        self.say(format!("Couldn't run it: {why}"));
+                    }
                 } else {
                     cx.write_to_clipboard(ClipboardItem::new_string(cmd.clone()));
                     self.say("Copied. Open a folder to run it here.");
@@ -548,16 +596,6 @@ fn same(a: &Act, b: &Act, dir: &str) -> bool {
     match (a, b) {
         (Act::File(x), Act::File(y)) => file_path(x, dir) == file_path(y, dir),
         _ => a == b,
-    }
-}
-
-fn shell_quote(s: &str) -> String {
-    if s.chars()
-        .all(|ch| ch.is_alphanumeric() || "/._-~".contains(ch))
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
     }
 }
 

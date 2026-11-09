@@ -8,6 +8,7 @@
 //!
 //! Squad Code v1 stays one click away on the rail while v2 grows.
 
+mod apps;
 mod asks;
 mod brain;
 mod builder;
@@ -444,6 +445,8 @@ pub struct Shell {
     chat_len: usize,
     thread_scroll: ScrollHandle,
     thread_key: u64,
+    /// Frames left to keep the thread at its newest after it changed.
+    thread_settle: u8,
     /// The thread whose earlier pages are open, and how many more pages.
     thread_more: (String, usize),
     /// Who spoke last in the chat being drawn, and when: a run of messages
@@ -540,6 +543,8 @@ pub struct Shell {
     list_git: bool,
     /// The Jobs panel beside a thread or job, opened from the top bar.
     jobs_open: bool,
+    /// The right sidebar hidden on a job's page, from its toggle in the top bar.
+    right_closed: bool,
     /// On a job's page the one right sidebar shows that job's details (true)
     /// or the Jobs panel (false). Opening a job from elsewhere starts on details.
     side_job: bool,
@@ -571,8 +576,16 @@ pub struct Shell {
     reading_for: Option<Member>,
     /// While Peek's decision is acted on: the bot named with @, who answers.
     answer_by: Option<Member>,
-    /// Terminals running an app Squad Code started for the person.
-    serving: Vec<u64>,
+    /// Apps and commands Squad runs for you, each in a hidden shell of its
+    /// own and shown as a card: never in your terminal.
+    runs: Vec<apps::Run>,
+    next_run: u64,
+    /// Typing into a run's output, for a prompt it shows.
+    run_focus: FocusHandle,
+    run_typing: Option<u64>,
+    /// Where a command clicked in a message was said: Peek's message, the
+    /// job. Its card shows there.
+    act_from: (Option<u64>, Option<u64>),
     /// When Peek's engine was last made sure of being warm.
     warmed_at: Option<std::time::Instant>,
     /// "run the app", read by Peek: started on the next draw, which has the
@@ -801,6 +814,18 @@ fn doze_after() -> Duration {
 pub(super) const DOCK_ROOM: f32 = 16.;
 /// How tall the bar across the top is, the sidebar's top strip included.
 pub(super) const TOP_H: f32 = 54.;
+/// Where the Mac window buttons sit: their left edge, and the top of their
+/// frames (16pt tall), so they centre on the top bar's row. The three are
+/// 14pt wide and 20pt apart, 54pt in all, so from here they centre over the
+/// icon rail and the Peek logo under them.
+pub(super) const LIGHTS_X: f32 = (sidebar::RAIL - 54.) / 2.;
+pub(super) const LIGHTS_Y: f32 = (TOP_H - 16.) / 2.;
+
+/// Whether the window has Mac window buttons in its top-left corner. Off a
+/// Mac, `SQUADCODE_FAKE_LIGHTS` draws stand-ins, for screenshots taken on Linux.
+pub(super) fn has_lights() -> bool {
+    cfg!(target_os = "macos") || std::env::var_os("SQUADCODE_FAKE_LIGHTS").is_some()
+}
 
 /// The rail's place for each part of the app, as a y offset of its highlight.
 fn nav_slot(place: Place) -> Option<f32> {
@@ -1283,6 +1308,7 @@ impl Shell {
             chat_len: 0,
             thread_scroll: ScrollHandle::new(),
             thread_key: 0,
+            thread_settle: 0,
             thread_more: (String::new(), 0),
             streak: None,
             maker: (squad_holo::Tint::VIOLET, squad_holo::fin::ROLES[6].outfit),
@@ -1318,6 +1344,7 @@ impl Shell {
             list_all: false,
             list_git: false,
             jobs_open: false,
+            right_closed: false,
             side_job: true,
             deleting: None,
             removing: None,
@@ -1331,7 +1358,11 @@ impl Shell {
             reading_since: None,
             reading_for: None,
             answer_by: None,
-            serving: Vec::new(),
+            runs: Vec::new(),
+            next_run: 0,
+            run_focus: cx.focus_handle(),
+            run_typing: None,
+            act_from: (None, None),
             warmed_at: None,
             run_wanted: None,
             follow_reading: None,
@@ -1929,7 +1960,7 @@ impl Shell {
     fn run_latest_app(
         &mut self,
         text: String,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         if self.crew.store.folder().is_none() || self.sampling {
@@ -1955,7 +1986,17 @@ impl Shell {
                     && j.mode.writes()
             })
             .map(|j| j.id);
-        match self.run_app(job, window, cx) {
+        // Peek's message about it, which its card sits under.
+        let talk = self
+            .crew
+            .store
+            .talks
+            .iter()
+            .map(|t| t.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        match self.run_app(job, Some(talk), cx) {
             Some(line) => {
                 self.crew.peek_says(text, line, Vec::new());
                 true
@@ -3102,6 +3143,7 @@ impl Shell {
         self.poll_server_setup(cx);
         self.poll_machine(cx);
         self.poll_web(cx);
+        self.poll_runs();
         let finished = self
             .crew
             .poll(cx.global::<crate::settings::AppSettings>(), viewing);
@@ -3342,6 +3384,13 @@ impl Shell {
         let now = self.now();
         let (shown, was, since) = self.moods.entry(slot).or_insert((state, state, -1.0));
         if *shown != state {
+            // Two faces drawn at one size share this slot. When the other one
+            // just took it from this mood, leave it be: swapping back each
+            // frame restarts the cross-fade, and the face flickers between
+            // two bots drawn over each other.
+            if *since >= 0.0 && now - *since < 0.5 && *was == state {
+                return pose;
+            }
             *was = *shown;
             *shown = state;
             *since = now;
@@ -3424,12 +3473,15 @@ impl Render for Shell {
         self.scale = window.scale_factor();
         self.view_w = f32::from(window.viewport_size().width);
         self.term_focused = self.term_focus.is_focused(window);
+        if self.run_typing.is_some() && !self.run_focus.is_focused(window) {
+            self.run_typing = None;
+        }
         if let Some((text, pending, job)) = self.run_wanted.take() {
             if let Some(id) = pending {
                 self.crew.store.talks.retain(|t| t.id != id);
             }
             let started = match job {
-                Some(job) => self.run_app(Some(job), window, cx).is_some(),
+                Some(job) => self.run_app(Some(job), None, cx).is_some(),
                 None => self.run_latest_app(text.clone(), window, cx),
             };
             if !started {
@@ -3894,7 +3946,7 @@ pub fn open_window(cx: &mut App) {
         titlebar: Some(TitlebarOptions {
             title: Some("Squad Code".into()),
             appears_transparent: cfg!(target_os = "macos"),
-            traffic_light_position: Some(point(px(16.), px(16.))),
+            traffic_light_position: Some(point(px(LIGHTS_X), px(LIGHTS_Y))),
         }),
         app_id: Some("squadcode".into()),
         window_background: background(),
