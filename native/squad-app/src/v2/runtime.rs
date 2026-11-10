@@ -533,7 +533,7 @@ impl Runtime {
         let chose = self.where_next.take().unwrap_or(usual);
         if chose == "server" && self.link.is_none() {
             job.feed.push(store::Item::Note(
-                "No server is connected, so this runs here. Connect one under Settings, My server."
+                "No server is connected, so this runs here. Connect one under Settings, Servers."
                     .into(),
             ));
         }
@@ -620,7 +620,7 @@ impl Runtime {
             Some(format!("{name} isn't answering, so this runs here."))
         } else if server.engines.is_empty() {
             Some(format!(
-                "Nothing is signed in on {name} yet, so this runs here. Sign it in under Settings > My server."
+                "Nothing is signed in on {name} yet, so this runs here. Sign it in under Settings > Servers."
             ))
         } else {
             None
@@ -715,7 +715,7 @@ impl Runtime {
                 self.say(format!("#{id} is still on its way to {name}. Try again in a moment."))
             }
             _ => self.say(format!(
-                "#{id} runs on {name}, and this app isn't connected to it. Connect in Settings, My server."
+                "#{id} runs on {name}, and this app isn't connected to it. Connect in Settings, Servers."
             )),
         }
         true

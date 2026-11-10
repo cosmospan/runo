@@ -158,7 +158,7 @@ impl Shell {
         let mut prog = program();
         let dir = if id == SERVER {
             let Some(link) = &self.crew.link else {
-                self.say("Connect a server first, in Settings, My server.".to_string());
+                self.say("Connect a server first, in Settings, Servers.".to_string());
                 cx.notify();
                 return;
             };

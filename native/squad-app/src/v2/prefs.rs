@@ -47,7 +47,7 @@ impl Pane {
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
-            Pane::Server => "My server",
+            Pane::Server => "Servers",
         }
     }
 
@@ -487,9 +487,10 @@ impl Shell {
 
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
-        let groups: [(&'static str, &[Pane]); 2] = [
-            ("CREW", &[Pane::Work, Pane::Engines, Pane::Server]),
-            ("YOU", &[Pane::General, Pane::Appearance]),
+        let groups: [(&'static str, &[Pane]); 3] = [
+            ("CREW", &[Pane::Work, Pane::Engines]),
+            ("APP", &[Pane::General, Pane::Appearance]),
+            ("CONNECTIONS", &[Pane::Server]),
         ];
         let mut col = div()
             .w(px(210.))

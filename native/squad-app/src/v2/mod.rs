@@ -30,6 +30,7 @@ mod jobs;
 mod learn;
 mod live;
 mod machine;
+mod machines;
 mod mascot;
 mod menu;
 mod motion;
@@ -629,6 +630,8 @@ pub struct Shell {
     proj_form: overview::ProjectForm,
     /// The bot open on the Crew page, and its tab.
     crew_pick: Option<Member>,
+    /// The machine open on the Machines page: 0 this computer, 1 your server.
+    machine_pick: u8,
     crew_tab: crew::CrewTab,
     /// The project whose lessons the Memory tab shows, when not this one.
     memory_folder: Option<String>,
@@ -1427,6 +1430,7 @@ impl Shell {
             history_input,
             proj_form,
             crew_pick: None,
+            machine_pick: 0,
             crew_tab: crew::CrewTab::default(),
             memory_folder: None,
             memory_input,
@@ -3641,7 +3645,7 @@ impl Render for Shell {
             Place::Overview => self.overview(cx),
             Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
-            Place::Server => self.server_page(cx),
+            Place::Server => self.machines(cx),
             Place::Screen => self.screen_page(window, cx),
             // A job's browser is a tab of its workspace.
             Place::Browser(id) => {

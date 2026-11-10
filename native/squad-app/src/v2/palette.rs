@@ -126,7 +126,7 @@ impl Shell {
             (
                 Place::Settings(Pane::Server),
                 IconName::Server,
-                "Settings: My server",
+                "Settings: Servers",
                 "",
             ),
             (Place::Server, IconName::Server, "Your server", ""),
