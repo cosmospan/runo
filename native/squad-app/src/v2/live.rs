@@ -208,15 +208,7 @@ impl Shell {
                     )
                 },
             )
-            // Its browser, terminal and folder, under one Open menu.
-            .map(|d| {
-                let id = job.id;
-                d.child(self.drop_menu(
-                    super::menu::Ctx::JobOpen(id),
-                    ui::ghost_i("job-open", IconName::ChevronDown, "Open"),
-                    cx,
-                ))
-            })
+            // Its browser, terminal and files are the workspace's tabs.
             .when(running && !job.remote_on.is_empty(), |d| {
                 d.child(self.screen_button("job-screen", "Watch its screen", cx))
             })
@@ -502,11 +494,18 @@ impl Shell {
                             .child(face)
                             .child(
                                 div()
+                                    .flex_none()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(by.accent()))
                                     .child(by.name()),
                             )
-                            .child(div().flex_1().text_color(c(ui::body())).child(t.clone())),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_color(c(ui::body()))
+                                    .child(t.clone()),
+                            ),
                     )
                 }
                 Item::Error(t) => feed.child(
@@ -539,9 +538,7 @@ impl Shell {
         if let Some(card) = self.clash_card(job, cx) {
             feed = feed.child(card.ml(px(40.)).mr_0());
         }
-        if let Some(card) = self.review_card(job, cx) {
-            feed = feed.child(card);
-        }
+        // The review itself is the workspace's Changes tab, beside this.
         if running {
             let dots = typing(self.now());
             feed = feed.child(
@@ -679,6 +676,35 @@ impl Shell {
 
     /// A job's details for the right sidebar: where it stands, its plan, the
     /// files it changed and the bot's other jobs.
+    /// The job's conversation and what Squad runs for it, without its
+    /// terminal: the workspace's left column.
+    pub(super) fn live_talk(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
+        let runs = self.job_runs(job.id, cx);
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(self.live_main(job, cx)),
+            )
+            .when(!runs.is_empty(), |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .px(px(16.))
+                        .pb(px(10.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .children(runs),
+                )
+            })
+    }
+
     pub(super) fn job_details(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
         let mut plan = div().flex().flex_col().gap(px(10.));
         if job.plan.is_empty() {

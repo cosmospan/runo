@@ -1520,7 +1520,7 @@ fn switch(on: bool) -> Div {
         .h(px(16.))
         .flex_none()
         .rounded_full()
-        .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
+        .bg(c(if on { ui::pick_fill() } else { ui::line_hi() }))
         .p(px(2.))
         .flex()
         .when(on, |d| d.justify_end())

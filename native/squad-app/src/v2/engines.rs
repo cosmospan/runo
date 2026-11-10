@@ -589,8 +589,12 @@ impl Shell {
                         .cursor_pointer()
                         .map(|d| {
                             if on {
-                                d.border_color(c(ui::VIOLET))
-                                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.1)))
+                                d.border_color(c(ui::pick()))
+                                    .bg(c(super::theme::mix(
+                                        ui::raised(),
+                                        ui::pick_fill(),
+                                        ui::pick_k(0.1),
+                                    )))
                                     .text_color(c(ui::t_violet()))
                                     .font_weight(FontWeight::MEDIUM)
                             } else {

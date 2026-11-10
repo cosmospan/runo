@@ -89,9 +89,15 @@ impl Shell {
             }
         }
         let places = [
-            (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
-            (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
-            (Place::History, IconName::Clock, "All jobs", "⌘3"),
+            (Place::Today, IconName::MessageSquare, "Threads", "⌘1"),
+            (Place::Inbox, IconName::Inbox, "Inbox", "⌘2"),
+            (
+                Place::History,
+                IconName::LayoutDashboard,
+                "Jobs board",
+                "⌘3",
+            ),
+            (Place::Overview, IconName::House, "Overview", ""),
             (
                 Place::Chat(self.last_chat()),
                 IconName::MessageCircle,
@@ -126,10 +132,10 @@ impl Shell {
             (
                 Place::Settings(Pane::Server),
                 IconName::Server,
-                "Settings: My server",
+                "Settings: Servers",
                 "",
             ),
-            (Place::Server, IconName::Server, "Your server", ""),
+            (Place::Server, IconName::Server, "Machines", ""),
             (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
         ];
         for (p, icon, label, key) in places {

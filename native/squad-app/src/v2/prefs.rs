@@ -47,7 +47,7 @@ impl Pane {
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
-            Pane::Server => "My server",
+            Pane::Server => "Servers",
         }
     }
 
@@ -88,9 +88,13 @@ fn switch(on: bool) -> Div {
         .h(px(20.))
         .flex_none()
         .rounded_full()
-        .bg(c(if on { ui::VIOLET } else { ui::off() }))
+        .bg(c(if on { ui::pick_fill() } else { ui::off() }))
         .border_1()
-        .border_color(c(if on { 0x8E66FF } else { ui::line_hi() }))
+        .border_color(c(if on {
+            super::theme::mix(ui::pick_fill(), ui::ink(), 0.2)
+        } else {
+            ui::line_hi()
+        }))
         .relative()
         .child(
             div()
@@ -487,9 +491,10 @@ impl Shell {
 
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
-        let groups: [(&'static str, &[Pane]); 2] = [
-            ("CREW", &[Pane::Work, Pane::Engines, Pane::Server]),
-            ("YOU", &[Pane::General, Pane::Appearance]),
+        let groups: [(&'static str, &[Pane]); 3] = [
+            ("CREW", &[Pane::Work, Pane::Engines]),
+            ("APP", &[Pane::General, Pane::Appearance]),
+            ("CONNECTIONS", &[Pane::Server]),
         ];
         let mut col = div()
             .w(px(210.))
@@ -563,9 +568,13 @@ impl Shell {
                         .cursor_pointer()
                         .map(|d| {
                             if on {
-                                d.bg(c(super::theme::mix(ui::bg(), ui::VIOLET, 0.09)))
-                                    .text_color(c(ui::t_violet()))
-                                    .font_weight(FontWeight::MEDIUM)
+                                d.bg(c(super::theme::mix(
+                                    ui::bg(),
+                                    ui::pick_fill(),
+                                    ui::pick_k(0.09),
+                                )))
+                                .text_color(c(ui::pick_text()))
+                                .font_weight(FontWeight::MEDIUM)
                             } else {
                                 d.text_color(c(ui::body()))
                                     .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
@@ -663,13 +672,13 @@ impl Shell {
             let on = level == key;
             let mut meter = div().flex().gap(px(3.));
             for b in 0..3 {
-                meter = meter.child(
-                    div()
-                        .w(px(16.))
-                        .h(px(5.))
-                        .rounded(px(2.))
-                        .bg(c(if b < bars { ui::VIOLET } else { ui::press() })),
-                );
+                meter = meter.child(div().w(px(16.)).h(px(5.)).rounded(px(2.)).bg(c(
+                    if b < bars {
+                        ui::pick_fill()
+                    } else {
+                        ui::press()
+                    },
+                )));
             }
             cards = cards.child(
                 div()
@@ -685,10 +694,10 @@ impl Shell {
                     .cursor_pointer()
                     .map(|d| {
                         if on {
-                            d.border_color(c(ui::VIOLET)).bg(c(super::theme::mix(
+                            d.border_color(c(ui::pick())).bg(c(super::theme::mix(
                                 ui::raised(),
-                                ui::VIOLET,
-                                0.05,
+                                ui::pick_fill(),
+                                ui::pick_k(0.05),
                             )))
                         } else {
                             d.border_color(c(ui::line()))
@@ -704,7 +713,7 @@ impl Shell {
                                 div()
                                     .size(px(16.))
                                     .rounded_full()
-                                    .border_color(c(if on { ui::VIOLET } else { ui::line_hi() }))
+                                    .border_color(c(if on { ui::pick() } else { ui::line_hi() }))
                                     .map(|d| if on { d.border(px(5.)) } else { d.border_1() }),
                             )
                             .child(
@@ -720,10 +729,14 @@ impl Shell {
                                         .px(px(6.))
                                         .py(px(1.))
                                         .rounded(px(5.))
-                                        .bg(c(super::theme::mix(ui::bg(), ui::VIOLET, 0.12)))
+                                        .bg(c(super::theme::mix(
+                                            ui::bg(),
+                                            ui::pick_fill(),
+                                            ui::pick_k(0.12),
+                                        )))
                                         .font_family(ui::MONO)
                                         .text_size(px(10.5))
-                                        .text_color(c(ui::t_violet()))
+                                        .text_color(c(ui::pick_text()))
                                         .child("Picked"),
                                 )
                             }),
@@ -901,10 +914,14 @@ impl Shell {
                     .items_center()
                     .justify_center()
                     .rounded(px(8.))
-                    .bg(c(super::theme::mix(ui::raised(), ui::VIOLET, 0.14)))
+                    .bg(c(super::theme::mix(
+                        ui::raised(),
+                        ui::pick_fill(),
+                        ui::pick_k(0.14),
+                    )))
                     .text_size(px(11.))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(c(ui::t_violet()))
+                    .text_color(c(ui::pick_text()))
                     .child("Y")
                     .into_any_element(),
             };
@@ -1336,7 +1353,7 @@ impl Shell {
                 .cursor_pointer()
                 .map(|d| {
                     if on {
-                        d.border_color(c(ui::VIOLET)).bg(c(ui::panel()))
+                        d.border_color(c(ui::pick())).bg(c(ui::panel()))
                     } else {
                         d.border_color(c(ui::line()))
                             .bg(c(ui::panel()))
@@ -1381,8 +1398,8 @@ impl Shell {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .bg(c(ui::VIOLET))
-                                    .text_color(c(0xFFFFFF))
+                                    .bg(c(ui::pick_fill()))
+                                    .text_color(c(ui::pick_on()))
                                     .child(Icon::new(IconName::Check).size(px(12.))),
                             )
                         }),
@@ -1516,8 +1533,8 @@ impl Shell {
                     div().w(px(180.)).child(
                         gpui_kit::component::slider::Slider::new(&self.clear_slider)
                             .disabled(!on)
-                            .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
-                            .text_color(c(0xFFFFFF)),
+                            .bg(c(if on { ui::pick_fill() } else { ui::line_hi() }))
+                            .text_color(c(ui::pick_on())),
                     ),
                 )
                 .child(label("Clear"))
@@ -1580,8 +1597,8 @@ impl Shell {
                     div().w(px(180.)).child(
                         gpui_kit::component::slider::Slider::new(&self.pop_slider)
                             .disabled(!pop_live)
-                            .bg(c(if pop_live { ui::VIOLET } else { ui::line_hi() }))
-                            .text_color(c(0xFFFFFF)),
+                            .bg(c(if pop_live { ui::pick_fill() } else { ui::line_hi() }))
+                            .text_color(c(ui::pick_on())),
                     ),
                 )
                 .child(label("Clear"))
@@ -1626,7 +1643,7 @@ impl Shell {
                 .rounded(px(8.))
                 .bg(c(ui::bg()))
                 .border_1()
-                .border_color(c(if selected { ui::VIOLET } else { ui::line() }))
+                .border_color(c(if selected { ui::pick() } else { ui::line() }))
                 .when(selected, |d| d.border_2())
         };
         let caption = |text: SharedString, selected: bool| {
@@ -1828,8 +1845,8 @@ impl Shell {
                         div().w(px(180.)).child(
                             gpui_kit::component::slider::Slider::new(slider)
                                 .disabled(!on)
-                                .bg(c(if on { ui::VIOLET } else { ui::line_hi() }))
-                                .text_color(c(0xFFFFFF)),
+                                .bg(c(if on { ui::pick_fill() } else { ui::line_hi() }))
+                                .text_color(c(ui::pick_on())),
                         ),
                     )
                     .child(label(ends.1))
@@ -1949,7 +1966,7 @@ impl Shell {
                             .rounded(px(8.))
                             .bg(c(ui::bg()))
                             .border_1()
-                            .border_color(c(if on { ui::VIOLET } else { ui::line() }))
+                            .border_color(c(if on { ui::pick() } else { ui::line() }))
                             .when(on, |d| d.border_2())
                             .child(ui::pattern_of(p, 2.))
                             .when(p == Pattern::Off, |d| {

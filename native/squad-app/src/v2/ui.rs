@@ -24,6 +24,56 @@ pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
 pub const MONO: &str = "JetBrains Mono";
 
+/// Graphite and lime, light or dark: picked things go ink and lime, not violet.
+fn lime() -> bool {
+    theme().id.starts_with("graphite-lime")
+}
+
+/// A picked option's edge, like the chosen card in Settings.
+pub fn pick() -> u32 {
+    if lime() {
+        ink()
+    } else {
+        VIOLET
+    }
+}
+
+/// What fills an on switch, a filled bar or a ticked box.
+pub fn pick_fill() -> u32 {
+    if lime() {
+        fill()
+    } else {
+        VIOLET
+    }
+}
+
+/// Text and marks on [`pick_fill`].
+pub fn pick_on() -> u32 {
+    if lime() {
+        on_fill()
+    } else {
+        0xFFFFFF
+    }
+}
+
+/// Words that say a thing is picked.
+pub fn pick_text() -> u32 {
+    if lime() {
+        ink()
+    } else {
+        t_violet()
+    }
+}
+
+/// How strongly to tint toward [`pick_fill`]: lime is pale, so it needs more.
+pub fn pick_k(k: f32) -> f32 {
+    if lime() {
+        (k * 3.).min(1.)
+    } else {
+        k
+    }
+}
+
 /// The spacing scale every screen keeps to, in pixels.
 #[allow(dead_code)]
 pub mod space {
@@ -162,6 +212,10 @@ pub fn ground() -> u32 {
     // Crew Chat's sidebar and Jobs panel: a cool, soft grey.
     if t.id == "crew-chat" {
         return super::theme::glass(0xF6F6F9);
+    }
+    // Graphite and lime's sidebar: a shade of the paper, warm like it.
+    if t.id == "graphite-lime" {
+        return super::theme::glass(0xEEEEE7);
     }
     let (base, k) = if t.light {
         (t.bg, 0.045)

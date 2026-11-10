@@ -256,6 +256,42 @@ impl Shell {
             )
             .on_click(cx.listener(|this, _, _, cx| this.toggle_usage(cx)));
 
+        // Where the crew runs: this computer, and your server once there is
+        // one. A click opens Machines.
+        let here = if cfg!(target_os = "macos") {
+            "This Mac"
+        } else {
+            "This computer"
+        };
+        let server = self.crew.link.as_ref().map(|l| l.up());
+        let machine = div()
+            .id("status-machine")
+            .h(px(22.))
+            .px(px(8.))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(6.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+            .child(Icon::new(IconName::Laptop).size(px(13.)))
+            .child("Runs on")
+            .child(div().text_color(c(ui::ink())).child(here))
+            .when_some(server, |d, up| {
+                d.child(div().size(px(6.)).rounded_full().bg(c(if up {
+                    ui::t_green()
+                } else {
+                    ui::faint()
+                })))
+                .child("server")
+            })
+            .tooltip(|window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new("Machines: where the crew runs")
+                    .build(window, cx)
+            })
+            .on_click(cx.listener(|this, _, _, cx| this.go(super::Place::Server, cx)));
+
         // The project's terminal: a toggle at the start of the bar, lit while
         // it's open, that opens it as a drawer just above.
         let term_on = self.term_open.is_some_and(super::term::is_project);
@@ -303,6 +339,7 @@ impl Shell {
             .border_color(c(ui::line2()))
             .text_size(px(11.5))
             .text_color(c(ui::muted()))
+            .child(machine)
             .child(term)
             .child(div().flex_1())
             .child(right)

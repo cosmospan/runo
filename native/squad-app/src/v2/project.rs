@@ -127,6 +127,52 @@ pub fn copy_files(project: &Project, from: &str, to: &str) -> Vec<String> {
     done
 }
 
+/// The file's text for `p`, with the same notes as a starting file, so a
+/// file saved from the Overview's form still explains itself.
+pub fn render(p: &Project) -> String {
+    let list = |v: &[String]| {
+        v.iter()
+            .map(|c| format!("{c:?}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "# Squad Code's project file: how every job sets up, runs and checks this project.\n\
+         # Every key is optional. https://github.com/hyperhale/squadcode#the-project-file\n\n\
+         # Commands a job's fresh worktree needs before its bot starts.\n\
+         setup = [{}]\n\n\
+         # Files git ignores that each job's worktree should get a copy of.\n\
+         copy = [{}]\n\n\
+         # How to start the app, and where it serves. $PORT is the job's own port.\n\
+         run = {:?}\n\
+         url = {:?}\n\n\
+         # Each job's app gets its own port counting from here (0 turns it off).\n\
+         port = {}\n\n\
+         # The checks Checker runs on every finished job.\n\
+         checks = [{}]\n",
+        list(&p.setup),
+        list(&p.copy),
+        p.run,
+        p.url,
+        p.port,
+        list(&p.checks),
+    )
+}
+
+/// Saves `p` as the project file in `dir`.
+pub fn write(dir: &str, p: &Project) -> Result<(), String> {
+    std::fs::write(Path::new(dir).join(FILE), render(p)).map_err(|e| e.to_string())
+}
+
+/// A comma-separated line from the form as a list, dropping empty entries.
+pub fn split_list(line: &str) -> Vec<String> {
+    line.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
+}
+
 /// A starting file for `dir`, from what Squad finds there.
 pub fn starter(dir: &str) -> String {
     let (run, url) = super::work::detect_start(dir).unwrap_or_default();
@@ -206,6 +252,24 @@ mod tests {
         assert_eq!(done, vec![".env".to_string(), "cfg/local.json".to_string()]);
         assert!(b.join("cfg/local.json").exists());
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_saved_file_reads_back_the_same() {
+        let p = Project {
+            setup: vec!["pnpm install".into()],
+            copy: vec![".env.local".into()],
+            run: "pnpm dev --port $PORT".into(),
+            url: "http://localhost:$PORT".into(),
+            port: 3100,
+            checks: vec!["pnpm lint".into(), "pnpm \"test\"".into()],
+        };
+        let back: Project = toml::from_str(&render(&p)).unwrap();
+        assert_eq!(back, p);
+        assert_eq!(
+            split_list(" pnpm lint, ,pnpm test "),
+            vec!["pnpm lint".to_string(), "pnpm test".to_string()]
+        );
     }
 
     #[test]

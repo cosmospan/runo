@@ -30,11 +30,14 @@ mod jobs;
 mod learn;
 mod live;
 mod machine;
+mod machines;
 mod mascot;
 mod menu;
 mod motion;
 mod myserver;
+mod overview;
 mod palette;
+mod peek;
 mod prefs;
 mod project;
 mod race;
@@ -87,6 +90,8 @@ use ui::{c, ca};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Place {
     Today,
+    /// The project's Overview: run, Git, setup and activity.
+    Overview,
     Inbox,
     History,
     Chat(Member),
@@ -621,6 +626,17 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// The Overview's form for squad.toml.
+    proj_form: overview::ProjectForm,
+    /// The bot open on the Crew page, and its tab.
+    crew_pick: Option<Member>,
+    /// The machine open on the Machines page: 0 this computer, 1 your server.
+    machine_pick: u8,
+    crew_tab: crew::CrewTab,
+    /// The project whose lessons the Memory tab shows, when not this one.
+    memory_folder: Option<String>,
+    /// Memory's line for adding something a bot should always know.
+    memory_input: Entity<InputState>,
     /// The filter over the right sidebar's Files tab.
     files_input: Entity<InputState>,
     /// The right sidebar shows its Files tab (beats `list_git`).
@@ -699,6 +715,12 @@ pub struct Shell {
     screen_focus: FocusHandle,
     /// A job's browser, watched in Squad.
     web: webpage::Web,
+    /// The job workspace's tab.
+    ws_tab: peek::Tab,
+    /// The Inbox's project filter, by folder path: None shows every project.
+    inbox_project: Option<String>,
+    /// Jobs shows as a list instead of the board.
+    jobs_list: bool,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -815,13 +837,11 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
-/// How tall the bar across the top is, the sidebar's top strip included.
-pub(super) const TOP_H: f32 = 54.;
+/// How tall the title bar across the whole window is.
+pub(super) const TOP_H: f32 = 38.;
 /// Where the Mac window buttons sit: their left edge, and the top of their
-/// frames (16pt tall), so they centre on the top bar's row. The three are
-/// 14pt wide and 20pt apart, 54pt in all, so from here they centre over the
-/// icon rail and the Peek logo under them.
-pub(super) const LIGHTS_X: f32 = (sidebar::RAIL - 54.) / 2.;
+/// frames (16pt tall), so they centre on the title bar's row, at its left end.
+pub(super) const LIGHTS_X: f32 = 13.;
 pub(super) const LIGHTS_Y: f32 = (TOP_H - 16.) / 2.;
 
 /// Whether the window has Mac window buttons in its top-left corner. Off a
@@ -835,7 +855,12 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) | Place::Browser(_) => 2,
+        Place::Overview
+        | Place::History
+        | Place::Live(_)
+        | Place::Race(_)
+        | Place::Goal(_)
+        | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
@@ -942,6 +967,11 @@ impl Shell {
         });
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
+        });
+        let proj_form = overview::ProjectForm::new(window, cx);
+        let memory_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Add something this bot should always know here\u{2026}")
         });
         let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
@@ -1238,6 +1268,7 @@ impl Shell {
             Ok("chat") => Place::Chat(Member::Fin),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
+            Ok("overview") => Place::Overview,
             Ok("engines") => Place::Settings(Pane::Engines),
             Ok("server") => Place::Settings(Pane::Server),
             Ok("settings") => Place::Settings(Pane::Work),
@@ -1397,6 +1428,12 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            proj_form,
+            crew_pick: None,
+            machine_pick: 0,
+            crew_tab: crew::CrewTab::default(),
+            memory_folder: None,
+            memory_input,
             files_input,
             list_files: false,
             files_open: Default::default(),
@@ -1442,6 +1479,9 @@ impl Shell {
             screen_bounds: Default::default(),
             screen_focus: cx.focus_handle(),
             web,
+            ws_tab: peek::Tab::default(),
+            inbox_project: None,
+            jobs_list: false,
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -1491,6 +1531,20 @@ impl Shell {
             }
             // The status bar's usage popover, open.
             Ok("usage-open") => shell.usage_open = true,
+            // A job's peek open beside its thread.
+            Ok("peek") => {
+                let pick = shell
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .find(|j| j.status == Status::Review && j.race == 0)
+                    .map(|j| (j.id, j.thread));
+                if let Some((id, thread)) = pick {
+                    shell.crew.store.thread_now = thread;
+                    shell.reply_open = Some(id);
+                }
+            }
             // The right sidebar open on its Files tab.
             Ok("files") => {
                 shell.jobs_open = true;
@@ -3590,21 +3644,23 @@ impl Render for Shell {
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
             Place::Today => self.channel(cx),
-            Place::Live(id) => {
-                let detail = self.live(id, cx);
-                self.split(Some(id), detail, cx)
-            }
+            Place::Live(id) => self.workspace(id, window, cx),
             Place::Race(id) => self.race(id, cx),
             Place::Goal(id) => self.goal_page(id, cx),
             Place::Crew => self.crew(cx),
             Place::Chat(who) => self.chat(who, cx),
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
+            Place::Overview => self.overview(cx),
             Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
-            Place::Server => self.server_page(cx),
+            Place::Server => self.machines(cx),
             Place::Screen => self.screen_page(window, cx),
-            Place::Browser(_) => self.web_page(window, cx),
+            // A job's browser is a tab of its workspace.
+            Place::Browser(id) => {
+                self.ws_tab = peek::Tab::Browser;
+                self.workspace(id, window, cx)
+            }
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
@@ -3646,13 +3702,12 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
-        // Settings has its own title column, so no bar across the top.
-        let bare = matches!(self.place, Place::Settings(_));
         let project_drawer = self.project_drawer(cx);
         let root = div()
             .size_full()
             .relative()
             .flex()
+            .flex_col()
             .track_focus(&self.focus)
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
                 this.wake(cx);
@@ -3784,38 +3839,47 @@ impl Render for Shell {
                 d.bg(c(if setup { ui::bg() } else { ui::ground() }))
             })
             .when(theme::layered() && setup, |d| d.bg(c(ui::bg())))
-            // The walkthrough has the whole window; the sidebar comes after it.
-            .when(!setup, |d| d.child(self.sidebar(cx)))
+            // The title bar runs across the whole window, the Mac window buttons
+            // at its left end; the walkthrough has the window to itself.
+            .when(!setup, |d| d.child(self.topbar(cx)))
             .child(
                 div()
                     .flex_1()
-                    .min_w_0()
+                    .min_h_0()
+                    .w_full()
                     .flex()
-                    .flex_col()
-                    // Full height on its own; as a canvas, it stretches between its margins.
-                    .when(setup, |d| d.h_full())
-                    .when(!setup, |d| d.bg(c(ui::bg())))
-                    .relative()
-                    .when(!setup && !bare, |d| d.child(self.topbar(cx)))
+                    // The sidebar comes after the walkthrough.
+                    .when(!setup, |d| d.child(self.sidebar(cx)))
                     .child(
                         div()
                             .flex_1()
-                            .min_h_0()
-                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            // Full height on its own; as a canvas, it stretches between its margins.
+                            .when(setup, |d| d.h_full())
+                            .when(!setup, |d| d.bg(c(ui::bg())))
                             .relative()
-                            .overflow_hidden()
-                            // The pattern lies under the page only, not the top bar:
-                            // the bar is a plain strip of the page's own ground, so
-                            // the pattern never runs into the bar's edge and no grid
-                            // line lands a few pixels off it.
-                            .when(!setup, |d| {
-                                d.children(ui::pattern(crate::pattern::Area::Content))
-                            })
-                            .child(div().size_full().child(body))
-                            .children(self.file_view(cx)),
-                    )
-                    .when(!setup, |d| d.children(project_drawer))
-                    .when(!setup, |d| d.child(self.statusbar(cx))),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .w_full()
+                                    .relative()
+                                    .overflow_hidden()
+                                    // The pattern lies under the page only, not the top bar:
+                                    // the bar is a plain strip of the page's own ground, so
+                                    // the pattern never runs into the bar's edge and no grid
+                                    // line lands a few pixels off it.
+                                    .when(!setup, |d| {
+                                        d.children(ui::pattern(crate::pattern::Area::Content))
+                                    })
+                                    .child(div().size_full().child(body))
+                                    .children(self.file_view(cx)),
+                            )
+                            .when(!setup, |d| d.children(project_drawer))
+                            .when(!setup, |d| d.child(self.statusbar(cx))),
+                    ),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

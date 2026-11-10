@@ -688,7 +688,7 @@ fn card() -> Div {
         .w_full()
         .flex()
         .flex_col()
-        .rounded(px(12.))
+        .rounded(px(7.))
         .bg(c(ui::raised()))
         .border_1()
         .border_color(c(ui::line()))
@@ -771,11 +771,8 @@ impl Shell {
         // When you came in: Peek's catch-up is posted then, and covers only
         // what happened while you were away.
         let arrived = self.new_mark.2;
-        let mut catch_up = if thread == 0 {
-            self.catch_up(&folder.path, since, arrived, cx)
-        } else {
-            None
-        };
+        // Peek's catch-up: one line in a fixed place at the top of the thread.
+        let catch_up = self.catch_up_bar(&folder.path, thread, since, arrived);
         self.crew.store.mark_seen(&folder.path, thread);
         // What's in the thread, by index and time only: this runs on every
         // frame, so only the entries that are drawn get copied.
@@ -932,30 +929,11 @@ impl Shell {
                 feed = feed.child(divider("New", Some(ui::RED)));
                 self.streak = None;
             }
-            // The catch-up sits where it was posted, so what you say after
-            // it comes below it and it scrolls up with the rest.
-            if at > arrived {
-                if let Some(post) = catch_up.take() {
-                    if !marked {
-                        marked = true;
-                        feed = feed.child(divider("New", Some(ui::RED)));
-                    }
-                    feed = feed.child(post);
-                    self.streak = Some(("Peek".into(), arrived));
-                }
-            }
             feed = feed.child(match e {
                 Entry::Job(j) => self.job_entry(&j, cx).into_any_element(),
                 Entry::Plan(g) => self.plan_entry(&g, cx).into_any_element(),
                 Entry::Talk(t) => self.talk_entry(&t, cx).into_any_element(),
             });
-        }
-
-        if let Some(post) = catch_up {
-            if !marked {
-                feed = feed.child(divider("New", Some(ui::RED)));
-            }
-            feed = feed.child(post);
         }
 
         // Short threads sit at the bottom, next to the composer.
@@ -989,6 +967,7 @@ impl Shell {
             .flex_col()
             .child(head)
             .children(self.about_thread(&folder.path, thread, cx))
+            .children(catch_up.map(|bar| self.catch_up_line(bar, cx)))
             .child(chat)
             .child(
                 div()
@@ -1022,7 +1001,7 @@ impl Shell {
                 j.folder.path == folder.path
                     && self.crew.store.thread_for(&folder.path, j.thread) == thread
             })
-            .map(|j| self.reply_pane(&j, &name, cx));
+            .map(|j| self.peek_pane(&j, &name, cx));
         let page = div()
             .size_full()
             .flex()
@@ -1033,222 +1012,72 @@ impl Shell {
         self.split(pick, page, cx)
     }
 
-    /// Peek's catch-up at the bottom of #general when you come back: what
-    /// finished, failed or waits on you across the project since you last
-    /// looked, and what's still running. Worked out each time, not stored.
-    fn catch_up(
-        &mut self,
-        path: &str,
-        since: u64,
-        arrived: u64,
-        cx: &mut Context<Self>,
-    ) -> Option<Div> {
+    /// What happened in this thread while you were away, in one line: how
+    /// many jobs finished, wait on you, and failed. Worked out each time.
+    fn catch_up_bar(&self, path: &str, thread: u64, since: u64, arrived: u64) -> Option<String> {
         if since == 0 {
             return None;
         }
         let store = &self.crew.store;
-        let mine: Vec<&Job> = store
+        let ended: Vec<&Job> = store
             .listed()
             .into_iter()
-            .filter(|j| j.folder.path == path)
+            .filter(|j| j.folder.path == path && store.thread_for(path, j.thread) == thread)
+            .filter(|j| j.ended.is_some_and(|e| e > since && e <= arrived))
             .collect();
-        // Only what ended while you were away, not what you watched end.
-        let ended_since = |j: &&Job| j.ended.is_some_and(|e| e > since && e <= arrived);
-        let done: Vec<String> = mine
+        let done = ended
             .iter()
-            .filter(|j| ended_since(j) && matches!(j.status, Status::Done | Status::Shipped))
-            .map(|j| format!("{} finished {}", j.bot.name(), j.label()))
-            .collect();
-        let failed = mine
-            .iter()
-            .filter(|j| ended_since(j) && j.status == Status::Failed)
+            .filter(|j| matches!(j.status, Status::Done | Status::Shipped))
             .count();
-        let review = mine
-            .iter()
-            .filter(|j| ended_since(j) && j.status == Status::Review)
-            .count();
-        // Running when you came in.
-        let running = mine
-            .iter()
-            .filter(|j| j.started <= arrived && j.ended.is_none_or(|e| e > arrived))
-            .filter(|j| !matches!(j.status, Status::Stopped | Status::Interrupted))
-            .count();
-        if done.is_empty() && failed == 0 && review == 0 {
-            return None;
-        }
-        let plural = |n: usize, one: &str, many: &str| {
-            if n == 1 {
-                format!("1 {one}")
-            } else {
-                format!("{n} {many}")
-            }
-        };
-        let mut lines: Vec<String> = done.into_iter().take(3).collect();
-        if review > 0 {
-            lines.push(format!(
-                "{} waiting for your OK",
-                plural(review, "change is", "changes are")
-            ));
-        }
-        if failed > 0 {
-            lines.push(format!("{} failed", plural(failed, "job", "jobs")));
-        }
-        if running > 0 {
-            lines.push(format!(
-                "{} still running",
-                plural(running, "job is", "jobs are")
-            ));
-        }
-        let face = self.avatar(Member::Fin, 34.);
-        let mut list = div().flex().flex_col().gap(px(3.));
-        for l in lines {
-            list = list.child(
+        let review = ended.iter().filter(|j| j.status == Status::Review).count();
+        let failed = ended.iter().filter(|j| j.status == Status::Failed).count();
+        catch_up_words(done, review, failed)
+    }
+
+    /// The catch-up line itself: Peek's face, the words and Jump to new.
+    fn catch_up_line(&mut self, words: String, cx: &mut Context<Self>) -> Div {
+        div()
+            .mx(px(28.))
+            .mt(px(10.))
+            .h(px(34.))
+            .px(px(12.))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(9.))
+            .rounded(px(5.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .text_size(px(12.5))
+            .text_color(c(ui::muted()))
+            .child(self.avatar(Member::Fin, 16.))
+            .child(
                 div()
-                    .flex()
-                    .items_start()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .mt(px(8.))
-                            .size(px(5.))
-                            .rounded_full()
-                            .bg(c(ui::faint())),
-                    )
-                    .child(l),
-            );
-        }
-        let needs = review + failed;
-        Some(
-            div()
-                .flex()
-                .gap(px(12.))
-                .py(px(8.))
-                .child(
-                    div()
-                        .size(px(34.))
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(face),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .child(
-                            byline("Peek", arrived).child(
-                                div()
-                                    .px(px(6.))
-                                    .rounded(px(5.))
-                                    .bg(ca(ui::VIOLET, 0.12))
-                                    .text_size(px(11.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c(ui::t_violet()))
-                                    .child("Catch-up"),
-                            ),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .text_color(c(ui::body()))
-                                .child("While you were away:"),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .line_height(px(21.))
-                                .text_color(c(ui::body()))
-                                .child(list),
-                        )
-                        .when(needs > 0, |d| {
-                            d.child(
-                                div().pt(px(4.)).flex().gap(px(6.)).child(
-                                    ui::ghost("catch-up-needs", "Open Needs you")
-                                        .h(px(28.))
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx)),
-                                        ),
-                                ),
-                            )
-                        }),
-                ),
-        )
+                    .flex_none()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child("While you were away"),
+            )
+            .child(div().flex_1().min_w_0().truncate().child(words))
+            .child(
+                div()
+                    .id("catch-up-jump")
+                    .flex_none()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .child("Jump to new")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.thread_scroll.scroll_to_bottom();
+                        cx.notify();
+                    })),
+            )
     }
 
     /// A job's conversation beside its thread: what the bot did and said,
     /// with a box to answer it, like replies in a thread.
-    fn reply_pane(&mut self, job: &Job, thread: &str, cx: &mut Context<Self>) -> Div {
-        div()
-            .w(px(460.))
-            .flex_none()
-            .h_full()
-            .flex()
-            .flex_col()
-            .border_l_1()
-            .border_color(c(ui::line2()))
-            .bg(c(ui::bg()))
-            .child(
-                div()
-                    .h(px(46.))
-                    .flex_none()
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .border_b_1()
-                    .border_color(c(ui::line2()))
-                    .child(
-                        div()
-                            .text_size(px(15.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(ui::ink()))
-                            .child("Thread"),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::faint()))
-                            .child(format!("#{thread} \u{b7} {}", job.label())),
-                    )
-                    .child(
-                        ui::icon_btn("reply-full", IconName::Maximize)
-                            .tooltip(|window, cx| {
-                                gpui_kit::component::tooltip::Tooltip::new("Open the whole job")
-                                    .build(window, cx)
-                            })
-                            .on_click({
-                                let id = job.id;
-                                cx.listener(move |this, _, _, cx| {
-                                    this.reply_open = None;
-                                    this.open_job(id, cx);
-                                })
-                            }),
-                    )
-                    .child(
-                        ui::icon_btn("reply-close", IconName::X).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.reply_open = None;
-                                cx.notify();
-                            },
-                        )),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .child(self.live_main(job, cx)),
-            )
-    }
-
     /// The bar over a thread, like a channel's: its name, who's in it as a
     /// row of faces, and Add a bot, which starts an @ in the box.
     /// "About this thread": what the thread is for in one line, opening to
@@ -1891,6 +1720,7 @@ impl Shell {
                 failed_checks,
                 added,
                 removed,
+                said: (!running && said != word_said).then(|| said.clone()),
             };
             self.live_card(j, bits, cx)
         };
@@ -1938,7 +1768,8 @@ impl Shell {
         let words = div()
             .flex()
             .flex_col()
-            .when(!running && !(quiet && said == word_said), |d| {
+            // A card carries the bot's words in its foot; a slim line has none.
+            .when(quiet && said != word_said, |d| {
                 d.child(
                     div()
                         .text_size(px(14.))
@@ -1998,8 +1829,8 @@ impl Shell {
                 .border_color(c(ui::line()))
                 .cursor_pointer()
                 .hover(|s| s.border_color(c(ui::line_hi())).bg(c(ui::hover())))
-                .tooltip(tip_of("Open the job".into()))
-                .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
+                .tooltip(tip_of("Peek at the job".into()))
+                .on_click(cx.listener(move |this, _, _, cx| this.peek_job(id, cx)))
                 .child(div().size(px(7.)).flex_none().rounded_full().bg(c(tone)))
                 .child(
                     div()
@@ -2062,6 +1893,7 @@ impl Shell {
             failed_checks,
             added,
             removed,
+            said,
             ..
         } = b;
         let head = div()
@@ -2117,11 +1949,22 @@ impl Shell {
                     .child(word.clone())
             });
 
+        let peeked = self.reply_open == Some(id);
         let mut body = card()
             .when(running, |d| {
                 d.border_color(c(super::theme::mix(ui::line(), accent, 0.45)))
             })
             .when(review, |d| d.border_color(c(ui::ask_tone().2)))
+            // The job open in the peek: a ring in the accent line, and a soft glow.
+            .when(peeked, |d| {
+                d.border_color(c(ui::ink())).shadow(vec![BoxShadow {
+                    color: ui::ca(ui::ink(), 0.08),
+                    offset: point(px(0.), px(0.)),
+                    blur_radius: px(0.),
+                    spread_radius: px(4.),
+                    inset: false,
+                }])
+            })
             .child(head);
         if let Some(f) = frac.filter(|_| running) {
             body = body.child(div().px(px(14.)).child(ui::bar(f, accent).h(px(3.))));
@@ -2289,12 +2132,17 @@ impl Shell {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .text_size(px(12.))
-                    .text_color(c(ui::faint()))
-                    .child(if racing {
-                        format!("Race of {tries} engines")
-                    } else {
-                        format!("#{id} \u{b7} {}", j.engine)
+                    .text_size(px(12.5))
+                    .map(|d| match (&said, racing) {
+                        (_, true) => d
+                            .text_color(c(ui::faint()))
+                            .child(format!("Race of {tries} engines")),
+                        (Some(words), false) => d
+                            .text_color(c(ui::body()))
+                            .child(words.lines().next().unwrap_or("").to_string()),
+                        (None, false) => d
+                            .text_color(c(ui::faint()))
+                            .child(format!("#{id} \u{b7} {}", j.engine)),
                     }),
             )
             .map(|d| {
@@ -2312,9 +2160,9 @@ impl Shell {
                     )
                 } else {
                     d.child(
-                        ui::ghost(("thread-open", id as usize), "Open")
+                        ui::ghost(("thread-open", id as usize), "Peek")
                             .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                            .on_click(cx.listener(move |this, _, _, cx| this.peek_job(id, cx))),
                     )
                 }
             });
@@ -2432,7 +2280,7 @@ impl Shell {
                     .when(k > 0, |d| d.border_t_1().border_color(c(ui::line2())))
                     .when(jid != 0, |d| {
                         d.cursor_pointer()
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_job(jid, cx)))
+                            .on_click(cx.listener(move |this, _, _, cx| this.peek_job(jid, cx)))
                     })
                     .child(
                         div()
@@ -3176,6 +3024,45 @@ struct JobBits {
     failed_checks: usize,
     added: usize,
     removed: usize,
+    /// What the bot said about it, carried in the card's foot: the card is
+    /// the message, not a message and then a card saying the same.
+    said: Option<String>,
+}
+
+/// The catch-up's words: "2 finished, 1 ready for you, nothing failed".
+/// Nothing when nothing ended.
+fn catch_up_words(done: usize, review: usize, failed: usize) -> Option<String> {
+    if done + review + failed == 0 {
+        return None;
+    }
+    let mut parts = vec![format!("{done} finished")];
+    if review > 0 {
+        parts.push(format!("{review} ready for you"));
+    }
+    parts.push(if failed == 0 {
+        "nothing failed".to_string()
+    } else {
+        format!("{failed} failed")
+    });
+    Some(parts.join(", "))
+}
+
+#[cfg(test)]
+mod catch_up_tests {
+    use super::catch_up_words;
+
+    #[test]
+    fn catch_up_reads_as_one_line() {
+        assert_eq!(catch_up_words(0, 0, 0), None);
+        assert_eq!(
+            catch_up_words(2, 1, 0).as_deref(),
+            Some("2 finished, 1 ready for you, nothing failed")
+        );
+        assert_eq!(
+            catch_up_words(0, 0, 1).as_deref(),
+            Some("0 finished, 1 failed")
+        );
+    }
 }
 
 #[cfg(test)]

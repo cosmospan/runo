@@ -140,6 +140,17 @@ impl Board {
         }
         // The longest running first: that's the one you are wondering about.
         b.working.sort_by_key(|l| l.id);
+        // The Inbox's order: a bot waiting on a yes, then reviews, then stops.
+        b.needs.sort_by_key(|l| {
+            (
+                l.ask.is_none(),
+                match l.status {
+                    Status::Review => 0,
+                    Status::Failed | Status::Stopped | Status::Interrupted => 1,
+                    _ => 2,
+                },
+            )
+        });
         b
     }
 
@@ -932,13 +943,8 @@ impl Render for Tray {
             .flex()
             .flex_col();
         if !board.needs.is_empty() {
-            list = list.child(self.section(
-                "Needs you",
-                Some(ui::AMBER),
-                &board.needs,
-                Place::Inbox,
-                cx,
-            ));
+            list =
+                list.child(self.section("Inbox", Some(ui::AMBER), &board.needs, Place::Inbox, cx));
         }
         if !board.working.is_empty() {
             list = list.child(self.section(
@@ -1055,8 +1061,9 @@ mod tests {
         };
         let b = Board::of(&store, true, |_| Vec::new());
         let ids = |ls: &[Line]| ls.iter().map(|l| l.id).collect::<Vec<_>>();
-        // Unseen endings need you; changes to review always do.
-        assert_eq!(ids(&b.needs), vec![4, 3, 1]);
+        // Unseen endings need you; changes to review always do. They come in
+        // the Inbox's order: reviews, then stops, then the rest.
+        assert_eq!(ids(&b.needs), vec![3, 4, 1]);
         assert_eq!(ids(&b.working), vec![2]);
         assert!(b.recent.is_empty());
         assert_eq!((b.running, b.needs_n, b.review), (1, 3, 1));

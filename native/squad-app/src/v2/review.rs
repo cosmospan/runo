@@ -53,33 +53,14 @@ impl Shell {
 
     /// The review card at the end of a job's feed, once it has changes.
     pub(super) fn review_card(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
-        if job.status == Status::Shipped && !job.shipped.is_empty() {
-            return Some(
-                div()
-                    .ml(px(40.))
-                    .px(px(16.))
-                    .py(px(12.))
-                    .rounded(px(12.))
-                    .bg(c(ui::ok_tone().1))
-                    .border_1()
-                    .border_color(c(ui::ok_tone().2))
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .text_size(px(13.))
-                    .text_color(c(ui::t_green()))
-                    .child(div().size(px(7.)).rounded_full().bg(c(ui::GREEN)))
-                    .child(job.shipped.clone()),
-            );
-        }
-        if job.status == Status::Shipping {
-            return Some(self.pr_card(job, cx));
-        }
-        if job.status != Status::Review || job.changes.is_empty() {
-            return None;
-        }
+        self.review_body(job, cx).map(|d| d.ml(px(40.)))
+    }
+
+    /// Checker's run of the project's checks on a job: the verdict with Run
+    /// again, then each check with its time, and the end of a failing one's
+    /// output. The review and the workspace's Checks tab both show it.
+    pub(super) fn checks_block(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
         let id = job.id;
-        let (files, added, removed) = (job.changes.len(), job.lines().0, job.lines().1);
         let (said, verdict) = work::verdict(&job.checks, job.checking);
         let verdict_color = match verdict {
             Verdict::Pass => ui::t_green(),
@@ -89,58 +70,6 @@ impl Shell {
             Verdict::None => ui::muted(),
         };
         let checker = self.avatar(Member::Checker, 22.);
-
-        // Head: where it stands, the size of the change, and the branch.
-        let head = div()
-            .px(px(16.))
-            .py(px(12.))
-            .flex()
-            .items_center()
-            .flex_wrap()
-            .gap(px(10.))
-            .border_b_1()
-            .border_color(c(ui::line()))
-            .child(super::home::pill("Ready for review", ui::ask_tone()))
-            .child(
-                div()
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(format!(
-                        "{files} {}",
-                        if files == 1 { "file" } else { "files" }
-                    )),
-            )
-            .child(
-                div()
-                    .font_family(ui::MONO)
-                    .text_size(px(12.))
-                    .flex()
-                    .gap(px(6.))
-                    .child(
-                        div()
-                            .text_color(c(ui::t_green()))
-                            .child(format!("+{added}")),
-                    )
-                    .child(
-                        div()
-                            .text_color(c(ui::t_red()))
-                            .child(format!("\u{2212}{removed}")),
-                    ),
-            )
-            .child(div().flex_1())
-            .child(
-                div()
-                    .text_size(px(12.))
-                    .text_color(c(ui::muted()))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .child(branch_chip(&job.branch))
-                    .child("into")
-                    .child(branch_chip(&job.base)),
-            );
-
-        // Checker's run of the checks.
         let mut proof = div()
             .px(px(16.))
             .py(px(12.))
@@ -226,6 +155,91 @@ impl Shell {
                 );
             }
         }
+        proof
+    }
+
+    /// The review on its own, without the feed's indent: for the peek pane
+    /// and the workspace's Changes tab.
+    pub(super) fn review_body(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        if job.status == Status::Shipped && !job.shipped.is_empty() {
+            return Some(
+                div()
+                    .ml(px(40.))
+                    .px(px(16.))
+                    .py(px(12.))
+                    .rounded(px(12.))
+                    .bg(c(ui::ok_tone().1))
+                    .border_1()
+                    .border_color(c(ui::ok_tone().2))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .text_size(px(13.))
+                    .text_color(c(ui::t_green()))
+                    .child(div().size(px(7.)).rounded_full().bg(c(ui::GREEN)))
+                    .child(job.shipped.clone()),
+            );
+        }
+        if job.status == Status::Shipping {
+            return Some(self.pr_card(job, cx));
+        }
+        if job.status != Status::Review || job.changes.is_empty() {
+            return None;
+        }
+        let id = job.id;
+        let (files, added, removed) = (job.changes.len(), job.lines().0, job.lines().1);
+        // Head: where it stands, the size of the change, and the branch.
+        let head = div()
+            .px(px(16.))
+            .py(px(12.))
+            .flex()
+            .items_center()
+            .flex_wrap()
+            .gap(px(10.))
+            .border_b_1()
+            .border_color(c(ui::line()))
+            .child(super::home::pill("Ready for review", ui::ask_tone()))
+            .child(
+                div()
+                    .text_size(px(13.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(format!(
+                        "{files} {}",
+                        if files == 1 { "file" } else { "files" }
+                    )),
+            )
+            .child(
+                div()
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .flex()
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_color(c(ui::t_green()))
+                            .child(format!("+{added}")),
+                    )
+                    .child(
+                        div()
+                            .text_color(c(ui::t_red()))
+                            .child(format!("\u{2212}{removed}")),
+                    ),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(c(ui::muted()))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(branch_chip(&job.branch))
+                    .child("into")
+                    .child(branch_chip(&job.base)),
+            );
+
+        // Checker's run of the checks.
+        let proof = self.checks_block(job, cx);
 
         // The files, each one opening its diff.
         let mut list = div().flex().flex_col();
@@ -381,7 +395,6 @@ impl Shell {
 
         Some(
             div()
-                .ml(px(40.))
                 .rounded(px(12.))
                 .bg(c(ui::panel()))
                 .border_1()

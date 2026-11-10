@@ -132,20 +132,28 @@ impl Shell {
                 .child(
                     div()
                         .flex()
-                        .items_center()
+                        .items_start()
                         .gap(px(8.))
                         .px(px(12.))
                         .pt(px(10.))
                         .pb(px(6.))
                         .text_size(px(13.))
+                        .line_height(px(18.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::ink()))
                         .child(
                             Icon::new(IconName::ShieldAlert)
+                                .mt(px(2.))
                                 .size(px(14.))
+                                .flex_none()
                                 .text_color(c(tone.0)),
                         )
-                        .child("Seatbelt: Shipper stopped before it left your computer"),
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child("Seatbelt: Shipper stopped before it left your computer"),
+                        ),
                 )
                 .child(rows)
                 .child(
@@ -349,15 +357,25 @@ impl Shell {
         jobs: &[Job],
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let body = div()
+        div()
             .id("git-side")
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .px(px(20.))
             .pb(px(24. + super::DOCK_ROOM))
-            .flex()
-            .flex_col();
+            .child(self.git_sections(folder, jobs, cx))
+    }
+
+    /// The Git side's blocks, one under another, for the sidebar and for the
+    /// project's Overview.
+    pub(super) fn git_sections(
+        &mut self,
+        folder: &str,
+        jobs: &[Job],
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let body = div().flex().flex_col();
         let quiet = |text: &str| {
             div()
                 .text_size(px(12.5))

@@ -1,0 +1,687 @@
+//! A project's Overview: the things that belong to the project rather than
+//! to one job. Running the app, how every job sets up (`squad.toml`, as a
+//! form), how work runs here, what happened lately, and Git.
+
+use gpui_kit::assets::IconName;
+use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::*;
+
+use super::project::{self, Project};
+use super::store::{self, Job, Status};
+use super::ui::{self, c};
+use super::{Place, Shell};
+
+/// The Overview's left column stops growing here.
+const MAX_W: f32 = 1180.;
+/// The Git column on the right.
+const GIT_W: f32 = 380.;
+
+/// The form for `squad.toml`, one line per key. Lists are comma-separated.
+pub(super) struct ProjectForm {
+    setup: Entity<InputState>,
+    copy: Entity<InputState>,
+    run: Entity<InputState>,
+    url: Entity<InputState>,
+    port: Entity<InputState>,
+    checks: Entity<InputState>,
+    /// The form is open.
+    pub(super) editing: bool,
+    /// Why the last save didn't happen.
+    error: Option<String>,
+}
+
+impl ProjectForm {
+    pub(super) fn new(window: &mut Window, cx: &mut Context<Shell>) -> Self {
+        let mut make =
+            |hint: &'static str| cx.new(|cx| InputState::new(window, cx).placeholder(hint));
+        Self {
+            setup: make("pnpm install"),
+            copy: make(".env.local"),
+            run: make("pnpm dev --port $PORT"),
+            url: make("http://localhost:$PORT"),
+            port: make("3100"),
+            checks: make("pnpm lint, pnpm test"),
+            editing: false,
+            error: None,
+        }
+    }
+
+    /// Fills the form from `p`.
+    fn fill(&self, p: &Project, window: &mut Window, cx: &mut App) {
+        let set = |input: &Entity<InputState>, text: String, window: &mut Window, cx: &mut App| {
+            input.update(cx, |i, cx| i.set_value(text, window, cx));
+        };
+        set(&self.setup, p.setup.join(", "), window, cx);
+        set(&self.copy, p.copy.join(", "), window, cx);
+        set(&self.run, p.run.clone(), window, cx);
+        set(&self.url, p.url.clone(), window, cx);
+        set(
+            &self.port,
+            if p.port == 0 {
+                String::new()
+            } else {
+                p.port.to_string()
+            },
+            window,
+            cx,
+        );
+        set(&self.checks, p.checks.join(", "), window, cx);
+    }
+
+    /// What the form says, or why it can't be saved.
+    fn read(&self, cx: &App) -> Result<Project, String> {
+        let text = |input: &Entity<InputState>| input.read(cx).value().trim().to_string();
+        let port = text(&self.port);
+        let port = if port.is_empty() {
+            0
+        } else {
+            port.parse::<u16>().map_err(|_| {
+                format!("The port should be a number like 3100, not \u{201c}{port}\u{201d}.")
+            })?
+        };
+        Ok(Project {
+            setup: project::split_list(&text(&self.setup)),
+            copy: project::split_list(&text(&self.copy)),
+            run: text(&self.run),
+            url: text(&self.url),
+            port,
+            checks: project::split_list(&text(&self.checks)),
+        })
+    }
+}
+
+/// What a job did, in a few words, for the activity list.
+pub(super) fn did(j: &Job) -> String {
+    match j.status {
+        Status::Running => "is working on".into(),
+        Status::Review => "finished".into(),
+        Status::Done if j.needs_you() => "finished".into(),
+        Status::Done => "finished".into(),
+        Status::Shipping if j.pr_number > 0 => format!("opened PR #{} for", j.pr_number),
+        Status::Shipping => "is shipping".into(),
+        Status::Shipped => "shipped".into(),
+        Status::Failed => "failed on".into(),
+        Status::Stopped => "was stopped on".into(),
+        Status::Interrupted => "was interrupted on".into(),
+        s => format!("{}:", s.label().to_lowercase()),
+    }
+}
+
+/// A card's title and its quiet line under it.
+fn card_head(title: &str, sub: Option<String>) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(
+            div()
+                .text_size(px(15.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::ink()))
+                .child(title.to_string()),
+        )
+        .when_some(sub, |d, s| {
+            d.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
+                    .child(s),
+            )
+        })
+}
+
+/// One of the Overview's cards.
+fn panel() -> Div {
+    ui::card().p(px(18.)).flex().flex_col().gap(px(14.))
+}
+
+/// A key and its value in the setup card.
+fn field(key: &str, value: Div) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .py(px(7.))
+        .border_t_1()
+        .border_color(c(ui::line2()))
+        .child(
+            div()
+                .w(px(70.))
+                .flex_none()
+                .text_size(px(12.5))
+                .text_color(c(ui::muted()))
+                .child(key.to_string()),
+        )
+        .child(div().flex_1().min_w_0().child(value))
+}
+
+/// A value in mono, or a quiet dash when there's none.
+fn code(text: String) -> Div {
+    if text.is_empty() {
+        div()
+            .text_size(px(12.5))
+            .text_color(c(ui::faint()))
+            .child("\u{2014}")
+    } else {
+        div()
+            .font_family(ui::MONO)
+            .text_size(px(12.5))
+            .text_color(c(ui::ink()))
+            .child(text)
+    }
+}
+
+impl Shell {
+    /// The Overview of the project you're in.
+    pub(super) fn overview(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(folder) = self.crew.store.folder().cloned() else {
+            return self.empty_place(
+                "No project yet",
+                "Pick a folder and its Overview shows how it runs, its Git and what the crew did lately.",
+                cx,
+            );
+        };
+        let here = folder.path.clone();
+        let jobs: Vec<Job> = self.crew.store.listed().into_iter().cloned().collect();
+
+        // The project's own line: its branch and how clean it is.
+        let repo = self.crew.repos.get(&here).cloned();
+        let mut sub = vec![super::sidebar::short_path(&here)];
+        if let Some(r) = repo.as_ref().filter(|r| r.is_repo) {
+            if !r.state.branch.is_empty() {
+                sub.push(r.state.branch.clone());
+            }
+            sub.push(match r.changed {
+                0 => "clean".into(),
+                1 => "1 file changed".into(),
+                n => format!("{n} files changed"),
+            });
+        }
+        let title = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(
+                div()
+                    .text_size(px(26.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(folder.name.clone()),
+            )
+            .child(
+                div()
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .text_color(c(ui::faint()))
+                    .child(sub.join(" \u{b7} ")),
+            );
+
+        let run = self.overview_run(&here, cx);
+        let setup = self.overview_setup(&here, cx);
+        let work = self.overview_work(&folder, cx);
+        let lately = self.overview_lately(&folder.name, &jobs, cx);
+        let git = panel()
+            .w(px(GIT_W))
+            .flex_none()
+            .gap(px(0.))
+            .py(px(4.))
+            .child(self.git_sections(&here, &jobs, cx));
+
+        div()
+            .id("overview")
+            .size_full()
+            .overflow_y_scroll()
+            .px(px(32.))
+            .pt(px(28.))
+            .pb(px(40. + super::DOCK_ROOM))
+            .child(
+                div()
+                    .max_w(px(MAX_W))
+                    .flex()
+                    .flex_col()
+                    .gap(px(22.))
+                    .child(title)
+                    .child(
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap(px(16.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(16.))
+                                    .child(run)
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_start()
+                                            .gap(px(16.))
+                                            .child(setup.flex_1().min_w_0())
+                                            .child(work.flex_1().min_w_0()),
+                                    )
+                                    .child(lately),
+                            )
+                            .child(git),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// Run the app: whether it's up and where, its command, and the buttons.
+    fn overview_run(&mut self, here: &str, cx: &mut Context<Self>) -> Div {
+        let found = super::work::start_command(here, 0);
+        let file = project::load(here);
+        let app = self
+            .runs
+            .iter()
+            .find(|r| r.spec.folder == here && r.spec.job.is_none() && !r.spec.setup && r.live())
+            .map(|r| {
+                (
+                    r.id,
+                    r.url().map(String::from),
+                    r.state(),
+                    r.spec.cmd.clone(),
+                )
+            });
+        let copies = self
+            .runs
+            .iter()
+            .filter(|r| r.spec.folder == here && r.spec.job.is_some() && r.live())
+            .count();
+
+        let state = app.as_ref().map(|(_, url, st, _)| {
+            let port = url
+                .as_deref()
+                .and_then(|u| u.rsplit(':').next())
+                .map(|p| p.trim_end_matches('/').to_string());
+            match st {
+                super::apps::State::Up => (
+                    match port {
+                        Some(p) => format!("up on :{p}"),
+                        None => "up".into(),
+                    },
+                    ui::ok_tone(),
+                ),
+                super::apps::State::Starting => ("starting".into(), ui::ask_tone()),
+                _ => ("running".into(), ui::run_tone()),
+            }
+        });
+        let mut buttons = div().ml_auto().flex().items_center().gap(px(8.));
+        match &app {
+            Some((id, url, _, _)) => {
+                let id = *id;
+                buttons = buttons
+                    .child(
+                        ui::ghost_i("ov-restart", IconName::RotateCw, "Restart")
+                            .on_click(cx.listener(move |this, _, _, cx| this.restart_run(id, cx))),
+                    )
+                    .child(
+                        ui::ghost_i("ov-stop", IconName::Square, "Stop")
+                            .on_click(cx.listener(move |this, _, _, cx| this.stop_run(id, cx))),
+                    )
+                    .when_some(url.clone(), |d, u| {
+                        d.child(
+                            ui::solid_i("ov-open", IconName::ExternalLink, "Open")
+                                .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&u))),
+                        )
+                    });
+            }
+            None if found.is_some() => {
+                buttons = buttons.child(ui::solid_i("ov-run", IconName::Play, "Run").on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.run_app(None, None, cx);
+                    }),
+                ));
+            }
+            None => {}
+        }
+        let cmd = app
+            .as_ref()
+            .map(|a| a.3.clone())
+            .or_else(|| found.as_ref().map(|f| f.0.clone()));
+        let note = match (&file, &found) {
+            (_, None) => "Squad can't tell how to start this app yet. Add a run command to how every job sets up, below.".to_string(),
+            (Some(p), Some(_)) if p.port > 0 => {
+                let mut s = format!("Each job's copy gets its own port from {}.", p.port);
+                match copies {
+                    0 => {}
+                    1 => s.push_str(" 1 job copy running."),
+                    n => s.push_str(&format!(" {n} job copies running.")),
+                }
+                s
+            }
+            (Some(_), Some(_)) => format!("From {}.", project::FILE),
+            (None, Some(_)) => format!(
+                "Squad worked this out from the project. Save it in {} to change it.",
+                project::FILE
+            ),
+        };
+        panel()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .child(card_head("Run the app", None))
+                    .when_some(state, |d, (word, tone)| {
+                        d.child(super::home::pill(&word, tone))
+                    })
+                    .child(buttons),
+            )
+            .when_some(cmd, |d, cmd| {
+                d.child(
+                    div()
+                        .px(px(12.))
+                        .py(px(9.))
+                        .rounded(px(6.))
+                        .bg(c(ui::well()))
+                        .font_family(ui::MONO)
+                        .text_size(px(12.5))
+                        .text_color(c(ui::ink()))
+                        .child(cmd),
+                )
+            })
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .child(note),
+            )
+    }
+
+    /// How every job sets up: `squad.toml`, read, or as a form to edit.
+    fn overview_setup(&mut self, here: &str, cx: &mut Context<Self>) -> Div {
+        let read = project::read(here);
+        let (file, broken) = match &read {
+            Ok(p) => (p.clone(), None),
+            Err(why) => (None, Some(why.clone())),
+        };
+        let sub = match (&file, &broken) {
+            (_, Some(_)) => format!("{} has a mistake", project::FILE),
+            (Some(_), None) => format!("{} \u{b7} in the project", project::FILE),
+            (None, None) => format!("No {} yet \u{b7} Squad works these out", project::FILE),
+        };
+        let mut card = panel().child(card_head("How every job sets up", Some(sub)));
+        if self.proj_form.editing {
+            let row = |key: &str, input: &Entity<InputState>| {
+                field(
+                    key,
+                    div()
+                        .h(px(30.))
+                        .px(px(2.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.))
+                        .bg(c(ui::raised()))
+                        .border_1()
+                        .border_color(c(ui::line()))
+                        .font_family(ui::MONO)
+                        .text_size(px(12.5))
+                        .child(Input::new(input).appearance(false).bordered(false)),
+                )
+            };
+            let f = &self.proj_form;
+            card = card
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(row("Setup", &f.setup))
+                        .child(row("Copy", &f.copy))
+                        .child(row("Run", &f.run))
+                        .child(row("Address", &f.url))
+                        .child(row("Port", &f.port))
+                        .child(row("Checks", &f.checks)),
+                )
+                .child(div().text_size(px(12.)).text_color(c(ui::faint())).child(
+                    "Separate several commands or files with commas. $PORT is each job's own port.",
+                ))
+                .when_some(f.error.clone(), |d, e| {
+                    d.child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::t_red()))
+                            .child(e),
+                    )
+                });
+            let dir = here.to_string();
+            card = card.child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(ui::solid("ov-save", "Save").on_click(cx.listener(
+                        move |this, _, _, cx| {
+                            match this
+                                .proj_form
+                                .read(cx)
+                                .and_then(|p| project::write(&dir, &p))
+                            {
+                                Ok(()) => {
+                                    this.proj_form.editing = false;
+                                    this.proj_form.error = None;
+                                }
+                                Err(why) => this.proj_form.error = Some(why),
+                            }
+                            cx.notify();
+                        },
+                    )))
+                    .child(ui::ghost("ov-cancel", "Cancel").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.proj_form.editing = false;
+                            this.proj_form.error = None;
+                            cx.notify();
+                        },
+                    ))),
+            );
+            return card;
+        }
+        if let Some(why) = broken {
+            card = card.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::t_red()))
+                    .child(why),
+            );
+        }
+        // What jobs get now: the file's keys, or what Squad found.
+        let shown = file.clone().unwrap_or_else(|| {
+            let (run, url) = super::work::detect_start(here).unwrap_or_default();
+            Project {
+                run,
+                url: url.unwrap_or_default(),
+                checks: super::work::detect_checks(here),
+                ..Project::default()
+            }
+        });
+        let start = shown.clone();
+        let dir = here.to_string();
+        card.child(
+            div()
+                .flex()
+                .flex_col()
+                .child(field("Setup", code(shown.setup.join(", "))))
+                .child(field("Copy", code(shown.copy.join(", "))))
+                .child(field("Run", code(shown.run.clone())))
+                .when(shown.port > 0, |d| {
+                    d.child(field("Ports", code(format!("from {}", shown.port))))
+                })
+                .child(field("Checks", code(shown.checks.join(", ")))),
+        )
+        .child(
+            div().flex().child(
+                ui::ghost_i(
+                    "ov-edit",
+                    IconName::Pencil,
+                    if file.is_some() { "Edit" } else { "Set up" },
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    let _ = &dir;
+                    this.proj_form.fill(&start, window, cx);
+                    this.proj_form.editing = true;
+                    this.proj_form.error = None;
+                    cx.notify();
+                })),
+            ),
+        )
+    }
+
+    /// How work runs here: how often the crew checks with you, where jobs
+    /// run and what Approve does.
+    fn overview_work(&mut self, folder: &store::Folder, cx: &mut Context<Self>) -> Div {
+        let st = cx.global::<crate::settings::AppSettings>().clone();
+        let level = match (st.v2_plan_first, st.v2_auto_merge) {
+            (true, _) => "Ask a lot: Peek's plan, the changes and the merge wait for you",
+            (false, true) => "Hands off: approved PRs merge once checks pass",
+            (false, false) => "Balanced: you approve, then merge",
+        };
+        let here = if cfg!(target_os = "macos") {
+            "This Mac"
+        } else {
+            "This computer"
+        };
+        let runs = match self.crew.link.as_ref() {
+            Some(_) => format!("Jobs run on {here}, or on your server"),
+            None => format!("Jobs run on {here}"),
+        };
+        let ship = match folder.ship.as_str() {
+            "pr" => "Approve opens a pull request",
+            "merge" => "Approve merges into your branch",
+            _ => "Approve opens a pull request when there's a remote, else merges",
+        };
+        let line = |text: String| {
+            div()
+                .flex()
+                .items_start()
+                .gap(px(8.))
+                .text_size(px(13.))
+                .line_height(px(19.))
+                .text_color(c(ui::body()))
+                .child(
+                    div()
+                        .mt(px(7.))
+                        .size(px(5.))
+                        .flex_none()
+                        .rounded_full()
+                        .bg(c(ui::faint())),
+                )
+                .child(div().flex_1().min_w_0().child(text))
+        };
+        panel()
+            .child(card_head(
+                "How work runs here",
+                Some("The same everywhere, from Settings".into()),
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(line(level.to_string()))
+                    .child(line(runs))
+                    .child(line(ship.to_string())),
+            )
+            .child(div().flex().child(
+                ui::ghost_i("ov-work", IconName::SlidersHorizontal, "Change").on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.go(Place::Settings(super::prefs::Pane::Work), cx)
+                    }),
+                ),
+            ))
+    }
+
+    /// Lately in the project: the latest jobs, newest first.
+    fn overview_lately(&mut self, name: &str, jobs: &[Job], cx: &mut Context<Self>) -> Div {
+        let mut recent: Vec<&Job> = jobs.iter().collect();
+        recent.sort_by_key(|j| std::cmp::Reverse(j.ended.unwrap_or(j.started)));
+        recent.truncate(6);
+        let mut list = div().flex().flex_col();
+        if recent.is_empty() {
+            list = list.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
+                    .child("Nothing yet. Jobs show here as the crew takes them on."),
+            );
+        }
+        for j in recent {
+            let id = j.id;
+            let face = self.avatar(j.bot, 20.);
+            list = list.child(
+                div()
+                    .id(("ov-lately", id as usize))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .px(px(8.))
+                    .mx(px(-8.))
+                    .h(px(32.))
+                    .rounded(px(6.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())))
+                    .text_size(px(13.))
+                    .child(face)
+                    .child(div().flex_none().text_color(c(ui::muted())).child(format!(
+                        "{} {}",
+                        j.bot.name(),
+                        did(j)
+                    )))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child(super::channel::card_title(j)),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(px(12.))
+                            .text_color(c(ui::faint()))
+                            .child(store::ago(j.ended.unwrap_or(j.started))),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+            );
+        }
+        panel()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .child(card_head(&format!("Lately in {name}"), None))
+                    .child(
+                        div().ml_auto().child(
+                            ui::ghost("ov-all-jobs", "All jobs").on_click(
+                                cx.listener(|this, _, _, cx| this.go(Place::History, cx)),
+                            ),
+                        ),
+                    ),
+            )
+            .child(list)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::store::{Job, Status};
+    use super::did;
+
+    #[test]
+    fn what_a_job_did_reads_plainly() {
+        let mut j = Job {
+            status: Status::Shipped,
+            ..Job::default()
+        };
+        assert_eq!(did(&j), "shipped");
+        j.status = Status::Shipping;
+        j.pr_number = 31;
+        assert_eq!(did(&j), "opened PR #31 for");
+        j.status = Status::Failed;
+        assert_eq!(did(&j), "failed on");
+    }
+}

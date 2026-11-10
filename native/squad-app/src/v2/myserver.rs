@@ -365,7 +365,7 @@ impl Shell {
         };
         Self::page(
             "settings-server",
-            "My server",
+            "Servers",
             "Run jobs on your own Linux server, so they carry on with this computer closed. Squad sets it up, keeps it locked down, and reaches it over SSH; nothing on it is opened to the internet.",
             body,
         )
