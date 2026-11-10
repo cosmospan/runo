@@ -6,7 +6,6 @@ use gpui_kit::*;
 use squad_holo::{Framing, Mood};
 
 use super::data::{Member, Mode};
-use super::store::Status;
 use super::ui::{self, c, ca};
 use super::Pane;
 use super::{Place, Shell};
@@ -104,33 +103,8 @@ impl Shell {
         let mood = self.mood(who);
         let face = self.bot(who, mood, 52., Framing::Bust);
         let (status, color) = self.status_of(who);
-        let jobs: Vec<_> = self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .filter(|j| j.bot == who)
-            .collect();
-        let done = jobs
-            .iter()
-            .filter(|j| matches!(j.status, Status::Done | Status::Shipped))
-            .count();
-        let ended = jobs
-            .iter()
-            .filter(|j| {
-                !matches!(
-                    j.status,
-                    Status::Running | Status::Review | Status::Shipping
-                )
-            })
-            .count();
-        let spend: f64 = jobs
-            .iter()
-            .filter_map(|j| super::home::cost(&j.summary))
-            .sum::<f64>();
         let engine = super::engine::label(cx.global::<crate::settings::AppSettings>(), who);
         let mode = who.mode();
-        let pinned = self.crew.store.pinned.contains(&who);
         let small = |id: (&'static str, usize), label: &'static str| {
             div()
                 .id(id)
@@ -149,61 +123,6 @@ impl Shell {
                 .child(label)
         };
         let key = who.key() as usize;
-        // What it can do: the words jobs come to it by and its skill files, and
-        // its connected apps and permissions.
-        let setup = super::setup::of(who);
-        let mut skills: Vec<String> = who
-            .skills()
-            .split(' ')
-            .filter(|w| !w.is_empty())
-            .map(str::to_string)
-            .collect();
-        skills.extend(setup.skill_files.iter().map(|s| s.name.clone()));
-        let mut apps: Vec<String> = setup
-            .mcp
-            .iter()
-            .map(|k| k.rsplit('/').next().unwrap_or(k).to_string())
-            .collect();
-        apps.extend(setup.servers.iter().map(|s| s.name.clone()));
-        let kind = who.mode().label().to_lowercase();
-        let skills_row = can_row(
-            "SKILLS",
-            skills,
-            format!("Takes {kind} jobs \u{00b7} no skill files yet"),
-            None,
-        );
-        let tools_row = can_row(
-            "TOOLS",
-            apps,
-            "No connected apps".into(),
-            Some(format!("\u{00b7} {}", setup.perms_line())),
-        );
-        // One figure under the bot: a small label over a mono value.
-        let figure = |label: &'static str, v: String| {
-            div()
-                .flex_1()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(
-                    div()
-                        .text_size(px(11.))
-                        .text_color(c(ui::faint()))
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .font_family(ui::MONO)
-                        .text_size(px(14.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if v == "\u{2014}" {
-                            ui::faint()
-                        } else {
-                            ui::ink()
-                        }))
-                        .child(v),
-                )
-        };
         div()
             .id(("crew-row", key))
             .on_hover(cx.listener(move |this, on: &bool, _, cx| {
@@ -242,13 +161,6 @@ impl Shell {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(ui::ink()))
                                     .child(who.name())
-                                    .when(pinned, |d| {
-                                        d.child(
-                                            Icon::new(IconName::Pin)
-                                                .size(px(12.))
-                                                .text_color(c(ui::faint())),
-                                        )
-                                    })
                                     .when(!super::data::project_of(who).is_empty(), |d| {
                                         d.child(
                                             div()
@@ -306,42 +218,6 @@ impl Shell {
             )
             .child(
                 div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(7.))
-                    .child(skills_row)
-                    .child(tools_row),
-            )
-            .child(
-                div()
-                    .flex()
-                    .px(px(4.))
-                    .child(figure(
-                        "Jobs",
-                        if jobs.is_empty() {
-                            "\u{2014}".into()
-                        } else {
-                            jobs.len().to_string()
-                        },
-                    ))
-                    .child(figure(
-                        "Success",
-                        match (done * 100).checked_div(ended) {
-                            Some(pct) => format!("{pct}%"),
-                            None => "\u{2014}".into(),
-                        },
-                    ))
-                    .child(figure(
-                        "Spend",
-                        if spend == 0. {
-                            "\u{2014}".into()
-                        } else {
-                            format!("${spend:.2}")
-                        },
-                    )),
-            )
-            .child(
-                div()
                     .pt(px(12.))
                     .border_t_1()
                     .border_color(c(ui::line2()))
@@ -351,33 +227,6 @@ impl Shell {
                     .child(small(("crew-setup", key), "Setup").on_click(
                         cx.listener(move |this, _, window, cx| this.open_setup(who, window, cx)),
                     ))
-                    .child(
-                        // A pin, not a word, so the row fits Setup and Give a job.
-                        ui::icon_btn(("crew-pin", key), IconName::Pin)
-                            .size(px(28.))
-                            .when(pinned, |d| d.text_color(c(ui::ink())))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if let Some(i) =
-                                    this.crew.store.pinned.iter().position(|m| *m == who)
-                                {
-                                    this.crew.store.pinned.remove(i);
-                                } else {
-                                    this.crew.store.pinned.push(who);
-                                }
-                                this.crew.store.save();
-                                cx.notify();
-                            })),
-                    )
-                    // Fin leads every crew, so it stays.
-                    .when(who != Member::Fin, |d| {
-                        d.child(
-                            ui::icon_btn(("crew-remove", key), IconName::Trash)
-                                .size(px(28.))
-                                .on_click(
-                                    cx.listener(move |this, _, _, cx| this.ask_remove(who, cx)),
-                                ),
-                        )
-                    })
                     .child(div().flex_1())
                     .child(
                         ui::ghost_i(("crew-chat", key), IconName::MessageCircle, "Chat")
@@ -468,70 +317,6 @@ impl Shell {
                 .child(row),
         )
     }
-}
-
-/// One line of what a bot can do on its card: a label, up to three chips, and
-/// a quiet tail.
-fn can_row(label: &'static str, items: Vec<String>, empty: String, tail: Option<String>) -> Div {
-    let mut chips = div()
-        .flex_1()
-        .min_w_0()
-        .flex()
-        .items_center()
-        .gap(px(5.))
-        .overflow_hidden();
-    if items.is_empty() {
-        chips = chips.child(
-            div()
-                .text_size(px(12.))
-                .text_color(c(ui::faint()))
-                .truncate()
-                .child(empty),
-        );
-    }
-    let more = items.len().saturating_sub(3);
-    for t in items.into_iter().take(3) {
-        chips = chips.child(
-            div()
-                .flex_none()
-                .h(px(22.))
-                .px(px(8.))
-                .flex()
-                .items_center()
-                .rounded(px(6.))
-                .bg(c(ui::well()))
-                .border_1()
-                .border_color(c(ui::line2()))
-                .text_size(px(11.5))
-                .text_color(c(ui::body()))
-                .child(t),
-        );
-    }
-    if more > 0 {
-        chips = chips.child(
-            div()
-                .flex_none()
-                .text_size(px(11.5))
-                .text_color(c(ui::faint()))
-                .child(format!("+{more}")),
-        );
-    }
-    if let Some(t) = tail {
-        chips = chips.child(
-            div()
-                .min_w_0()
-                .text_size(px(11.5))
-                .text_color(c(ui::faint()))
-                .truncate()
-                .child(t),
-        );
-    }
-    div()
-        .flex()
-        .items_center()
-        .gap(px(10.))
-        .child(div().w(px(46.)).flex_none().child(ui::caption(label)))
-        .child(chips)
 }
 
 /// What taking a bot off the crew throws away for good: its chat with you, in

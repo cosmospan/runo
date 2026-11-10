@@ -93,13 +93,13 @@ flowchart LR
 
 Each thread is a chat with the crew about one piece of work. Your asks and the bots' replies read like a conversation, grouped by who said them, with clock times and reactions. Every job arrives as a live card in the thread: its progress while it runs, then its branch, its change and its checks, with the buttons it needs right there. A job that just finished folds down to a single line once you've dealt with it.
 
-The rail on the far left switches projects, and the sidebar lists the project's threads (with unread counts), a direct message with every bot, and what needs you. The status bar along the bottom shows every engine in play today, how much of its plan is left and what the crew has spent.
+The rail on the far left switches projects, and the sidebar lists the project's threads (with unread counts), a direct message with every bot, and what needs you. The status bar along the bottom shows every engine in play today, how much of its plan is left and what the crew has spent; click it for the day's details and the Usage page.
 
 ### A job, with everything about it in one sidebar
 
 <img src="docs/images/job.png" alt="A finished job, Stop double charges on retry by Fixer: the seatbelt holding it over a Stripe key left in the code, a Clash ahead warning about job #9, the review card with 2 checks passing and Approve and merge into main, and the right sidebar with its status, time, turns, cost, plan, files changed and Fixer's other jobs" width="920" />
 
-Open any job to see what the bot says and does as it happens. The right sidebar has three tabs that share one place: **Details** (status, time, turns, cost, the plan step by step and the files it touched), **Jobs** (everything running and waiting in this thread or all of them) and **Git**. **Browser**, **Terminal** and **Open folder** are one click away; the terminal opens a real shell in the job's own worktree.
+Open any job to see what the bot says and does as it happens. The right sidebar has three tabs that share one place: **Details** (time, turns, cost, the plan step by step, and the files it touched while there's no review card listing them), **Jobs** (everything running and waiting in this thread or all of them) and **Git**. The job's **Open** menu has its browser, a terminal and its folder; the terminal opens a real shell in the job's own worktree.
 
 <table>
 <tr>
@@ -228,7 +228,7 @@ Squad Code still decides some things for itself: whether a job runs here or on y
 
 <img src="docs/images/appearance.png" alt="Settings, Appearance: the see-through window and popover switches and sliders, and the background image picker with None, Aurora, Dusk, Lagoon, Ember, Meadow, Blush and your own" width="920" />
 
-**Settings → Mascot** sets how the crew is drawn: line weight, colour (crew colour, pastel, two-tone or rainbow) and eyes, and dresses each bot with a role kit, with a large live preview in every mood.
+**Settings → Appearance → Mascot** sets how the crew is drawn: line weight, colour (crew colour, pastel, two-tone or rainbow) and eyes, and dresses each bot with a role kit, with a large live preview in every mood.
 
 <img src="docs/images/mascot.png" alt="Settings, Mascot: a large live preview of Guard listening, the mood buttons under it, and the crew look and dress-a-bot options" width="920" />
 
@@ -330,7 +330,7 @@ Open the disk image and drag **Squad Code** to Applications. Squad Code checks f
 
 <img src="docs/images/welcome.png" alt="Welcome to Squad Code: step one asks whether a coding agent is installed and shows the agents found on this computer, with Check again and Continue" width="920" />
 
-A two-step welcome checks which coding agents are installed and asks for a folder; both steps can be skipped. The folder becomes your first project, with a `#general` thread and Peek ready to talk. Until there's work, the page shows what to do first, and the **Try** list at the bottom of the sidebar points at real controls.
+A two-step welcome checks which coding agents are installed and asks for a folder; both steps can be skipped. The folder becomes your first project, with a `#general` thread and Peek ready to talk. Until there's work, the page shows what to do first.
 
 ### Requirements
 

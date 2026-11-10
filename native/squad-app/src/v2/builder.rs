@@ -952,6 +952,18 @@ impl Shell {
                     .flex()
                     .items_center()
                     .gap(px(8.))
+                    // Taking a bot off the crew lives here, not on its card.
+                    .when_some(e.who.filter(|w| *w != Member::Fin), |d, gone| {
+                        d.child(
+                            ui::ghost_i("mk-remove", IconName::UserMinus, "Remove from crew")
+                                .text_color(c(ui::t_red()))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.close_maker(cx);
+                                    this.ask_remove(gone, cx);
+                                })),
+                        )
+                    })
+                    .child(div().flex_1())
                     .child(
                         ui::ghost_i("mk-redraft", IconName::Sparkles, "Redraft")
                             .on_click(cx.listener(|this, _, _, cx| this.start_draft(cx))),

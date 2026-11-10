@@ -12,7 +12,6 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use super::data::Member;
-use super::prefs::Pane;
 use super::store::Status;
 use super::ui::{self, c};
 use super::{Place, Shell};
@@ -83,21 +82,6 @@ fn count(n: usize, tone: Option<ui::Tone>) -> Div {
         None => d.text_color(c(ui::faint())),
     }
     .child(n.min(99).to_string())
-}
-
-/// A group's label, with an optional action on its right.
-fn label(text: &'static str) -> Div {
-    div()
-        .h(px(28.))
-        .mt(px(14.))
-        .pl(px(28.))
-        .pr(px(6.))
-        .flex()
-        .items_center()
-        .text_size(px(12.5))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(ui::muted()))
-        .child(text)
 }
 
 /// A square button on the rail, lit like a row when you're on its place.
@@ -346,11 +330,17 @@ fn hash(tint: u32) -> Div {
 impl Shell {
     /// The sidebar's width now: the rail alone when the panel is put away.
     pub(super) fn side_w(&self) -> f32 {
-        if self.side_slim {
+        if self.panel_off() {
             RAIL
         } else {
             WIDTH
         }
+    }
+
+    /// The labelled panel is put away, or Settings has the window: Settings
+    /// brings its own column, so only the rail stays beside it.
+    fn panel_off(&self) -> bool {
+        self.side_slim || matches!(self.place, Place::Settings(_))
     }
 
     pub(super) fn sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -358,7 +348,7 @@ impl Shell {
         self.inbox_seen = inbox;
         let band = self.side_band(cx);
         let rail = self.rail(cx);
-        let panel = (!self.side_slim).then(|| self.panel(inbox, cx));
+        let panel = (!self.panel_off()).then(|| self.panel(inbox, cx));
         div()
             .id("sidebar")
             .w(px(self.side_w()))
@@ -410,7 +400,7 @@ impl Shell {
                         }),
                 )
             });
-        if self.side_slim {
+        if self.panel_off() {
             return band;
         }
         let folder = self.crew.store.folder().cloned();
@@ -441,23 +431,6 @@ impl Shell {
                     .text_color(c(ui::ink()))
                     .child(project)
                     .tooltip(tip(where_)),
-            )
-            .child(
-                small_btn("side-search", IconName::Search)
-                    .tooltip(tip(if cfg!(target_os = "macos") {
-                        "Search  ⌘K"
-                    } else {
-                        "Search  Ctrl K"
-                    }))
-                    .on_click(cx.listener(|this, _, window, cx| this.open_palette(window, cx))),
-            )
-            .child(
-                small_btn("side-compose", IconName::SquarePen)
-                    .tooltip(tip("New job"))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.go(Place::Today, cx);
-                        this.composer.update(cx, |i, cx| i.focus(window, cx));
-                    })),
             )
             .child(
                 small_btn("side-slim", IconName::PanelLeftClose)
@@ -611,7 +584,7 @@ impl Shell {
                 ),
         );
 
-        let slim = self.side_slim;
+        let slim = self.side_slim && !matches!(place, Place::Settings(_));
         let foot = div()
             .flex()
             .flex_col()
@@ -684,12 +657,6 @@ impl Shell {
                     .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
             )
             .child(
-                row("side-usage", place == Place::Usage)
-                    .child(Icon::new(IconName::ChartColumn).size(px(16.)))
-                    .child("Usage")
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Usage, cx))),
-            )
-            .child(
                 row("side-crew", place == Place::Crew)
                     .child(Icon::new(IconName::Users).size(px(16.)))
                     .child("Crew")
@@ -715,7 +682,6 @@ impl Shell {
 
         let threads = self.thread_list(cx);
         let crew = self.crew_list(cx);
-        let tries = self.try_list(cx);
 
         div()
             .w(px(PANEL))
@@ -736,8 +702,7 @@ impl Shell {
                     .flex_col()
                     .child(nav)
                     .child(threads)
-                    .child(crew)
-                    .children(tries),
+                    .child(crew),
             )
     }
 
@@ -1037,71 +1002,6 @@ impl Shell {
                     this.open_maker(None, None, window, cx);
                 })),
         )
-    }
-
-    /// A few things worth trying that the person hasn't done yet: another
-    /// engine, a bot of their own, a server that keeps jobs going.
-    fn try_list(&mut self, cx: &mut Context<Self>) -> Option<Div> {
-        if self.crew.store.try_hidden {
-            return None;
-        }
-        let st = cx.global::<crate::settings::AppSettings>();
-        let engines = (0..crate::agent::PROVIDERS.len())
-            .filter(|i| super::engine::ready(st, *i))
-            .count();
-        let own_bot = Member::everyone().iter().any(|m| m.is_made());
-        let mut list = div().flex().flex_col().gap(px(1.)).child(
-            label("Try").child(div().flex_1()).child(
-                small_btn("side-try-hide", IconName::X)
-                    .size(px(20.))
-                    .tooltip(tip("Hide these"))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.crew.store.try_hidden = true;
-                        this.crew.store.save();
-                        cx.notify();
-                    })),
-            ),
-        );
-        let mut any = false;
-        if engines < 2 {
-            any = true;
-            list = list.child(
-                row("side-try-engine", false)
-                    .child(Icon::new(IconName::Zap).size(px(16.)))
-                    .child(if engines == 0 {
-                        "Connect an engine"
-                    } else {
-                        "Connect another engine"
-                    })
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Engines), cx)),
-                    ),
-            );
-        }
-        if !own_bot {
-            any = true;
-            list = list.child(
-                row("side-try-bot", false)
-                    .child(Icon::new(IconName::Sparkles).size(px(16.)))
-                    .child("Make a bot of your own")
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.go(Place::Crew, cx);
-                        this.open_maker(None, None, window, cx);
-                    })),
-            );
-        }
-        if self.crew.link.is_none() {
-            any = true;
-            list = list.child(
-                row("side-try-server", false)
-                    .child(Icon::new(IconName::Server).size(px(16.)))
-                    .child("Keep jobs going on a server")
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.go(Place::Settings(Pane::Server), cx)),
-                    ),
-            );
-        }
-        any.then_some(list)
     }
 
     /// Each live thread in the current project, #general first: its id, name,

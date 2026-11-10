@@ -269,15 +269,6 @@ impl Member {
         }
     }
 
-    /// What a made bot knows best, as space-separated words; empty for the
-    /// built-in crew, whose kind of work is their skill.
-    pub fn skills(self) -> &'static str {
-        match self {
-            Member::Made(id) => made(id, |k| k.skills).unwrap_or(""),
-            _ => "",
-        }
-    }
-
     pub fn role(self) -> &'static str {
         match self {
             Member::Made(id) => made(id, |k| k.role).unwrap_or("Your bot"),

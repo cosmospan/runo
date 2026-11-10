@@ -8,6 +8,17 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 - Files open inside Squad Code. Clicking a file in a message, a job's files or the Files tab shows it in a viewer over the page: code with its colours and line numbers, Markdown as a page (or its source), pictures, and PDFs on a Mac. An HTML page has Preview, which shows it in the job's own browser. Open with hands the file to another app, and Escape closes it.
 
+### Changed
+
+- A simpler window, with each thing shown once:
+  - The sidebar keeps Needs you, All jobs and Crew. Usage opens from the spend in the status bar, the Try list is gone (its links are in Settings), and the sidebar's search and new-job buttons are gone too: the search box in the top bar and the thread's box do those.
+  - A job's page shows its status once, in the header. The right sidebar's first section is now Summary (time, turns, cost and a line on where it's at), and it lists changed files only when the review card doesn't. A job that only reads no longer shows an empty Files changed.
+  - Browser, Terminal and Open folder on a job's page are one **Open** menu, with the pull request when there is one.
+  - Crew cards show the bot, its job, its status and its engine, with Setup, Chat and Give a job. Skills, tools and the jobs, success and spend figures are gone from the card, and so is the pin, which no longer did anything. Remove from crew is in the bot's Setup and its right-click menu.
+  - A thread's bar shows its bots as faces only, without the written-out list of names.
+  - All jobs drops its Needs you filter (Needs you has its own page), and each job's row shows the lines it changed and when, not five chips.
+  - Settings takes the window beside the rail, with Back at the top, instead of sitting next to the sidebar. Mascot is a tab in Appearance, and How work runs no longer repeats the Engines list.
+
 ### Fixed
 
 - Asking a job for more after its work was merged (a follow-up, or "Point at it" in its browser) made the changes straight in your checkout, which then stopped every later merge with "has uncommitted changes". That job now starts a fresh branch from where its base is, like a new job.

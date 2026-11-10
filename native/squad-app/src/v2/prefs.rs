@@ -55,7 +55,7 @@ impl Pane {
         match self {
             Pane::Work => "When the crew checks with you",
             Pane::General => "Alerts, motion and limits",
-            Pane::Appearance => "Themes, glass and background",
+            Pane::Appearance => "Themes, glass, background and the mascot",
             Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
             Pane::Server => "Jobs that run with the lid closed",
@@ -425,21 +425,70 @@ impl Shell {
             Pane::Engines => self.engines(cx),
             Pane::Server => self.settings_server(cx),
         };
+        let tabs =
+            matches!(pane, Pane::Appearance | Pane::Mascot).then(|| self.look_tabs(pane, cx));
         div()
             .size_full()
             .flex()
             .child(nav)
-            .child(div().flex_1().min_w_0().h_full().child(body))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .flex()
+                    .flex_col()
+                    .children(tabs)
+                    .child(div().flex_1().min_h_0().child(body)),
+            )
             .into_any_element()
+    }
+
+    /// Appearance's two tabs: the app's theme, and the mascot.
+    fn look_tabs(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
+        let mut row = div()
+            .flex_none()
+            .flex()
+            .gap(px(18.))
+            .px(px(28.))
+            .pt(px(14.))
+            .border_b_1()
+            .border_color(c(ui::line2()));
+        for (p, label) in [(Pane::Appearance, "Theme"), (Pane::Mascot, "Mascot")] {
+            let on = p == pane;
+            row = row.child(
+                div()
+                    .id(("look-tab", p as usize))
+                    .pb(px(9.))
+                    .text_size(px(13.5))
+                    .cursor_pointer()
+                    .border_b_2()
+                    .map(|d| {
+                        if on {
+                            d.border_color(c(ui::ink()))
+                                .text_color(c(ui::ink()))
+                                .font_weight(FontWeight::SEMIBOLD)
+                        } else {
+                            d.border_color(transparent_black())
+                                .text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
+                        }
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.settings_pane = p;
+                        this.place = Place::Settings(p);
+                        cx.notify();
+                    })),
+            );
+        }
+        row
     }
 
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
         let groups: [(&'static str, &[Pane]); 2] = [
-            (
-                "CREW",
-                &[Pane::Work, Pane::Engines, Pane::Server, Pane::Mascot],
-            ),
+            ("CREW", &[Pane::Work, Pane::Engines, Pane::Server]),
             ("YOU", &[Pane::General, Pane::Appearance]),
         ];
         let mut col = div()
@@ -453,6 +502,30 @@ impl Shell {
             .border_r_1()
             .border_color(c(ui::line2()))
             .bg(c(ui::bg()))
+            // Settings has the window, so the way out is at its top.
+            .child(
+                div()
+                    .id("settings-back")
+                    .h(px(28.))
+                    .px(px(8.))
+                    .mb(px(8.))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .rounded(px(7.))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::muted()))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                    .child(Icon::new(IconName::ArrowLeft).size(px(14.)))
+                    .child("Back")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.back(cx);
+                        if matches!(this.place, Place::Settings(_)) {
+                            this.go(Place::Today, cx);
+                        }
+                    })),
+            )
             .child(
                 div()
                     .px(px(10.))
@@ -474,7 +547,8 @@ impl Shell {
                     .child(label),
             );
             for &p in panes {
-                let on = p == pane;
+                // Mascot is a tab inside Appearance.
+                let on = p == pane || (p == Pane::Appearance && pane == Pane::Mascot);
                 col = col.child(
                     div()
                         .id(("settings-pane", p as usize))
@@ -555,7 +629,7 @@ impl Shell {
     }
 
     /// How work runs: one choice for how often the crew checks with you, the
-    /// switches it sets, the engines, and a preview of what an ask looks like.
+    /// switches it sets, and a preview of what an ask looks like.
     fn settings_work(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let st = cx.global::<AppSettings>().clone();
         let level = match (st.v2_plan_first, st.v2_auto_merge) {
@@ -754,123 +828,6 @@ impl Shell {
                 cx,
             ));
 
-        // The engines in play: the default, then any a bot was moved to.
-        let default_i = super::engine::index_of(&st, "");
-        let mut used: Vec<(usize, Vec<Member>)> = vec![(default_i, Vec::new())];
-        for who in Member::all() {
-            let (i, _) = super::engine::engine(&st, who);
-            match used.iter_mut().find(|(k, _)| *k == i) {
-                Some((_, bots)) => bots.push(who),
-                None => used.push((i, vec![who])),
-            }
-        }
-        // Then the ones installed here, and the usual few, so a missing one can be set up.
-        let n = crate::agent::PROVIDERS.len();
-        for i in (0..n)
-            .filter(|&i| super::engine::ready(&st, i))
-            .chain(0..n.min(3))
-        {
-            if used.len() < 5 && !used.iter().any(|(k, _)| *k == i) {
-                used.push((i, Vec::new()));
-            }
-        }
-        let mut engines = card_head("Engines", None);
-        for (i, bots) in used {
-            let p = &crate::agent::PROVIDERS[i];
-            let ready = super::engine::ready(&st, i);
-            let who = match bots.len() {
-                _ if !ready => "Not set up yet".to_string(),
-                0 => "Ready, no bots on it".to_string(),
-                1 => format!("Used by {}", bots[0].name()),
-                n => format!("Used by {n} bots"),
-            };
-            let pill = |text: &'static str, tone: ui::Tone| {
-                div()
-                    .px(px(7.))
-                    .py(px(2.))
-                    .rounded(px(5.))
-                    .bg(c(tone.1))
-                    .font_family(ui::MONO)
-                    .text_size(px(11.))
-                    .text_color(c(tone.0))
-                    .child(text)
-            };
-            engines = engines.child(
-                div()
-                    .px(px(18.))
-                    .py(px(12.))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .border_t_1()
-                    .border_color(c(ui::line2()))
-                    .child(
-                        div()
-                            .size(px(30.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(8.))
-                            .bg(c(super::theme::mix(ui::bg(), p.color, 0.12)))
-                            .text_size(px(11.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(super::theme::mix(p.color, ui::ink(), 0.25)))
-                            .child(p.mark),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(13.5))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(ui::ink()))
-                                    .child(p.name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(c(ui::muted()))
-                                    .child(who),
-                            ),
-                    )
-                    .when(i == default_i, |d| {
-                        d.child(pill("Default", ui::grey_tone()))
-                    })
-                    .child(if ready {
-                        pill("Connected", ui::ok_tone()).into_any_element()
-                    } else {
-                        ui::ghost(("work-setup", i), "Set up")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.settings_pane = Pane::Engines;
-                                this.place = Place::Settings(Pane::Engines);
-                                cx.notify();
-                            }))
-                            .into_any_element()
-                    }),
-            );
-        }
-        let engines = engines.child(
-            div()
-                .id("work-engines")
-                .px(px(18.))
-                .py(px(11.))
-                .border_t_1()
-                .border_color(c(ui::line2()))
-                .text_size(px(12.5))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(ui::t_violet()))
-                .cursor_pointer()
-                .child("Set per bot \u{2192}")
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.settings_pane = Pane::Engines;
-                    this.place = Place::Settings(Pane::Engines);
-                    cx.notify();
-                })),
-        );
-
         let main = Self::page(
             "settings-work",
             "How work runs",
@@ -880,8 +837,7 @@ impl Shell {
                 .flex_col()
                 .gap(px(space::M))
                 .child(ask)
-                .child(checkpoints)
-                .child(engines),
+                .child(checkpoints),
         );
         let rail = self.work_preview(&st, cx);
         div()
