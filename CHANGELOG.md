@@ -22,8 +22,7 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 ### Fixed
 
 - Asking a job for more after its work was merged (a follow-up, or "Point at it" in its browser) made the changes straight in your checkout, which then stopped every later merge with "has uncommitted changes". That job now starts a fresh branch from where its base is, like a new job.
-- Approve no longer refuses to merge because your checkout has uncommitted changes to other files. When the merge would overwrite your changes, the job names the files once (pressing Approve again doesn't pile up the same red error) and offers "Set them aside and merge": they're stashed for the merge and put back after, or kept in the stash if they clash with what came in.
-- A staged change in your checkout to a file the job doesn't touch no longer stops Approve with git's raw "would be overwritten by merge" error. It's named on the job like other changes in the way, and "Set them aside and merge" puts it back staged after.
+- Approve no longer stops because your checkout has uncommitted changes. Changes the merge would overwrite, and staged ones git won't make a merge commit over, are set aside for the merge and put back after (like `git merge --autostash`), and the job says so in one line. Only when your changes clash with what came in does the job ask, with a card naming the files: "Bring them back to sort out" puts them back with both sides marked in the file, and "Leave them in the stash" keeps them there. Nothing is lost either way.
 - The Open menu on a job's page and Open with in the file viewer drop down below their buttons instead of opening over them (and over Stop).
 
 ## [2.0.0-alpha.9] - 2026-11-09

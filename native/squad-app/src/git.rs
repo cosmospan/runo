@@ -597,8 +597,11 @@ impl From<String> for MergeError {
 pub struct Merged {
     /// The new short hash of `base`.
     pub hash: String,
-    /// Changes that were set aside to merge and clash with what came in, so they
-    /// stay in the stash under this name instead of going back into the files.
+    /// Files with your uncommitted changes that were set aside for the merge.
+    pub set_aside: Vec<String>,
+    /// When those changes clash with what came in, they stay in the stash
+    /// instead of going back into the files: the stash commit, for
+    /// [`bring_back`].
     pub kept: Option<String>,
 }
 
@@ -736,22 +739,55 @@ pub fn merge_into(
     if temporary {
         let _ = remove_worktree(repo, &dir);
     }
+    let set_aside = stashed.map(|(_, files)| files).unwrap_or_default();
     outcome
-        .map(|hash| Merged { hash, kept })
+        .map(|hash| Merged {
+            hash,
+            set_aside,
+            kept,
+        })
         .map_err(MergeError::Failed)
+}
+
+/// The stash entry for the stash commit `sha` ("stash@{2}"), if it's still there.
+fn stash_entry(dir: &str, sha: &str) -> Option<String> {
+    if sha.is_empty() {
+        return None;
+    }
+    (0..100)
+        .map(|n| format!("stash@{{{n}}}"))
+        .take_while(|r| rev(dir, r).is_some())
+        .find(|r| rev(dir, r).as_deref() == Some(sha))
+}
+
+/// Brings changes a merge kept in the stash (see [`Merged::kept`]) back into
+/// `dir`, with the clash marked in the files, and drops them from the stash:
+/// the marked files hold both sides. Gives back the files that clash.
+pub fn bring_back(dir: &str, sha: &str) -> Result<Vec<String>, String> {
+    let at = stash_entry(dir, sha)
+        .ok_or_else(|| "Those changes aren't in the stash any more.".to_string())?;
+    let applied = git(dir, &["stash", "apply", "--quiet", &at]);
+    let clash = conflicted(dir);
+    if let (Err(why), true) = (applied, clash.is_empty()) {
+        return Err(why);
+    }
+    let _ = git(dir, &["stash", "drop", "--quiet", &at]);
+    // The files read as plain uncommitted changes with the clash marked, not
+    // as a merge git waits on, which would stop the next one.
+    if !clash.is_empty() {
+        let mut reset = vec!["reset", "--quiet", "--"];
+        reset.extend(clash.iter().map(String::as_str));
+        let _ = git(dir, &reset);
+    }
+    Ok(clash)
 }
 
 /// Puts changes set aside before a merge back into `dir`. When they clash with
 /// what the merge brought in, the files go back to the merged version and the
-/// changes stay in the stash: its name then.
+/// changes stay in the stash: its commit then.
 fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
-    if sha.is_empty() {
-        return None;
-    }
     // The newest stash entry is ours unless something stashed in between.
-    let at = (0..50)
-        .map(|n| format!("stash@{{{n}}}"))
-        .find(|r| rev(dir, r).as_deref() == Some(sha))?;
+    let at = stash_entry(dir, sha)?;
     // Staged changes go back staged when they can; git refuses that without
     // touching anything when the index can't take them, and then they go back
     // as plain changes.
@@ -768,7 +804,7 @@ fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
     let mut checkout = vec!["checkout", "HEAD", "--"];
     checkout.extend(files.iter().map(String::as_str));
     let _ = git(dir, &checkout);
-    Some(at)
+    Some(sha.to_string())
 }
 
 /// The commit where the branch left `base`.
@@ -1612,7 +1648,8 @@ mod tests {
         let (r, repo) = merge_setup("merge-kept");
         std::fs::write(repo.join("f"), "a\nX\nc\n").unwrap();
         let merged = merge_into(&r, "feat", "main", true).unwrap();
-        assert_eq!(merged.kept.as_deref(), Some("stash@{0}"));
+        assert_eq!(merged.set_aside, vec!["f".to_string()]);
+        assert_eq!(merged.kept, rev(&r, "stash@{0}"));
         // The merged file, with no clash markers, and the change kept.
         assert_eq!(
             std::fs::read_to_string(repo.join("f")).unwrap(),
@@ -1620,6 +1657,18 @@ mod tests {
         );
         assert!(conflicted(&r).is_empty());
         assert!(git(&r, &["stash", "show", "-p"]).unwrap().contains("+X"));
+
+        // Brought back, the clash is marked in the file and the stash is empty.
+        let clash = bring_back(&r, merged.kept.as_deref().unwrap()).unwrap();
+        assert_eq!(clash, vec!["f".to_string()]);
+        let f = std::fs::read_to_string(repo.join("f")).unwrap();
+        assert!(
+            f.contains("<<<<<<<") && f.contains("X") && f.contains("B"),
+            "{f}"
+        );
+        assert!(git(&r, &["stash", "list"]).unwrap().trim().is_empty());
+        assert!(conflicted(&r).is_empty());
+        assert!(bring_back(&r, merged.kept.as_deref().unwrap()).is_err());
     }
 
     /// `merge_setup`, with `main` moved on so the merge makes a commit.

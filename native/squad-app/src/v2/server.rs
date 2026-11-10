@@ -568,6 +568,8 @@ pub fn respond(http: &Http, base: &Path, hub: &Mutex<Hub>) -> Reply {
                 "approve" => hub.rt.approve(id),
                 "approve-anyway" => hub.rt.approve_anyway(id),
                 "set-aside-and-merge" => hub.rt.set_aside_and_merge(id),
+                "bring-back" => hub.rt.bring_back(id),
+                "leave-kept" => hub.rt.leave_kept(id),
                 "take-out" => hub.rt.take_out(&st, id),
                 "discard" => hub.rt.discard(id),
                 "stop" => hub.rt.stop(id),
