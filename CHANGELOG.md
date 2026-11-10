@@ -8,6 +8,11 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 - Files open inside Squad Code. Clicking a file in a message, a job's files or the Files tab shows it in a viewer over the page: code with its colours and line numbers, Markdown as a page (or its source), pictures, and PDFs on a Mac. An HTML page has Preview, which shows it in the job's own browser. Open with hands the file to another app, and Escape closes it.
 
+### Fixed
+
+- Asking a job for more after its work was merged (a follow-up, or "Point at it" in its browser) made the changes straight in your checkout, which then stopped every later merge with "has uncommitted changes". That job now starts a fresh branch from where its base is, like a new job.
+- Approve no longer refuses to merge because your checkout has uncommitted changes to other files. When the merge would overwrite your changes, the job names the files once (pressing Approve again doesn't pile up the same red error) and offers "Set them aside and merge": they're stashed for the merge and put back after, or kept in the stash if they clash with what came in.
+
 ## [2.0.0-alpha.9] - 2026-11-09
 
 ### Fixed

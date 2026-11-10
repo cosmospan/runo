@@ -1866,7 +1866,9 @@ impl Shell {
         let failed_checks = j.checks.iter().filter(|c| !c.ok).count();
         let asks = self.ask_card(j, cx);
         let branch = self.branch_line(j);
-        let belt = self.belt_card(j, cx);
+        let belt = self
+            .belt_card(j, cx)
+            .or_else(|| self.in_the_way_card(j, cx));
         let clash = self.clash_card(j, cx);
         // A job that's over and left nothing to look at (no changes, nothing
         // asked, no git news) is one slim line, not a two-part card.
@@ -2963,7 +2965,16 @@ impl Shell {
         if !self.mode_pinned && !value.starts_with('/') {
             self.mode = Mode::guess(&value);
         }
-        let target = if self.mode == Mode::Ask {
+        let named = super::mentioned(&value).map(|(m, _)| m);
+        // Nobody named: Peek reads it and picks the bot, so no bot is
+        // guessed here ahead of it.
+        let peek_picks = named.is_none()
+            && self.target.is_none()
+            && !self.mode_pinned
+            && !value.starts_with('/');
+        let target = if let Some(m) = named {
+            m
+        } else if peek_picks || self.mode == Mode::Ask {
             self.ask_who()
         } else {
             self.doer()
@@ -2971,9 +2982,13 @@ impl Shell {
         let ready = !value.trim().is_empty();
         let face = self.avatar(target, 20.);
         let plan_first = cx.global::<crate::settings::AppSettings>().v2_plan_first;
-        let named = super::mentioned(&value).map(|(m, _)| m);
         let goes = if let Some(m) = named.filter(|_| !value.starts_with('/')) {
-            format!("{} takes it", m.name())
+            match self.open_here(m) {
+                Some(id) => format!("{} adds it to #{id}", m.name()),
+                None => format!("{} takes it", m.name()),
+            }
+        } else if peek_picks {
+            "Peek picks the bot".to_string()
         } else if value.starts_with("/thread") {
             "Makes a new thread".to_string()
         } else if value.starts_with("/rename") {

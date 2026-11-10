@@ -477,7 +477,6 @@ fn real_reads() {
                 recent: &[],
                 crew: &crew,
                 running: &[],
-                worked: &[],
                 in_thread: &[],
                 server: "this computer, or the person's server vps (connected, with claude signed in). It doesn't have this project yet; Squad Code copies it there first, by itself. Squad Code picks where each job runs.",
         };

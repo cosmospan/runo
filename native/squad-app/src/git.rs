@@ -560,10 +560,93 @@ pub fn checked_out_at(repo: &str, branch: &str) -> Option<String> {
     None
 }
 
+/// Why a merge didn't happen.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MergeError {
+    /// The checkout where `base` is has uncommitted changes to these files, and the
+    /// merge changes them too, so merging there would overwrite them.
+    InTheWay {
+        dir: String,
+        files: Vec<String>,
+    },
+    Failed(String),
+}
+
+impl std::fmt::Display for MergeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MergeError::InTheWay { dir, files } => write!(
+                f,
+                "{dir} has changes you haven't committed to {}, and this merge changes {} too.",
+                files.join(", "),
+                if files.len() == 1 { "it" } else { "them" }
+            ),
+            MergeError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl From<String> for MergeError {
+    fn from(why: String) -> Self {
+        MergeError::Failed(why)
+    }
+}
+
+/// A merge that went through.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Merged {
+    /// The new short hash of `base`.
+    pub hash: String,
+    /// Changes that were set aside to merge and clash with what came in, so they
+    /// stay in the stash under this name instead of going back into the files.
+    pub kept: Option<String>,
+}
+
+/// Files with changes not yet committed in `dir`, staged or not. Untracked files
+/// don't count: a merge leaves them alone unless it adds the same path, and then
+/// git refuses on its own.
+fn uncommitted_files(dir: &str) -> Vec<String> {
+    git(dir, &["diff", "HEAD", "--name-only", "-z", "--no-renames"])
+        .map(|s| split_z(&s))
+        .unwrap_or_default()
+}
+
+/// Uncommitted changes in the checkout where `base` is that merging `branch`
+/// would overwrite: that folder and the files, or `None` when nothing is in the
+/// way. Changes to other files don't stop a merge.
+pub fn in_the_way(repo: &str, branch: &str, base: &str) -> Option<(String, Vec<String>)> {
+    let dir = checked_out_at(repo, base)?;
+    let dirty = uncommitted_files(&dir);
+    if dirty.is_empty() {
+        return None;
+    }
+    let touched = git(
+        repo,
+        &[
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            &format!("{base}...{branch}"),
+        ],
+    )
+    .map(|s| split_z(&s))
+    .unwrap_or_default();
+    let files: Vec<String> = dirty.into_iter().filter(|f| touched.contains(f)).collect();
+    (!files.is_empty()).then_some((dir, files))
+}
+
 /// Merge `branch` into `base` without touching the session's worktree. Uses the
-/// worktree where `base` is checked out (it must have no uncommitted changes), or a
-/// temporary one. Conflicts abort the merge. Returns the new short hash of `base`.
-pub fn merge_into(repo: &str, branch: &str, base: &str) -> Result<String, String> {
+/// worktree where `base` is checked out, or a temporary one. Uncommitted changes
+/// there to files the merge doesn't touch stay as they are; ones it would
+/// overwrite stop it, unless `set_aside`, which stashes them first and puts them
+/// back after. Conflicts abort the merge.
+pub fn merge_into(
+    repo: &str,
+    branch: &str,
+    base: &str,
+    set_aside: bool,
+) -> Result<Merged, MergeError> {
     if !exists(repo, &format!("refs/heads/{base}")) {
         // Only the remote has it: start a local branch there first.
         let remote = remote_name(repo);
@@ -573,13 +656,18 @@ pub fn merge_into(repo: &str, branch: &str, base: &str) -> Result<String, String
         )?;
     }
     let editor = [("GIT_EDITOR", "true")];
+    let mut stashed = None;
     let (dir, temporary) = match checked_out_at(repo, base) {
         Some(dir) => {
-            let dirty = git(&dir, &["status", "--porcelain", "--untracked-files=no"])?;
-            if !dirty.trim().is_empty() {
-                return Err(format!(
-                    "{dir} has uncommitted changes on {base}. Commit or stash them first."
-                ));
+            if let Some((_, files)) = in_the_way(repo, branch, base) {
+                if !set_aside {
+                    return Err(MergeError::InTheWay { dir, files });
+                }
+                let label = format!("Squad Code: set aside to merge {branch}");
+                let mut args = vec!["stash", "push", "--quiet", "-m", label.as_str(), "--"];
+                args.extend(files.iter().map(String::as_str));
+                git(&dir, &args)?;
+                stashed = Some((rev(&dir, "refs/stash").unwrap_or_default(), files));
             }
             (dir, false)
         }
@@ -614,10 +702,41 @@ pub fn merge_into(repo: &str, branch: &str, base: &str) -> Result<String, String
             })
         }
     };
+    let kept = match &stashed {
+        Some((sha, files)) => put_back(&dir, sha, files),
+        None => None,
+    };
     if temporary {
         let _ = remove_worktree(repo, &dir);
     }
     outcome
+        .map(|hash| Merged { hash, kept })
+        .map_err(MergeError::Failed)
+}
+
+/// Puts changes set aside before a merge back into `dir`. When they clash with
+/// what the merge brought in, the files go back to the merged version and the
+/// changes stay in the stash: its name then.
+fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
+    if sha.is_empty() {
+        return None;
+    }
+    // The newest stash entry is ours unless something stashed in between.
+    let at = (0..50)
+        .map(|n| format!("stash@{{{n}}}"))
+        .find(|r| rev(dir, r).as_deref() == Some(sha))?;
+    if git(dir, &["stash", "apply", "--quiet", &at]).is_ok() && conflicted(dir).is_empty() {
+        let _ = git(dir, &["stash", "drop", "--quiet", &at]);
+        return None;
+    }
+    // A clash: leave the merged files as they are and keep the changes stashed.
+    let mut reset = vec!["reset", "--quiet", "--"];
+    reset.extend(files.iter().map(String::as_str));
+    let _ = git(dir, &reset);
+    let mut checkout = vec!["checkout", "HEAD", "--"];
+    checkout.extend(files.iter().map(String::as_str));
+    let _ = git(dir, &checkout);
+    Some(at)
 }
 
 /// The commit where the branch left `base`.
@@ -1397,6 +1516,78 @@ mod tests {
         sh(&repo, &["config", "user.name", "t"]);
         // Git reports real paths, and on a Mac the temporary folder is a symlink.
         repo.canonicalize().unwrap()
+    }
+
+    /// A repo on `main` with `f` and `g`, and a branch `feat` that changes `f`.
+    fn merge_setup(name: &str) -> (String, std::path::PathBuf) {
+        let repo = repo(name);
+        sh(&repo, &["checkout", "-q", "-b", "main"]);
+        std::fs::write(repo.join("f"), "a\nb\nc\n").unwrap();
+        std::fs::write(repo.join("g"), "1\n").unwrap();
+        sh(&repo, &["add", "."]);
+        sh(&repo, &["commit", "-qm", "init"]);
+        sh(&repo, &["checkout", "-q", "-b", "feat"]);
+        std::fs::write(repo.join("f"), "a\nB\nc\n").unwrap();
+        sh(&repo, &["commit", "-qam", "feat"]);
+        sh(&repo, &["checkout", "-q", "main"]);
+        (repo.to_string_lossy().into_owned(), repo)
+    }
+
+    #[test]
+    fn changes_to_other_files_dont_stop_a_merge() {
+        let (r, repo) = merge_setup("merge-other");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        assert_eq!(in_the_way(&r, "feat", "main"), None);
+        let merged = merge_into(&r, "feat", "main", false).unwrap();
+        assert_eq!(merged.kept, None);
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nB\nc\n"
+        );
+        assert_eq!(std::fs::read_to_string(repo.join("g")).unwrap(), "2\n");
+    }
+
+    #[test]
+    fn changes_the_merge_would_overwrite_are_named() {
+        let (r, repo) = merge_setup("merge-named");
+        std::fs::write(repo.join("f"), "a\nb\nc\nd\n").unwrap();
+        match merge_into(&r, "feat", "main", false) {
+            Err(MergeError::InTheWay { files, .. }) => assert_eq!(files, vec!["f".to_string()]),
+            other => panic!("expected in the way, got {other:?}"),
+        }
+        // Nothing moved.
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nb\nc\nd\n"
+        );
+    }
+
+    #[test]
+    fn set_aside_changes_come_back_after_the_merge() {
+        let (r, repo) = merge_setup("merge-aside");
+        std::fs::write(repo.join("f"), "a\nb\nc\nd\n").unwrap();
+        let merged = merge_into(&r, "feat", "main", true).unwrap();
+        assert_eq!(merged.kept, None);
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nB\nc\nd\n"
+        );
+        assert!(git(&r, &["stash", "list"]).unwrap().trim().is_empty());
+    }
+
+    #[test]
+    fn set_aside_changes_that_clash_stay_in_the_stash() {
+        let (r, repo) = merge_setup("merge-kept");
+        std::fs::write(repo.join("f"), "a\nX\nc\n").unwrap();
+        let merged = merge_into(&r, "feat", "main", true).unwrap();
+        assert_eq!(merged.kept.as_deref(), Some("stash@{0}"));
+        // The merged file, with no clash markers, and the change kept.
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nB\nc\n"
+        );
+        assert!(conflicted(&r).is_empty());
+        assert!(git(&r, &["stash", "show", "-p"]).unwrap().contains("+X"));
     }
 
     #[test]

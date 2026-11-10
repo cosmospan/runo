@@ -567,6 +567,7 @@ pub fn respond(http: &Http, base: &Path, hub: &Mutex<Hub>) -> Reply {
             match *action {
                 "approve" => hub.rt.approve(id),
                 "approve-anyway" => hub.rt.approve_anyway(id),
+                "set-aside-and-merge" => hub.rt.set_aside_and_merge(id),
                 "take-out" => hub.rt.take_out(&st, id),
                 "discard" => hub.rt.discard(id),
                 "stop" => hub.rt.stop(id),
