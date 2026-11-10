@@ -627,6 +627,13 @@ pub struct Shell {
     history_input: Entity<InputState>,
     /// The Overview's form for squad.toml.
     proj_form: overview::ProjectForm,
+    /// The bot open on the Crew page, and its tab.
+    crew_pick: Option<Member>,
+    crew_tab: crew::CrewTab,
+    /// The project whose lessons the Memory tab shows, when not this one.
+    memory_folder: Option<String>,
+    /// Memory's line for adding something a bot should always know.
+    memory_input: Entity<InputState>,
     /// The filter over the right sidebar's Files tab.
     files_input: Entity<InputState>,
     /// The right sidebar shows its Files tab (beats `list_git`).
@@ -959,6 +966,10 @@ impl Shell {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
         let proj_form = overview::ProjectForm::new(window, cx);
+        let memory_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Add something this bot should always know here\u{2026}")
+        });
         let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
             .global::<crate::settings::AppSettings>()
@@ -1415,6 +1426,10 @@ impl Shell {
             palette_input,
             history_input,
             proj_form,
+            crew_pick: None,
+            crew_tab: crew::CrewTab::default(),
+            memory_folder: None,
+            memory_input,
             files_input,
             list_files: false,
             files_open: Default::default(),
