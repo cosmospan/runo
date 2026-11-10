@@ -60,72 +60,51 @@ impl Shell {
                 .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Not picked yet".into()),
         ];
-        let mut steps = div().flex().flex_col().gap(px(4.));
+        // The steps as a row of chips, each with where it stands.
+        let mut steps = div().flex().items_center().justify_center().gap(px(8.));
         for (i, name) in STEPS.into_iter().enumerate() {
             let done = i < step;
             let on = i == step;
+            if i > 0 {
+                steps = steps.child(
+                    Icon::new(IconName::ChevronRight)
+                        .size(px(13.))
+                        .text_color(c(ui::faint())),
+                );
+            }
             steps = steps.child(
                 div()
                     .id(("setup-dot", i))
+                    .h(px(26.))
+                    .px(px(11.))
                     .flex()
                     .items_center()
-                    .gap(px(12.))
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(10.))
+                    .gap(px(6.))
+                    .rounded_full()
                     .cursor_pointer()
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight::MEDIUM)
                     .map(|d| {
                         if on {
-                            d.bg(c(ui::hover()))
+                            d.bg(c(ui::fill())).text_color(c(ui::on_fill()))
+                        } else if done {
+                            d.bg(ca(ui::GREEN, 0.14)).text_color(c(ui::t_green()))
                         } else {
-                            d.hover(|s| s.bg(c(ui::hover())))
+                            d.bg(c(ui::well())).text_color(c(ui::muted()))
                         }
                     })
-                    .child(
-                        div()
-                            .size(px(24.))
-                            .flex_none()
-                            .rounded_full()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(11.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .map(|d| {
-                                if on {
-                                    d.bg(c(ui::fill())).text_color(c(ui::on_fill()))
-                                } else if done {
-                                    d.bg(ca(ui::GREEN, 0.16)).text_color(c(ui::t_green()))
-                                } else {
-                                    d.border_1()
-                                        .border_color(c(ui::line_hi()))
-                                        .text_color(c(ui::muted()))
-                                }
-                            })
-                            .child(if done {
-                                "\u{2713}".to_string()
-                            } else {
-                                format!("{}", i + 1)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .text_size(px(13.5))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c(if on || done { ui::ink() } else { ui::body() }))
-                                    .child(name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(c(ui::muted()))
-                                    .truncate()
-                                    .child(notes[i].clone()),
-                            ),
-                    )
+                    .tooltip({
+                        let note = notes[i].clone();
+                        move |window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(note.clone())
+                                .build(window, cx)
+                        }
+                    })
+                    .child(if done {
+                        format!("\u{2713} {name}")
+                    } else {
+                        format!("{} {name}", i + 1)
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| this.setup_step(i, cx))),
             );
         }
@@ -144,61 +123,47 @@ impl Shell {
                 },
             ))
         };
-        let mark = self.bot(Member::Fin, Mood::Signature, 56., Framing::Bust);
-        let left = div()
-            .w(px(320.))
-            .flex_none()
-            .h_full()
-            .bg(c(ui::panel()))
-            .border_r_1()
-            .border_color(c(ui::line()))
-            .px(px(24.))
-            .pt(px(if cfg!(target_os = "macos") { 48. } else { 28. }))
-            .pb(px(24.))
+        let skip = div()
+            .id("setup-skip")
+            .px(px(8.))
+            .text_size(px(13.))
+            .text_color(c(ui::muted()))
+            .cursor_pointer()
+            .hover(|s| s.text_color(c(ui::ink())))
+            .child("Skip")
+            .tooltip(|window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new("Skip setup and go to #general")
+                    .build(window, cx)
+            })
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.finish_setup(cx);
+                this.go(Place::Today, cx);
+            }));
+        let mark = self.bot(Member::Fin, Mood::Signature, 84., Framing::Bust);
+        let head = div()
             .flex()
             .flex_col()
-            .gap(px(22.))
+            .items_center()
+            .gap(px(10.))
+            .child(mark)
             .child(
                 div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(10.))
-                    .child(mark)
-                    .child(
-                        div()
-                            .text_size(px(20.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(ui::ink()))
-                            .child("Welcome to Squad Code"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .line_height(px(19.))
-                            .text_color(c(ui::muted()))
-                            .child("Two quick checks, then you're in #general with Peek, ready for a first job. Both can be changed later."),
-                    ),
+                    .mt(px(6.))
+                    .text_size(px(32.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::ink()))
+                    .child("Welcome to Squad Code"),
             )
-            .child(steps)
-            .child(div().flex_1())
             .child(
                 div()
-                    .id("setup-skip")
-                    .text_size(px(12.5))
+                    .text_size(px(15.))
                     .text_color(c(ui::muted()))
-                    .cursor_pointer()
-                    .hover(|s| s.text_color(c(ui::ink())))
-                    .child("Skip setup and go to #general")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.finish_setup(cx);
-                        this.go(Place::Today, cx);
-                    })),
-            );
-        let right = div()
+                    .child("Your coding agents, as a crew you talk to in threads."),
+            )
+            .child(div().mt(px(10.)).child(steps));
+        div()
             .id("welcome")
-            .flex_1()
-            .min_w_0()
-            .h_full()
+            .size_full()
             .overflow_y_scroll()
             .child(
                 div()
@@ -207,30 +172,27 @@ impl Shell {
                     .flex_col()
                     .justify_center()
                     .items_center()
+                    .gap(px(26.))
                     .px(px(40.))
-                    .py(px(40.))
+                    .py(px(48.))
+                    .child(head)
                     .child(ui::rise(
-                        div().w_full().max_w(px(760.)).child(body),
+                        div().w_full().max_w(px(680.)).child(body),
                         self.stagger(0),
                     ))
                     .child(
                         div()
                             .w_full()
-                            .max_w(px(760.))
-                            .mt(px(22.))
+                            .max_w(px(680.))
                             .flex()
                             .items_center()
                             .gap(px(10.))
+                            .child(skip)
                             .children(back)
                             .child(div().flex_1())
                             .child(next),
                     ),
-            );
-        div()
-            .size_full()
-            .flex()
-            .child(left)
-            .child(right)
+            )
             .into_any_element()
     }
 
@@ -239,7 +201,6 @@ impl Shell {
         let ready: Vec<usize> = (0..crate::agent::PROVIDERS.len())
             .filter(|i| super::engine::ready(&st, *i))
             .collect();
-        let hero = self.bot(Member::Fin, Mood::Idle, 150., Framing::Full);
         let mut list = div().flex().flex_wrap().gap(px(8.));
         // The installed agents first, then the three most people use, greyed.
         let common = ["claude", "codex", "gemini"];
@@ -290,7 +251,6 @@ impl Shell {
             "The crew works through the coding agents on this computer. These are ready; you can pick which one each bot uses later, in Engines."
         };
         card_with(
-            hero,
             "Is a coding agent installed?",
             words,
             div()
@@ -315,7 +275,6 @@ impl Shell {
     }
 
     fn welcome_folder(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let hero = self.bot(Member::Keeper, Mood::Idle, 150., Framing::Full);
         let mut list = div().flex().flex_col().gap(px(6.));
         let current = self.crew.store.current;
         for (i, f) in self.crew.store.folders.iter().enumerate().take(5) {
@@ -370,7 +329,6 @@ impl Shell {
             "The crew works in one project folder at a time. Pick one here, or add another. You can add or switch projects any time from the rail on the left."
         };
         card_with(
-            hero,
             "Where's your code?",
             words,
             div().flex().flex_col().gap(px(12.)).child(list).child(
@@ -384,33 +342,25 @@ impl Shell {
     }
 }
 
-fn card_with(hero: Img, title: &'static str, words: &'static str, body: impl IntoElement) -> Div {
+fn card_with(title: &'static str, words: &'static str, body: impl IntoElement) -> Div {
     ui::card()
-        .p(px(28.))
+        .p(px(26.))
         .flex()
-        .gap(px(26.))
-        .child(div().flex_none().child(hero))
+        .flex_col()
+        .gap(px(10.))
         .child(
             div()
-                .flex_1()
-                .min_w_0()
-                .pt(px(10.))
-                .flex()
-                .flex_col()
-                .gap(px(10.))
-                .child(
-                    div()
-                        .text_size(px(30.))
-                        .font_weight(FontWeight::BOLD)
-                        .child(title),
-                )
-                .child(
-                    div()
-                        .text_size(px(14.))
-                        .line_height(px(21.))
-                        .text_color(c(ui::body()))
-                        .child(words),
-                )
-                .child(div().mt(px(8.)).child(body)),
+                .text_size(px(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::ink()))
+                .child(title),
         )
+        .child(
+            div()
+                .text_size(px(13.5))
+                .line_height(px(20.))
+                .text_color(c(ui::body()))
+                .child(words),
+        )
+        .child(div().mt(px(8.)).child(body))
 }
