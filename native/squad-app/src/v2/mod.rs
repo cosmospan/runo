@@ -105,8 +105,6 @@ pub enum Place {
     Goal(u64),
     /// Settings, open on one pane.
     Settings(Pane),
-    /// What the crew cost and did lately.
-    Usage,
     /// Your server: how it's doing, and its controls.
     Server,
     /// Your server's screen, live.
@@ -863,9 +861,7 @@ fn nav_slot(place: Place) -> Option<f32> {
         | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
-            return None
-        }
+        Place::Settings(_) | Place::Server | Place::Screen | Place::Welcome => return None,
     };
     Some(i as f32 * 46.)
 }
@@ -1277,7 +1273,7 @@ impl Shell {
             Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("appearance") => Place::Settings(Pane::Appearance),
-            Ok("usage") => Place::Usage,
+            Ok("usage") => Place::Settings(Pane::Usage),
             Ok("machine") => Place::Server,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
@@ -3656,7 +3652,6 @@ impl Render for Shell {
             Place::History => self.history(cx),
             Place::Overview => self.overview(cx),
             Place::Settings(pane) => self.settings(pane, cx),
-            Place::Usage => self.usage(cx),
             Place::Server => self.machines(cx),
             Place::Screen => self.screen_page(window, cx),
             // A job's browser is a tab of its workspace.
@@ -3826,7 +3821,7 @@ impl Render for Shell {
                     "4" => Place::Chat(this.last_chat()),
                     "5" => Place::Crew,
                     "6" => Place::Settings(this.settings_pane),
-                    "7" => Place::Usage,
+                    "7" => Place::Settings(Pane::Usage),
                     _ => return,
                 };
                 this.go(to, cx);

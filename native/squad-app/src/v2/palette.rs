@@ -136,7 +136,12 @@ impl Shell {
                 "",
             ),
             (Place::Server, IconName::Server, "Machines", ""),
-            (Place::Usage, IconName::ChartColumn, "Usage", "⌘7"),
+            (
+                Place::Settings(Pane::Usage),
+                IconName::ChartColumn,
+                "Usage",
+                "⌘7",
+            ),
         ];
         for (p, icon, label, key) in places {
             all.push(Entry {

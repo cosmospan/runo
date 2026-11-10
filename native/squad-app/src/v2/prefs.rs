@@ -35,6 +35,8 @@ pub enum Pane {
     Appearance,
     Mascot,
     Engines,
+    /// What the crew spent and did.
+    Usage,
     /// Your own server, for jobs that carry on with this computer closed.
     Server,
 }
@@ -47,6 +49,7 @@ impl Pane {
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
+            Pane::Usage => "Usage",
             Pane::Server => "Servers",
         }
     }
@@ -58,6 +61,7 @@ impl Pane {
             Pane::Appearance => "Themes, glass, background and the mascot",
             Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
+            Pane::Usage => "Spend, jobs and time",
             Pane::Server => "Jobs that run with the lid closed",
         }
     }
@@ -69,6 +73,7 @@ impl Pane {
             Pane::Appearance => IconName::Palette,
             Pane::Mascot => IconName::Bot,
             Pane::Engines => IconName::Cpu,
+            Pane::Usage => IconName::ChartColumn,
             Pane::Server => IconName::Server,
         }
     }
@@ -427,10 +432,9 @@ impl Shell {
             Pane::Appearance => self.settings_appearance(cx),
             Pane::Mascot => self.settings_mascot(cx),
             Pane::Engines => self.engines(cx),
+            Pane::Usage => self.usage(cx),
             Pane::Server => self.settings_server(cx),
         };
-        let tabs =
-            matches!(pane, Pane::Appearance | Pane::Mascot).then(|| self.look_tabs(pane, cx));
         div()
             .size_full()
             .flex()
@@ -442,58 +446,16 @@ impl Shell {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .children(tabs)
                     .child(div().flex_1().min_h_0().child(body)),
             )
             .into_any_element()
     }
 
-    /// Appearance's two tabs: the app's theme, and the mascot.
-    fn look_tabs(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
-        let mut row = div()
-            .flex_none()
-            .flex()
-            .gap(px(18.))
-            .px(px(28.))
-            .pt(px(14.))
-            .border_b_1()
-            .border_color(c(ui::line2()));
-        for (p, label) in [(Pane::Appearance, "Theme"), (Pane::Mascot, "Mascot")] {
-            let on = p == pane;
-            row = row.child(
-                div()
-                    .id(("look-tab", p as usize))
-                    .pb(px(9.))
-                    .text_size(px(13.5))
-                    .cursor_pointer()
-                    .border_b_2()
-                    .map(|d| {
-                        if on {
-                            d.border_color(c(ui::ink()))
-                                .text_color(c(ui::ink()))
-                                .font_weight(FontWeight::SEMIBOLD)
-                        } else {
-                            d.border_color(transparent_black())
-                                .text_color(c(ui::muted()))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                        }
-                    })
-                    .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.settings_pane = p;
-                        this.place = Place::Settings(p);
-                        cx.notify();
-                    })),
-            );
-        }
-        row
-    }
-
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
         let groups: [(&'static str, &[Pane]); 3] = [
-            ("CREW", &[Pane::Work, Pane::Engines]),
-            ("APP", &[Pane::General, Pane::Appearance]),
+            ("CREW", &[Pane::Work, Pane::Engines, Pane::Usage]),
+            ("APP", &[Pane::General, Pane::Appearance, Pane::Mascot]),
             ("CONNECTIONS", &[Pane::Server]),
         ];
         let mut col = div()
@@ -552,8 +514,7 @@ impl Shell {
                     .child(label),
             );
             for &p in panes {
-                // Mascot is a tab inside Appearance.
-                let on = p == pane || (p == Pane::Appearance && pane == Pane::Mascot);
+                let on = p == pane;
                 col = col.child(
                     div()
                         .id(("settings-pane", p as usize))
