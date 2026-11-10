@@ -371,6 +371,11 @@ pub struct Job {
     /// A lesson the crew's engine found in a send-back, waiting for the person
     /// to keep it, keep it for the whole crew, or let it go. Empty when none.
     pub lesson_offer: String,
+    /// Checks the person said to ignore on this job: they fail on their own,
+    /// not because of it. By command.
+    pub ignored_checks: Vec<String>,
+    /// Merge it the moment every check passes: approved ahead of the checks.
+    pub merge_on_green: bool,
     /// Where its files stood before each turn, so it can be rewound to any of
     /// them (see `rewind`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -487,6 +492,8 @@ impl Default for Job {
             behind: 0,
             clash_with: Vec::new(),
             lesson_offer: String::new(),
+            ignored_checks: Vec::new(),
+            merge_on_green: false,
             marks: Vec::new(),
             rewound: false,
             resume_at: 0,

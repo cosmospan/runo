@@ -285,7 +285,8 @@ pub fn seed() -> Store {
         change("src/checkout/total.ts", "M", 18, 6),
         change("src/cart/summary.tsx", "M", 25, 2),
     ];
-    j.checks = vec![check("npm test", true, 40)];
+    j.checks = vec![check("npm test", true, 40), check("npm run lint", false, 9)];
+    j.checks[1].tail = "src/legacy/coupon.js\n  14:7  error  'total' is assigned a value but never used  no-unused-vars\n\n1 problem (1 error, 0 warnings)\nNot in this job's files. It fails on main too.".into();
     j.ahead = 3;
     j.behind = 4;
     j.clash_with = vec![(4, "pay.ts around line 22".into())];

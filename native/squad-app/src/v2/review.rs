@@ -105,9 +105,11 @@ impl Shell {
         if job.checking {
             proof = proof.child(ui::sweep(ui::BLUE, 0.).h(px(3.)));
         }
-        for check in &job.checks {
+        for (n, check) in job.checks.iter().enumerate() {
             let (mark, col) = if check.ok {
                 ("pass", ui::t_green())
+            } else if check.infra == work::IGNORED {
+                ("ignored", ui::faint())
             } else if !check.infra.is_empty() {
                 ("couldn't run", ui::t_amber())
             } else {
@@ -154,6 +156,80 @@ impl Shell {
                         .child(tail.join("\n")),
                 );
             }
+            // A check that fails on its own: a job of its own, or leave it.
+            if !check.ok && check.infra.is_empty() && !job.checking {
+                let cmd = check.command.clone();
+                let (fix_cmd, tail) = (cmd.clone(), check.tail.clone());
+                let folder = job.folder.clone();
+                proof = proof.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
+                            ui::ghost(("check-fix", id as usize * 64 + n), "Start a job to fix it")
+                                .h(px(26.))
+                                .text_size(px(12.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.fix_check(id, &fix_cmd, &tail, folder.clone(), cx)
+                                })),
+                        )
+                        .child(
+                            ui::ghost(
+                                ("check-ignore", id as usize * 64 + n),
+                                "Ignore for this job",
+                            )
+                            .h(px(26.))
+                            .text_size(px(12.))
+                            .text_color(c(ui::muted()))
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.ignore_check(id, &cmd, cx)),
+                            ),
+                        ),
+                );
+            }
+        }
+        // Approve ahead of the checks: it merges the moment they're green.
+        if job.status == Status::Review && verdict != Verdict::Pass && !job.checks.is_empty()
+            || job.status == Status::Review && job.checking
+        {
+            let on = job.merge_on_green;
+            proof = proof.child(
+                div()
+                    .id(("merge-green", id as usize))
+                    .mt(px(4.))
+                    .pt(px(10.))
+                    .border_t_1()
+                    .border_color(c(ui::line2()))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c(ui::ink()))
+                                    .child("Merge when checks pass"),
+                            )
+                            .child(div().text_size(px(12.)).text_color(c(ui::muted())).child(
+                                "Approve now, and it merges the moment every check is green.",
+                            )),
+                    )
+                    .child(super::prefs::switch(on))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(j) = this.crew.store.job_mut(id) {
+                            j.merge_on_green = !on;
+                        }
+                        this.crew.store.save();
+                        cx.notify();
+                    })),
+            );
         }
         proof
     }

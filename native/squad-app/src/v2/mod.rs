@@ -2962,6 +2962,38 @@ impl Shell {
         cx.notify();
     }
 
+    /// A check that fails on its own, not because of job `id`: Fixer gets a
+    /// job of its own to make it pass.
+    pub(super) fn fix_check(
+        &mut self,
+        id: u64,
+        command: &str,
+        tail: &str,
+        folder: store::Folder,
+        cx: &mut Context<Self>,
+    ) {
+        let end: Vec<&str> = tail.lines().rev().take(30).collect();
+        let end: Vec<&str> = end.into_iter().rev().collect();
+        let text = format!(
+            "The check `{command}` fails in this project, and not because of job #{id}. Make it pass without changing what it checks.\n\nThe end of its output:\n```\n{}\n```",
+            end.join("\n")
+        );
+        self.start_job_in(Member::Fixer, Mode::Fix, text, folder, cx);
+    }
+
+    /// Leaves a failing check out of job `id`'s verdict: it fails on its own.
+    pub(super) fn ignore_check(&mut self, id: u64, command: &str, cx: &mut Context<Self>) {
+        if let Some(j) = self.crew.store.job_mut(id) {
+            if !j.ignored_checks.iter().any(|c| c == command) {
+                j.ignored_checks.push(command.to_string());
+            }
+            let ignored = j.ignored_checks.clone();
+            work::ignore(&mut j.checks, &ignored);
+        }
+        self.crew.store.save();
+        cx.notify();
+    }
+
     /// Hands what the seatbelt found back to the job's bot to take out.
     pub(super) fn take_out(&mut self, id: u64, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);
