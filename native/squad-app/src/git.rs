@@ -577,7 +577,7 @@ impl std::fmt::Display for MergeError {
         match self {
             MergeError::InTheWay { dir, files } => write!(
                 f,
-                "{dir} has changes you haven't committed to {}, and this merge changes {} too.",
+                "{dir} has changes you haven't committed to {}, and the merge can't go ahead over {}.",
                 files.join(", "),
                 if files.len() == 1 { "it" } else { "them" }
             ),
@@ -611,15 +611,39 @@ fn uncommitted_files(dir: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Uncommitted changes in the checkout where `base` is that merging `branch`
-/// would overwrite: that folder and the files, or `None` when nothing is in the
-/// way. Changes to other files don't stop a merge.
+/// Files with changes staged in `dir`.
+fn staged_files(dir: &str) -> Vec<String> {
+    git(
+        dir,
+        &["diff", "--cached", "--name-only", "-z", "--no-renames"],
+    )
+    .map(|s| split_z(&s))
+    .unwrap_or_default()
+}
+
+/// Whether merging `branch` into `base` makes a merge commit rather than
+/// moving `base` ahead.
+fn makes_a_commit(dir: &str, branch: &str, base: &str) -> bool {
+    !is_ancestor(dir, base, branch)
+        || git(dir, &["config", "--get", "merge.ff"]).is_ok_and(|v| v.trim() == "false")
+}
+
+/// Uncommitted changes in the checkout where `base` is that stop merging
+/// `branch` there: that folder and the files, or `None` when nothing is in the
+/// way. Those are changes to files the merge changes too, and, when the merge
+/// makes a commit, any staged change, since git won't make a merge commit over
+/// a staged one. Unstaged changes to other files don't stop a merge.
 pub fn in_the_way(repo: &str, branch: &str, base: &str) -> Option<(String, Vec<String>)> {
     let dir = checked_out_at(repo, base)?;
     let dirty = uncommitted_files(&dir);
     if dirty.is_empty() {
         return None;
     }
+    let staged = if makes_a_commit(&dir, branch, base) {
+        staged_files(&dir)
+    } else {
+        Vec::new()
+    };
     let touched = git(
         repo,
         &[
@@ -632,7 +656,10 @@ pub fn in_the_way(repo: &str, branch: &str, base: &str) -> Option<(String, Vec<S
     )
     .map(|s| split_z(&s))
     .unwrap_or_default();
-    let files: Vec<String> = dirty.into_iter().filter(|f| touched.contains(f)).collect();
+    let files: Vec<String> = dirty
+        .into_iter()
+        .filter(|f| touched.contains(f) || staged.contains(f))
+        .collect();
     (!files.is_empty()).then_some((dir, files))
 }
 
@@ -725,7 +752,12 @@ fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
     let at = (0..50)
         .map(|n| format!("stash@{{{n}}}"))
         .find(|r| rev(dir, r).as_deref() == Some(sha))?;
-    if git(dir, &["stash", "apply", "--quiet", &at]).is_ok() && conflicted(dir).is_empty() {
+    // Staged changes go back staged when they can; git refuses that without
+    // touching anything when the index can't take them, and then they go back
+    // as plain changes.
+    let applied = git(dir, &["stash", "apply", "--quiet", "--index", &at]).is_ok()
+        || (conflicted(dir).is_empty() && git(dir, &["stash", "apply", "--quiet", &at]).is_ok());
+    if applied && conflicted(dir).is_empty() {
         let _ = git(dir, &["stash", "drop", "--quiet", &at]);
         return None;
     }
@@ -1588,6 +1620,56 @@ mod tests {
         );
         assert!(conflicted(&r).is_empty());
         assert!(git(&r, &["stash", "show", "-p"]).unwrap().contains("+X"));
+    }
+
+    /// `merge_setup`, with `main` moved on so the merge makes a commit.
+    fn merge_setup_diverged(name: &str) -> (String, std::path::PathBuf) {
+        let (r, repo) = merge_setup(name);
+        std::fs::write(repo.join("h"), "x\n").unwrap();
+        sh(&repo, &["add", "h"]);
+        sh(&repo, &["commit", "-qm", "main moved on"]);
+        (r, repo)
+    }
+
+    #[test]
+    fn a_staged_change_to_another_file_is_in_the_way_of_a_merge_commit() {
+        let (r, repo) = merge_setup_diverged("merge-staged");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        sh(&repo, &["add", "g"]);
+        // Git won't make a merge commit over it, so it's named, not a raw error.
+        match merge_into(&r, "feat", "main", false) {
+            Err(MergeError::InTheWay { files, .. }) => assert_eq!(files, vec!["g".to_string()]),
+            other => panic!("expected in the way, got {other:?}"),
+        }
+        // Set aside, it merges and comes back staged.
+        let merged = merge_into(&r, "feat", "main", true).unwrap();
+        assert_eq!(merged.kept, None);
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nB\nc\n"
+        );
+        assert_eq!(std::fs::read_to_string(repo.join("g")).unwrap(), "2\n");
+        assert_eq!(staged_files(&r), vec!["g".to_string()]);
+        assert!(git(&r, &["stash", "list"]).unwrap().trim().is_empty());
+    }
+
+    #[test]
+    fn a_staged_change_doesnt_stop_a_fast_forward() {
+        let (r, repo) = merge_setup("merge-staged-ff");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        sh(&repo, &["add", "g"]);
+        assert_eq!(in_the_way(&r, "feat", "main"), None);
+        merge_into(&r, "feat", "main", false).unwrap();
+        assert_eq!(staged_files(&r), vec!["g".to_string()]);
+    }
+
+    #[test]
+    fn unstaged_changes_to_other_files_dont_stop_a_merge_commit() {
+        let (r, repo) = merge_setup_diverged("merge-other-diverged");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        assert_eq!(in_the_way(&r, "feat", "main"), None);
+        merge_into(&r, "feat", "main", false).unwrap();
+        assert_eq!(std::fs::read_to_string(repo.join("g")).unwrap(), "2\n");
     }
 
     #[test]

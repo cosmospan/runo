@@ -237,7 +237,7 @@ impl Shell {
                         .text_size(px(12.5))
                         .text_color(c(ui::muted()))
                         .child(format!(
-                            "{} has changes you haven't committed, and this merge changes the same files. Commit them there and approve again, or set them aside: they're stashed for the merge and put back after.",
+                            "{} has changes you haven't committed that the merge can't go ahead over: it changes the same files, or they're staged. Commit them there and approve again, or set them aside: they're stashed for the merge and put back after.",
                             j.folder.path
                         )),
                 )

@@ -211,12 +211,11 @@ impl Shell {
             // Its browser, terminal and folder, under one Open menu.
             .map(|d| {
                 let id = job.id;
-                d.child(
-                    ui::ghost_i("job-open", IconName::ChevronDown, "Open").on_mouse_down(
-                        MouseButton::Left,
-                        self.on_menu(super::menu::Ctx::JobOpen(id), cx),
-                    ),
-                )
+                d.child(self.drop_menu(
+                    super::menu::Ctx::JobOpen(id),
+                    ui::ghost_i("job-open", IconName::ChevronDown, "Open"),
+                    cx,
+                ))
             })
             .when(running && !job.remote_on.is_empty(), |d| {
                 d.child(self.screen_button("job-screen", "Watch its screen", cx))

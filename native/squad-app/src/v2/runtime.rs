@@ -1667,7 +1667,7 @@ impl Runtime {
                     // says nothing new; the card above already shows them.
                     if j.in_the_way != files {
                         j.feed.push(store::Item::Note(format!(
-                            "Nothing was merged: {dir} has changes you haven't committed to {}, and this merge changes {} too.",
+                            "Nothing was merged: {dir} has changes you haven't committed to {}, and the merge can't go ahead over {}.",
                             files.join(", "),
                             if files.len() == 1 { "it" } else { "them" }
                         )));

@@ -1502,7 +1502,6 @@ impl Store {
         }
     }
 
-    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
     /// `who`'s notebook for the project at `folder`: a line for each of its
     /// last few jobs there, newest first, so a new job or a DM starts
     /// knowing the bot's own past work in this project. Its lessons are
@@ -1546,6 +1545,7 @@ impl Store {
         )
     }
 
+    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
     pub fn dm_jobs(&self, who: Member) -> Vec<&Job> {
         let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
         let mut v: Vec<&Job> = self
