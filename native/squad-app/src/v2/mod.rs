@@ -2863,6 +2863,16 @@ impl Shell {
         cx.notify();
     }
 
+    /// Merges a job whose merge was held by uncommitted changes in your
+    /// checkout, setting them aside for it and putting them back after.
+    pub(super) fn set_aside_and_merge(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
+        self.crew.set_aside_and_merge(id);
+        cx.notify();
+    }
+
     /// Hands what the seatbelt found back to the job's bot to take out.
     pub(super) fn take_out(&mut self, id: u64, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);

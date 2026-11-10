@@ -192,19 +192,22 @@ pub fn message(job: &Job) -> String {
 
 /// Approves a job: commits what's left in its worktree, merges its branch into
 /// the branch it started from, then removes the worktree and the branch.
-/// Returns the new commit on the base branch.
-pub fn merge(job: &Job) -> Result<String, String> {
+/// `set_aside` stashes uncommitted changes in your checkout that the merge would
+/// overwrite, and puts them back after; without it they stop the merge.
+pub fn merge(job: &Job, set_aside: bool) -> Result<git::Merged, git::MergeError> {
     let repo = job.folder.path.as_str();
     let dir = job.worktree.as_str();
     if dir.is_empty() || !Path::new(dir).is_dir() {
-        return Err("Its worktree is gone, so there's nothing to merge.".into());
+        return Err(git::MergeError::Failed(
+            "Its worktree is gone, so there's nothing to merge.".into(),
+        ));
     }
     if git::has_uncommitted(dir) == Some(true) {
         git::commit(dir, &message(job))?;
     }
-    let hash = git::merge_into(repo, &job.branch, &job.base)?;
+    let merged = git::merge_into(repo, &job.branch, &job.base, set_aside)?;
     cleanup(job);
-    Ok(hash)
+    Ok(merged)
 }
 
 /// Throws a job's changes away: its worktree and its branch.
@@ -412,7 +415,7 @@ mod tests {
         run(&dir, &["config", "user.email", "t@t"]);
         run(Path::new(&iso.worktree), &["config", "user.name", "t"]);
         run(Path::new(&iso.worktree), &["config", "user.email", "t@t"]);
-        merge(&job).unwrap();
+        merge(&job, false).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "two\n");
         assert!(dir.join("b.txt").exists());
         assert!(!Path::new(&iso.worktree).exists());
