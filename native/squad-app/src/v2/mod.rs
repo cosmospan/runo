@@ -1288,6 +1288,13 @@ impl Shell {
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
                 .unwrap_or(Place::Today),
+            // "job:9" opens job #9's workspace.
+            Ok(p) if p.starts_with("job:") => p[4..]
+                .parse()
+                .ok()
+                .filter(|id| store.job(*id).is_some())
+                .map(Place::Live)
+                .unwrap_or(Place::Today),
             Ok("review" | "review-jobs" | "review-files") => store
                 .jobs
                 .iter()

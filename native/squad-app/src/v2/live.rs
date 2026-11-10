@@ -538,6 +538,9 @@ impl Shell {
         if let Some(card) = self.clash_card(job, cx) {
             feed = feed.child(card.ml(px(40.)).mr_0());
         }
+        if let Some(card) = self.lesson_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
         // The review itself is the workspace's Changes tab, beside this.
         if running {
             let dots = typing(self.now());

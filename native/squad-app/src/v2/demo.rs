@@ -264,6 +264,8 @@ pub fn seed() -> Store {
     j.ahead = 3;
     j.behind = 4;
     j.clash_with = vec![(4, "pay.ts around line 22".into())];
+    // You sent it back once over how it showed prices.
+    j.lesson_offer = "Show prices with formatMoney from src/lib/money.ts, never toFixed.".into();
     j.conflict = vec![
         "src/checkout/total.ts".into(),
         "src/cart/summary.tsx".into(),
@@ -452,6 +454,7 @@ pub fn seed() -> Store {
             text: "Use the money helpers in src/lib/money.ts, never floats, for prices.".into(),
             job: 1,
             at: t - 3_000,
+            crew: false,
         }],
         threads: vec![
             thread(

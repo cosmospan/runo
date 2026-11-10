@@ -715,6 +715,7 @@ impl Shell {
                                     text,
                                     job: 0,
                                     at: super::store::now(),
+                                    crew: false,
                                 },
                             );
                             if added {

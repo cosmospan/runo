@@ -368,6 +368,9 @@ pub struct Job {
     /// Other jobs in the same project whose work clashes with this one's:
     /// their id and where ("total.ts around line 40").
     pub clash_with: Vec<(u64, String)>,
+    /// A lesson the crew's engine found in a send-back, waiting for the person
+    /// to keep it, keep it for the whole crew, or let it go. Empty when none.
+    pub lesson_offer: String,
     /// Where its files stood before each turn, so it can be rewound to any of
     /// them (see `rewind`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -483,6 +486,7 @@ impl Default for Job {
             ahead: 0,
             behind: 0,
             clash_with: Vec::new(),
+            lesson_offer: String::new(),
             marks: Vec::new(),
             rewound: false,
             resume_at: 0,
