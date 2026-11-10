@@ -37,58 +37,9 @@ impl Route {
         .to_string()
     }
 
-    /// Peek's line as it hands the job on: why, then whether the bot is
-    /// new to the project, invited in, or already here.
-    pub fn handoff(&self, joins: Joins) -> String {
-        format!("{} {}", self.reason(), joins.line(self.bot))
-    }
-}
-
-/// Where a bot stands when Peek brings it in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Joins {
-    /// It has never worked on this project: Peek onboards it.
-    New,
-    /// It has worked on this project, not in this thread: Peek invites it.
-    Back,
-    /// It's already working in this thread.
-    Here,
-}
-
-impl Joins {
-    /// Where `bot` stands, from the bots that have worked on this project
-    /// and those in this thread.
-    pub fn of(bot: Member, project: &[Member], thread: &[Member]) -> Joins {
-        if thread.contains(&bot) {
-            Joins::Here
-        } else if project.contains(&bot) {
-            Joins::Back
-        } else {
-            Joins::New
-        }
-    }
-
-    /// Peek's words for it.
-    pub fn line(self, bot: Member) -> String {
-        let name = bot.name();
-        match self {
-            Joins::New => format!(
-                "Onboarding {name}: it's new to this project, so it'll look around the code first."
-            ),
-            Joins::Back => {
-                format!("Inviting {name} into this thread; it's worked on this project before.")
-            }
-            Joins::Here => format!("{name} is already in this thread, so it's picking this up."),
-        }
-    }
-
-    /// How the engine is told where a bot stands.
-    pub fn note(self) -> &'static str {
-        match self {
-            Joins::New => "never worked on this project",
-            Joins::Back => "has worked on this project, not in this thread",
-            Joins::Here => "already in this thread",
-        }
+    /// Peek's line as it hands the job on: why this bot.
+    pub fn handoff(&self) -> String {
+        self.reason()
     }
 }
 
@@ -172,7 +123,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_handoff_names_the_bot_and_why() {
+    fn the_handoff_says_why() {
         let r = Route {
             mode: Mode::Fix,
             bot: Member::Fixer,
@@ -181,19 +132,7 @@ mod tests {
             by: "engine".into(),
             site: String::new(),
         };
-        let h = r.handoff(Joins::New);
-        assert!(h.contains("Fixer") && h.contains("bug"), "{h}");
-        assert!(h.contains("Onboarding"), "{h}");
-        assert!(r.handoff(Joins::Back).contains("Inviting"));
-        assert!(r.handoff(Joins::Here).contains("already in this thread"));
-    }
-
-    #[test]
-    fn where_a_bot_stands() {
-        let (b, f) = (Member::Builder, Member::Fixer);
-        assert_eq!(Joins::of(b, &[], &[]), Joins::New);
-        assert_eq!(Joins::of(b, &[b], &[]), Joins::Back);
-        assert_eq!(Joins::of(b, &[b, f], &[b]), Joins::Here);
+        assert!(r.handoff().contains("bug"), "{}", r.handoff());
     }
 
     #[test]
