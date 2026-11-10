@@ -514,7 +514,7 @@ impl Shell {
     }
 
     /// Does what a message offered.
-    pub(super) fn act(&mut self, a: &Act, dir: &str, _window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn act(&mut self, a: &Act, dir: &str, window: &mut Window, cx: &mut Context<Self>) {
         match a {
             // The app a job made opens in that job's browser, inside Squad.
             Act::Link(u) => match self.job_in_view().filter(|_| local_port(u).is_some()) {
@@ -549,10 +549,12 @@ impl Shell {
                     self.say("Copied. Open a folder to run it here.");
                 }
             }
+            // Opens in Squad's own viewer; "Open with" there hands it to another app.
             Act::File(p) => {
                 let path = file_path(p, dir);
                 if std::path::Path::new(&path).exists() {
-                    cx.open_url(&format!("file://{path}"));
+                    let job = self.act_from.1.or(self.job_in_view());
+                    self.open_file(path.into(), job, window, cx);
                 } else {
                     self.say(format!("{p} isn't there yet."));
                 }

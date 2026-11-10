@@ -61,6 +61,7 @@ pub(crate) mod tray;
 mod trouble;
 mod ui;
 mod usage;
+mod viewer;
 mod waiting;
 mod wallpaper;
 mod webpage;
@@ -557,6 +558,8 @@ pub struct Shell {
     menu: Option<(Point<Pixels>, menu::Ctx)>,
     /// The menu entry picked with the arrow keys.
     menu_hot: Option<usize>,
+    /// The file open in the viewer, over the page.
+    viewer: Option<viewer::Viewer>,
     /// A project waiting for you to confirm removing it, or deleting its folder.
     gone: Option<menu::Gone>,
     /// Running job cards showing their raw commands.
@@ -1350,6 +1353,7 @@ impl Shell {
             removing: None,
             menu: None,
             menu_hot: None,
+            viewer: None,
             gone: None,
             raw_open: Default::default(),
             about_open: false,
@@ -1521,6 +1525,10 @@ impl Shell {
             }
             _ => {}
         }
+        // A file open in the viewer, for looking at it.
+        if let Some(file) = std::env::var_os("SQUADCODE_VIEW") {
+            shell.open_file(file.into(), None, window, cx);
+        }
         shell
     }
 
@@ -1529,6 +1537,7 @@ impl Shell {
     }
 
     fn go(&mut self, place: Place, cx: &mut Context<Self>) {
+        self.viewer = None;
         if self.place != place {
             self.trail.push(self.place);
             if self.trail.len() > 40 {
@@ -1541,6 +1550,11 @@ impl Shell {
 
     /// Back to the place before this one.
     fn back(&mut self, cx: &mut Context<Self>) {
+        // An open file closes first, back to the page under it.
+        if self.viewer.take().is_some() {
+            cx.notify();
+            return;
+        }
         while let Some(p) = self.trail.pop() {
             // Skip jobs that are gone and repeats of where we are.
             let ok = match p {
@@ -3693,6 +3707,11 @@ impl Render for Shell {
                     }
                     return;
                 }
+                if this.viewer.is_some() && key == "escape" {
+                    this.close_file(cx);
+                    cx.stop_propagation();
+                    return;
+                }
                 // Ctrl+` opens and closes a terminal: the job's own on a job,
                 // the project's everywhere else (or when that one is open).
                 if m.control && key == "`" && this.place != Place::Welcome {
@@ -3804,7 +3823,8 @@ impl Render for Shell {
                             .when(!setup, |d| {
                                 d.children(ui::pattern(crate::pattern::Area::Content))
                             })
-                            .child(div().size_full().child(body)),
+                            .child(div().size_full().child(body))
+                            .children(self.file_view(cx)),
                     )
                     .when(!setup, |d| d.children(project_drawer))
                     .when(!setup, |d| d.child(self.statusbar(cx))),

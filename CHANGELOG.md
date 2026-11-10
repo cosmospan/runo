@@ -4,6 +4,10 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ## [Unreleased]
 
+### Added
+
+- Files open inside Squad Code. Clicking a file in a message, a job's files or the Files tab shows it in a viewer over the page: code with its colours and line numbers, Markdown as a page (or its source), pictures, and PDFs on a Mac. An HTML page has Preview, which shows it in the job's own browser. Open with hands the file to another app, and Escape closes it.
+
 ## [2.0.0-alpha.9] - 2026-11-09
 
 ### Fixed
