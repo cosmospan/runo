@@ -174,6 +174,97 @@ impl Shell {
         )
     }
 
+    /// Merging waits on uncommitted changes in your checkout that it would
+    /// overwrite: which files, and setting them aside to merge anyway.
+    pub(super) fn in_the_way_card(&mut self, j: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        if j.in_the_way.is_empty() || j.status != Status::Review {
+            return None;
+        }
+        let id = j.id;
+        let tone = ui::ask_tone();
+        let base = if j.base.is_empty() {
+            "its base"
+        } else {
+            j.base.as_str()
+        };
+        let mut rows = div().flex().flex_col();
+        for (n, path) in j.in_the_way.iter().enumerate() {
+            rows = rows.child(
+                div()
+                    .px(px(12.))
+                    .py(px(5.))
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .text_color(c(ui::body()))
+                    .when(n > 0, |d| d.border_t_1().border_color(c(tone.2)))
+                    .child(path.clone()),
+            );
+        }
+        Some(
+            div()
+                .mx(px(14.))
+                .mb(px(10.))
+                .rounded(px(12.))
+                .bg(c(tone.1))
+                .border_1()
+                .border_color(c(tone.2))
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .px(px(12.))
+                        .pt(px(10.))
+                        .pb(px(2.))
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(
+                            Icon::new(IconName::CircleAlert)
+                                .size(px(14.))
+                                .text_color(c(tone.0)),
+                        )
+                        .child(format!(
+                            "Uncommitted changes on {base} are in the way"
+                        )),
+                )
+                .child(
+                    div()
+                        .px(px(12.))
+                        .pb(px(6.))
+                        .text_size(px(12.5))
+                        .text_color(c(ui::muted()))
+                        .child(format!(
+                            "{} has changes you haven't committed, and this merge changes the same files. Commit them there and approve again, or set them aside: they're stashed for the merge and put back after.",
+                            j.folder.path
+                        )),
+                )
+                .child(rows)
+                .child(
+                    div()
+                        .px(px(12.))
+                        .py(px(10.))
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(8.))
+                        .child(
+                            ui::solid(("aside-merge", id as usize), "Set them aside and merge")
+                                .h(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.set_aside_and_merge(id, cx)
+                                })),
+                        )
+                        .child(
+                            ui::ghost(("aside-retry", id as usize), "I committed them, try again")
+                                .h(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
+                        ),
+                ),
+        )
+    }
+
     /// Peek's heads-up: other jobs in the project change the same lines.
     pub(super) fn clash_card(&mut self, j: &Job, cx: &mut Context<Self>) -> Option<Div> {
         if j.clash_with.is_empty()

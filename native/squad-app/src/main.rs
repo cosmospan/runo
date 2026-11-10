@@ -37,6 +37,8 @@ mod harness;
 mod health;
 mod icons;
 mod install;
+#[cfg(target_os = "macos")]
+mod macfile;
 mod mcp;
 mod memory_mcp;
 mod menubar;

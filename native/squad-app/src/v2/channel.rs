@@ -1857,7 +1857,9 @@ impl Shell {
         let failed_checks = j.checks.iter().filter(|c| !c.ok).count();
         let asks = self.ask_card(j, cx);
         let branch = self.branch_line(j);
-        let belt = self.belt_card(j, cx);
+        let belt = self
+            .belt_card(j, cx)
+            .or_else(|| self.in_the_way_card(j, cx));
         let clash = self.clash_card(j, cx);
         // A job that's over and left nothing to look at (no changes, nothing
         // asked, no git news) is one slim line, not a two-part card.

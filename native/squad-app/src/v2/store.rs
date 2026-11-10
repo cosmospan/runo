@@ -353,6 +353,13 @@ pub struct Job {
     pub held: Vec<String>,
     /// The person said to push or merge in spite of the seatbelt.
     pub belt_ok: bool,
+    /// Files with uncommitted changes in your checkout of its base that merging
+    /// would overwrite, found when Approve was pressed. Merging waits until
+    /// they're committed or set aside.
+    pub in_the_way: Vec<String>,
+    /// The person said to set those changes aside for the merge and put them
+    /// back after.
+    pub set_aside: bool,
     /// Commits on its branch since it started, and commits its base got since.
     pub ahead: usize,
     pub behind: usize,
@@ -468,6 +475,8 @@ impl Default for Job {
             remote_dir: String::new(),
             held: Vec::new(),
             belt_ok: false,
+            in_the_way: Vec::new(),
+            set_aside: false,
             ahead: 0,
             behind: 0,
             clash_with: Vec::new(),
