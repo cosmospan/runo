@@ -917,8 +917,8 @@ enum Ask {
     Send(u64, Value, String),
     Act(u64, String, Value),
     Watch(Vec<u64>),
-    /// Copies a project from this computer (name, path here), then starts
-    /// a job on it there when one is given.
+    /// Puts a project from this computer (name, path here) on the server
+    /// through git, then starts a job on it there when one is given.
     Copy(String, String, Option<(u64, Value)>),
 }
 
@@ -1027,15 +1027,14 @@ impl Link {
         let _ = self.tx.send(Ask::Watch(remote));
     }
 
-    /// Clones `url` into ~/squad/<name> there and adds it as a project.
-    /// Copies the project at `path` here to the server.
+    /// Puts the project at `path` here on the server, through git.
     pub fn copy_project(&self, name: &str, path: &str) {
         let _ = self
             .tx
             .send(Ask::Copy(name.to_string(), path.to_string(), None));
     }
 
-    /// Copies the project to the server, then starts the job on it there.
+    /// Puts the project on the server, then starts the job on it there.
     pub fn copy_then_send(&self, local: u64, folder: &store::Folder, body: Value) {
         let _ = self.tx.send(Ask::Copy(
             folder.name.clone(),
@@ -1122,12 +1121,20 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                     (Err(why), Some((local, _))) => lock().sent.push((local, Err(why))),
                     (Ok(there), Some((local, mut body))) => {
                         body["folder"] = json!(there);
-                        let result = match call("POST", "/v1/jobs", Some(&body)) {
-                            Ok((200, v)) => v["job"]
-                                .as_u64()
-                                .ok_or_else(|| "it didn't start a job".to_string()),
-                            Ok((_, v)) => Err(error_of(&v)),
-                            Err(e) => Err(e),
+                        let result = match hand_off_job(&cfg, &path, &there, local, &mut body) {
+                            Ok(note) => {
+                                if let Some(note) = note {
+                                    lock().job_notes.push((local, note));
+                                }
+                                match call("POST", "/v1/jobs", Some(&body)) {
+                                    Ok((200, v)) => v["job"]
+                                        .as_u64()
+                                        .ok_or_else(|| "it didn't start a job".to_string()),
+                                    Ok((_, v)) => Err(error_of(&v)),
+                                    Err(e) => Err(e),
+                                }
+                            }
+                            Err(why) => Err(format!("couldn't hand it your latest commit: {why}")),
                         };
                         if let Ok(id) = result {
                             if !watching.contains(&id) {
@@ -1139,10 +1146,21 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
                 }
                 read_at = Instant::now() - REFRESH;
             }
-            Some(Ask::Send(local, body, here)) => {
-                if let (false, Some(there)) = (here.is_empty(), body["folder"].as_str()) {
-                    let note = push_latest(&cfg, &here, there);
-                    lock().job_notes.push((local, note));
+            Some(Ask::Send(local, mut body, here)) => {
+                if let (false, Some(there)) =
+                    (here.is_empty(), body["folder"].as_str().map(str::to_string))
+                {
+                    match hand_off_job(&cfg, &here, &there, local, &mut body) {
+                        Ok(Some(note)) => lock().job_notes.push((local, note)),
+                        Ok(None) => {}
+                        Err(why) => {
+                            lock().sent.push((
+                                local,
+                                Err(format!("couldn't hand it your latest commit: {why}")),
+                            ));
+                            continue;
+                        }
+                    }
                 }
                 let result = match call("POST", "/v1/jobs", Some(&body)) {
                     Ok((200, v)) => v["job"]
@@ -1247,73 +1265,271 @@ fn worker(cfg: Config, seen: Arc<Mutex<Seen>>, rx: Receiver<Ask>) {
     }
 }
 
-/// Clones a project onto the server and adds it there.
-/// Folders a copy to the server leaves out: things the project rebuilds.
-const COPY_SKIPS: &[&str] = &[
-    "node_modules",
-    "target",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".next",
-    ".turbo",
-];
+// ---------- keeping this computer and the server in step ----------
+//
+// Like the cloud coding tools, Squad moves work through git, never by copying
+// files. Each project on the server has a hub: a bare repository Squad keeps
+// at ~/squad/hub/<name>.git, which the server's copy knows as its `squad`
+// remote. A job's branch is born here at your commit and pushed to the hub;
+// the server fetches it and works on it in a worktree of its own; when you
+// approve, the server pushes it back to the hub and this computer fetches it.
+// Only one side writes a job's branch at a time, and nothing ever pushes into
+// a folder someone has checked out. Git goes over the same SSH as everything
+// else, so it needs no GitHub and no login to one.
 
-/// Copies the project at `local` (this computer) into `~/squad` on the server,
-/// over SSH, and adds it there. Needs no git remote and no login to one: it's
-/// the files as they are here, with their git history. Gives back its path there.
-fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<String, String> {
-    let label = cfg.label();
-    let local = std::path::Path::new(local);
-    let (Some(parent), Some(base)) = (local.parent(), local.file_name()) else {
-        return Err(format!("{name} isn't a folder Squad can copy"));
-    };
-    let base = base.to_string_lossy().to_string();
-    let mut tar = Command::new("tar");
-    tar.arg("-C").arg(parent).arg("-czf").arg("-");
-    for skip in COPY_SKIPS {
-        tar.arg(format!("--exclude={skip}"));
-    }
-    let mut pack = tar
-        .arg(&base)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("tar isn't available here: {e}"))?;
-    let packed = pack.stdout.take().ok_or("tar gave no output")?;
-    let script = format!(
-        "set -e; mkdir -p squad; tar -xzf - -C squad; cd squad/{} && {{ git config receive.denyCurrentBranch updateInstead 2>/dev/null || true; }}; pwd",
-        quote(&base)
+/// How the sync reaches the server's side: a shell there, and a git address
+/// for a folder there. Over SSH in the app; on this computer in tests.
+struct Side<'a> {
+    run: &'a dyn Fn(&str) -> Result<String, String>,
+    url: &'a dyn Fn(&str) -> String,
+    /// `git` in a folder here, able to reach the server.
+    git: &'a GitHere<'a>,
+}
+
+type GitHere<'a> = dyn Fn(&str, &[&str]) -> Result<String, String> + 'a;
+
+/// What bringing a job home gives back: its worktree here and its branch.
+pub type Home = Result<(String, String), String>;
+
+/// The last line a script printed.
+fn last_line(out: &str) -> String {
+    out.lines()
+        .rev()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// Gives the server's copy at `there` a hub unless it has one, and prints
+/// the hub's path. A copy made before hubs (the old tar copy) gets one made
+/// from its own history, so its jobs and branches carry on.
+fn hub_script(there: &str) -> String {
+    format!(
+        r#"set -e
+cd {there}
+if h=$(git remote get-url squad 2>/dev/null); then :; else
+  n=$(basename "$PWD"); h="$HOME/squad/hub/$n.git"; i=2
+  while [ -e "$h" ]; do h="$HOME/squad/hub/$n-$i.git"; i=$((i+1)); done
+  mkdir -p "$HOME/squad/hub"
+  git clone -q --bare . "$h"
+  git remote add squad "$h"
+fi
+echo "$h""#,
+        there = quote(there)
+    )
+}
+
+/// Makes an empty hub for a project new to the server, and picks the folder
+/// its copy goes in. Prints the folder, then the hub.
+fn seed_script(name: &str) -> String {
+    format!(
+        r#"set -e
+mkdir -p "$HOME/squad/hub"
+n={name}; d="$HOME/squad/$n"; h="$HOME/squad/hub/$n.git"; i=2
+while [ -e "$d" ] || [ -e "$h" ]; do d="$HOME/squad/$n-$i"; h="$HOME/squad/hub/$n-$i.git"; i=$((i+1)); done
+git init -q --bare "$h"
+echo "$d"
+echo "$h""#,
+        name = quote(name)
+    )
+}
+
+/// Clones the server's copy from its hub, on `branch`, and keeps the
+/// project's own remote as `origin` so the server knows it for what it is.
+fn clone_script(dir: &str, hub: &str, branch: &str, origin: &str) -> String {
+    let mut s = format!(
+        "set -e\ngit -C {hub} symbolic-ref HEAD {head}\ngit clone -q -o squad {hub} {dir}\n",
+        hub = quote(hub),
+        head = quote(&format!("refs/heads/{branch}")),
+        dir = quote(dir),
     );
-    let unpack = ssh_base(&cfg.host, &cfg.key)
-        .arg(script)
-        .stdin(Stdio::from(packed))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| e.to_string())?;
-    let packed_ok = pack.wait().map(|s| s.success()).unwrap_or(false);
-    if !unpack.status.success() {
-        let err = String::from_utf8_lossy(&unpack.stderr);
-        return Err(format!(
-            "Couldn't copy {name} to {label}: {}",
-            err.lines()
-                .rev()
-                .find(|l| !l.trim().is_empty())
-                .unwrap_or("ssh stopped")
-                .trim()
+    if !origin.is_empty() {
+        s.push_str(&format!(
+            "git -C {} remote add origin {}\n",
+            quote(dir),
+            quote(origin)
         ));
     }
-    if !packed_ok {
-        return Err(format!("Couldn't pack {name} up to copy it"));
+    s.push_str(&format!("echo {}", quote(dir)));
+    s
+}
+
+/// Puts a project on the server through git: an empty hub there, your
+/// branch pushed to it, and the server's copy cloned from it. Only commits
+/// travel: no secrets, nothing uncommitted, nothing git ignores. Gives back
+/// the copy's folder there.
+fn seed(side: &Side, here: &str, name: &str) -> Result<String, String> {
+    if !crate::git::is_repo(here) || !crate::git::has_commits(here) {
+        return Err(format!(
+            "{name} isn't a git repository with a commit yet. Make a first commit and it can go to the server; until then its jobs run here."
+        ));
     }
-    let path = String::from_utf8_lossy(&unpack.stdout)
+    let sha = crate::git::head(here).ok_or("couldn't read your latest commit")?;
+    let branch = match crate::git::current_branch(here) {
+        b if b.is_empty() || b == "HEAD" => "main".to_string(),
+        b => b,
+    };
+    let made = (side.run)(&seed_script(name))?;
+    let mut lines = made.lines().map(str::trim).filter(|l| !l.is_empty());
+    let (Some(dir), Some(hub)) = (lines.next(), lines.next()) else {
+        return Err("the server didn't say where it put the project".into());
+    };
+    (side.git)(
+        here,
+        &[
+            "push",
+            "--quiet",
+            &(side.url)(hub),
+            &format!("{sha}:refs/heads/{branch}"),
+        ],
+    )
+    .map_err(|why| format!("couldn't push {branch}: {why}"))?;
+    let origin = super::ship::remote_url(here).unwrap_or_default();
+    (side.run)(&clone_script(dir, hub, &branch, &origin))?;
+    Ok(dir.to_string())
+}
+
+/// Hands a job's branch to the server: makes it here at the commit you're on
+/// and pushes it, and only it, to the hub. Your own branches are never pushed.
+/// `None` when the project here isn't a git repository with a commit.
+fn hand_off(
+    side: &Side,
+    here: &str,
+    there: &str,
+    title: &str,
+    id: u64,
+) -> Result<Option<super::work::Handoff>, String> {
+    if !crate::git::is_repo(here) || !crate::git::has_commits(here) {
+        return Ok(None);
+    }
+    let sha = crate::git::head(here).ok_or("couldn't read your latest commit")?;
+    let base = match crate::git::current_branch(here) {
+        b if b == "HEAD" => String::new(),
+        b => b,
+    };
+    let hub = last_line(&(side.run)(&hub_script(there))?);
+    if hub.is_empty() {
+        return Err("the server didn't say where its hub is".into());
+    }
+    let url = (side.url)(&hub);
+    // A name no other job on the hub has.
+    let taken =
+        (side.git)(here, &["ls-remote", "--heads", &url, "refs/heads/squad/*"]).unwrap_or_default();
+    let taken: Vec<&str> = taken
         .lines()
-        .last()
-        .unwrap_or("")
-        .trim()
-        .to_string();
+        .filter_map(|l| l.split_whitespace().nth(1))
+        .filter_map(|r| r.strip_prefix("refs/heads/"))
+        .collect();
+    let branch =
+        crate::git::unique_branch(&super::work::branch_for(title, id), |b| taken.contains(&b));
+    (side.git)(
+        here,
+        &[
+            "push",
+            "--quiet",
+            &url,
+            &format!("{sha}:refs/heads/{branch}"),
+        ],
+    )?;
+    Ok(Some(super::work::Handoff {
+        branch,
+        base_sha: sha,
+        base,
+    }))
+}
+
+/// Brings a job's work home from the server: commits it there on its branch,
+/// pushes that branch to the hub, fetches it here and checks it out in a
+/// worktree of its own, as if the job had run here. Gives back that worktree
+/// and the branch's name here, which differs only when a branch of yours
+/// already has its name.
+fn bring_home_by(
+    side: &Side,
+    job: &store::Job,
+    there: &str,
+    who: (&str, &str),
+) -> Result<(String, String), String> {
+    use crate::git;
+    let here = job.folder.path.as_str();
+    let branch = job.branch.as_str();
+    if branch.is_empty() {
+        return Err("it didn't work on a branch of its own".into());
+    }
+    let (name, email) = who;
+    if !job.remote_dir.is_empty() {
+        let commit = format!(
+            "cd {dir} && git add -A && (git diff --cached --quiet || GIT_AUTHOR_NAME={n} GIT_AUTHOR_EMAIL={e} GIT_COMMITTER_NAME={n} GIT_COMMITTER_EMAIL={e} git commit -q -m {m})",
+            dir = quote(&job.remote_dir),
+            n = quote(name),
+            e = quote(email),
+            m = quote(&super::work::message(job)),
+        );
+        (side.run)(&commit).map_err(|why| format!("couldn't save its work there: {why}"))?;
+    }
+    let hub = last_line(&(side.run)(&hub_script(there))?);
+    let refspec = format!("refs/heads/{branch}:refs/heads/{branch}");
+    (side.run)(&format!(
+        "git -C {} push --quiet squad {}",
+        quote(there),
+        quote(&refspec)
+    ))
+    .map_err(|why| {
+        if why.contains("rejected") || why.contains("non-fast-forward") {
+            format!(
+                "{branch} moved on the server's hub since it started, so nothing was overwritten"
+            )
+        } else {
+            format!("couldn't send {branch} to the hub: {why}")
+        }
+    })?;
+    let url = (side.url)(&hub);
+    let fetched = format!("refs/remotes/squad/{branch}");
+    (side.git)(
+        here,
+        &[
+            "fetch",
+            "--quiet",
+            &url,
+            &format!("+refs/heads/{branch}:{fetched}"),
+        ],
+    )
+    .map_err(|why| format!("couldn't fetch {branch}: {why}"))?;
+    // Your own branch of that name stays as it is.
+    let tip = git::rev(here, &fetched);
+    let local = if !git::has_branch(here, branch) || git::rev(here, branch) == tip {
+        branch.to_string()
+    } else {
+        git::unique_branch(branch, |b| git::has_branch(here, b))
+    };
+    let worktree = git::add_worktree(here, &local, Some(&fetched))?;
+    let _ = (side.git)(here, &["update-ref", "-d", &fetched]);
+    // It's home: the hub needn't keep it.
+    let _ = (side.git)(here, &["push", "--quiet", &url, "--delete", branch]);
+    Ok((worktree, local))
+}
+
+impl Config {
+    /// Runs the sync over SSH, the way the app reaches the server.
+    fn with_side<T>(&self, f: impl FnOnce(&Side) -> T) -> T {
+        let run = |script: &str| ssh(&self.host, &self.key, script, None);
+        let url = |there: &str| git_url(self, there);
+        let git = |dir: &str, args: &[&str]| git_here(self, dir, args);
+        f(&Side {
+            run: &run,
+            url: &url,
+            git: &git,
+        })
+    }
+}
+
+/// Puts the project at `local` here on the server through git and adds it
+/// there. Gives back its folder there.
+fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<String, String> {
+    let label = cfg.label();
+    let path = cfg
+        .with_side(|side| seed(side, local, name))
+        .map_err(|why| format!("Couldn't put {name} on {label}: {why}"))?;
     match http(
         port,
         "POST",
@@ -1326,14 +1542,6 @@ fn copy_project(cfg: &Config, port: u16, name: &str, local: &str) -> Result<Stri
         Err(e) => Err(format!("Couldn't reach {label}: {e}")),
     }
 }
-
-// ---------- keeping this computer and the server in step ----------
-//
-// Like the cloud coding tools, Squad syncs through git rather than copying
-// files back and forth: before a job runs there, the server gets your latest
-// commits; when you approve it, its branch comes back here and merges like a
-// job that ran here. Git goes over the same SSH as everything else, so it
-// needs no GitHub and no login to one.
 
 /// How git reaches the server: Squad's key and Squad's trusted host keys.
 fn git_ssh(key: &str) -> String {
@@ -1372,73 +1580,44 @@ fn git_here(cfg: &Config, dir: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
-/// The server's copy of a project as a git address.
+/// A folder on the server as a git address.
 fn git_url(cfg: &Config, there: &str) -> String {
     format!("{}:{there}", cfg.host)
 }
 
-/// Lets a push update the branch the server's copy has checked out, the way
-/// a pull there would, as long as nothing there is uncommitted.
-fn accept_pushes(cfg: &Config, there: &str) -> Result<String, String> {
-    ssh(
-        &cfg.host,
-        &cfg.key,
-        &format!(
-            "git -C {} config receive.denyCurrentBranch updateInstead",
-            quote(there)
-        ),
-        None,
-    )
-}
-
-/// Sends the commits of the branch you're on here to the server's copy, so a
-/// job there starts from your latest work. Says what it did, for the job.
-fn push_latest(cfg: &Config, here: &str, there: &str) -> String {
+/// Hands the job's branch over before it's sent: the fields the server
+/// starts it from, and a line for the job's feed.
+fn hand_off_job(
+    cfg: &Config,
+    here: &str,
+    there: &str,
+    local: u64,
+    body: &mut Value,
+) -> Result<Option<String>, String> {
     let label = cfg.label();
-    let branch = crate::git::current_branch(here);
-    if branch.is_empty() || branch == "HEAD" {
-        return format!(
-            "This project isn't on a branch here, so the job on {label} starts from what's there."
-        );
-    }
-    let pushed = accept_pushes(cfg, there).and_then(|_| {
-        git_here(
-            cfg,
-            here,
-            &[
-                "push",
-                "--quiet",
-                &git_url(cfg, there),
-                &format!("HEAD:refs/heads/{branch}"),
-            ],
-        )
-    });
-    let short = crate::git::head(here)
-        .map(|h| h.chars().take(7).collect::<String>())
-        .unwrap_or_default();
+    let title = body["text"].as_str().unwrap_or("").to_string();
+    let Some(h) = cfg.with_side(|side| hand_off(side, here, there, &title, local))? else {
+        return Ok(None);
+    };
+    body["branch"] = json!(h.branch);
+    body["base_sha"] = json!(h.base_sha);
+    body["base"] = json!(h.base);
+    let short: String = h.base_sha.chars().take(7).collect();
     let uncommitted = if crate::git::has_uncommitted(here) == Some(true) {
         " Changes you haven't committed stay here."
     } else {
         ""
     };
-    match pushed {
-        Ok(_) => format!("Sent your latest commit on {branch} ({short}) to {label}, so it starts from there.{uncommitted}"),
-        Err(why) => format!(
-            "Couldn't send your latest commits to {label} ({why}), so it starts from what {label} has."
-        ),
-    }
+    Ok(Some(format!(
+        "Handed {} to {label} at your commit {short}, so it starts exactly where you are.{uncommitted}",
+        h.branch
+    )))
 }
 
-/// Brings a job's work home from the server: commits it there on its branch,
-/// fetches that branch here, and checks it out in a worktree of its own,
-/// as if the job had run here. Gives back that worktree.
-fn bring_home(cfg: &Config, job: &store::Job, there: &str) -> Result<String, String> {
+/// Brings a job's work home from the server ([`bring_home_by`]), with your
+/// name on the commit as when a job here commits.
+fn bring_home(cfg: &Config, job: &store::Job, there: &str) -> Result<(String, String), String> {
     let here = job.folder.path.as_str();
-    let branch = job.branch.as_str();
-    if branch.is_empty() {
-        return Err("it didn't work on a branch of its own".into());
-    }
-    // Your name on the commit, as when a job here commits.
     let who = |key: &str, or: &str| {
         git_here(cfg, here, &["config", "--get", key])
             .ok()
@@ -1449,37 +1628,11 @@ fn bring_home(cfg: &Config, job: &store::Job, there: &str) -> Result<String, Str
         who("user.name", "Squad Code"),
         who("user.email", "squad@localhost"),
     );
-    if !job.remote_dir.is_empty() {
-        let commit = format!(
-            "cd {dir} && git add -A && (git diff --cached --quiet || GIT_AUTHOR_NAME={n} GIT_AUTHOR_EMAIL={e} GIT_COMMITTER_NAME={n} GIT_COMMITTER_EMAIL={e} git commit -q -m {m})",
-            dir = quote(&job.remote_dir),
-            n = quote(&name),
-            e = quote(&email),
-            m = quote(&super::work::message(job)),
-        );
-        ssh(&cfg.host, &cfg.key, &commit, None)
-            .map_err(|why| format!("couldn't save its work there: {why}"))?;
-    }
-    git_here(
-        cfg,
-        here,
-        &[
-            "fetch",
-            "--quiet",
-            &git_url(cfg, there),
-            &format!("+refs/heads/{branch}:refs/heads/{branch}"),
-        ],
-    )
-    .map_err(|why| format!("couldn't fetch {branch}: {why}"))?;
-    crate::git::add_worktree(here, branch, None)
+    cfg.with_side(|side| bring_home_by(side, job, there, (&name, &email)))
 }
 
 /// [`bring_home`] on a thread of its own.
-pub fn bring_home_later(
-    cfg: Config,
-    job: store::Job,
-    there: String,
-) -> Receiver<Result<String, String>> {
+pub fn bring_home_later(cfg: Config, job: store::Job, there: String) -> Receiver<Home> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
         let _ = tx.send(bring_home(&cfg, &job, &there));
@@ -2046,5 +2199,234 @@ mod tests {
     #[test]
     fn quotes_survive_the_shell() {
         assert_eq!(quote("it's"), "'it'\\''s'");
+    }
+}
+
+#[cfg(test)]
+mod sync_tests {
+    //! The git sync end to end, with a folder on this computer standing in
+    //! for the server: its shell is `sh` with that folder as $HOME.
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    fn fresh(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("squad-sync-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Runs the sync against `server` as if it were the server's home.
+    fn on<T>(server: &Path, f: impl FnOnce(&Side) -> T) -> T {
+        let home = server.to_path_buf();
+        let run = move |script: &str| {
+            let out = Command::new("sh")
+                .arg("-c")
+                .arg(script)
+                .current_dir(&home)
+                .env("HOME", &home)
+                .env("GIT_AUTHOR_NAME", "s")
+                .env("GIT_AUTHOR_EMAIL", "s@s")
+                .env("GIT_COMMITTER_NAME", "s")
+                .env("GIT_COMMITTER_EMAIL", "s@s")
+                .output()
+                .map_err(|e| e.to_string())?;
+            if out.status.success() {
+                Ok(String::from_utf8_lossy(&out.stdout).to_string())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+            }
+        };
+        let url = |there: &str| there.to_string();
+        let git_here = |dir: &str, args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .output()
+                .map_err(|e| e.to_string())?;
+            if out.status.success() {
+                Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+            }
+        };
+        f(&Side {
+            run: &run,
+            url: &url,
+            git: &git_here,
+        })
+    }
+
+    #[test]
+    fn a_job_goes_there_and_comes_home_through_git() {
+        let root = fresh("e2e");
+        let (here, server) = (root.join("shop"), root.join("server"));
+        std::fs::create_dir_all(&here).unwrap();
+        std::fs::create_dir_all(&server).unwrap();
+        git(&here, &["init", "-q", "-b", "main"]);
+        std::fs::write(here.join("a.txt"), "one\n").unwrap();
+        std::fs::write(here.join(".env"), "SECRET=1\n").unwrap();
+        std::fs::write(here.join(".gitignore"), ".env\n").unwrap();
+        git(&here, &["add", "a.txt", ".gitignore"]);
+        git(&here, &["commit", "-q", "-m", "first"]);
+        git(&here, &["checkout", "-q", "-b", "feature"]);
+        git(
+            &here,
+            &["remote", "add", "origin", "git@github.com:me/shop.git"],
+        );
+        let here_s = here.to_string_lossy().to_string();
+
+        // Put on the server: a clone of your branch, never your secrets.
+        let there = on(&server, |s| seed(s, &here_s, "shop")).unwrap();
+        let there_p = PathBuf::from(&there);
+        assert_eq!(there_p, server.join("squad/shop"));
+        assert_eq!(
+            git(&there_p, &["rev-parse", "--abbrev-ref", "HEAD"]),
+            "feature"
+        );
+        assert_eq!(
+            git(&there_p, &["config", "--get", "remote.origin.url"]),
+            super::super::ship::remote_url(&here_s).unwrap()
+        );
+        assert!(!there_p.join(".env").exists());
+
+        // A new commit here, then a job: it starts from that exact commit,
+        // even though the server's copy is still on the old one.
+        std::fs::write(here.join("a.txt"), "two\n").unwrap();
+        git(&here, &["commit", "-q", "-am", "second"]);
+        let sha = git(&here, &["rev-parse", "HEAD"]);
+        let h = on(&server, |s| {
+            hand_off(s, &here_s, &there, "Fix the login", 7)
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(h.base_sha, sha);
+        assert_eq!(h.base, "feature");
+        assert!(h.branch.starts_with("squad/"));
+        // Your own branches aren't pushed anywhere.
+        let hub = server.join("squad/hub/shop.git");
+        assert!(git(&hub, &["branch", "--list", "feature"]).contains("feature"));
+        assert_ne!(git(&hub, &["rev-parse", "feature"]), sha);
+        // The same title again gets a name of its own on the hub.
+        let h2 = on(&server, |s| {
+            hand_off(s, &here_s, &there, "Fix the login", 8)
+        })
+        .unwrap()
+        .unwrap();
+        assert_ne!(h2.branch, h.branch);
+
+        // The server fetches it and works in a worktree from that commit.
+        git(
+            &there_p,
+            &[
+                "fetch",
+                "-q",
+                "squad",
+                &format!("+refs/heads/{0}:refs/remotes/squad/{0}", h.branch),
+            ],
+        );
+        let iso = crate::v2::work::isolate_at(&there, &h).unwrap();
+        assert_eq!(git(Path::new(&iso.worktree), &["rev-parse", "HEAD"]), sha);
+        std::fs::write(Path::new(&iso.worktree).join("b.txt"), "bot\n").unwrap();
+
+        // Approved: it comes home as a branch and worktree of its own.
+        let job = store::Job {
+            title: "Fix the login".into(),
+            folder: store::Folder {
+                name: "shop".into(),
+                path: here_s.clone(),
+                ship: String::new(),
+            },
+            branch: iso.branch.clone(),
+            remote_dir: iso.worktree.clone(),
+            ..Default::default()
+        };
+        let (worktree, branch) =
+            on(&server, |s| bring_home_by(s, &job, &there, ("Me", "me@x"))).unwrap();
+        assert_eq!(branch, iso.branch);
+        assert_eq!(
+            std::fs::read_to_string(Path::new(&worktree).join("b.txt")).unwrap(),
+            "bot\n"
+        );
+        assert_eq!(git(Path::new(&worktree), &["rev-parse", "HEAD~1"]), sha);
+        // No stray refs here, and the hub let go of it.
+        assert!(git(&here, &["for-each-ref", "refs/remotes/squad"]).is_empty());
+        assert!(git(&hub, &["branch", "--list", &iso.branch]).is_empty());
+        // Your checkout never moved.
+        assert_eq!(
+            git(&here, &["rev-parse", "--abbrev-ref", "HEAD"]),
+            "feature"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(root.parent().unwrap().join(".squadcode-worktrees"));
+    }
+
+    #[test]
+    fn a_copy_from_before_hubs_gets_one() {
+        let root = fresh("old");
+        let server = root.join("server");
+        let old = server.join("squad/app");
+        std::fs::create_dir_all(&old).unwrap();
+        git(&old, &["init", "-q", "-b", "main"]);
+        std::fs::write(old.join("x"), "1").unwrap();
+        git(&old, &["add", "x"]);
+        git(&old, &["commit", "-q", "-m", "x"]);
+        // Left half-done there: it stays as it was.
+        std::fs::write(old.join("x"), "dirty").unwrap();
+        let there = old.to_string_lossy().to_string();
+        let hub = on(&server, |s| (s.run)(&hub_script(&there))).unwrap();
+        assert_eq!(
+            last_line(&hub),
+            server.join("squad/hub/app.git").to_string_lossy()
+        );
+        assert_eq!(git(&old, &["remote", "get-url", "squad"]), last_line(&hub));
+        assert_eq!(std::fs::read_to_string(old.join("x")).unwrap(), "dirty");
+        // And the next time it's the same hub.
+        let again = on(&server, |s| (s.run)(&hub_script(&there))).unwrap();
+        assert_eq!(last_line(&again), last_line(&hub));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_folder_without_commits_doesnt_go() {
+        let root = fresh("empty");
+        git(&root, &["init", "-q"]);
+        let r = root.to_string_lossy().to_string();
+        let err = on(&root, |s| seed(s, &r, "empty")).unwrap_err();
+        assert!(err.contains("first commit"), "{err}");
+        assert!(on(&root, |s| hand_off(s, &r, "/nowhere", "x", 1))
+            .unwrap()
+            .is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_squads_branches_are_taken_from_a_client() {
+        use crate::v2::work::handoff_branch_ok;
+        assert!(handoff_branch_ok("squad/fix-the-login-2"));
+        assert!(!handoff_branch_ok("main"));
+        assert!(!handoff_branch_ok("squad/../main"));
+        assert!(!handoff_branch_ok("squad/a b"));
+        assert!(!handoff_branch_ok("squad/$(rm)"));
     }
 }

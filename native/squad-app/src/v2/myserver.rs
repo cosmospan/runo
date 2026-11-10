@@ -488,8 +488,8 @@ impl Shell {
         let logins = link.logins();
         let projects = link.projects();
         let here = self.crew.store.folder().cloned();
-        // The open project, when the server doesn't have it yet: copied over
-        // from here, so it needs no git remote.
+        // The open project, when the server doesn't have it yet: put there
+        // through git, so it needs no GitHub.
         let copy = here.and_then(|f| {
             let url = super::ship::remote_url(&f.path).unwrap_or_default();
             link.path_for(&f, &url)
@@ -534,12 +534,12 @@ impl Shell {
             ui::ghost_i(
                 "server-copy",
                 IconName::CloudUpload,
-                format!("Copy {name} there"),
+                format!("Set {name} up there"),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 if let Some(link) = &this.crew.link {
                     link.copy_project(&name, &path);
-                    this.say(format!("Copying {name} to the server…"));
+                    this.say(format!("Setting {name} up on the server through git…"));
                 }
                 cx.notify();
             }))
@@ -569,7 +569,7 @@ impl Shell {
                     .text_size(px(12.5))
                     .text_color(c(ui::faint()))
                     .child(match run.as_str() {
-                        "server" => format!("Every job runs on {label}. When it doesn't have the project yet, Squad copies it there first."),
+                        "server" => format!("Every job runs on {label}. When it doesn't have the project yet, Squad sets it up there through git first."),
                         "here" => "Every job runs on this computer. The server waits until you switch.".to_string(),
                         _ => format!("Squad picks: long work goes to {label}, quick work stays here. Each job says where it ran."),
                     }),
@@ -730,7 +730,7 @@ impl Shell {
             ))
             .child(line_row(
                 "How work comes back",
-                "Like the cloud coding tools, through git: before a job runs there, Squad sends the server your latest commits, and when you approve one that ran there, its branch comes back here and merges like any job (or becomes a pull request). It all goes over the same SSH, so the server needs no GitHub login. Changes you haven't committed stay here.",
+                "Like the cloud coding tools, through git, never by copying files: each job gets its own branch, made here at the commit you're on and handed to the server. When you approve, that branch comes back here and merges like any job (or becomes a pull request). Your own branches are never pushed, and it all goes over the same SSH, so the server needs no GitHub login. Changes you haven't committed, and files git ignores like .env, stay here.",
             )))
     }
 }

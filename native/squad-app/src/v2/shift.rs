@@ -41,6 +41,8 @@ pub struct Later {
     /// with, and its address.
     pub issue: String,
     pub issue_url: String,
+    /// Sent from another computer: the branch and commit it starts from.
+    pub handoff: Option<super::work::Handoff>,
 }
 
 impl Default for Later {
@@ -57,6 +59,7 @@ impl Default for Later {
             reading: false,
             issue: String::new(),
             issue_url: String::new(),
+            handoff: None,
         }
     }
 }

@@ -66,9 +66,21 @@ impl Runtime {
         gone
     }
 
+    /// The handed-over branch for a job that went into the line instead of
+    /// starting: it waits with the job, not for whichever starts next.
+    pub(super) fn keep_handoff(&mut self, later: u64) {
+        let h = self.handoff.take();
+        if let Some(l) = self.store.later.iter_mut().find(|l| l.id == later) {
+            l.handoff = h;
+            self.store.save();
+        }
+    }
+
     fn start_later(&mut self, st: &AppSettings, l: shift::Later) -> u64 {
         let night = l.at > l.made + 60;
+        self.handoff = l.handoff.clone();
         let mut job = self.make_job(st, l.bot, l.mode, &l.text, l.folder.clone(), None, None);
+        self.handoff = None;
         job.thread = l.thread;
         job.issue = l.issue.clone();
         job.issue_url = l.issue_url.clone();

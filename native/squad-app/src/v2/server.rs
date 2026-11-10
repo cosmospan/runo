@@ -711,6 +711,17 @@ fn new_job(hub: &mut Hub, st: &AppSettings, body: &Value) -> Reply {
         return (202, json!({ "chat": bot.name() }));
     }
     let race = body["race"].as_u64().unwrap_or(0) as usize;
+    // Sent from another computer through the hub: fetch the branch it
+    // handed over, so the job starts from that exact commit.
+    let handoff = match handoff_of(body) {
+        Some(h) => match fetch_handoff(&folder.path, &h) {
+            Ok(()) => Some(h),
+            Err(why) => return err(409, why),
+        },
+        None => None,
+    };
+    let plain = !(body["split"].as_bool() == Some(true) && mode.writes()) && race <= 1;
+    hub.rt.handoff = handoff.filter(|_| plain);
     let opened = if body["split"].as_bool() == Some(true) && mode.writes() {
         let id = hub.rt.begin_goal(st, text, folder);
         return (200, json!({ "goal": id }));
@@ -719,12 +730,55 @@ fn new_job(hub: &mut Hub, st: &AppSettings, body: &Value) -> Reply {
     } else {
         hub.rt.start_job(st, bot, mode, text, folder)
     };
+    hub.rt.handoff = None;
     match opened {
         Opened::Job(id) => (200, json!({ "job": id })),
         Opened::Race(id) => (200, json!({ "race": id })),
         // Next in line: it starts once the bot is free.
         Opened::Busy(id) => (202, json!({ "queued": true, "busy": id })),
         Opened::Waiting(id) => (202, json!({ "queued": true, "waiting": id })),
+    }
+}
+
+/// The branch and commit a job sent from another computer starts from:
+/// `{branch, base_sha, base}` in the body, when it has them.
+fn handoff_of(body: &Value) -> Option<super::work::Handoff> {
+    let field = |k: &str| body[k].as_str().unwrap_or("").trim().to_string();
+    let h = super::work::Handoff {
+        branch: field("branch"),
+        base_sha: field("base_sha"),
+        base: field("base"),
+    };
+    (!h.base_sha.is_empty()).then_some(h)
+}
+
+/// Brings the handed-over branch into the server's copy from its hub (the
+/// `squad` remote), and checks the commit the job starts from is there.
+fn fetch_handoff(folder: &str, h: &super::work::Handoff) -> Result<(), String> {
+    let sha_ok = h.base_sha.len() >= 7 && h.base_sha.chars().all(|c| c.is_ascii_hexdigit());
+    if !sha_ok {
+        return Err("That isn't a commit.".into());
+    }
+    if super::work::handoff_branch_ok(&h.branch) {
+        let _ = std::process::Command::new("git")
+            .arg("-C")
+            .arg(folder)
+            .args([
+                "fetch",
+                "--quiet",
+                "squad",
+                &format!("+refs/heads/{0}:refs/remotes/squad/{0}", h.branch),
+            ])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .stdin(std::process::Stdio::null())
+            .output();
+    }
+    match crate::git::rev(folder, &h.base_sha) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "The server doesn't have commit {} yet.",
+            h.base_sha.chars().take(7).collect::<String>()
+        )),
     }
 }
 
