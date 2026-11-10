@@ -815,13 +815,11 @@ fn doze_after() -> Duration {
 
 /// Extra room at the bottom of a page (the crew is in the sidebar now).
 pub(super) const DOCK_ROOM: f32 = 16.;
-/// How tall the bar across the top is, the sidebar's top strip included.
-pub(super) const TOP_H: f32 = 54.;
+/// How tall the title bar across the whole window is.
+pub(super) const TOP_H: f32 = 38.;
 /// Where the Mac window buttons sit: their left edge, and the top of their
-/// frames (16pt tall), so they centre on the top bar's row. The three are
-/// 14pt wide and 20pt apart, 54pt in all, so from here they centre over the
-/// icon rail and the Peek logo under them.
-pub(super) const LIGHTS_X: f32 = (sidebar::RAIL - 54.) / 2.;
+/// frames (16pt tall), so they centre on the title bar's row, at its left end.
+pub(super) const LIGHTS_X: f32 = 13.;
 pub(super) const LIGHTS_Y: f32 = (TOP_H - 16.) / 2.;
 
 /// Whether the window has Mac window buttons in its top-left corner. Off a
@@ -3637,13 +3635,12 @@ impl Render for Shell {
                 )
         });
         let setup = self.place == Place::Welcome;
-        // Settings has its own title column, so no bar across the top.
-        let bare = matches!(self.place, Place::Settings(_));
         let project_drawer = self.project_drawer(cx);
         let root = div()
             .size_full()
             .relative()
             .flex()
+            .flex_col()
             .track_focus(&self.focus)
             .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
                 this.wake(cx);
@@ -3775,38 +3772,47 @@ impl Render for Shell {
                 d.bg(c(if setup { ui::bg() } else { ui::ground() }))
             })
             .when(theme::layered() && setup, |d| d.bg(c(ui::bg())))
-            // The walkthrough has the whole window; the sidebar comes after it.
-            .when(!setup, |d| d.child(self.sidebar(cx)))
+            // The title bar runs across the whole window, the Mac window buttons
+            // at its left end; the walkthrough has the window to itself.
+            .when(!setup, |d| d.child(self.topbar(cx)))
             .child(
                 div()
                     .flex_1()
-                    .min_w_0()
+                    .min_h_0()
+                    .w_full()
                     .flex()
-                    .flex_col()
-                    // Full height on its own; as a canvas, it stretches between its margins.
-                    .when(setup, |d| d.h_full())
-                    .when(!setup, |d| d.bg(c(ui::bg())))
-                    .relative()
-                    .when(!setup && !bare, |d| d.child(self.topbar(cx)))
+                    // The sidebar comes after the walkthrough.
+                    .when(!setup, |d| d.child(self.sidebar(cx)))
                     .child(
                         div()
                             .flex_1()
-                            .min_h_0()
-                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            // Full height on its own; as a canvas, it stretches between its margins.
+                            .when(setup, |d| d.h_full())
+                            .when(!setup, |d| d.bg(c(ui::bg())))
                             .relative()
-                            .overflow_hidden()
-                            // The pattern lies under the page only, not the top bar:
-                            // the bar is a plain strip of the page's own ground, so
-                            // the pattern never runs into the bar's edge and no grid
-                            // line lands a few pixels off it.
-                            .when(!setup, |d| {
-                                d.children(ui::pattern(crate::pattern::Area::Content))
-                            })
-                            .child(div().size_full().child(body))
-                            .children(self.file_view(cx)),
-                    )
-                    .when(!setup, |d| d.children(project_drawer))
-                    .when(!setup, |d| d.child(self.statusbar(cx))),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .w_full()
+                                    .relative()
+                                    .overflow_hidden()
+                                    // The pattern lies under the page only, not the top bar:
+                                    // the bar is a plain strip of the page's own ground, so
+                                    // the pattern never runs into the bar's edge and no grid
+                                    // line lands a few pixels off it.
+                                    .when(!setup, |d| {
+                                        d.children(ui::pattern(crate::pattern::Area::Content))
+                                    })
+                                    .child(div().size_full().child(body))
+                                    .children(self.file_view(cx)),
+                            )
+                            .when(!setup, |d| d.children(project_drawer))
+                            .when(!setup, |d| d.child(self.statusbar(cx))),
+                    ),
             )
             .children(toast_el)
             // Deferred, so it paints over the crew's frames too.

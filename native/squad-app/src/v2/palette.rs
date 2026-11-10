@@ -90,7 +90,7 @@ impl Shell {
         }
         let places = [
             (Place::Today, IconName::LayoutDashboard, "Jobs", "⌘1"),
-            (Place::Inbox, IconName::Inbox, "Needs you", "⌘2"),
+            (Place::Inbox, IconName::Inbox, "Inbox", "⌘2"),
             (Place::History, IconName::Clock, "All jobs", "⌘3"),
             (
                 Place::Chat(self.last_chat()),

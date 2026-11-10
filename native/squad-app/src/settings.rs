@@ -113,6 +113,9 @@ pub struct AppSettings {
     /// The window has been switched to Crew Chat once; after that the theme is
     /// whatever the person picks.
     pub v2_crew_chat: bool,
+    /// The window has been switched to Graphite and lime once; after that the
+    /// theme is whatever the person picks.
+    pub v2_lime: bool,
     /// How often the crew checks with you, under Settings > How work runs:
     /// "a_lot", "balanced" or "hands_off". The two switches below follow it.
     pub v2_ask: String,
@@ -297,12 +300,13 @@ impl Default for AppSettings {
             fin_looks: HashMap::new(),
             glass: "off".into(),
             glass_cards: true,
-            v2_theme: "crew-chat".into(),
+            v2_theme: "graphite-lime".into(),
             v2_see_through: false,
             v2_clear: 50,
             v2_glass_popovers: true,
             v2_pop_clear: 40,
             v2_crew_chat: true,
+            v2_lime: false,
             v2_ask: "balanced".into(),
             v2_plan_first: false,
             v2_auto_merge: false,
@@ -426,6 +430,11 @@ impl AppSettings {
         if !self.v2_crew_chat {
             self.v2_crew_chat = true;
             self.v2_theme = "crew-chat".into();
+        }
+        // The window's new look: move everyone to Graphite and lime once.
+        if !self.v2_lime {
+            self.v2_lime = true;
+            self.v2_theme = "graphite-lime".into();
         }
         if self.v2_ask.is_empty() {
             self.v2_ask = "balanced".into();

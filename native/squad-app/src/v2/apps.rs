@@ -100,6 +100,11 @@ impl State {
 }
 
 impl Run {
+    /// The address it serves on, once it said or was expected to.
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
     pub fn live(&self) -> bool {
         !self.sh.exited()
     }

@@ -105,7 +105,75 @@ const fn glass_tones(blue: u32, amber: u32, green: u32, red: u32, grey: u32) -> 
     ]
 }
 
-pub const THEMES: [Theme; 8] = [
+pub const THEMES: [Theme; 10] = [
+    // Graphite and lime: the default. A warm paper page, hairline edges, and
+    // lime for the one thing to press. Lime is too pale to read as text on
+    // paper, so text keeps to ink and the status colours.
+    Theme {
+        id: "graphite-lime",
+        name: "Graphite and lime",
+        line: "Warm paper and lime, the default",
+        light: true,
+        frosted: false,
+        bg: 0xF6F6F1,
+        panel: 0xFBFBF8,
+        raised: 0xFFFFFF,
+        hover: 0xE9E9E2,
+        press: 0xDFDFD6,
+        ink: 0x1A1A17,
+        body: 0x3B3B36,
+        muted: 0x5C5C54,
+        faint: 0x76766C,
+        line_c: 0xDAD9CF,
+        line2: 0xE4E3DA,
+        line_hi: 0xCFCEC3,
+        fill: 0xC8F04B,
+        fill_hover: 0xBCE63A,
+        fill_press: 0xAED82E,
+        on_fill: 0x151513,
+        well: 0xEFEFE9,
+        t_blue: 0x1D5AC4,
+        t_amber: 0x8F5700,
+        t_green: 0x0F7646,
+        t_red: 0xB52634,
+        t_violet: 0x5B3FC4,
+        add: 0x0F7646,
+        del: 0xB52634,
+        tones: tones(0xF6F6F1, 0x2F7BEB, 0xD08A12, 0x1E9E62, 0xE0414F, 0x3B3B36),
+    },
+    // Graphite and lime after dark: the same design on warm graphite.
+    Theme {
+        id: "graphite-lime-dark",
+        name: "Graphite and lime, dark",
+        line: "Warm graphite and lime",
+        light: false,
+        frosted: false,
+        bg: 0x1C1C1A,
+        panel: 0x20201E,
+        raised: 0x252523,
+        hover: 0x2B2B28,
+        press: 0x33332F,
+        ink: 0xEDEDE6,
+        body: 0xC9C9C0,
+        muted: 0xA8A89F,
+        faint: 0x85857B,
+        line_c: 0x33332F,
+        line2: 0x2A2A27,
+        line_hi: 0x45453F,
+        fill: 0xC8F04B,
+        fill_hover: 0xD4F56A,
+        fill_press: 0xB5DC3A,
+        on_fill: 0x151513,
+        well: 0x171715,
+        t_blue: 0x86B6FF,
+        t_amber: 0xF2B544,
+        t_green: 0x7DDB8C,
+        t_red: 0xFF7B6F,
+        t_violet: 0xB9A8FF,
+        add: 0x7DDB8C,
+        del: 0xFF8A80,
+        tones: tones(0x1C1C1A, 0x86B6FF, 0xF2B544, 0x7DDB8C, 0xFF6B5E, 0xC9C9C0),
+    },
     // Crew Chat: the default. A white page, a soft grey sidebar and Jobs panel,
     // and violet for the crew's own voice, so the bots' glowing faces stand out.
     Theme {
@@ -395,6 +463,8 @@ impl Theme {
     /// the tests below). A frosted theme's own opacity is thinned on top of this.
     pub fn floor(&self) -> f32 {
         match self.id {
+            "graphite-lime" => 0.36,
+            "graphite-lime-dark" => 0.60,
             "crew-chat" => 0.34,
             "midnight" => 0.58,
             "graphite" => 0.60,
@@ -413,7 +483,7 @@ pub fn theme() -> &'static Theme {
     &THEMES[CURRENT.load(Ordering::Relaxed).min(THEMES.len() - 1)]
 }
 
-/// Puts a theme in use by id; an unknown id means the default, Crew Chat.
+/// Puts a theme in use by id; an unknown id means the default, Graphite and lime.
 pub fn set_theme(id: &str) {
     let i = THEMES.iter().position(|t| t.id == id).unwrap_or(0);
     CURRENT.store(i, Ordering::Relaxed);
@@ -714,8 +784,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids_are_unique_and_crew_chat_is_first() {
-        assert_eq!(THEMES[0].id, "crew-chat");
+    fn ids_are_unique_and_graphite_lime_is_first() {
+        assert_eq!(THEMES[0].id, "graphite-lime");
         for (i, a) in THEMES.iter().enumerate() {
             for b in &THEMES[i + 1..] {
                 assert_ne!(a.id, b.id);
@@ -964,11 +1034,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_id_falls_back_to_crew_chat() {
+    fn unknown_id_falls_back_to_graphite_lime() {
         set_theme("no-such-theme");
-        assert_eq!(theme().id, "crew-chat");
+        assert_eq!(theme().id, "graphite-lime");
         set_theme("frost");
         assert_eq!(theme().id, "frost");
-        set_theme("crew-chat");
+        set_theme("graphite-lime");
     }
 }

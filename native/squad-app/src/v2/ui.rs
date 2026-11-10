@@ -163,6 +163,10 @@ pub fn ground() -> u32 {
     if t.id == "crew-chat" {
         return super::theme::glass(0xF6F6F9);
     }
+    // Graphite and lime's sidebar: a shade of the paper, warm like it.
+    if t.id == "graphite-lime" {
+        return super::theme::glass(0xEEEEE7);
+    }
     let (base, k) = if t.light {
         (t.bg, 0.045)
     } else {

@@ -17,8 +17,9 @@ use super::ui::{self, c};
 use super::{Place, Shell};
 
 /// The icon rail's width, the labelled panel's beside it, and the two together.
-/// The rail is wide enough to hold the Mac window buttons above it, centred.
-pub(super) const RAIL: f32 = 72.;
+/// The Mac window buttons sit in the title bar across the top, not over the
+/// rail, so the rail only needs room for its icons.
+pub(super) const RAIL: f32 = 52.;
 pub(super) const PANEL: f32 = 236.;
 pub(super) const WIDTH: f32 = RAIL + PANEL;
 
@@ -88,13 +89,13 @@ fn count(n: usize, tone: Option<ui::Tone>) -> Div {
 fn rail_btn(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
     div()
         .id(id)
-        .size(px(38.))
+        .size(px(34.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
         .relative()
-        .rounded(px(10.))
+        .rounded(px(7.))
         .cursor_pointer()
         .map(|d| {
             if on {
@@ -229,13 +230,13 @@ fn initials(name: &str) -> String {
 /// solid for the project you're in.
 fn monogram(name: &str, tint: u32, on: bool) -> Div {
     div()
-        .size(px(38.))
+        .size(px(32.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(12.))
-        .text_size(px(14.))
+        .rounded(px(7.))
+        .text_size(px(12.))
         .font_weight(FontWeight::BOLD)
         .map(|d| {
             if on {
@@ -282,6 +283,19 @@ fn count_badge(n: usize) -> Div {
         } else {
             n.to_string()
         })
+}
+
+/// A dot on the tile's corner when something in the project waits on you.
+fn ask_dot() -> Div {
+    div()
+        .absolute()
+        .top(px(-3.))
+        .right(px(-3.))
+        .size(px(10.))
+        .rounded_full()
+        .bg(c(ui::RED))
+        .border_2()
+        .border_color(c(ui::ground()))
 }
 
 /// A blue dot on the tile's foot while the crew works in the project.
@@ -346,7 +360,6 @@ impl Shell {
     pub(super) fn sidebar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let inbox = self.inbox_count();
         self.inbox_seen = inbox;
-        let band = self.side_band(cx);
         let rail = self.rail(cx);
         let panel = (!self.panel_off()).then(|| self.panel(inbox, cx));
         div()
@@ -361,87 +374,7 @@ impl Shell {
             .flex_col()
             .relative()
             .children(ui::pattern(crate::pattern::Area::Panels))
-            .child(band)
             .child(div().flex_1().min_h_0().flex().child(rail).children(panel))
-    }
-
-    /// The top of the sidebar: a strip as tall as the top bar beside it, with
-    /// the same line under it, so the two read as one bar split at the
-    /// sidebar's edge. The project's name and its buttons sit on it; on a Mac
-    /// the window buttons take its left end.
-    fn side_band(&mut self, cx: &mut Context<Self>) -> Div {
-        let band = div()
-            .h(px(super::TOP_H))
-            .flex_none()
-            .w_full()
-            .flex()
-            .items_center()
-            .relative()
-            // The window buttons sit over the rail, so the name lines up with
-            // the panel below it either way.
-            .pl(px(RAIL + 10.))
-            .pr(px(10.))
-            .border_b_1()
-            .border_color(c(ui::line2()))
-            // Stand-ins for the Mac window buttons, for screenshots off a Mac.
-            .when(!cfg!(target_os = "macos") && super::has_lights(), |d| {
-                d.children(
-                    [0xff5f57u32, 0xfebc2e, 0x28c840]
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, col)| {
-                            div()
-                                .absolute()
-                                .left(px(super::LIGHTS_X + 1. + i as f32 * 20.))
-                                .top(px(super::LIGHTS_Y + 2.))
-                                .size(px(12.))
-                                .rounded_full()
-                                .bg(c(col))
-                        }),
-                )
-            });
-        if self.panel_off() {
-            return band;
-        }
-        let folder = self.crew.store.folder().cloned();
-        let project = folder
-            .as_ref()
-            .map(|f| f.name.clone())
-            .unwrap_or_else(|| "Squad Code".into());
-        let where_ = folder
-            .as_ref()
-            .map(|f| short_path(&f.path))
-            .unwrap_or_else(|| "No project yet".into());
-        let head = div()
-            .flex_1()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap(px(2.))
-            .child(
-                // One line, so it sits on the same centre line as the window
-                // buttons and the top bar; the folder's path is on hover.
-                div()
-                    .id("side-project")
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(14.))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(c(ui::ink()))
-                    .child(project)
-                    .tooltip(tip(where_)),
-            )
-            .child(
-                small_btn("side-slim", IconName::PanelLeftClose)
-                    .tooltip(tip("Hide the sidebar"))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.side_slim = true;
-                        cx.notify();
-                    })),
-            );
-
-        band.child(head)
     }
 
     /// The icon rail: Peek on top, the places, your projects as tiles, and
@@ -451,14 +384,26 @@ impl Shell {
 
         // Peek, the lead, as the app's mark: a click opens Peek's chat.
         let peek_mood = self.side_mood(Member::Fin);
-        let peek = self.bot(Member::Fin, peek_mood, 34., squad_holo::Framing::Bust);
+        let peek = self.bot(Member::Fin, peek_mood, 32., squad_holo::Framing::Bust);
         let logo = rail_btn("rail-peek", place == Place::Chat(Member::Fin))
-            .size(px(40.))
+            .size(px(38.))
             .mb(px(4.))
             .child(peek)
             .tooltip(tip("Peek, your lead"))
             .on_hover(cx.listener(|this, on: &bool, _, cx| this.hover_bot(Member::Fin, *on, cx)))
             .on_click(cx.listener(|this, _, _, cx| this.go(Place::Chat(Member::Fin), cx)));
+
+        // The Inbox: everything waiting on you, in every project.
+        let waiting = self.inbox_count();
+        let inbox = rail_btn("rail-inbox", place == Place::Inbox)
+            .child(Icon::new(IconName::Inbox).size(px(18.)))
+            .when(waiting > 0, |d| d.child(count_badge(waiting)))
+            .tooltip(tip(if waiting > 0 {
+                format!("Inbox\n{waiting} waiting on you")
+            } else {
+                "Inbox\nNothing waits on you".to_string()
+            }))
+            .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx)));
 
         // Your projects as tiles, the one you're in ringed: a dot when
         // something in it needs you, blue while the crew works there.
@@ -523,7 +468,7 @@ impl Shell {
                     .id(("rail-project", i))
                     .group(group.clone())
                     .w_full()
-                    .h(px(44.))
+                    .h(px(40.))
                     .flex_none()
                     .flex()
                     .items_center()
@@ -535,7 +480,8 @@ impl Shell {
                         div()
                             .relative()
                             .child(monogram(&name, tint, on))
-                            .when(asks > 0, |d| d.child(count_badge(asks)))
+                            // A dot, not a number: the count lives on the Inbox.
+                            .when(asks > 0, |d| d.child(ask_dot()))
                             .when(busy > 0, |d| d.child(busy_dot())),
                     )
                     // No name card over its own right-click menu.
@@ -556,18 +502,18 @@ impl Shell {
         list = list.child(
             div()
                 .w_full()
-                .h(px(44.))
+                .h(px(40.))
                 .flex()
                 .items_center()
                 .justify_center()
                 .child(
                     div()
                         .id("rail-add-project")
-                        .size(px(38.))
+                        .size(px(32.))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .rounded(px(12.))
+                        .rounded(px(7.))
                         .border_1()
                         .border_dashed()
                         .border_color(c(ui::line_hi()))
@@ -578,7 +524,7 @@ impl Shell {
                                 .bg(ui::ca(ui::VIOLET, 0.08))
                                 .text_color(c(ui::t_violet()))
                         })
-                        .child(Icon::new(IconName::Plus).size(px(16.)))
+                        .child(Icon::new(IconName::Plus).size(px(14.)))
                         .tooltip(tip("Add a project folder"))
                         .on_click(cx.listener(|this, _, _, cx| this.pick_folder(cx))),
                 ),
@@ -602,6 +548,31 @@ impl Shell {
                         })),
                 )
             })
+            // Machines: where the crew runs, this Mac and your server, with a
+            // dot for whether the server answers once there is one.
+            .child({
+                let up = self.crew.link.as_ref().map(|l| l.up());
+                rail_btn(
+                    "rail-machines",
+                    matches!(place, Place::Server | Place::Screen),
+                )
+                .child(Icon::new(IconName::Server).size(px(18.)))
+                .when_some(up, |d, up| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .bottom(px(6.))
+                            .right(px(6.))
+                            .size(px(7.))
+                            .rounded_full()
+                            .border_1()
+                            .border_color(c(ground()))
+                            .bg(c(if up { ui::t_green() } else { ui::faint() })),
+                    )
+                })
+                .tooltip(tip("Machines\nThis Mac and your server"))
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Server, cx)))
+            })
             .child(
                 rail_btn("rail-settings", matches!(place, Place::Settings(_)))
                     .child(Icon::new(IconName::Settings).size(px(18.)))
@@ -621,11 +592,12 @@ impl Shell {
             .flex_col()
             .items_center()
             .gap(px(4.))
-            .pt(px(12.))
+            .pt(px(10.))
             .pb(px(12.))
             .bg(ui::ca(ui::ink(), 0.03))
             .when(!slim, |d| d.border_r_1().border_color(c(ui::line2())))
             .child(logo)
+            .child(inbox)
             .child(div().w(px(22.)).h(px(1.)).my(px(6.)).bg(c(ui::line())))
             .child(list)
             .child(foot)
@@ -637,51 +609,182 @@ impl Shell {
     fn panel(&mut self, inbox: usize, cx: &mut Context<Self>) -> Div {
         let place = self.place;
 
-        let all_jobs = self.crew.store.listed().len();
-        let nav = div()
+        let _ = inbox;
+        // The project's own places. The Inbox and Machines sit on the rail,
+        // since they span every project.
+        let working = self.crew.store.running().count();
+        let nav = div().flex().flex_col().gap(px(1.)).child(
+            row("side-history", place == Place::History)
+                .child(Icon::new(IconName::LayoutDashboard).size(px(16.)))
+                .child("Jobs")
+                .when(working > 0, |d| d.child(running(working).ml_auto()))
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
+        );
+
+        let threads = self.thread_list(cx);
+        let crew = self.crew_list(cx);
+
+        // The project you're in, at the head of its panel: its name, and
+        // where it lives on disk under it.
+        let folder = self.crew.store.folder().cloned();
+        let project = folder
+            .as_ref()
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "Squad Code".into());
+        let where_ = folder
+            .as_ref()
+            .map(|f| short_path(&f.path))
+            .unwrap_or_else(|| "No project yet".into());
+        let head = div()
+            .px(px(4.))
+            .pb(px(10.))
             .flex()
             .flex_col()
             .gap(px(1.))
             .child(
-                row("side-inbox", place == Place::Inbox)
-                    .child(Icon::new(IconName::Inbox).size(px(16.)))
-                    .child("Needs you")
-                    .when(inbox > 0, |d| d.child(count(inbox, Some(ui::ask_tone()))))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Inbox, cx))),
+                div()
+                    .truncate()
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(project),
             )
             .child(
-                row("side-history", place == Place::History)
-                    .child(Icon::new(IconName::MessageSquare).size(px(16.)))
-                    .child("All jobs")
-                    .when(all_jobs > 0, |d| d.child(count(all_jobs, None)))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
-            )
-            .child(
-                row("side-crew", place == Place::Crew)
-                    .child(Icon::new(IconName::Users).size(px(16.)))
-                    .child("Crew")
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
-            )
-            // Your server, once there is one, with a dot for whether it answers.
-            .when_some(self.crew.link.as_ref().map(|l| l.up()), |d, up| {
-                d.child(
-                    row(
-                        "side-server",
-                        matches!(place, Place::Server | Place::Screen),
-                    )
-                    .child(Icon::new(IconName::Server).size(px(16.)))
-                    .child("Your server")
-                    .child(div().ml_auto().size(px(7.)).rounded_full().bg(c(if up {
+                div()
+                    .truncate()
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .text_color(c(ui::faint()))
+                    .child(where_),
+            );
+
+        // What runs in this project now: the app, and any other command.
+        let here = folder.as_ref().map(|f| f.path.clone()).unwrap_or_default();
+        let runs: Vec<(u64, String, Option<String>, bool)> = self
+            .runs
+            .iter()
+            .filter(|r| r.spec.folder == here && !r.spec.setup && r.live())
+            .map(|r| {
+                (
+                    r.id,
+                    r.spec.cmd.clone(),
+                    r.url().map(String::from),
+                    r.state() == super::apps::State::Up,
+                )
+            })
+            .collect();
+        // Run the app, or, while it runs, its address and a way to open it.
+        let app = runs.iter().find(|r| r.2.is_some()).cloned();
+        let run_box = folder.is_some().then(|| {
+            let base = div()
+                .id("side-run")
+                .mx(px(2.))
+                .mb(px(10.))
+                .h(px(32.))
+                .px(px(10.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .rounded(px(5.))
+                .bg(c(ui::raised()))
+                .border_1()
+                .border_color(c(ui::line()))
+                .text_size(px(12.5))
+                .cursor_pointer()
+                .hover(|s| s.border_color(c(ui::line_hi())));
+            match app {
+                Some((_, _, Some(url), up)) => {
+                    let open = url.clone();
+                    base.child(div().size(px(7.)).rounded_full().flex_none().bg(c(if up {
                         ui::t_green()
                     } else {
-                        ui::faint()
+                        ui::t_amber()
                     })))
-                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Server, cx))),
-                )
-            });
-
-        let threads = self.thread_list(cx);
-        let crew = self.crew_list(cx);
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .font_family(ui::MONO)
+                            .text_size(px(12.))
+                            .text_color(c(ui::ink()))
+                            .child(url.trim_start_matches("http://").to_string()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Open \u{2197}"),
+                    )
+                    .tooltip(tip("Open the running app in your browser"))
+                    .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&open)))
+                }
+                _ => base
+                    .text_color(c(ui::muted()))
+                    .child(Icon::new(IconName::Play).size(px(13.)))
+                    .child("Run app")
+                    .tooltip(tip("Start this project's app here in Squad"))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.run_app(None, None, cx);
+                    })),
+            }
+        });
+        // Everything running, docked at the foot of the panel.
+        let dock = (!runs.is_empty()).then(|| {
+            let mut d = div()
+                .flex_none()
+                .pt(px(8.))
+                .mt(px(4.))
+                .border_t_1()
+                .border_color(c(ui::line()))
+                .flex()
+                .flex_col()
+                .gap(px(1.))
+                .child(
+                    div()
+                        .px(px(10.))
+                        .pb(px(4.))
+                        .flex()
+                        .justify_between()
+                        .font_family(ui::MONO)
+                        .text_size(px(10.5))
+                        .text_color(c(ui::faint()))
+                        .child("RUNNING NOW")
+                        .child(runs.len().to_string()),
+                );
+            for (id, cmd, url, up) in runs {
+                let port = url
+                    .as_deref()
+                    .and_then(|u| u.rsplit(':').next())
+                    .map(|p| format!(":{}", p.trim_end_matches('/')));
+                d = d.child(
+                    row(("side-running", id as usize), false)
+                        .h(px(27.))
+                        .text_size(px(12.5))
+                        .child(div().size(px(7.)).rounded_full().flex_none().bg(c(if up {
+                            ui::t_green()
+                        } else {
+                            ui::t_blue()
+                        })))
+                        .child(div().flex_1().min_w_0().truncate().child(cmd))
+                        .when_some(port, |d, p| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .font_family(ui::MONO)
+                                    .text_size(px(11.))
+                                    .text_color(c(ui::faint()))
+                                    .child(p),
+                            )
+                        })
+                        .when_some(url, |d, u| {
+                            d.on_click(cx.listener(move |_, _, _, cx| cx.open_url(&u)))
+                        }),
+                );
+            }
+            d
+        });
 
         div()
             .w(px(PANEL))
@@ -692,6 +795,8 @@ impl Shell {
             .pt(px(12.))
             .pb(px(12.))
             .px(px(10.))
+            .child(head)
+            .children(run_box)
             .child(
                 div()
                     .id("side-scroll")
@@ -704,6 +809,7 @@ impl Shell {
                     .child(threads)
                     .child(crew),
             )
+            .children(dock)
     }
 
     /// A section's heading that folds it open or shut: a caret, its name,
@@ -848,7 +954,7 @@ impl Shell {
     /// The crew as direct messages: each bot's face with a dot for what it's
     /// doing (blue working, amber asking you), its name, and a word on it.
     fn crew_list(&mut self, cx: &mut Context<Self>) -> Div {
-        let (open, head) = self.fold_label("crew", "Direct messages", None, cx);
+        let (open, head) = self.fold_label("crew", "Bots", None, cx);
         let mut list = div().flex().flex_col().gap(px(1.)).child(head);
         if !open {
             return list;
@@ -993,6 +1099,13 @@ impl Shell {
             );
         }
         list.child(
+            row("side-crew", place == Place::Crew)
+                .text_color(c(ui::muted()))
+                .child(Icon::new(IconName::Users).size(px(15.)))
+                .child("Manage the crew")
+                .on_click(cx.listener(|this, _, _, cx| this.go(Place::Crew, cx))),
+        )
+        .child(
             row("side-add-bot", false)
                 .text_color(c(ui::faint()))
                 .child(add_mark())
@@ -1118,7 +1231,7 @@ impl Shell {
                 "#{}",
                 self.crew.store.thread_label(self.crew.store.thread_here())
             ),
-            Place::Inbox => "Needs you".into(),
+            Place::Inbox => "Inbox".into(),
             Place::History => "All jobs".into(),
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
@@ -1137,8 +1250,8 @@ impl Shell {
             },
             Place::Settings(_) => "Settings".into(),
             Place::Usage => "Usage".into(),
-            Place::Server => "Your server".into(),
-            Place::Screen => "Your server / Screen".into(),
+            Place::Server => "Machines".into(),
+            Place::Screen => "Machines / Screen".into(),
             Place::Browser(id) => match self.crew.store.job(id) {
                 Some(j) => format!("{} / {} / Browser", self.thread_crumb(j.thread), j.label()),
                 None => "Jobs / Browser".into(),
@@ -1186,7 +1299,7 @@ impl Shell {
             .enumerate()
             .flat_map(|(i, part)| {
                 let chev = Icon::new(IconName::ChevronRight)
-                    .size(px(14.))
+                    .size(px(12.))
                     .flex_none()
                     .text_color(c(ui::faint()))
                     .into_any_element();
@@ -1222,59 +1335,95 @@ impl Shell {
                 }
             })
             .collect();
-        let mono = folder
-            .chars()
-            .next()
-            .unwrap_or('S')
-            .to_uppercase()
-            .to_string();
+        // The title bar's left end lines up with the sidebar under it, and is
+        // never narrower than the Mac window buttons it holds.
+        let lights_w = if super::has_lights() { 84. } else { 0. };
+        let left_w = self.side_w().max(lights_w);
+        let slim = self.side_slim;
+        let can_hide = !global;
+        let can_back = !self.trail.is_empty();
         div()
             .h(px(super::TOP_H))
             .flex_none()
             .w_full()
             .flex()
             .items_center()
-            .gap(px(10.))
-            // The same inset as the thread's bar under it, so their right
-            // edges line up; none when the right sidebar's section ends it.
-            .pl(px(20.))
-            .pr(px(if right_open { 0. } else { 20. }))
+            .bg(c(ui::ground()))
+            .pr(px(if right_open { 0. } else { 10. }))
             .border_b_1()
-            .border_color(c(ui::line2()))
-            .text_size(px(13.))
-            // Where you are: the folder as a small tile, then the place.
+            .border_color(c(ui::line()))
+            .text_size(px(12.5))
+            // The Mac window buttons' corner, as wide as the sidebar below.
+            .child(
+                div()
+                    .w(px(left_w))
+                    .h_full()
+                    .flex_none()
+                    .relative()
+                    // Stand-ins for the Mac window buttons, for screenshots off a Mac.
+                    .when(!cfg!(target_os = "macos") && super::has_lights(), |d| {
+                        d.children(
+                            [0xff5f57u32, 0xfebc2e, 0x28c840]
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, col)| {
+                                    div()
+                                        .absolute()
+                                        .left(px(super::LIGHTS_X + 1. + i as f32 * 20.))
+                                        .top(px(super::LIGHTS_Y + 2.))
+                                        .size(px(12.))
+                                        .rounded_full()
+                                        .bg(c(col))
+                                }),
+                        )
+                    }),
+            )
+            // Show or hide the sidebar, and go back.
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(2.))
+                    .pl(px(6.))
+                    .pr(px(6.))
+                    .when(can_hide, |d| {
+                        d.child(
+                            small_btn(
+                                "top-side",
+                                if slim {
+                                    IconName::PanelLeftOpen
+                                } else {
+                                    IconName::PanelLeftClose
+                                },
+                            )
+                            .tooltip(tip(if slim {
+                                "Show the sidebar"
+                            } else {
+                                "Hide the sidebar"
+                            }))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.side_slim = !this.side_slim;
+                                cx.notify();
+                            })),
+                        )
+                    })
+                    .child(
+                        small_btn("top-back", IconName::ChevronLeft)
+                            .when(!can_back, |d| d.opacity(0.4))
+                            .tooltip(tip("Back"))
+                            .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
+                    ),
+            )
+            // Where you are: the project, then the place.
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(6.))
                     .min_w_0()
                     .when(!global, |d| {
-                        d.child(
-                            div()
-                                .h(px(24.))
-                                .flex()
-                                .flex_none()
-                                .items_center()
-                                .gap(px(8.))
-                                .text_color(c(ui::muted()))
-                                .child(
-                                    div()
-                                        .size(px(20.))
-                                        .rounded(px(5.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .bg(c(ui::raised()))
-                                        .border_1()
-                                        .border_color(c(ui::line()))
-                                        .text_size(px(10.5))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(c(ui::ink()))
-                                        .child(mono),
-                                )
-                                .child(folder),
-                        )
+                        d.child(div().flex_none().text_color(c(ui::muted())).child(folder))
                     })
                     .children(crumbs),
             )
@@ -1308,13 +1457,13 @@ impl Shell {
                                     d.w(px(220.))
                                 }
                             })
-                            .h(px(30.))
-                            .px(px(10.))
+                            .h(px(26.))
+                            .px(px(9.))
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .rounded(px(8.))
-                            .bg(c(ui::well()))
+                            .rounded(px(5.))
+                            .bg(c(ui::raised()))
                             .border_1()
                             .border_color(c(ui::line()))
                             .text_size(px(12.5))
@@ -1365,7 +1514,7 @@ impl Shell {
                         div()
                             .id("top-right-panel")
                             .relative()
-                            .size(px(30.))
+                            .size(px(28.))
                             .flex_none()
                             .flex()
                             .items_center()
