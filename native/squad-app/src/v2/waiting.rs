@@ -122,4 +122,172 @@ impl Shell {
         }
         Some(list)
     }
+
+    /// The night shift on the Jobs page: every job waiting for its time across
+    /// your projects, and what the night shift finished in the last day.
+    /// Nothing when both are empty.
+    pub(super) fn night_shift(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        let now = store::now();
+        let mut waiting: Vec<super::shift::Later> = self.crew.store.later.clone();
+        waiting.sort_by_key(|l| l.at);
+        let done: Vec<(
+            u64,
+            super::data::Member,
+            String,
+            String,
+            super::store::Status,
+        )> = self
+            .crew
+            .store
+            .jobs
+            .iter()
+            .filter(|j| j.shift && j.ended.is_some_and(|e| now.saturating_sub(e) < 86_400))
+            .map(|j| {
+                (
+                    j.id,
+                    j.bot,
+                    j.label().to_string(),
+                    j.folder.name.clone(),
+                    j.status,
+                )
+            })
+            .collect();
+        if waiting.is_empty() && done.is_empty() {
+            return None;
+        }
+        let row = || {
+            div()
+                .h(px(38.))
+                .px(px(14.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .border_t_1()
+                .border_color(c(ui::line2()))
+        };
+        let quiet = |text: String| {
+            div()
+                .flex_none()
+                .text_size(px(11.5))
+                .text_color(c(ui::faint()))
+                .child(text)
+        };
+        let title = |t: &'static str| {
+            div()
+                .px(px(14.))
+                .pt(px(10.))
+                .pb(px(6.))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .text_size(px(11.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(ui::muted()))
+                .child(t)
+        };
+        let mut card = ui::card().overflow_hidden().flex().flex_col();
+        if !waiting.is_empty() {
+            card = card.child(title("Waiting for their time"));
+            for l in waiting {
+                let id = l.id;
+                let when = if l.reading {
+                    "reading its issue".to_string()
+                } else if l.at == 0 || l.at <= now {
+                    format!("when {} is free", l.bot.name())
+                } else {
+                    super::shift::when_words(l.at, now)
+                };
+                card = card.child(
+                    row()
+                        .child(self.avatar(l.bot, 20.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(13.))
+                                .text_color(c(ui::ink()))
+                                .child(l.label().to_string()),
+                        )
+                        .child(quiet(l.folder.name.clone()))
+                        .child(
+                            div()
+                                .w(px(120.))
+                                .flex_none()
+                                .flex()
+                                .justify_end()
+                                .items_center()
+                                .gap(px(4.))
+                                .text_size(px(11.5))
+                                .text_color(c(ui::muted()))
+                                .child(Icon::new(IconName::Clock).size(px(11.)))
+                                .child(when),
+                        )
+                        .child(
+                            ui::ghost(("shift-now", id as usize), "Start now")
+                                .h(px(24.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    let st = Self::app_settings(cx);
+                                    this.crew.start_later_now(&st, id);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            ui::icon_btn(("shift-cancel", id as usize), IconName::X).on_click(
+                                cx.listener(move |this, _, _, cx| {
+                                    this.crew.cancel_later(id);
+                                    cx.notify();
+                                }),
+                            ),
+                        ),
+                );
+            }
+        }
+        if !done.is_empty() {
+            card = card.child(title("Done on the night shift"));
+            for (id, bot, label, project, status) in done {
+                card = card.child(
+                    row()
+                        .id(("shift-done", id as usize))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(ui::hover())))
+                        .child(self.avatar(bot, 20.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(13.))
+                                .text_color(c(ui::ink()))
+                                .child(label),
+                        )
+                        .child(quiet(project))
+                        .child(div().w(px(120.)).flex_none().flex().justify_end().child(
+                            ui::status(super::live::status_color(status), status.label()),
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                );
+            }
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .mt(px(8.))
+                        .child(
+                            Icon::new(IconName::Moon)
+                                .size(px(14.))
+                                .text_color(c(ui::muted())),
+                        )
+                        .child(ui::heading("Night shift", None, None)),
+                )
+                .child(card),
+        )
+    }
 }

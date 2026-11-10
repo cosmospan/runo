@@ -77,6 +77,8 @@ pub fn seed() -> Store {
     );
     j.status = Status::Shipped;
     j.shipped = "Merged into main as 3f2a1c9.".into();
+    // It ran on last night's shift.
+    j.shift = true;
     j.changes = vec![change("src/coupon.tsx", "M", 12, 4)];
     j.feed = vec![Item::Text(
         "The coupon field was hidden by the keyboard. It now scrolls into view.".into(),

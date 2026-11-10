@@ -756,6 +756,11 @@ pub struct Shell {
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
     splitting: bool,
+    /// The Run it later menu by the send button is open.
+    later_menu: bool,
+    /// When the next job sent from the thread's box starts, as /later words
+    /// ("tonight", "tomorrow 9am"); None sends it now.
+    later_pick: Option<String>,
     /// Terminal drawers' shells, by job, and the job whose drawer is open.
     terms: HashMap<u64, crate::pty::Shell>,
     term_open: Option<u64>,
@@ -1504,6 +1509,8 @@ impl Shell {
             diff_text: String::new(),
             racing: 0,
             splitting: false,
+            later_menu: false,
+            later_pick: None,
             terms: HashMap::new(),
             term_open: None,
             term_focus: cx.focus_handle(),

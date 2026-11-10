@@ -698,7 +698,7 @@ impl Shell {
         for (i, label, n) in [
             // Needs you has its own page, so it isn't a filter here too.
             (0usize, "All", all.len()),
-            (2, "Running", going.len()),
+            (2, "Working", going.len()),
             (3, "Done", done.len()),
             (4, "Problems", trouble.len()),
         ] {
@@ -769,9 +769,9 @@ impl Shell {
             );
 
         let groups = [
-            (1usize, "Needs you", ui::AMBER, needs),
-            (2, "Running", ui::BLUE, going),
-            (4, "Stopped early", ui::RED, trouble),
+            (2usize, "Working", ui::BLUE, going),
+            (1, "To review", ui::AMBER, needs),
+            (4, "Stopped", ui::RED, trouble),
             (3, "Done", ui::GREEN, done),
         ];
         // The board: a column per state, side by side. The list: one under another.
@@ -858,6 +858,8 @@ impl Shell {
             );
         }
 
+        // Under the board: what waits for the night shift, and what it did.
+        let night = self.night_shift(cx);
         div()
             .id("jobs-page")
             .size_full()
@@ -909,7 +911,8 @@ impl Shell {
                             .child(div().flex_1())
                             .child(self.board_toggle(board, cx)),
                     )
-                    .child(body),
+                    .child(body)
+                    .children(night),
             )
             .into_any_element()
     }
@@ -1296,11 +1299,16 @@ fn inbox_group(j: &Job) -> (u8, &'static str) {
     }
 }
 
-/// Splits jobs into needs you, running, done, and stopped early, keeping order.
+/// Splits jobs into to review, working, done, and stopped, keeping order. A
+/// job that stopped goes with the stopped ones even before you've seen it.
 fn sort_jobs(jobs: &[Job]) -> (Vec<Job>, Vec<Job>, Vec<Job>, Vec<Job>) {
     let mut out = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for j in jobs {
-        let bin = if j.needs_you() {
+        let stopped = matches!(
+            j.status,
+            Status::Failed | Status::Interrupted | Status::Stopped
+        );
+        let bin = if j.needs_you() && !stopped {
             &mut out.0
         } else if matches!(j.status, Status::Running | Status::Shipping) {
             &mut out.1
@@ -1413,6 +1421,7 @@ mod tests {
             job(2, Status::Done, false),
             job(3, Status::Review, true),
             job(4, Status::Failed, true),
+            job(7, Status::Failed, false),
             job(5, Status::Done, true),
             job(6, Status::Shipping, true),
         ];
@@ -1421,6 +1430,6 @@ mod tests {
         assert_eq!(ids(needs), [2, 3]);
         assert_eq!(ids(going), [1, 6]);
         assert_eq!(ids(done), [5]);
-        assert_eq!(ids(trouble), [4]);
+        assert_eq!(ids(trouble), [4, 7]);
     }
 }
