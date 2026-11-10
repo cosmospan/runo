@@ -132,20 +132,28 @@ impl Shell {
                 .child(
                     div()
                         .flex()
-                        .items_center()
+                        .items_start()
                         .gap(px(8.))
                         .px(px(12.))
                         .pt(px(10.))
                         .pb(px(6.))
                         .text_size(px(13.))
+                        .line_height(px(18.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(ui::ink()))
                         .child(
                             Icon::new(IconName::ShieldAlert)
+                                .mt(px(2.))
                                 .size(px(14.))
+                                .flex_none()
                                 .text_color(c(tone.0)),
                         )
-                        .child("Seatbelt: Shipper stopped before it left your computer"),
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child("Seatbelt: Shipper stopped before it left your computer"),
+                        ),
                 )
                 .child(rows)
                 .child(

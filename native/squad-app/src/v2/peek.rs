@@ -1,8 +1,8 @@
 //! A job, two ways. The peek pane opens beside the thread when you click a
 //! job's card: what it is, where it stands, its changes and the buttons to
 //! decide, without leaving the conversation. Expand opens the job workspace:
-//! the bot's conversation always on the left, and the job's Changes, Plan,
-//! Browser, Terminal and Files as tabs on the right.
+//! the bot's conversation always on the left, and the job's Changes,
+//! Checks, Browser, Terminal and Files as tabs on the right.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder;
@@ -23,7 +23,7 @@ pub(super) const TALK_W: f32 = 460.;
 pub(super) enum Tab {
     #[default]
     Changes,
-    Plan,
+    Checks,
     Browser,
     Terminal,
     Files,
@@ -32,7 +32,7 @@ pub(super) enum Tab {
 impl Tab {
     pub(super) const ALL: [Tab; 5] = [
         Tab::Changes,
-        Tab::Plan,
+        Tab::Checks,
         Tab::Browser,
         Tab::Terminal,
         Tab::Files,
@@ -41,7 +41,7 @@ impl Tab {
     pub(super) fn name(self) -> &'static str {
         match self {
             Tab::Changes => "Changes",
-            Tab::Plan => "Plan",
+            Tab::Checks => "Checks",
             Tab::Browser => "Browser",
             Tab::Terminal => "Terminal",
             Tab::Files => "Files",
@@ -272,14 +272,41 @@ impl Shell {
                 )
                 .into_any_element(),
             },
-            Tab::Plan => div()
-                .id("ws-plan")
-                .size_full()
-                .overflow_y_scroll()
-                .px(px(24.))
-                .py(px(16.))
-                .child(div().max_w(px(640.)).child(self.job_details(&job, cx)))
-                .into_any_element(),
+            Tab::Checks => {
+                // Checker's run when there is one, then where the job stands
+                // and its plan.
+                let checks = (!job.checks.is_empty() || job.checking).then(|| {
+                    ui::card()
+                        .overflow_hidden()
+                        .child(self.checks_block(&job, cx))
+                });
+                let none = (job.checks.is_empty() && !job.checking).then(|| {
+                    div().text_size(px(13.)).text_color(c(ui::muted())).child(
+                        if job.mode.writes() {
+                            "Checker runs the project's checks when the bot finishes."
+                        } else {
+                            "A job that only reads has no checks to run."
+                        },
+                    )
+                });
+                div()
+                    .id("ws-checks")
+                    .size_full()
+                    .overflow_y_scroll()
+                    .px(px(24.))
+                    .py(px(16.))
+                    .child(
+                        div()
+                            .max_w(px(720.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(14.))
+                            .children(checks)
+                            .children(none)
+                            .child(self.job_details(&job, cx)),
+                    )
+                    .into_any_element()
+            }
             Tab::Browser => {
                 if self.web.job == id && self.web.live() {
                     self.web_page(window, cx)

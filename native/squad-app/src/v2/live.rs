@@ -208,16 +208,7 @@ impl Shell {
                     )
                 },
             )
-            // Its browser, terminal and folder, under one Open menu.
-            .map(|d| {
-                let id = job.id;
-                d.child(
-                    ui::ghost_i("job-open", IconName::ChevronDown, "Open").on_mouse_down(
-                        MouseButton::Left,
-                        self.on_menu(super::menu::Ctx::JobOpen(id), cx),
-                    ),
-                )
-            })
+            // Its browser, terminal and files are the workspace's tabs.
             .when(running && !job.remote_on.is_empty(), |d| {
                 d.child(self.screen_button("job-screen", "Watch its screen", cx))
             })
@@ -503,11 +494,18 @@ impl Shell {
                             .child(face)
                             .child(
                                 div()
+                                    .flex_none()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c(by.accent()))
                                     .child(by.name()),
                             )
-                            .child(div().flex_1().text_color(c(ui::body())).child(t.clone())),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .text_color(c(ui::body()))
+                                    .child(t.clone()),
+                            ),
                     )
                 }
                 Item::Error(t) => feed.child(
