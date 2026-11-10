@@ -70,6 +70,70 @@ pub fn isolate(folder: &str, title: &str, id: u64) -> Result<Option<Isolated>, S
     }))
 }
 
+/// Where a job sent from another computer starts: the branch that computer
+/// pushed to the hub for it, and the exact commit it starts from. The server
+/// starts there rather than from whatever its own copy has checked out.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Handoff {
+    pub branch: String,
+    pub base_sha: String,
+    /// The branch it was on there, which the job lands back on.
+    pub base: String,
+}
+
+/// A branch name another computer may hand over: Squad's own `squad/…`,
+/// nothing git or a shell could read as anything else.
+pub fn handoff_branch_ok(b: &str) -> bool {
+    b.starts_with("squad/")
+        && b.len() < 200
+        && !b.contains("..")
+        && !b.ends_with('/')
+        && !b.ends_with(".lock")
+        && b.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
+}
+
+/// [`isolate`] for a job handed over from another computer: its own branch
+/// and worktree at `h.base_sha`, which must already be in `folder`. Keeps
+/// the branch name it was given unless something here already has it.
+pub fn isolate_at(folder: &str, h: &Handoff) -> Result<Isolated, String> {
+    if !git::is_repo(folder) || !git::has_commits(folder) {
+        return Err("the server's copy isn't a git repository".into());
+    }
+    let sha_ok = h.base_sha.len() >= 7 && h.base_sha.chars().all(|c| c.is_ascii_hexdigit());
+    if !sha_ok || git::rev(folder, &h.base_sha).is_none() {
+        return Err(format!(
+            "the server doesn't have commit {}",
+            h.base_sha.chars().take(7).collect::<String>()
+        ));
+    }
+    let wanted = if handoff_branch_ok(&h.branch) {
+        h.branch.clone()
+    } else {
+        "squad/job".to_string()
+    };
+    let branch = git::unique_branch(&wanted, |b| {
+        git::has_branch(folder, b) || git::worktree_path(folder, b).exists()
+    });
+    let worktree = git::add_worktree(folder, &branch, Some(&h.base_sha))?;
+    let _ = git::copy_included(folder, &worktree);
+    if let Some(p) = super::project::load(&worktree) {
+        super::project::copy_files(&p, folder, &worktree);
+    }
+    let base = if h.base.trim().is_empty() {
+        git::default_branch(folder)
+    } else {
+        h.base.trim().to_string()
+    };
+    Ok(Isolated {
+        branch,
+        worktree,
+        base,
+        base_sha: h.base_sha.clone(),
+    })
+}
+
 /// What the job changed in its worktree since it started: commits it made and
 /// work it left uncommitted.
 pub fn changed(job: &Job) -> Vec<Changed> {

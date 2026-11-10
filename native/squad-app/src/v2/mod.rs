@@ -2307,7 +2307,7 @@ impl Shell {
         let has = if link.path_for(&f, &remote).is_some() {
             "It has this project.".to_string()
         } else {
-            "It doesn't have this project yet; Squad Code copies it there first, by itself."
+            "It doesn't have this project yet; Squad Code sets it up there through git first, by itself."
                 .to_string()
         };
         let usual = match link.cfg.run.as_str() {

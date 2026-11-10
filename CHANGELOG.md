@@ -10,6 +10,7 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ### Changed
 
+- Your server gets its work through git, never by copying files. A project goes there as a clone of your branch (no `.env`, nothing uncommitted, nothing git ignores), and each job gets its own branch, made here at the commit you're on and handed over through a hub repository on the server. The job starts from exactly that commit, even when the server's copy is on another branch, and if the hand-off fails it runs here instead of starting from old code. When you approve, its branch comes back without touching a branch of yours with the same name. Projects copied there before keep working: they get a hub the first time a job goes to them.
 - A simpler window, with each thing shown once:
   - The sidebar keeps Needs you, All jobs and Crew. Usage opens from the spend in the status bar, the Try list is gone (its links are in Settings), and the sidebar's search and new-job buttons are gone too: the search box in the top bar and the thread's box do those.
   - A job's page shows its status once, in the header. The right sidebar's first section is now Summary (time, turns, cost and a line on where it's at), and it lists changed files only when the review card doesn't. A job that only reads no longer shows an empty Files changed.

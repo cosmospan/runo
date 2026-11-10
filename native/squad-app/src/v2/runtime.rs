@@ -82,6 +82,10 @@ struct Summing {
 
 pub struct Runtime {
     pub store: Store,
+    /// Where the next job started for a client starts: the branch and commit
+    /// it handed over ([`work::Handoff`]). Taken by the job that starts next,
+    /// or kept with it while it waits in line.
+    pub handoff: Option<work::Handoff>,
     /// A thread summary being written, one at a time.
     summing: Option<Summing>,
     /// When summaries were last checked for being due.
@@ -126,7 +130,7 @@ pub struct Runtime {
     /// Bots' messages to a bot that's busy, delivered once it's free.
     relays: Vec<Relay>,
     /// Server jobs whose work is coming home to be approved here.
-    bringing: Vec<(u64, Receiver<Result<String, String>>)>,
+    bringing: Vec<(u64, Receiver<super::remote::Home>)>,
     /// Titles and recaps Peek is writing, by job.
     peeking: Vec<(u64, Receiver<brain::tasks::Said>)>,
     /// New bots the crew's engine is setting up for the project, by made id,
@@ -237,6 +241,7 @@ impl Runtime {
             feedback_due: Vec::new(),
             learning: Vec::new(),
             updating: Vec::new(),
+            handoff: None,
         }
     }
 
@@ -318,6 +323,7 @@ impl Runtime {
         // An issue it names is read first; the job starts once it's in.
         if let Some(r) = super::issues::find(&text) {
             let id = self.queue_later(bot, mode, text, folder, 0);
+            self.keep_handoff(id);
             self.say(format!(
                 "Reading {} first. {} starts as soon as it's read.",
                 r.label(),
@@ -327,7 +333,8 @@ impl Runtime {
         }
         if let Some(busy) = self.store.busy(bot) {
             let (title, id) = (busy.title.clone(), busy.id);
-            self.queue_later(bot, mode, text, folder, 0);
+            let later = self.queue_later(bot, mode, text, folder, 0);
+            self.keep_handoff(later);
             self.say(format!(
                 "{} is still on \u{201c}{title}\u{201d}. This one is next in line and starts as soon as it's free.",
                 bot.name()
@@ -646,7 +653,7 @@ impl Runtime {
             }
             None => {
                 job.feed.push(store::Item::Note(format!(
-                    "Copying {} to your server, {name}, first. Then it runs there.",
+                    "Setting {} up on your server, {name}, through git first. Then it runs there.",
                     job.folder.name
                 )));
                 link.copy_then_send(job.id, &job.folder, body);
@@ -667,9 +674,32 @@ impl Runtime {
     /// engine.
     fn launch(&mut self, st: &AppSettings, job: &mut store::Job, text: &str) {
         let mode = job.mode;
+        // Sent from another computer: it starts on the branch that computer
+        // handed over, at the commit it was on there.
+        let handoff = self.handoff.take();
+        let mut handed = false;
+        if let (true, Some(h)) = (mode.writes(), handoff) {
+            match work::isolate_at(&job.folder.path, &h) {
+                Ok(iso) => {
+                    handed = true;
+                    job.feed.push(store::Item::Note(format!(
+                        "Working on {}, from your commit {}, so it starts exactly where you were.",
+                        iso.branch,
+                        iso.base_sha.chars().take(7).collect::<String>()
+                    )));
+                    job.branch = iso.branch;
+                    job.worktree = iso.worktree;
+                    job.base = iso.base;
+                    job.base_sha = iso.base_sha;
+                }
+                Err(why) => job.feed.push(store::Item::Note(format!(
+                    "Couldn't start from the commit you sent ({why}), so it starts from the server's copy."
+                ))),
+            }
+        }
         // A job that may change files gets its own branch and worktree, so your
         // checkout stays as it is and its changes wait for your approval.
-        if mode.writes() {
+        if mode.writes() && !handed {
             match work::isolate(&job.folder.path, text, job.id) {
                 Ok(Some(iso)) => {
                     job.feed.push(store::Item::Note(format!(
@@ -1581,9 +1611,10 @@ impl Runtime {
             };
             let name = j.remote_on.clone();
             match result {
-                Ok(worktree) => {
+                Ok((worktree, branch)) => {
                     let remote = j.remote;
                     j.worktree = worktree;
+                    j.branch = branch;
                     j.remote_on.clear();
                     j.remote = 0;
                     j.remote_dir.clear();
