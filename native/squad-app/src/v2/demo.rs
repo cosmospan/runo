@@ -172,8 +172,29 @@ pub fn seed() -> Store {
         tool("Edit src/checkout/pay.ts", "edit", 1),
         tool("Run npm test", "bash", 1),
         Item::Text("A retry after a timeout sent the charge again. Each charge now carries a key, so the payment service ignores the repeat. I added a test that retries twice and checks there's one charge.".into()),
+        Item::You("Also cover a retry that lands after the first charge went through.".into()),
+        tool("Edit src/checkout/pay.test.ts", "edit", 1),
+        Item::Text("Added that case: the second call finds the key and returns the first charge.".into()),
         Item::By(Member::Fin, "Heads up: #9 Add gift cards changes the same lines, in pay.ts around line 22. Whichever is approved second will need its branch brought up to date.".into()),
         Item::By(Member::Shipper, "I stopped before pushing. Something in this change shouldn't leave your computer: Looks like a Stripe secret key (src/checkout/pay.ts:41), and 1 more.".into()),
+    ];
+    // Where its files stood before each turn, so it can be rewound.
+    if j.worktree.is_empty() {
+        j.worktree = format!("{}/.squad/work/4", folder.path);
+    }
+    j.marks = vec![
+        super::rewind::Mark {
+            feed_at: 0,
+            sha: "demo".into(),
+            said: "Stop double charges on retry".into(),
+            at: t - 1_800,
+        },
+        super::rewind::Mark {
+            feed_at: 5,
+            sha: "demo".into(),
+            said: "Also cover a retry that lands after the first charge went through.".into(),
+            at: t - 1_500,
+        },
     ];
     jobs.push(j);
 

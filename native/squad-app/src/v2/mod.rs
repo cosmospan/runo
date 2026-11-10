@@ -763,6 +763,8 @@ pub struct Shell {
     later_pick: Option<String>,
     /// The project's open issues on its Overview, as last read.
     issue_list: Option<IssueList>,
+    /// A rewind waiting for its OK: the job and the point.
+    rewind_ask: Option<(u64, usize)>,
     /// Terminal drawers' shells, by job, and the job whose drawer is open.
     terms: HashMap<u64, crate::pty::Shell>,
     term_open: Option<u64>,
@@ -1514,6 +1516,7 @@ impl Shell {
             later_menu: false,
             later_pick: None,
             issue_list: None,
+            rewind_ask: None,
             terms: HashMap::new(),
             term_open: None,
             term_focus: cx.focus_handle(),
@@ -2885,10 +2888,35 @@ impl Shell {
     /// Rewinds a job to before its turn `k`: its files go back and the
     /// later turns leave its feed.
     pub(super) fn rewind_job(&mut self, id: u64, k: usize, cx: &mut Context<Self>) {
+        self.rewind_ask = None;
         if let Err(why) = self.crew.rewind(id, k) {
             self.say(why);
         }
         cx.notify();
+    }
+
+    /// Rewinds, then puts the message it went back over in the job's box, to
+    /// change and send again.
+    pub(super) fn rewind_and_edit(
+        &mut self,
+        id: u64,
+        k: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let said = self.crew.store.job(id).and_then(|j| {
+            let at = j.marks.get(k)?.feed_at;
+            match j.feed.get(at) {
+                Some(store::Item::You(t)) => Some(t.clone()),
+                _ => j.marks.get(k).map(|m| m.said.clone()),
+            }
+        });
+        self.rewind_job(id, k, cx);
+        if let Some(text) = said {
+            self.live_input
+                .update(cx, |i, cx| i.set_value(text, window, cx));
+            self.live_input.read(cx).focus_handle(cx).focus(window, cx);
+        }
     }
 
     /// A stopped or interrupted job picks up where it was.
