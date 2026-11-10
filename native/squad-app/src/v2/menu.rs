@@ -37,6 +37,8 @@ pub(super) enum Ctx {
         edit: Option<String>,
         job: Option<u64>,
     },
+    /// The file open in the viewer, from its Open with button.
+    File(PathBuf),
 }
 
 #[derive(Clone)]
@@ -65,6 +67,8 @@ enum Act {
     Copy(String, &'static str),
     Reveal(PathBuf),
     OpenLink(String),
+    /// A file, in the app at the second path, or its default app.
+    OpenWith(PathBuf, Option<PathBuf>),
 }
 
 struct Item {
@@ -157,7 +161,7 @@ impl Shell {
         true
     }
 
-    fn menu_items(&self, target: &Ctx) -> Vec<Entry> {
+    fn menu_items(&mut self, target: &Ctx) -> Vec<Entry> {
         let store = &self.crew.store;
         match target {
             Ctx::Project(path) => {
@@ -269,6 +273,43 @@ impl Shell {
                 v
             }
             Ctx::Job(id) => self.job_items(*id),
+            Ctx::File(path) => {
+                let apps = self.viewer_apps();
+                let mut v: Vec<Entry> = Vec::new();
+                if apps.is_empty() {
+                    v.push(item(
+                        "Open in its default app",
+                        IconName::SquareArrowOutUpRight,
+                        Act::OpenWith(path.clone(), None),
+                    ));
+                }
+                for (i, (name, app)) in apps.into_iter().enumerate() {
+                    v.push(item(
+                        if i == 0 {
+                            format!("{name} (default)")
+                        } else {
+                            name
+                        },
+                        IconName::AppWindow,
+                        Act::OpenWith(path.clone(), Some(app)),
+                    ));
+                    if i == 0 {
+                        v.push(None);
+                    }
+                }
+                v.push(None);
+                v.push(item(
+                    "Copy path",
+                    IconName::Copy,
+                    Act::Copy(path.display().to_string(), "path"),
+                ));
+                v.push(item(
+                    reveal_label(),
+                    IconName::FolderOpen,
+                    Act::Reveal(path.clone()),
+                ));
+                v
+            }
             Ctx::Message {
                 copy,
                 reply,
@@ -450,6 +491,7 @@ impl Shell {
             }
             Act::Reveal(path) => cx.reveal_path(&path),
             Act::OpenLink(url) => cx.open_url(&url),
+            Act::OpenWith(path, app) => super::viewer::open_in(&path, app.as_deref(), cx),
         }
         cx.notify();
     }
