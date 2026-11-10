@@ -78,6 +78,7 @@ flowchart LR
 ```
 
 - **Just talk.** Type in a thread the way you'd message a teammate. Peek decides whether to answer, ask back, or turn it into jobs. `@` brings a bot in, `#` points at another thread, and `/` has the rest: `/plan`, `/race`, `/ask`, `/thread`, `/rename`, `/archive`.
+- **One job per bot per thread.** Every job belongs to the bot you asked (or the one Peek picked when you didn't name one), and that bot does its own kind of work. Until you approve its job, whatever you say to that bot in that thread goes into the same job, on the same branch. After that, your next ask starts a new one. Each bot also keeps a short notebook of its recent jobs in each project.
 - **Plans before work.** For anything bigger than one step, Peek posts a plan card: the steps and the bot for each. Nothing starts until you press its **Start** button.
 - **Your checkout is never touched.** Every job that changes files gets its own branch (`squad/<slug>`) and worktree, so several jobs run side by side without stepping on each other.
 - **Proven before you look.** When a job finishes, Checker runs the project's checks in its worktree, and the job card shows the result next to the diff.
@@ -249,7 +250,7 @@ checks = ["pnpm lint", "pnpm test"] # what Checker runs
 Every job you can start in the window you can start from a terminal, including the one built into each job. `squad` is installed for you in `~/.squadcode/bin`.
 
 ```bash
-squad do make the checkout remember the cart   # Peek picks the bot and the kind of job
+squad do make the checkout remember the cart   # Peek picks the bot
 squad fix the login redirect loops on Safari   # a Fix job, for Fixer
 squad new --bot Guard look for leaked keys     # a job for one bot
 squad ls                                       # jobs, newest first
@@ -269,7 +270,7 @@ squad brain why tidy up the old feature flags  # where Peek would send a job, an
 | `squad new <words…>` | A Build job in this folder |
 | `squad fix\|test\|tidy\|review <words…>` | A job of that kind |
 | `squad new --bot <name> <words…>` | A job for one bot |
-| `squad do <words…>` | Your engine picks the bot and the kind of job |
+| `squad do <words…>` | Your engine picks the bot |
 | `squad approve <id>` / `discard <id>` / `stop <id>` | Approve a job waiting for review, throw its changes away, or stop it |
 | `squad later [<when> <words…>\|cancel <id>]` | Start a job later (tonight, 2am, in 2h, tomorrow at 7am), or list and cancel waiting ones |
 | `squad rewind <id> [n]` | Put a job back to before your message n |

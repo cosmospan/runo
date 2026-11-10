@@ -1730,19 +1730,6 @@ impl Shell {
         let Some((who, rest)) = mention else {
             return self.read_first(text, cx);
         };
-        // Stepping into the bots' talk: "@Builder ..." carries on Builder's
-        // job there, on its branch, rather than starting over.
-        if self.place == Place::Today && !rest.trim().is_empty() {
-            let here = self.crew.store.thread_here();
-            let folder = self.crew.store.folder().map(|f| f.path.clone());
-            if let Some(id) = folder.and_then(|f| self.crew.talking_job(&f, here, who)) {
-                let st = Self::app_settings(cx);
-                self.crew.step_in(&st, id, rest);
-                self.crew.store.save();
-                cx.notify();
-                return;
-            }
-        }
         if self.place == Place::Today {
             let here = self.crew.store.thread_here();
             if let Some(t) = self.crew.store.threads.iter_mut().find(|t| t.id == here) {
@@ -1837,7 +1824,7 @@ impl Shell {
                 .filter(|j| j.status == Status::Running && j.folder.path == folder)
                 .map(|j| format!("#{} {}: {}", j.id, j.bot.name(), j.label()))
                 .collect();
-            let (worked, in_thread) = self.bots_here();
+            let in_thread = self.open_here_bots();
             let server = self.server_note(&folder);
             let thread = self.crew.store.thread_label(here);
             let summary = self.crew.store.summary_brief(&folder, here);
@@ -1848,7 +1835,6 @@ impl Shell {
                 recent: &recent,
                 crew: &crew,
                 running: &running,
-                worked: &worked,
                 in_thread: &in_thread,
                 server: &server,
             };
@@ -1903,7 +1889,7 @@ impl Shell {
             (j.bot.name().to_string(), j.label().to_string()),
         ];
         let crew = Member::all();
-        let (worked, in_thread) = self.bots_here();
+        let in_thread = self.open_here_bots();
         let server = self.server_note(&folder);
         let seen = brain::think::Seen {
             project: &project,
@@ -1912,7 +1898,6 @@ impl Shell {
             recent: &recent,
             crew: &crew,
             running: &[],
-            worked: &worked,
             in_thread: &in_thread,
             server: &server,
         };
@@ -2168,7 +2153,13 @@ impl Shell {
                 cx.notify();
             }
             brain::front::Front::Confirm { why, route } => {
-                let id = says(self, why, vec!["Go ahead".into(), "Cancel".into()]);
+                // Switching to another bot reads as what it does.
+                let yes = if route.by == brain::front::SWITCH {
+                    format!("Give it to {}", route.bot.name())
+                } else {
+                    "Go ahead".to_string()
+                };
+                let id = says(self, why, vec![yes, "Cancel".into()]);
                 self.confirming = Some((id, text, route));
                 cx.notify();
             }
@@ -2182,8 +2173,7 @@ impl Shell {
             }
             brain::front::Front::Hand(route) => {
                 drop_pending(self);
-                // Peek says why, and whether it's onboarding the bot or
-                // inviting it back, on the job's card.
+                // Peek says why it's this bot, on the job's card.
                 let line = self.handoff_line(&route, line);
                 self.hand_with_line(route, text, line, cx);
             }
@@ -2204,8 +2194,8 @@ impl Shell {
         }
         match self.confirming.take() {
             Some((id, text, route)) if id == talk => {
-                if choice == "Go ahead" {
-                    let said = matches!(route.by.as_str(), "engine" | "learned")
+                if choice == "Go ahead" || choice == format!("Give it to {}", route.bot.name()) {
+                    let said = matches!(route.by.as_str(), "engine" | "learned" | "switch")
                         .then(|| route.why.clone());
                     let line = self.handoff_line(&route, said);
                     self.hand_with_line(route, text, line, cx);
@@ -2260,41 +2250,17 @@ impl Shell {
         format!("this computer, or the person's server {name} ({state}). {has} {usual}")
     }
 
-    /// The bots that have worked on the open project, and those in this
-    /// thread.
-    fn bots_here(&self) -> (Vec<Member>, Vec<Member>) {
-        let folder = self
-            .crew
-            .store
-            .folder()
-            .map(|f| f.path.clone())
-            .unwrap_or_default();
-        let here = self.crew.store.thread_here();
-        let mut worked = Vec::new();
-        let mut in_thread = Vec::new();
-        for j in self
-            .crew
-            .store
-            .jobs
-            .iter()
-            .filter(|j| j.folder.path == folder)
-        {
-            if !worked.contains(&j.bot) {
-                worked.push(j.bot);
-            }
-            if j.thread == here && !in_thread.contains(&j.bot) {
-                in_thread.push(j.bot);
-            }
-        }
-        (worked, in_thread)
+    /// The bots with an open job in the thread you're in.
+    fn open_here_bots(&self) -> Vec<Member> {
+        Member::all()
+            .into_iter()
+            .filter(|b| self.open_here(*b).is_some())
+            .collect()
     }
 
-    /// Peek's line on a hand-off: its reason (the engine's, unless that
-    /// already names who's coming in), then whether it's onboarding the bot,
-    /// inviting it, or it's already here.
+    /// Peek's line on a hand-off: why this bot (the engine's reason, unless
+    /// that names the bot), and where it runs when that was asked for.
     fn handoff_line(&self, route: &brain::route::Route, said: Option<String>) -> String {
-        let (worked, in_thread) = self.bots_here();
-        let joins = brain::route::Joins::of(route.bot, &worked, &in_thread);
         let reason = said
             .map(|s| s.trim().to_string())
             .filter(|s| {
@@ -2306,7 +2272,7 @@ impl Shell {
             ("here", _) => " It runs on this computer.".to_string(),
             _ => String::new(),
         };
-        format!("{reason} {}{place}", joins.line(route.bot))
+        format!("{reason}{place}")
     }
 
     /// Starts an ask the way Peek routed it, with Peek's line on the new
@@ -2354,10 +2320,10 @@ impl Shell {
         text: String,
         cx: &mut Context<Self>,
     ) {
-        let crew = Member::all();
         let (target, mode, pinned) = (self.target, self.mode, self.mode_pinned);
-        self.target = crew.contains(&route.bot).then_some(route.bot);
-        self.mode = route.mode;
+        // The bot Peek picked takes it, doing what that bot does.
+        self.target = Some(route.bot);
+        self.mode = route.bot.mode();
         self.mode_pinned = true;
         // "do it on the VPS": this job runs there, whatever the usual choice.
         self.crew.where_next = (!route.site.is_empty()).then(|| route.site.clone());
@@ -2374,6 +2340,7 @@ impl Shell {
         let mut plan = false;
         let mut race = 0;
         let mut later: Option<u64> = None;
+        let mut asked = false;
         if let Some(rest) = text.clone().strip_prefix('/') {
             let (cmd, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
             let arg = arg.trim().to_string();
@@ -2484,6 +2451,7 @@ impl Shell {
                 "ask" => {
                     self.mode = Mode::Ask;
                     self.mode_pinned = true;
+                    asked = true;
                 }
                 _ => {
                     self.say(format!(
@@ -2496,8 +2464,12 @@ impl Shell {
                 text = arg;
             }
         }
-        if !self.mode_pinned {
-            self.mode = Mode::guess(&text);
+        // A named bot does what it does; the kind of work is only guessed
+        // when nobody was named or picked.
+        match self.target {
+            Some(t) if !asked => self.mode = t.mode(),
+            _ if !self.mode_pinned => self.mode = Mode::guess(&text),
+            _ => {}
         }
         if plan && !self.mode.writes() {
             self.mode = Mode::Build;
@@ -2516,9 +2488,9 @@ impl Shell {
             return;
         }
         if !Member::all().contains(&self.doer()) {
-            // Nobody on the crew does this kind of work yet: Fin asks first.
+            // That bot isn't on the crew yet: Peek offers to add it first.
             self.offer = Some(Offer {
-                who: Member::for_mode(self.mode),
+                who: self.doer(),
                 mode: self.mode,
                 text,
                 goal: plan && self.mode.writes(),
@@ -2570,15 +2542,24 @@ impl Shell {
             self.begin_goal(text, folder, cx);
             return;
         }
+        // The one rule: the bot's open job in this thread takes it, else
+        // it's a new job.
+        if self.place == Place::Today {
+            if let Some(id) = self.open_here(doer) {
+                let st = Self::app_settings(cx);
+                self.crew.add_to_job(&st, id, text);
+                self.crew.store.save();
+                cx.notify();
+                return;
+            }
+        }
         self.start_job_in(doer, mode, text, folder, cx);
     }
 
-    /// The bot a job from Today's box goes to: a made bot picked for it, else the
-    /// crew member for the mode.
+    /// The bot a job from the box goes to: the one named or picked for it,
+    /// else the crew's bot for the kind of work.
     fn doer(&self) -> Member {
         self.target
-            .filter(|t| t.mode() == self.mode && Member::all().contains(t))
-            .or_else(|| self.thread_doer())
             .or_else(|| Member::doer_for(self.mode))
             .unwrap_or(Member::for_mode(self.mode))
     }
@@ -2591,24 +2572,12 @@ impl Shell {
             .unwrap_or(Member::Fin)
     }
 
-    /// In a thread with its own bots, the one of them that does this kind of
-    /// work, so the thread's work goes to the bots you put in it.
-    fn thread_doer(&self) -> Option<Member> {
-        if self.place != Place::Today {
-            return None;
-        }
-        let here = self.crew.store.thread_here();
-        let t = self.crew.store.threads.iter().find(|t| t.id == here)?;
-        let crew = Member::all();
-        t.bots
-            .iter()
-            .copied()
-            // Shipper and Peek take no jobs of their own, as in doer_for.
-            .find(|b| {
-                !matches!(b, Member::Shipper | Member::Fin)
-                    && b.mode() == self.mode
-                    && crew.contains(b)
-            })
+    /// `who`'s open job in the thread you're in, which what you say to it
+    /// goes into.
+    pub(super) fn open_here(&self, who: Member) -> Option<u64> {
+        let folder = self.crew.store.folder()?.path.clone();
+        self.crew
+            .open_job(&folder, self.crew.store.thread_here(), who)
     }
 
     /// Puts built-in bots on the crew, with one line saying so.

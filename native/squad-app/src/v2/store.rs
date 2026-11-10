@@ -1494,6 +1494,49 @@ impl Store {
     }
 
     /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
+    /// `who`'s notebook for the project at `folder`: a line for each of its
+    /// last few jobs there, newest first, so a new job or a DM starts
+    /// knowing the bot's own past work in this project. Its lessons are
+    /// added where the bot's instructions are written. Empty when it has
+    /// none.
+    pub fn notebook(&self, who: Member, folder: &str) -> String {
+        let mut mine: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.bot == who && j.folder.path == folder)
+            .filter(|j| j.goal == 0 && (j.race == 0 || j.race == j.id))
+            .collect();
+        mine.sort_by_key(|j| std::cmp::Reverse(j.started));
+        let lines: Vec<String> = mine
+            .into_iter()
+            .take(NOTEBOOK)
+            .map(|j| {
+                let last: String = j
+                    .last_words()
+                    .and_then(|w| w.lines().next())
+                    .unwrap_or("")
+                    .chars()
+                    .take(160)
+                    .collect();
+                format!(
+                    "- #{} \"{}\" ({}) {last}",
+                    j.id,
+                    j.label(),
+                    j.status.label()
+                )
+                .trim_end()
+                .to_string()
+            })
+            .collect();
+        if lines.is_empty() {
+            return String::new();
+        }
+        format!(
+            "Your recent jobs in this project, newest first:\n{}",
+            lines.join("\n")
+        )
+    }
+
     pub fn dm_jobs(&self, who: Member) -> Vec<&Job> {
         let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
         let mut v: Vec<&Job> = self
@@ -1506,6 +1549,9 @@ impl Store {
         v
     }
 }
+
+/// Jobs a bot's notebook lists.
+pub const NOTEBOOK: usize = 5;
 
 /// A step in plain words: "Ran cat > package.json <<'EOF'" reads "Writing
 /// package.json", "Ran npm install" reads "Installing packages". `now` picks
@@ -2038,6 +2084,34 @@ mod tests {
         s.current = 0;
         assert_eq!(s.chat(Member::Builder)[0].text, "in a");
         assert_eq!(s.dm_jobs(Member::Builder).len(), 1);
+    }
+
+    #[test]
+    fn a_bots_notebook_is_its_own_recent_jobs_in_that_project() {
+        let mut s = Store::default();
+        let job = |id, bot, path: &str, title: &str| Job {
+            id,
+            bot,
+            title: title.into(),
+            started: id,
+            folder: Folder {
+                path: path.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(s.notebook(Member::Builder, "/a").is_empty());
+        for id in 1..=7 {
+            s.jobs
+                .push(job(id, Member::Builder, "/a", &format!("task {id}")));
+        }
+        s.jobs.push(job(8, Member::Guard, "/a", "a review"));
+        s.jobs.push(job(9, Member::Builder, "/b", "elsewhere"));
+        let n = s.notebook(Member::Builder, "/a");
+        // Newest first, only the last few, only Builder's, only here.
+        assert!(n.find("#7").unwrap() < n.find("#6").unwrap(), "{n}");
+        assert_eq!(n.matches("\n- #").count(), NOTEBOOK);
+        assert!(!n.contains("#2 ") && !n.contains("review") && !n.contains("elsewhere"));
     }
 
     #[test]

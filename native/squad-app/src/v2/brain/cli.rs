@@ -35,7 +35,6 @@ fn decide_here(
         recent: &[],
         crew: &crew,
         running: &[],
-        worked: &[],
         in_thread: &[],
         server: "",
     };
@@ -147,9 +146,9 @@ pub fn main(args: &[String]) -> Result<String, String> {
             let out = format!(
                 "Peek: {}\n{} \u{b7} {} job (decided by {})\nRuns on {site}, on {}. {}",
                 if say.is_empty() {
-                    r.handoff(super::route::Joins::New)
+                    r.handoff()
                 } else {
-                    format!("{say} {}", super::route::Joins::New.line(r.bot))
+                    say.clone()
                 },
                 r.bot.name(),
                 r.mode.label(),

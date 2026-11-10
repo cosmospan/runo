@@ -37,6 +37,24 @@ pub enum Opened {
     Waiting(u64),
 }
 
+/// Where work given to a bot went: into its open job in the thread, or a
+/// new one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    Added(u64),
+    Opened(Opened),
+}
+
+/// Who takes a change picked on `job`'s page: its own bot when it changes
+/// code, else the bot that builds.
+pub fn page_bot(job: &store::Job) -> Member {
+    if job.bot.mode().writes() {
+        job.bot
+    } else {
+        Member::doer_for(Mode::Build).unwrap_or(Member::Builder)
+    }
+}
+
 /// One bot's message to another, on its way.
 #[derive(Clone, Debug)]
 struct Relay {
@@ -323,6 +341,65 @@ impl Runtime {
         Opened::Job(id)
     }
 
+    /// `who`'s open job in this thread: one still working or waiting for
+    /// review, or, for a bot that doesn't change code, one that finished,
+    /// since there's nothing of it to approve. A bot has at most one; what's
+    /// said to that bot here goes into it until it's approved or thrown away.
+    /// Plan steps and race tries are their own work and never count.
+    pub fn open_job(&self, folder: &str, thread: u64, who: Member) -> Option<u64> {
+        self.store
+            .jobs_in(folder, thread)
+            .into_iter()
+            .rev()
+            .find(|j| {
+                j.bot == who
+                    && j.goal == 0
+                    && j.race == 0
+                    && match j.status {
+                        Status::Running | Status::Review => true,
+                        Status::Done => !j.mode.writes(),
+                        _ => false,
+                    }
+            })
+            .map(|j| j.id)
+    }
+
+    /// The one rule for work given to a bot in a thread: its open job there
+    /// takes it as the next turn, else a new job for it starts there.
+    pub fn ask_bot(
+        &mut self,
+        st: &AppSettings,
+        bot: Member,
+        text: String,
+        folder: store::Folder,
+        thread: u64,
+    ) -> Asked {
+        if let Some(id) = self.open_job(&folder.path, thread, bot) {
+            self.add_to_job(st, id, text);
+            return Asked::Added(id);
+        }
+        // It starts in that thread, not wherever the person last looked.
+        let was = std::mem::replace(&mut self.store.thread_now, thread);
+        let opened = self.start_job(st, bot, bot.mode(), text, folder);
+        self.store.thread_now = was;
+        Asked::Opened(opened)
+    }
+
+    /// A change the person picked on job `from`'s page in its browser. It
+    /// goes to that job's bot by the one rule, or, when that bot doesn't
+    /// change code, to the bot that builds, as the pick bar says.
+    pub fn ask_from_page(&mut self, st: &AppSettings, from: u64, text: String) -> Option<Asked> {
+        let job = self.store.job(from)?;
+        let bot = page_bot(job);
+        let (folder, thread) = (job.folder.clone(), job.thread);
+        let text = if self.open_job(&folder.path, thread, bot) == Some(from) {
+            text
+        } else {
+            format!("{text}\n\nThe page was open in #{from}'s browser.")
+        };
+        Some(self.ask_bot(st, bot, text, folder, thread))
+    }
+
     /// A new job, on its own branch when it may change files, started on its
     /// bot's engine, or on `pick` (an agent index) for a try in a race. The
     /// caller adds it to the store.
@@ -383,6 +460,13 @@ impl Runtime {
                 .thread_context(&job.folder.path, job.thread, text);
             if !talk.is_empty() {
                 job.context = format!("{talk}\n\n{}", job.context).trim().to_string();
+            }
+        }
+        // The bot's notebook for this project: what it did here before.
+        if job.goal == 0 {
+            let notes = self.store.notebook(bot, &job.folder.path);
+            if !notes.is_empty() {
+                job.context = format!("{}\n\n{notes}", job.context).trim().to_string();
             }
         }
         // Threads the person points at with #, as a short digest each.
@@ -2273,41 +2357,12 @@ impl Runtime {
             );
             return;
         };
-        // One conversation per bot: it knows the jobs it ran here, too.
-        let jobs: Vec<String> = self
-            .store
-            .dm_jobs(who)
-            .into_iter()
-            .rev()
-            .take(5)
-            .map(|j| {
-                let last = j
-                    .last_words()
-                    .map(|w| {
-                        w.lines()
-                            .next()
-                            .unwrap_or("")
-                            .chars()
-                            .take(160)
-                            .collect::<String>()
-                    })
-                    .unwrap_or_default();
-                format!(
-                    "- #{} \"{}\" ({}) {}",
-                    j.id,
-                    j.label(),
-                    j.status.label(),
-                    last
-                )
-            })
-            .collect();
-        let prompt = if jobs.is_empty() {
+        // One conversation per bot: it reads its notebook for this project.
+        let notes = self.store.notebook(who, &folder.path);
+        let prompt = if notes.is_empty() {
             text.clone()
         } else {
-            format!(
-                "(Jobs you ran in this project, newest first:\n{}\n)\n\n{text}",
-                jobs.join("\n")
-            )
+            format!("({notes}\n)\n\n{text}")
         };
         match engine::Ask::start(st, who, &folder, &prompt, &history) {
             Ok(ask) => self.asking = Some(ask),
@@ -2705,8 +2760,9 @@ impl Runtime {
         }
     }
 
-    /// Hands bots the messages waiting for them, once they're free: as the
-    /// next turn of their job in that thread, or as a new job there.
+    /// Hands bots the messages waiting for them, once they're free, by the
+    /// one rule: the next turn of their open job in that thread, else a new
+    /// job there.
     fn deliver_relays(&mut self, st: &AppSettings) {
         let waiting = std::mem::take(&mut self.relays);
         for r in waiting {
@@ -2715,19 +2771,7 @@ impl Runtime {
                 continue;
             }
             let text = brain::talk::relay_text(r.from, r.from_job, &r.said, &r.whole);
-            let theirs = self
-                .store
-                .jobs
-                .iter()
-                .rev()
-                .find(|j| {
-                    j.bot == r.to
-                        && j.folder.path == r.folder.path
-                        && j.thread == r.thread
-                        && j.goal == 0
-                        && j.race == 0
-                })
-                .map(|j| j.id);
+            let theirs = self.open_job(&r.folder.path, r.thread, r.to);
             match theirs {
                 Some(tid) => {
                     if let Some(j) = self.store.job_mut(tid) {
@@ -2776,39 +2820,24 @@ impl Runtime {
         });
     }
 
-    /// `who`'s job in this thread that has been talking with the rest of the
-    /// crew, when it's waiting for its next turn: where the person's
-    /// "@Builder ..." goes once they step in, so it carries on that work
-    /// instead of starting again from scratch.
-    pub fn talking_job(&self, folder: &str, thread: u64, who: Member) -> Option<u64> {
-        self.store
-            .jobs_in(folder, thread)
-            .into_iter()
-            .rev()
-            .find(|j| j.bot == who && j.goal == 0 && j.race == 0)
-            .filter(|j| matches!(j.status, Status::Done | Status::Review))
-            .filter(|j| self.in_crew_talk(j))
-            .map(|j| j.id)
-    }
-
-    /// Whether a job has been talking with other bots: one messaged it, or
-    /// it messaged one.
-    fn in_crew_talk(&self, j: &store::Job) -> bool {
-        let from = format!("from #{}", j.id);
+    /// Whether a job has been talked to in its thread since it began: a bot
+    /// messaged it or it messaged one, or the person added to it there. Its
+    /// later turns then show in the thread, where the talk is.
+    fn talked_in_thread(&self, j: &store::Job) -> bool {
+        let (from, added) = (format!("from #{}", j.id), format!("added to #{}", j.id));
         j.feed.iter().any(|i| matches!(i, store::Item::By(..)))
             || self.store.talks.iter().any(|t| {
                 t.folder == j.folder.path
-                    && t.question.is_empty()
                     && t.answer
                         .as_ref()
                         .and_then(|a| a.via.as_deref())
-                        .is_some_and(|v| v.ends_with(&from))
+                        .is_some_and(|v| v.ends_with(&from) || v == added)
             })
     }
 
-    /// A later turn of a job in the bots' talk ends: what it said goes in the
-    /// thread as the bot's message, since its card sits further up where the
-    /// job began. Its @mentions are posted on their own after it.
+    /// A later turn of a job talked to in its thread ends: what it said goes
+    /// in the thread as the bot's message, since its card sits further up
+    /// where the job began. Its @mentions are posted on their own after it.
     fn post_turn(&mut self, id: u64) {
         let Some(job) = self.store.job(id) else {
             return;
@@ -2826,7 +2855,7 @@ impl Runtime {
                 job.status,
                 Status::Failed | Status::Stopped | Status::Interrupted
             )
-            || !self.in_crew_talk(job)
+            || !self.talked_in_thread(job)
         {
             return;
         }
@@ -2858,24 +2887,23 @@ impl Runtime {
         self.crew_says(&folder, thread, bot, body, Some(format!("in #{id}")));
     }
 
-    /// The person steps into the bots' talk with "@Builder ...": their words
-    /// show in the thread and go to Builder's job there as its next turn.
-    pub fn step_in(&mut self, st: &AppSettings, id: u64, text: String) {
+    /// The person's words for a bot go into its open job `id`: they show in
+    /// the thread, and what the bot says back is posted there too.
+    pub fn add_to_job(&mut self, st: &AppSettings, id: u64, text: String) {
         let Some(job) = self.store.job(id) else {
             return;
         };
         let (folder, thread, who) = (job.folder.path.clone(), job.thread, job.bot);
         let tid = self.store.talks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let mut said = Said::note(format!("{} adds this to #{id}.", who.name()));
+        said.via = Some(format!("added to #{id}"));
         self.store.talks.push(Talk {
             id: tid,
             folder,
             thread,
             bot: who,
             question: text.clone(),
-            answer: Some(Said::note(format!(
-                "{} picks this up in #{id}, where it was working with the crew.",
-                who.name()
-            ))),
+            answer: Some(said),
             at: store::now(),
             choices: Vec::new(),
         });
@@ -3398,6 +3426,85 @@ mod tests {
     }
 
     #[test]
+    fn a_bot_keeps_one_open_job_per_thread() {
+        let mut st = AppSettings::default();
+        for p in crate::agent::PROVIDERS.iter() {
+            let mut a = st.agent(p.id);
+            a.binary = "/nonexistent/squad-test-agent".into();
+            st.agents.insert(p.id.to_string(), a);
+        }
+        let dir = std::env::temp_dir().join(format!("squad-open-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let folder = store::Folder {
+            name: "t".into(),
+            path: dir.to_string_lossy().into_owned(),
+            ship: String::new(),
+        };
+        let mut rt = Runtime::new(quiet_store());
+        rt.store.folders = vec![folder.clone()];
+        rt.store.current = 0;
+        let other = rt.store.add_thread("other", Vec::new()).unwrap();
+        let t = rt.store.add_thread("checkout", Vec::new()).unwrap();
+        rt.store.thread_now = 0;
+        let job = |id, bot: Member, status| store::Job {
+            id,
+            thread: t,
+            bot,
+            mode: bot.mode(),
+            status,
+            folder: folder.clone(),
+            ..Default::default()
+        };
+        rt.store.jobs.push(job(9, Member::Builder, Status::Review));
+        rt.store.jobs.push(job(10, Member::Guard, Status::Done));
+        rt.store.jobs.push(job(11, Member::Checker, Status::Done));
+        rt.store.next_id = 11;
+        // Waiting for review: Builder's words here go into it.
+        let p = folder.path.clone();
+        assert_eq!(rt.open_job(&p, t, Member::Builder), Some(9));
+        // A bot that doesn't change code keeps its finished job open; one
+        // that does starts again once it's done.
+        assert_eq!(rt.open_job(&p, t, Member::Guard), Some(10));
+        assert_eq!(rt.open_job(&p, t, Member::Checker), None);
+        // Another thread is another job.
+        assert_eq!(rt.open_job(&p, other, Member::Builder), None);
+        let asked = rt.ask_bot(
+            &st,
+            Member::Builder,
+            "make it blue too".into(),
+            folder.clone(),
+            t,
+        );
+        assert_eq!(asked, Asked::Added(9));
+        assert!(rt.store.talks.last().unwrap().question.contains("blue"));
+        // Approved: the next ask is a new job for Builder, in that thread.
+        rt.store.job_mut(9).unwrap().status = Status::Shipped;
+        let Asked::Opened(Opened::Job(id)) = rt.ask_bot(
+            &st,
+            Member::Builder,
+            "add a footer".into(),
+            folder.clone(),
+            t,
+        ) else {
+            panic!("expected a new job");
+        };
+        let j = rt.store.job(id).unwrap();
+        assert_eq!((j.bot, j.mode, j.thread), (Member::Builder, Mode::Build, t));
+        // A pick on Guard's page goes to the bot that builds, in its thread.
+        rt.store.job_mut(id).unwrap().status = Status::Shipped;
+        let Some(Asked::Opened(Opened::Job(id))) =
+            rt.ask_from_page(&st, 10, "make the button green".into())
+        else {
+            panic!("expected a new job");
+        };
+        let j = rt.store.job(id).unwrap();
+        assert_eq!((j.bot, j.thread), (Member::Builder, t));
+        assert!(j.title.contains("#10"));
+        assert!(rt.ask_from_page(&st, 404, "nothing".into()).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn an_old_mention_isnt_sent_again() {
         let mut rt = Runtime::new(quiet_store());
         let folder = store::Folder {
@@ -3772,8 +3879,8 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
         run_until_idle(&mut rt, &st);
         assert_eq!(rt.store.talks.len(), paused);
         // The person steps in, answering Builder: the bots may talk again.
-        // "@Builder ..." goes on in Builder's job, not a new one.
-        let id = rt.talking_job(&folder.path, thread, Member::Builder);
+        // "@Builder ..." goes into Builder's open job here, not a new one.
+        let id = rt.open_job(&folder.path, thread, Member::Builder);
         assert_eq!(id, Some(builder.id));
         let guard_id = rt
             .store
@@ -3783,11 +3890,22 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
             .unwrap()
             .id;
         assert_eq!(
-            rt.talking_job(&folder.path, thread, Member::Guard),
+            rt.open_job(&folder.path, thread, Member::Guard),
             Some(guard_id)
         );
-        assert_eq!(rt.talking_job(&folder.path, thread, Member::Checker), None);
-        rt.step_in(&st, builder.id, "TALK-START Fine, add httpOnly.".into());
+        assert_eq!(rt.open_job(&folder.path, thread, Member::Checker), None);
+        // Each bot kept to one job in the thread, however often it was asked.
+        for who in [Member::Builder, Member::Guard] {
+            assert_eq!(rt.store.jobs.iter().filter(|j| j.bot == who).count(), 1);
+        }
+        let asked = rt.ask_bot(
+            &st,
+            Member::Builder,
+            "TALK-START Fine, add httpOnly.".into(),
+            folder.clone(),
+            thread,
+        );
+        assert_eq!(asked, Asked::Added(builder.id));
         assert!(rt.store.talks[paused]
             .question
             .contains("Fine, add httpOnly"));

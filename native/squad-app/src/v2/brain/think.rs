@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::front::Front;
-use super::route::{self, Joins, Route};
+use super::route::{self, Route};
 use crate::agent::{self, Event};
 use crate::settings::AppSettings;
 use crate::v2::data::{Member, Mode};
@@ -36,8 +36,8 @@ pub struct Seen<'a> {
     pub crew: &'a [Member],
     /// Jobs running here, as "#4 Builder: add a login page".
     pub running: &'a [String],
-    /// The bots that have worked on this project, and those in this thread.
-    pub worked: &'a [Member],
+    /// The bots with an open job in this thread, which more work for them
+    /// goes into.
     pub in_thread: &'a [Member],
     /// Where jobs can run besides this computer, in a sentence or two;
     /// empty when no server is connected.
@@ -71,11 +71,11 @@ If they say it's a discussion, believe them.\n\
 - \"stop\": they want what's running stopped or cancelled.\n\
 - \"run\": they want the app started or run so they can see it (\"runthe app\", \"start it up\", \"let me see it\"). Squad Code starts it; no bot is needed.\n\
 - \"answer\": a question about this project's code or files, which needs reading them. A bot answers without changing anything. Not for discussion or general talk.\n\
-- \"hand\": real work on the project. Pick the bot whose role fits best (prefer one already in this thread when it fits), the kind of work, and say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in: Squad Code adds whether it's onboarding a new bot or inviting one back. \
+- \"hand\": real work on the project. Pick the bot whose role fits best; when the message carries on work a bot has open in this thread, pick that bot, since it goes into its open job. Each bot does one kind of work, so the bot decides it. Say why in one short, friendly sentence in your own voice, like \"Sounds like a bug in the Safari checkout.\" Don't name the bot or say you're bringing it in. \
 If they want it done on their server (a VPS, the cloud, \"remote\", the server's name), set \"where\" to \"server\": Squad Code copies the project there if it isn't yet and runs the job there, so never say the crew can only work on this computer. If they want it on this computer, \"here\". Otherwise leave it empty. \
 If they want the server but none is connected, \"ask\" them to connect one under Settings, My server.\n\n\
 Reply with JSON only, on one line:\n\
-{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, or empty\", \"where\": \"server|here, or empty\"}\n\
+{\"do\": \"reply|ask|stop|run|answer|hand\", \"say\": \"what Peek says\", \"choices\": [], \"bot\": \"a name from the crew, or empty\", \"kind\": \"build|fix|test|review|tidy|ask, only when bot is empty\", \"where\": \"server|here, or empty\"}\n\
 Keep \"say\" warm, plain and short, no markdown: two sentences at most, or up to four when you're taking part in a discussion.";
 
 /// The conversation as the engine reads it: the last few messages, each
@@ -99,11 +99,15 @@ pub fn turn(text: &str, seen: &Seen, heading: &str, conversation: &[String]) -> 
         .filter(|m| **m != Member::Fin)
         .map(|m| {
             format!(
-                "- {} ({} work): {} [{}]",
+                "- {} ({} work): {}{}",
                 m.name(),
                 m.mode().label().to_lowercase(),
                 m.role(),
-                Joins::of(*m, seen.worked, seen.in_thread).note()
+                if seen.in_thread.contains(m) {
+                    " [has an open job in this thread]"
+                } else {
+                    ""
+                }
             )
         })
         .collect();
@@ -196,13 +200,15 @@ pub fn parse(reply: &str, text: &str, crew: &[Member]) -> Option<(Front, String)
                 _ => Mode::Build,
             };
             let named = v["bot"].as_str().unwrap_or("").trim().to_lowercase();
+            // The bot decides the kind of work; the kind only picks a bot
+            // when none was named.
             let bot = crew
                 .iter()
                 .copied()
                 .find(|m| *m != Member::Fin && m.name().to_lowercase() == named)
                 .unwrap_or_else(|| route::doer(mode, crew));
             let r = Route {
-                mode,
+                mode: bot.mode(),
                 bot,
                 sure: 0.9,
                 why: say.clone(),
@@ -329,7 +335,6 @@ mod tests {
                 recent: &[],
                 crew: &c,
                 running: &[],
-                worked: &[],
                 in_thread: &[],
                 server: "",
             },
@@ -352,8 +357,7 @@ mod tests {
                 recent: &recent,
                 crew: &c,
                 running: &running,
-                worked: &[Member::Builder],
-                in_thread: &[],
+                in_thread: &[Member::Builder],
                 server: "vps: connected, Claude Code signed in.",
             },
         );
@@ -363,8 +367,7 @@ mod tests {
             "#4 Builder",
             "whoa re you",
             "\"do\"",
-            "has worked on this project",
-            "never worked on this project",
+            "has an open job in this thread",
             "vps: connected",
             "Not every message is about the code",
         ] {

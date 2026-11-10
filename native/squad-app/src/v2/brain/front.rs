@@ -33,9 +33,11 @@ pub enum Front {
 }
 
 /// What Peek decided, when the person named the bot with @: the named bot
-/// answers what Peek would answer, and does the work Peek would hand to
-/// another bot. A bot that only answers (one that never writes code) answers
-/// work asks too. Stop, run the app and asking back stay Peek's.
+/// answers what Peek would answer and takes the work Peek would hand on,
+/// doing what that bot does. Work that needs code changed, named to a bot
+/// that doesn't change code, isn't moved quietly: Peek asks once whether to
+/// give it to the bot it picked. Stop, run the app and asking back stay
+/// Peek's.
 pub fn pinned(front: Front, bot: Member, text: &str) -> Front {
     let answer = || Front::Answer {
         question: text.to_string(),
@@ -46,16 +48,47 @@ pub fn pinned(front: Front, bot: Member, text: &str) -> Front {
         r.mode = bot.mode();
         r
     };
+    // The named bot can't do it when it needs code changed and the bot
+    // doesn't change code.
+    let cant = |r: &Route| r.bot != bot && r.mode.writes() && !bot.mode().writes();
     match front {
         Front::Chat { .. } => answer(),
-        Front::Hand(_) | Front::Confirm { .. } if !bot.mode().writes() => answer(),
+        Front::Hand(r) if cant(&r) => Front::Confirm {
+            why: switch_line(bot, r.bot),
+            route: switched(r),
+        },
+        Front::Hand(_) if bot.mode() == Mode::Ask => answer(),
         Front::Hand(r) => Front::Hand(to(r)),
+        Front::Confirm { why, route } if cant(&route) => Front::Confirm {
+            why: format!("{why} {}", switch_line(bot, route.bot)),
+            route: switched(route),
+        },
         Front::Confirm { why, route } => Front::Confirm {
             why,
             route: to(route),
         },
         other => other,
     }
+}
+
+/// How a route Peek offers to switch to is marked, so its yes reads "Give it
+/// to Builder" rather than "Go ahead".
+pub const SWITCH: &str = "switch";
+
+fn switched(mut r: Route) -> Route {
+    r.mode = r.bot.mode();
+    r.by = SWITCH.into();
+    r
+}
+
+/// Peek's one question when the named bot doesn't do this kind of work.
+fn switch_line(named: Member, to: Member) -> String {
+    format!(
+        "{} doesn't change code ({}). Give this to {} instead?",
+        named.name(),
+        named.role().to_lowercase(),
+        to.name()
+    )
 }
 
 /// Who answers a question when nobody was picked: the crew's explainer.
@@ -102,5 +135,34 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(pinned(Front::Stop, Member::Builder, "stop"), Front::Stop);
+    }
+
+    #[test]
+    fn a_review_bot_named_for_a_review_does_it_as_a_job() {
+        let f = pinned(
+            Front::Hand(route(Member::Guard)),
+            Member::Guard,
+            "check the coupon code",
+        );
+        match f {
+            Front::Hand(r) => assert_eq!((r.bot, r.mode), (Member::Guard, Mode::Review)),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn building_named_to_a_bot_that_doesnt_build_asks_once() {
+        let f = pinned(
+            Front::Hand(route(Member::Builder)),
+            Member::Guard,
+            "add a login page",
+        );
+        match f {
+            Front::Confirm { why, route } => {
+                assert!(why.contains("Guard") && why.contains("Builder"), "{why}");
+                assert_eq!((route.bot, route.by.as_str()), (Member::Builder, SWITCH));
+            }
+            other => panic!("{other:?}"),
+        }
     }
 }
