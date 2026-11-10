@@ -79,6 +79,8 @@ pub fn seed() -> Store {
     j.shipped = "Merged into main as 3f2a1c9.".into();
     // It ran on last night's shift.
     j.shift = true;
+    j.issue = "Closes #22".into();
+    j.pr_number = 48;
     j.changes = vec![change("src/coupon.tsx", "M", 12, 4)];
     j.feed = vec![Item::Text(
         "The coupon field was hidden by the keyboard. It now scrolls into view.".into(),
@@ -644,4 +646,28 @@ pub fn repos() -> std::collections::HashMap<String, super::runtime::RepoLine> {
         },
     ))
     .collect()
+}
+
+/// The demo project's open issues, as `gh issue list` would give them.
+pub(super) fn issues() -> Vec<super::issues::Listed> {
+    let issue = |number: u64, title: &str, labels: &[&str]| super::issues::Listed {
+        number,
+        title: title.into(),
+        labels: labels.iter().map(|l| l.to_string()).collect(),
+        url: format!("https://github.com/acme/shop/issues/{number}"),
+    };
+    vec![
+        issue(
+            31,
+            "Checkout button does nothing on Safari",
+            &["bug", "safari"],
+        ),
+        issue(
+            29,
+            "Show the order total before the payment step",
+            &["checkout"],
+        ),
+        issue(27, "Gift card balance shows NaN after a refund", &["bug"]),
+        issue(24, "Dark mode for the account pages", &["design"]),
+    ]
 }

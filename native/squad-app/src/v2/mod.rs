@@ -761,6 +761,8 @@ pub struct Shell {
     /// When the next job sent from the thread's box starts, as /later words
     /// ("tonight", "tomorrow 9am"); None sends it now.
     later_pick: Option<String>,
+    /// The project's open issues on its Overview, as last read.
+    issue_list: Option<IssueList>,
     /// Terminal drawers' shells, by job, and the job whose drawer is open.
     terms: HashMap<u64, crate::pty::Shell>,
     term_open: Option<u64>,
@@ -1511,6 +1513,7 @@ impl Shell {
             splitting: false,
             later_menu: false,
             later_pick: None,
+            issue_list: None,
             terms: HashMap::new(),
             term_open: None,
             term_focus: cx.focus_handle(),
@@ -3984,6 +3987,15 @@ fn background() -> WindowBackgroundAppearance {
     }
 }
 
+/// A project's open issues, as last read.
+pub(crate) struct IssueList {
+    pub folder: String,
+    pub at: Instant,
+    pub loading: bool,
+    pub items: Vec<issues::Listed>,
+    pub error: Option<String>,
+}
+
 /// The system is using a dark appearance.
 pub(crate) fn system_dark(a: gpui::WindowAppearance) -> bool {
     matches!(
@@ -4026,6 +4038,7 @@ pub fn open_window(cx: &mut App) {
     // The look first: the window opens with the background it needs.
     let st = cx.global::<crate::settings::AppSettings>();
     theme::set_pref(&st.v2_theme, system_dark(cx.window_appearance()));
+    issues::set_close_on_merge(st.v2_close_issues);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
     theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);

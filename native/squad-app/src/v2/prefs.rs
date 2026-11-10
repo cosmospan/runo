@@ -87,7 +87,7 @@ fn save(cx: &mut App, f: impl FnOnce(&mut AppSettings)) {
 }
 
 /// A small on/off switch.
-fn switch(on: bool) -> Div {
+pub(super) fn switch(on: bool) -> Div {
     div()
         .w(px(34.))
         .h(px(20.))

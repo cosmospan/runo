@@ -100,6 +100,9 @@ pub struct AppSettings {
     /// The Squad Code window's theme, by id from `v2::theme::THEMES`: "midnight",
     /// "daylight", "frost"…
     pub v2_theme: String,
+    /// A pull request for a job that names an issue closes the issue when it
+    /// merges ("Closes #12"); off, it only links it ("Refs #12").
+    pub v2_close_issues: bool,
     /// Window transparency for the Squad Code window: the desktop shows through
     /// whatever theme is picked, blurred.
     pub v2_see_through: bool,
@@ -301,6 +304,7 @@ impl Default for AppSettings {
             glass: "off".into(),
             glass_cards: true,
             v2_theme: "graphite-lime".into(),
+            v2_close_issues: true,
             v2_see_through: false,
             v2_clear: 50,
             v2_glass_popovers: true,
