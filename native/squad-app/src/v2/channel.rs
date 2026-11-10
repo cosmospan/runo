@@ -1022,7 +1022,7 @@ impl Shell {
                 j.folder.path == folder.path
                     && self.crew.store.thread_for(&folder.path, j.thread) == thread
             })
-            .map(|j| self.reply_pane(&j, &name, cx));
+            .map(|j| self.peek_pane(&j, &name, cx));
         let page = div()
             .size_full()
             .flex()
@@ -1181,74 +1181,6 @@ impl Shell {
 
     /// A job's conversation beside its thread: what the bot did and said,
     /// with a box to answer it, like replies in a thread.
-    fn reply_pane(&mut self, job: &Job, thread: &str, cx: &mut Context<Self>) -> Div {
-        div()
-            .w(px(460.))
-            .flex_none()
-            .h_full()
-            .flex()
-            .flex_col()
-            .border_l_1()
-            .border_color(c(ui::line2()))
-            .bg(c(ui::bg()))
-            .child(
-                div()
-                    .h(px(46.))
-                    .flex_none()
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .border_b_1()
-                    .border_color(c(ui::line2()))
-                    .child(
-                        div()
-                            .text_size(px(15.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(c(ui::ink()))
-                            .child("Thread"),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_size(px(12.5))
-                            .text_color(c(ui::faint()))
-                            .child(format!("#{thread} \u{b7} {}", job.label())),
-                    )
-                    .child(
-                        ui::icon_btn("reply-full", IconName::Maximize)
-                            .tooltip(|window, cx| {
-                                gpui_kit::component::tooltip::Tooltip::new("Open the whole job")
-                                    .build(window, cx)
-                            })
-                            .on_click({
-                                let id = job.id;
-                                cx.listener(move |this, _, _, cx| {
-                                    this.reply_open = None;
-                                    this.open_job(id, cx);
-                                })
-                            }),
-                    )
-                    .child(
-                        ui::icon_btn("reply-close", IconName::X).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.reply_open = None;
-                                cx.notify();
-                            },
-                        )),
-                    ),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .child(self.live_main(job, cx)),
-            )
-    }
-
     /// The bar over a thread, like a channel's: its name, who's in it as a
     /// row of faces, and Add a bot, which starts an @ in the box.
     /// "About this thread": what the thread is for in one line, opening to
@@ -1998,8 +1930,8 @@ impl Shell {
                 .border_color(c(ui::line()))
                 .cursor_pointer()
                 .hover(|s| s.border_color(c(ui::line_hi())).bg(c(ui::hover())))
-                .tooltip(tip_of("Open the job".into()))
-                .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
+                .tooltip(tip_of("Peek at the job".into()))
+                .on_click(cx.listener(move |this, _, _, cx| this.peek_job(id, cx)))
                 .child(div().size(px(7.)).flex_none().rounded_full().bg(c(tone)))
                 .child(
                     div()
@@ -2312,9 +2244,9 @@ impl Shell {
                     )
                 } else {
                     d.child(
-                        ui::ghost(("thread-open", id as usize), "Open")
+                        ui::ghost(("thread-open", id as usize), "Peek")
                             .h(px(28.))
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                            .on_click(cx.listener(move |this, _, _, cx| this.peek_job(id, cx))),
                     )
                 }
             });
@@ -2432,7 +2364,7 @@ impl Shell {
                     .when(k > 0, |d| d.border_t_1().border_color(c(ui::line2())))
                     .when(jid != 0, |d| {
                         d.cursor_pointer()
-                            .on_click(cx.listener(move |this, _, _, cx| this.open_job(jid, cx)))
+                            .on_click(cx.listener(move |this, _, _, cx| this.peek_job(jid, cx)))
                     })
                     .child(
                         div()

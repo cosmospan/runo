@@ -126,7 +126,7 @@ impl Web {
         }
     }
 
-    fn live(&self) -> bool {
+    pub(super) fn live(&self) -> bool {
         self.view
             .as_ref()
             .is_some_and(|v| !matches!(v.state(), State::Closed(_)))

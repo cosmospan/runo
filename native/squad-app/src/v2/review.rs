@@ -53,6 +53,12 @@ impl Shell {
 
     /// The review card at the end of a job's feed, once it has changes.
     pub(super) fn review_card(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        self.review_body(job, cx).map(|d| d.ml(px(40.)))
+    }
+
+    /// The review on its own, without the feed's indent: for the peek pane
+    /// and the workspace's Changes tab.
+    pub(super) fn review_body(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
         if job.status == Status::Shipped && !job.shipped.is_empty() {
             return Some(
                 div()
@@ -381,7 +387,6 @@ impl Shell {
 
         Some(
             div()
-                .ml(px(40.))
                 .rounded(px(12.))
                 .bg(c(ui::panel()))
                 .border_1()

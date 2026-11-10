@@ -1287,7 +1287,6 @@ impl Shell {
         // The right sidebar shows on a job's page, and beside a thread when
         // the Jobs panel is open.
         let right_open = match self.place {
-            Place::Live(id) => self.crew.store.job(id).is_some() && !self.right_closed,
             Place::Today => self.jobs_open,
             _ => false,
         };
@@ -1490,82 +1489,88 @@ impl Shell {
                     // The right sidebar's toggle, at the window's right edge like
                     // the left one's at its left: its icon shows the panel it opens.
                     // A dot says something waits on you, or that the crew is working.
-                    .child({
-                        let asks = self.inbox_count();
-                        let on_job = matches!(self.place, Place::Live(_));
-                        let dot = if asks > 0 {
-                            Some(ui::t_amber())
-                        } else if running > 0 {
-                            Some(ui::t_blue())
-                        } else {
-                            None
-                        };
-                        let mut say = if right_open {
-                            "Hide the right sidebar".to_string()
-                        } else {
-                            "Show the right sidebar: jobs, git and files".to_string()
-                        };
-                        if asks > 0 {
-                            say.push_str(&format!("\n{asks} waiting on you"));
-                        }
-                        if running > 0 {
-                            say.push_str(&format!("\n{running} running"));
-                        }
-                        div()
-                            .id("top-right-panel")
-                            .relative()
-                            .size(px(28.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(8.))
-                            .cursor_pointer()
-                            .text_color(c(if right_open { ui::ink() } else { ui::muted() }))
-                            .when(right_open, |d| d.bg(c(ui::press())))
-                            .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
-                            .child(
-                                Icon::new(if right_open {
-                                    IconName::PanelRightClose
+                    // A job's workspace has its own tabs instead of the right sidebar.
+                    .when(
+                        !matches!(self.place, Place::Live(_) | Place::Browser(_)),
+                        |d| {
+                            d.child({
+                                let asks = self.inbox_count();
+                                let on_job = matches!(self.place, Place::Live(_));
+                                let dot = if asks > 0 {
+                                    Some(ui::t_amber())
+                                } else if running > 0 {
+                                    Some(ui::t_blue())
                                 } else {
-                                    IconName::PanelRightOpen
-                                })
-                                .size(px(17.)),
-                            )
-                            .when_some(dot, |d, col| {
-                                d.child(
-                                    div()
-                                        .absolute()
-                                        .top(px(4.))
-                                        .right(px(4.))
-                                        .size(px(7.))
-                                        .rounded_full()
-                                        .border_1()
-                                        .border_color(c(if right_open {
-                                            ui::ground()
+                                    None
+                                };
+                                let mut say = if right_open {
+                                    "Hide the right sidebar".to_string()
+                                } else {
+                                    "Show the right sidebar: jobs, git and files".to_string()
+                                };
+                                if asks > 0 {
+                                    say.push_str(&format!("\n{asks} waiting on you"));
+                                }
+                                if running > 0 {
+                                    say.push_str(&format!("\n{running} running"));
+                                }
+                                div()
+                                    .id("top-right-panel")
+                                    .relative()
+                                    .size(px(28.))
+                                    .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(8.))
+                                    .cursor_pointer()
+                                    .text_color(c(if right_open { ui::ink() } else { ui::muted() }))
+                                    .when(right_open, |d| d.bg(c(ui::press())))
+                                    .hover(|s| s.bg(c(ui::hover())).text_color(c(ui::ink())))
+                                    .child(
+                                        Icon::new(if right_open {
+                                            IconName::PanelRightClose
                                         } else {
-                                            ui::bg()
-                                        }))
-                                        .bg(c(col)),
-                                )
+                                            IconName::PanelRightOpen
+                                        })
+                                        .size(px(17.)),
+                                    )
+                                    .when_some(dot, |d, col| {
+                                        d.child(
+                                            div()
+                                                .absolute()
+                                                .top(px(4.))
+                                                .right(px(4.))
+                                                .size(px(7.))
+                                                .rounded_full()
+                                                .border_1()
+                                                .border_color(c(if right_open {
+                                                    ui::ground()
+                                                } else {
+                                                    ui::bg()
+                                                }))
+                                                .bg(c(col)),
+                                        )
+                                    })
+                                    .tooltip(tip(say))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if on_job {
+                                            this.right_closed = !this.right_closed;
+                                            cx.notify();
+                                            return;
+                                        }
+                                        this.jobs_open = !this.jobs_open;
+                                        // The panel sits beside a thread or a job: open it there.
+                                        if this.jobs_open
+                                            && !matches!(this.place, Place::Today | Place::Live(_))
+                                        {
+                                            this.go(Place::Today, cx);
+                                        }
+                                        cx.notify();
+                                    }))
                             })
-                            .tooltip(tip(say))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if on_job {
-                                    this.right_closed = !this.right_closed;
-                                    cx.notify();
-                                    return;
-                                }
-                                this.jobs_open = !this.jobs_open;
-                                // The panel sits beside a thread or a job: open it there.
-                                if this.jobs_open
-                                    && !matches!(this.place, Place::Today | Place::Live(_))
-                                {
-                                    this.go(Place::Today, cx);
-                                }
-                                cx.notify();
-                            }))
-                    }),
+                        },
+                    ),
             )
     }
 }

@@ -35,6 +35,7 @@ mod menu;
 mod motion;
 mod myserver;
 mod palette;
+mod peek;
 mod prefs;
 mod project;
 mod race;
@@ -699,6 +700,8 @@ pub struct Shell {
     screen_focus: FocusHandle,
     /// A job's browser, watched in Squad.
     web: webpage::Web,
+    /// The job workspace's tab.
+    ws_tab: peek::Tab,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -1440,6 +1443,7 @@ impl Shell {
             screen_bounds: Default::default(),
             screen_focus: cx.focus_handle(),
             web,
+            ws_tab: peek::Tab::default(),
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
@@ -1489,6 +1493,20 @@ impl Shell {
             }
             // The status bar's usage popover, open.
             Ok("usage-open") => shell.usage_open = true,
+            // A job's peek open beside its thread.
+            Ok("peek") => {
+                let pick = shell
+                    .crew
+                    .store
+                    .jobs
+                    .iter()
+                    .find(|j| j.status == Status::Review && j.race == 0)
+                    .map(|j| (j.id, j.thread));
+                if let Some((id, thread)) = pick {
+                    shell.crew.store.thread_now = thread;
+                    shell.reply_open = Some(id);
+                }
+            }
             // The right sidebar open on its Files tab.
             Ok("files") => {
                 shell.jobs_open = true;
@@ -3579,10 +3597,7 @@ impl Render for Shell {
         mascot::sync(cx.global::<crate::settings::AppSettings>());
         let body = match self.place {
             Place::Today => self.channel(cx),
-            Place::Live(id) => {
-                let detail = self.live(id, cx);
-                self.split(Some(id), detail, cx)
-            }
+            Place::Live(id) => self.workspace(id, window, cx),
             Place::Race(id) => self.race(id, cx),
             Place::Goal(id) => self.goal_page(id, cx),
             Place::Crew => self.crew(cx),
@@ -3593,7 +3608,11 @@ impl Render for Shell {
             Place::Usage => self.usage(cx),
             Place::Server => self.server_page(cx),
             Place::Screen => self.screen_page(window, cx),
-            Place::Browser(_) => self.web_page(window, cx),
+            // A job's browser is a tab of its workspace.
+            Place::Browser(id) => {
+                self.ws_tab = peek::Tab::Browser;
+                self.workspace(id, window, cx)
+            }
             Place::Welcome => self.welcome(cx),
         };
         // Each place eases in: a short fade and a lift of a few pixels.
