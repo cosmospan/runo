@@ -353,12 +353,14 @@ pub struct Job {
     pub held: Vec<String>,
     /// The person said to push or merge in spite of the seatbelt.
     pub belt_ok: bool,
-    /// Files with uncommitted changes in your checkout of its base that merging
-    /// would overwrite, found when Approve was pressed. Merging waits until
-    /// they're committed or set aside.
+    /// Files with your uncommitted changes in the checkout of its base that
+    /// were set aside to merge it and clash with what it brought in.
     pub in_the_way: Vec<String>,
-    /// The person said to set those changes aside for the merge and put them
-    /// back after.
+    /// The stash commit holding those changes until you bring them back or
+    /// leave them there; empty when nothing is waiting.
+    pub kept: String,
+    /// Set by builds that asked before setting changes aside; merging now
+    /// always does. Read and ignored.
     pub set_aside: bool,
     /// Commits on its branch since it started, and commits its base got since.
     pub ahead: usize,
@@ -476,6 +478,7 @@ impl Default for Job {
             held: Vec::new(),
             belt_ok: false,
             in_the_way: Vec::new(),
+            kept: String::new(),
             set_aside: false,
             ahead: 0,
             behind: 0,
@@ -1502,7 +1505,6 @@ impl Store {
         }
     }
 
-    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
     /// `who`'s notebook for the project at `folder`: a line for each of its
     /// last few jobs there, newest first, so a new job or a DM starts
     /// knowing the bot's own past work in this project. Its lessons are
@@ -1546,6 +1548,7 @@ impl Store {
         )
     }
 
+    /// `who`'s jobs in the project you're in, oldest first: the cards its DM shows.
     pub fn dm_jobs(&self, who: Member) -> Vec<&Job> {
         let here = self.folder().map(|f| f.path.as_str()).unwrap_or("");
         let mut v: Vec<&Job> = self

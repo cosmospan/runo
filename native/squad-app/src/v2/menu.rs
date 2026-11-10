@@ -5,7 +5,9 @@
 //! It also holds the confirm for taking a project away: off the list only
 //! (the files stay), or the folder itself to the Trash.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -146,6 +148,47 @@ impl Shell {
             });
             cx.stop_propagation();
         }
+    }
+
+    /// `button` opening the menu for `target` just below it, lined up with its
+    /// left edge, the way a dropdown does, rather than over it at the pointer.
+    pub(super) fn drop_menu(
+        &self,
+        target: Ctx,
+        button: Stateful<Div>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let bounds: Rc<Cell<Bounds<Pixels>>> = Rc::default();
+        let seen = bounds.clone();
+        let this = cx.entity().downgrade();
+        div()
+            .relative()
+            .flex_none()
+            .child(button.on_mouse_down(
+                MouseButton::Left,
+                move |ev: &MouseDownEvent, _: &mut Window, cx: &mut App| {
+                    let b = seen.get();
+                    let at = if b.size.width > px(0.) {
+                        point(b.left(), b.bottom() + px(4.))
+                    } else {
+                        ev.position
+                    };
+                    let target = target.clone();
+                    let _ = this.update(cx, |this, cx| {
+                        this.menu = Some((at, target));
+                        this.menu_hot = None;
+                        cx.notify();
+                    });
+                    cx.stop_propagation();
+                },
+            ))
+            .child(
+                canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {})
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full(),
+            )
     }
 
     fn close_menu(&mut self, cx: &mut Context<Self>) {

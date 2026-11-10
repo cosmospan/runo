@@ -174,19 +174,15 @@ impl Shell {
         )
     }
 
-    /// Merging waits on uncommitted changes in your checkout that it would
-    /// overwrite: which files, and setting them aside to merge anyway.
+    /// Your uncommitted changes a merge set aside and couldn't put back,
+    /// because they clash with what it brought in: which files, and bringing
+    /// them back with the clash marked or leaving them in the stash.
     pub(super) fn in_the_way_card(&mut self, j: &Job, cx: &mut Context<Self>) -> Option<Div> {
-        if j.in_the_way.is_empty() || j.status != Status::Review {
+        if j.kept.is_empty() {
             return None;
         }
         let id = j.id;
         let tone = ui::ask_tone();
-        let base = if j.base.is_empty() {
-            "its base"
-        } else {
-            j.base.as_str()
-        };
         let mut rows = div().flex().flex_col();
         for (n, path) in j.in_the_way.iter().enumerate() {
             rows = rows.child(
@@ -200,6 +196,7 @@ impl Shell {
                     .child(path.clone()),
             );
         }
+        let one = j.in_the_way.len() == 1;
         Some(
             div()
                 .mx(px(14.))
@@ -226,9 +223,11 @@ impl Shell {
                                 .size(px(14.))
                                 .text_color(c(tone.0)),
                         )
-                        .child(format!(
-                            "Uncommitted changes on {base} are in the way"
-                        )),
+                        .child(if one {
+                            "Your changes to this file clash with the merge"
+                        } else {
+                            "Your changes to these files clash with the merge"
+                        }),
                 )
                 .child(
                     div()
@@ -237,7 +236,7 @@ impl Shell {
                         .text_size(px(12.5))
                         .text_color(c(ui::muted()))
                         .child(format!(
-                            "{} has changes you haven't committed, and this merge changes the same files. Commit them there and approve again, or set them aside: they're stashed for the merge and put back after.",
+                            "It merged, and your uncommitted changes in {} were set aside for it. They change the same lines, so they weren't put back. Nothing is lost.",
                             j.folder.path
                         )),
                 )
@@ -250,16 +249,18 @@ impl Shell {
                         .flex_wrap()
                         .gap(px(8.))
                         .child(
-                            ui::solid(("aside-merge", id as usize), "Set them aside and merge")
+                            ui::solid(("kept-back", id as usize), "Bring them back to sort out")
                                 .h(px(28.))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.set_aside_and_merge(id, cx)
-                                })),
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.bring_back(id, cx)),
+                                ),
                         )
                         .child(
-                            ui::ghost(("aside-retry", id as usize), "I committed them, try again")
+                            ui::ghost(("kept-leave", id as usize), "Leave them in the stash")
                                 .h(px(28.))
-                                .on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx))),
+                                .on_click(
+                                    cx.listener(move |this, _, _, cx| this.leave_kept(id, cx)),
+                                ),
                         ),
                 ),
         )
