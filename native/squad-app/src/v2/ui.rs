@@ -24,9 +24,10 @@ pub const VIOLET: u32 = 0x7B4DF5;
 pub const RED: u32 = 0xF2364F;
 pub const MONO: &str = "JetBrains Mono";
 
-/// Graphite and lime, light or dark: picked things go ink and lime, not violet.
+/// One of the redesign's looks (Graphite and lime, Harbour, Orchid), light or
+/// dark: picked things go ink and the look's accent, not violet.
 fn lime() -> bool {
-    theme().id.starts_with("graphite-lime")
+    super::theme::family_of(theme().id).is_some()
 }
 
 /// A picked option's edge, like the chosen card in Settings.
@@ -213,9 +214,17 @@ pub fn ground() -> u32 {
     if t.id == "crew-chat" {
         return super::theme::glass(0xF6F6F9);
     }
-    // Graphite and lime's sidebar: a shade of the paper, warm like it.
-    if t.id == "graphite-lime" {
-        return super::theme::glass(0xEEEEE7);
+    // The redesign's sidebars: a shade of each look's own page.
+    let side = match t.id {
+        "graphite-lime" => Some(0xEEEEE7),
+        "harbour" => Some(0xE7EBF0),
+        "harbour-dark" => Some(0x10151C),
+        "orchid" => Some(0xEFE9E1),
+        "orchid-dark" => Some(0x191512),
+        _ => None,
+    };
+    if let Some(side) = side {
+        return super::theme::glass(side);
     }
     let (base, k) = if t.light {
         (t.bg, 0.045)

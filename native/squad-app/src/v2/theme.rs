@@ -105,7 +105,7 @@ const fn glass_tones(blue: u32, amber: u32, green: u32, red: u32, grey: u32) -> 
     ]
 }
 
-pub const THEMES: [Theme; 10] = [
+pub const THEMES: [Theme; 14] = [
     // Graphite and lime: the default. A warm paper page, hairline edges, and
     // lime for the one thing to press. Lime is too pale to read as text on
     // paper, so text keeps to ink and the status colours.
@@ -173,6 +173,138 @@ pub const THEMES: [Theme; 10] = [
         add: 0x7DDB8C,
         del: 0xFF8A80,
         tones: tones(0x1C1C1A, 0x86B6FF, 0xF2B544, 0x7DDB8C, 0xFF6B5E, 0xC9C9C0),
+    },
+    // Harbour: cool slate paper and a periwinkle accent.
+    Theme {
+        id: "harbour",
+        name: "Harbour",
+        line: "Cool slate and periwinkle",
+        light: true,
+        frosted: false,
+        bg: 0xF2F4F7,
+        panel: 0xF8F9FB,
+        raised: 0xFFFFFF,
+        hover: 0xE0E5EB,
+        press: 0xD4DBE3,
+        ink: 0x131D29,
+        body: 0x334155,
+        muted: 0x475569,
+        faint: 0x5F6E83,
+        line_c: 0xD2D9E1,
+        line2: 0xE1E6EC,
+        line_hi: 0xC1CAD4,
+        fill: 0xB8B2FF,
+        fill_hover: 0xACA5FF,
+        fill_press: 0x9F97F7,
+        on_fill: 0x14102E,
+        well: 0xEBEEF2,
+        t_blue: 0x1A50B0,
+        t_amber: 0x7F4D00,
+        t_green: 0x0D6A3F,
+        t_red: 0xA5222F,
+        t_violet: 0x4B3DC2,
+        add: 0x0D6A3F,
+        del: 0xA5222F,
+        tones: tones(0xF2F4F7, 0x2F7BEB, 0xD08A12, 0x1E9E62, 0xE0414F, 0x334155),
+    },
+    // Harbour after dark: deep harbour blue, the same periwinkle.
+    Theme {
+        id: "harbour-dark",
+        name: "Harbour, dark",
+        line: "Deep slate and periwinkle",
+        light: false,
+        frosted: false,
+        bg: 0x141A22,
+        panel: 0x171E27,
+        raised: 0x1B222C,
+        hover: 0x232C38,
+        press: 0x2A3441,
+        ink: 0xE6ECF3,
+        body: 0xC6D0DC,
+        muted: 0xA9B5C4,
+        faint: 0x8592A3,
+        line_c: 0x2A3441,
+        line2: 0x222A35,
+        line_hi: 0x374354,
+        fill: 0xB8B2FF,
+        fill_hover: 0xC6C1FF,
+        fill_press: 0xA69FF5,
+        on_fill: 0x14102E,
+        well: 0x10151C,
+        t_blue: 0x82ADF7,
+        t_amber: 0xE6A84C,
+        t_green: 0x62D29C,
+        t_red: 0xF27D86,
+        t_violet: 0xC4BFFF,
+        add: 0x62D29C,
+        del: 0xF27D86,
+        tones: tones(0x141A22, 0x82ADF7, 0xE6A84C, 0x62D29C, 0xF27D86, 0xC6D0DC),
+    },
+    // Orchid: warm linen and an orchid pink accent.
+    Theme {
+        id: "orchid",
+        name: "Orchid",
+        line: "Warm linen and orchid",
+        light: true,
+        frosted: false,
+        bg: 0xF7F3EE,
+        panel: 0xFBF8F4,
+        raised: 0xFFFFFF,
+        hover: 0xE8E1D7,
+        press: 0xDED5C9,
+        ink: 0x231C17,
+        body: 0x433932,
+        muted: 0x62564C,
+        faint: 0x74675C,
+        line_c: 0xDDD4C8,
+        line2: 0xE6DFD5,
+        line_hi: 0xCFC4B6,
+        fill: 0xF4B8EC,
+        fill_hover: 0xEFA8E5,
+        fill_press: 0xE898DD,
+        on_fill: 0x2A0D25,
+        well: 0xF0EBE4,
+        t_blue: 0x1A50B0,
+        t_amber: 0x7F4D00,
+        t_green: 0x0D6A3F,
+        t_red: 0xA5222F,
+        t_violet: 0x8E2479,
+        add: 0x0D6A3F,
+        del: 0xA5222F,
+        tones: tones(0xF7F3EE, 0x2F7BEB, 0xD08A12, 0x1E9E62, 0xE0414F, 0x433932),
+    },
+    // Orchid after dark: warm espresso, the same orchid.
+    Theme {
+        id: "orchid-dark",
+        name: "Orchid, dark",
+        line: "Warm espresso and orchid",
+        light: false,
+        frosted: false,
+        bg: 0x1E1A17,
+        panel: 0x221E1A,
+        raised: 0x28231F,
+        hover: 0x312B26,
+        press: 0x383029,
+        ink: 0xF0E9E1,
+        body: 0xD4CABF,
+        muted: 0xBCB0A4,
+        faint: 0x998D82,
+        line_c: 0x383029,
+        line2: 0x2E2823,
+        line_hi: 0x463D35,
+        fill: 0xF4B8EC,
+        fill_hover: 0xF8CAF1,
+        fill_press: 0xE8A3DE,
+        on_fill: 0x2A0D25,
+        well: 0x191512,
+        t_blue: 0x82ADF7,
+        t_amber: 0xE6A84C,
+        t_green: 0x62D29C,
+        t_red: 0xF27D86,
+        t_violet: 0xF4B8EC,
+        add: 0x62D29C,
+        del: 0xF27D86,
+        tones: tones(0x1E1A17, 0x82ADF7, 0xE6A84C, 0x62D29C, 0xF27D86, 0xD4CABF),
     },
     // Crew Chat: the default. A white page, a soft grey sidebar and Jobs panel,
     // and violet for the crew's own voice, so the bots' glowing faces stand out.
@@ -465,6 +597,10 @@ impl Theme {
         match self.id {
             "graphite-lime" => 0.36,
             "graphite-lime-dark" => 0.60,
+            "harbour" => 0.36,
+            "harbour-dark" => 0.60,
+            "orchid" => 0.36,
+            "orchid-dark" => 0.60,
             "crew-chat" => 0.34,
             "midnight" => 0.58,
             "graphite" => 0.60,
@@ -487,6 +623,108 @@ pub fn theme() -> &'static Theme {
 pub fn set_theme(id: &str) {
     let i = THEMES.iter().position(|t| t.id == id).unwrap_or(0);
     CURRENT.store(i, Ordering::Relaxed);
+}
+
+/// A look that comes light and dark: picked once, then shown in either, or in
+/// whichever the system is using.
+pub struct Family {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub line: &'static str,
+    /// The theme ids for its light and dark sides.
+    pub light: &'static str,
+    pub dark: &'static str,
+}
+
+/// The three looks of the redesign, in the order Settings shows them.
+pub const FAMILIES: [Family; 3] = [
+    Family {
+        id: "graphite-lime",
+        name: "Graphite and lime",
+        line: "Warm paper and lime, the default",
+        light: "graphite-lime",
+        dark: "graphite-lime-dark",
+    },
+    Family {
+        id: "harbour",
+        name: "Harbour",
+        line: "Cool slate and periwinkle",
+        light: "harbour",
+        dark: "harbour-dark",
+    },
+    Family {
+        id: "orchid",
+        name: "Orchid",
+        line: "Warm linen and orchid",
+        light: "orchid",
+        dark: "orchid-dark",
+    },
+];
+
+/// How a saved theme asks to follow the system: `<family>:system`.
+pub const SYSTEM: &str = ":system";
+
+/// 0 when the theme is fixed; otherwise one more than the family it follows.
+static FOLLOW: AtomicUsize = AtomicUsize::new(0);
+
+/// The family a theme id belongs to, if it's one of the redesign's looks.
+pub fn family_of(id: &str) -> Option<&'static Family> {
+    let fam = id.strip_suffix(SYSTEM).unwrap_or(id);
+    FAMILIES
+        .iter()
+        .find(|f| f.id == fam || f.light == fam || f.dark == fam)
+}
+
+/// Puts the saved theme in use. A theme id is used as it is; `<family>:system`
+/// picks the family's light or dark side to match the system (`dark`), and keeps
+/// matching it through [`follow_system`].
+pub fn set_pref(pref: &str, dark: bool) {
+    match follows(pref) {
+        Some(i) => {
+            FOLLOW.store(i + 1, Ordering::Relaxed);
+            follow_system(dark);
+        }
+        None => {
+            FOLLOW.store(0, Ordering::Relaxed);
+            set_theme(pref);
+        }
+    }
+}
+
+/// Which family `pref` follows the system with, if it does.
+fn follows(pref: &str) -> Option<usize> {
+    pref.strip_suffix(SYSTEM)
+        .and_then(|f| FAMILIES.iter().position(|x| x.id == f))
+}
+
+/// The theme `pref` shows when the system is light or `dark`, if it follows it.
+#[cfg(test)]
+pub fn system_side(pref: &str, dark: bool) -> Option<&'static str> {
+    follows(pref).map(|i| {
+        if dark {
+            FAMILIES[i].dark
+        } else {
+            FAMILIES[i].light
+        }
+    })
+}
+
+/// The theme follows the system's light or dark.
+pub fn following() -> bool {
+    FOLLOW.load(Ordering::Relaxed) > 0
+}
+
+/// When the theme follows the system, switches to the side that matches `dark`.
+pub fn follow_system(dark: bool) {
+    let i = FOLLOW.load(Ordering::Relaxed);
+    if i == 0 {
+        return;
+    }
+    let f = &FAMILIES[(i - 1).min(FAMILIES.len() - 1)];
+    let id = if dark { f.dark } else { f.light };
+    if theme().id != id {
+        set_theme(id);
+    }
 }
 
 /// Turns window transparency on or off, and sets how see-through it is (0 to 100).
@@ -1024,6 +1262,24 @@ mod tests {
         // Faint overlays stay as they are; solid surfaces gain an opacity.
         assert_eq!(thin(see(0xFFFFFF, 0x14), 0.5), see(0xFFFFFF, 0x14));
         assert_eq!(thin(0x101010, 0.5) >> 24, 128);
+    }
+
+    #[test]
+    fn families_point_at_real_themes() {
+        for f in &FAMILIES {
+            let light = THEMES.iter().find(|t| t.id == f.light).unwrap();
+            let dark = THEMES.iter().find(|t| t.id == f.dark).unwrap();
+            assert!(light.light && !dark.light, "{}", f.id);
+            assert_eq!(family_of(f.dark).unwrap().id, f.id);
+        }
+    }
+
+    #[test]
+    fn following_the_system_picks_the_matching_side() {
+        assert_eq!(system_side("harbour:system", true), Some("harbour-dark"));
+        assert_eq!(system_side("harbour:system", false), Some("harbour"));
+        assert_eq!(system_side("orchid-dark", false), None);
+        assert_eq!(system_side("nothing:system", true), None);
     }
 
     #[test]

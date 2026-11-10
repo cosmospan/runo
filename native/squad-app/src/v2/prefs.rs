@@ -1412,7 +1412,11 @@ impl Shell {
         };
         let grid = |frosted: bool, cx: &mut Context<Self>| {
             let mut d = div().flex().flex_wrap().gap(px(space::SM));
-            for t in ui::THEMES.iter().filter(|t| t.frosted == frosted) {
+            // The redesign's looks have their own picker above.
+            for t in ui::THEMES
+                .iter()
+                .filter(|t| t.frosted == frosted && theme::family_of(t.id).is_none())
+            {
                 d = d.child(card_for(t, cx));
             }
             d
@@ -1436,6 +1440,7 @@ impl Shell {
                         .child(line),
                 )
         };
+        let looks = self.looks_card(cx);
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
         let window = self.transparency_card(cx);
@@ -1450,13 +1455,14 @@ impl Shell {
                 .flex_col()
                 .gap(px(space::L))
                 // Themes first: the choice most people come here for.
+                .child(looks)
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(space::SM))
                         .child(heading(
-                            "Solid",
+                            "More themes",
                             if theme::see_through() {
                                 "Opaque by design, see-through while the window switch is on."
                             } else {
@@ -1480,6 +1486,159 @@ impl Shell {
                 .child(picture)
                 .child(backdrop),
         )
+    }
+
+    /// The three looks, each light and dark, and whether to match the system.
+    fn looks_card(&mut self, cx: &mut Context<Self>) -> Div {
+        let current = ui::theme();
+        let family = theme::family_of(current.id);
+        let follow = theme::following();
+        let dark = !current.light;
+        let by_id = |id: &str| ui::THEMES.iter().find(|t| t.id == id);
+        let mut cards = div().flex().flex_wrap().gap(px(space::SM));
+        for f in theme::FAMILIES.iter() {
+            let on = family.is_some_and(|x| x.id == f.id);
+            let side = if dark { f.dark } else { f.light };
+            let Some(shown) = by_id(side) else { continue };
+            cards = cards.child(
+                div()
+                    .id(SharedString::from(format!("look-{}", f.id)))
+                    .w(px(206.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .p(px(10.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .cursor_pointer()
+                    .bg(c(ui::panel()))
+                    .map(|d| {
+                        if on {
+                            d.border_color(c(ui::pick()))
+                        } else {
+                            d.border_color(c(ui::line()))
+                                .hover(|s| s.border_color(c(ui::line_hi())))
+                        }
+                    })
+                    .child(swatch(shown))
+                    .child(
+                        div()
+                            .px(px(4.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(
+                                        div()
+                                            .text_size(px(13.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(c(ui::ink()))
+                                            .child(f.name),
+                                    )
+                                    .child(
+                                        div()
+                                            .ml_auto()
+                                            .text_size(px(10.5))
+                                            .font_family(ui::MONO)
+                                            .text_color(c(ui::faint()))
+                                            .child("LIGHT · DARK"),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .text_color(c(ui::muted()))
+                                    .truncate()
+                                    .child(f.line),
+                            ),
+                    )
+                    .on_click(cx.listener(move |_, _, window, cx| {
+                        let pref = if follow {
+                            format!("{}{}", f.id, theme::SYSTEM)
+                        } else if dark {
+                            f.dark.to_string()
+                        } else {
+                            f.light.to_string()
+                        };
+                        theme::set_pref(&pref, super::system_dark(window.appearance()));
+                        save(cx, |st| st.v2_theme = pref);
+                        cx.notify();
+                    })),
+            );
+        }
+        // Light, dark or the system's, for the look in use (or the default
+        // look, while an older theme is picked).
+        let fam = family.unwrap_or(&theme::FAMILIES[0]);
+        let mode = |id: &'static str, label: &'static str, on: bool, pref: String| {
+            segment(id, label, on).on_click(cx.listener(move |_, _, window, cx| {
+                theme::set_pref(&pref, super::system_dark(window.appearance()));
+                let pref = pref.clone();
+                save(cx, |st| st.v2_theme = pref);
+                cx.notify();
+            }))
+        };
+        let in_family = family.is_some();
+        let modes = segmented(vec![
+            mode(
+                "look-light",
+                "Light",
+                in_family && !follow && !dark,
+                fam.light.to_string(),
+            ),
+            mode(
+                "look-dark",
+                "Dark",
+                in_family && !follow && dark,
+                fam.dark.to_string(),
+            ),
+            mode(
+                "look-system",
+                "Match the system",
+                in_family && follow,
+                format!("{}{}", fam.id, theme::SYSTEM),
+            ),
+        ]);
+        let note = if follow {
+            if dark {
+                "Every theme has both. Right now it's dark, because your system is."
+            } else {
+                "Every theme has both. Right now it's light, because your system is."
+            }
+        } else {
+            "Every theme has both. Pick one, or follow your system as it changes."
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(space::SM))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(3.))
+                    .child(
+                        div()
+                            .text_size(px(13.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Theme"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::muted()))
+                            .child("Three looks to start, each in light and dark."),
+                    ),
+            )
+            .child(cards)
+            .child(group(
+                "Light or dark",
+                vec![row("Light or dark", note, modes)],
+            ))
     }
 
     /// Window transparency: a switch, and a slider for how far the desktop shows

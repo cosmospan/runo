@@ -1019,6 +1019,8 @@ impl Shell {
         };
         let (web, web_sub) = webpage::Web::new(window, cx);
         let mut subs = vec![
+            // A theme that follows the system redraws when the system switches.
+            cx.observe_window_appearance(window, |_, _, cx| cx.notify()),
             // The background image's dim and show-through preview as you drag; its
             // blur needs a new copy made, so that waits until you let go.
             cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
@@ -3555,6 +3557,7 @@ impl Render for Shell {
         self.poll(cx);
         self.poll_maker(window, cx);
         data::set_here(self.crew.store.folder().map_or("", |f| f.path.as_str()));
+        theme::follow_system(system_dark(window.appearance()));
         if self.applied_theme != look() {
             self.applied_theme = look();
             apply_theme(window, cx);
@@ -3972,6 +3975,14 @@ fn background() -> WindowBackgroundAppearance {
     }
 }
 
+/// The system is using a dark appearance.
+pub(crate) fn system_dark(a: gpui::WindowAppearance) -> bool {
+    matches!(
+        a,
+        gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark
+    )
+}
+
 /// Puts the theme in use on the window and on the kit's text boxes and menus.
 fn apply_theme(window: &mut Window, cx: &mut App) {
     use gpui_kit::component::{Theme, ThemeMode};
@@ -4005,7 +4016,7 @@ fn apply_theme(window: &mut Window, cx: &mut App) {
 pub fn open_window(cx: &mut App) {
     // The look first: the window opens with the background it needs.
     let st = cx.global::<crate::settings::AppSettings>();
-    ui::set_theme(&st.v2_theme);
+    theme::set_pref(&st.v2_theme, system_dark(cx.window_appearance()));
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
     theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);
