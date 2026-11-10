@@ -313,21 +313,21 @@ impl Shell {
         let menu_path = path.clone();
         tools = tools
             .child(
-                ui::ghost_i(
-                    "file-open-with",
-                    IconName::SquareArrowOutUpRight,
-                    "Open with",
-                )
-                .h(px(28.))
-                .text_size(px(12.5))
-                .child(
-                    Icon::new(IconName::ChevronDown)
-                        .size(px(12.))
-                        .text_color(c(ui::muted())),
-                )
-                .on_mouse_down(
-                    MouseButton::Left,
-                    self.on_menu(super::menu::Ctx::File(menu_path), cx),
+                self.drop_menu(
+                    super::menu::Ctx::File(menu_path),
+                    ui::ghost_i(
+                        "file-open-with",
+                        IconName::SquareArrowOutUpRight,
+                        "Open with",
+                    )
+                    .h(px(28.))
+                    .text_size(px(12.5))
+                    .child(
+                        Icon::new(IconName::ChevronDown)
+                            .size(px(12.))
+                            .text_color(c(ui::muted())),
+                    ),
+                    cx,
                 ),
             )
             .child(

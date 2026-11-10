@@ -577,7 +577,7 @@ impl std::fmt::Display for MergeError {
         match self {
             MergeError::InTheWay { dir, files } => write!(
                 f,
-                "{dir} has changes you haven't committed to {}, and this merge changes {} too.",
+                "{dir} has changes you haven't committed to {}, and the merge can't go ahead over {}.",
                 files.join(", "),
                 if files.len() == 1 { "it" } else { "them" }
             ),
@@ -597,8 +597,11 @@ impl From<String> for MergeError {
 pub struct Merged {
     /// The new short hash of `base`.
     pub hash: String,
-    /// Changes that were set aside to merge and clash with what came in, so they
-    /// stay in the stash under this name instead of going back into the files.
+    /// Files with your uncommitted changes that were set aside for the merge.
+    pub set_aside: Vec<String>,
+    /// When those changes clash with what came in, they stay in the stash
+    /// instead of going back into the files: the stash commit, for
+    /// [`bring_back`].
     pub kept: Option<String>,
 }
 
@@ -611,15 +614,39 @@ fn uncommitted_files(dir: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Uncommitted changes in the checkout where `base` is that merging `branch`
-/// would overwrite: that folder and the files, or `None` when nothing is in the
-/// way. Changes to other files don't stop a merge.
+/// Files with changes staged in `dir`.
+fn staged_files(dir: &str) -> Vec<String> {
+    git(
+        dir,
+        &["diff", "--cached", "--name-only", "-z", "--no-renames"],
+    )
+    .map(|s| split_z(&s))
+    .unwrap_or_default()
+}
+
+/// Whether merging `branch` into `base` makes a merge commit rather than
+/// moving `base` ahead.
+fn makes_a_commit(dir: &str, branch: &str, base: &str) -> bool {
+    !is_ancestor(dir, base, branch)
+        || git(dir, &["config", "--get", "merge.ff"]).is_ok_and(|v| v.trim() == "false")
+}
+
+/// Uncommitted changes in the checkout where `base` is that stop merging
+/// `branch` there: that folder and the files, or `None` when nothing is in the
+/// way. Those are changes to files the merge changes too, and, when the merge
+/// makes a commit, any staged change, since git won't make a merge commit over
+/// a staged one. Unstaged changes to other files don't stop a merge.
 pub fn in_the_way(repo: &str, branch: &str, base: &str) -> Option<(String, Vec<String>)> {
     let dir = checked_out_at(repo, base)?;
     let dirty = uncommitted_files(&dir);
     if dirty.is_empty() {
         return None;
     }
+    let staged = if makes_a_commit(&dir, branch, base) {
+        staged_files(&dir)
+    } else {
+        Vec::new()
+    };
     let touched = git(
         repo,
         &[
@@ -632,7 +659,10 @@ pub fn in_the_way(repo: &str, branch: &str, base: &str) -> Option<(String, Vec<S
     )
     .map(|s| split_z(&s))
     .unwrap_or_default();
-    let files: Vec<String> = dirty.into_iter().filter(|f| touched.contains(f)).collect();
+    let files: Vec<String> = dirty
+        .into_iter()
+        .filter(|f| touched.contains(f) || staged.contains(f))
+        .collect();
     (!files.is_empty()).then_some((dir, files))
 }
 
@@ -709,23 +739,61 @@ pub fn merge_into(
     if temporary {
         let _ = remove_worktree(repo, &dir);
     }
+    let set_aside = stashed.map(|(_, files)| files).unwrap_or_default();
     outcome
-        .map(|hash| Merged { hash, kept })
+        .map(|hash| Merged {
+            hash,
+            set_aside,
+            kept,
+        })
         .map_err(MergeError::Failed)
+}
+
+/// The stash entry for the stash commit `sha` ("stash@{2}"), if it's still there.
+fn stash_entry(dir: &str, sha: &str) -> Option<String> {
+    if sha.is_empty() {
+        return None;
+    }
+    (0..100)
+        .map(|n| format!("stash@{{{n}}}"))
+        .take_while(|r| rev(dir, r).is_some())
+        .find(|r| rev(dir, r).as_deref() == Some(sha))
+}
+
+/// Brings changes a merge kept in the stash (see [`Merged::kept`]) back into
+/// `dir`, with the clash marked in the files, and drops them from the stash:
+/// the marked files hold both sides. Gives back the files that clash.
+pub fn bring_back(dir: &str, sha: &str) -> Result<Vec<String>, String> {
+    let at = stash_entry(dir, sha)
+        .ok_or_else(|| "Those changes aren't in the stash any more.".to_string())?;
+    let applied = git(dir, &["stash", "apply", "--quiet", &at]);
+    let clash = conflicted(dir);
+    if let (Err(why), true) = (applied, clash.is_empty()) {
+        return Err(why);
+    }
+    let _ = git(dir, &["stash", "drop", "--quiet", &at]);
+    // The files read as plain uncommitted changes with the clash marked, not
+    // as a merge git waits on, which would stop the next one.
+    if !clash.is_empty() {
+        let mut reset = vec!["reset", "--quiet", "--"];
+        reset.extend(clash.iter().map(String::as_str));
+        let _ = git(dir, &reset);
+    }
+    Ok(clash)
 }
 
 /// Puts changes set aside before a merge back into `dir`. When they clash with
 /// what the merge brought in, the files go back to the merged version and the
-/// changes stay in the stash: its name then.
+/// changes stay in the stash: its commit then.
 fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
-    if sha.is_empty() {
-        return None;
-    }
     // The newest stash entry is ours unless something stashed in between.
-    let at = (0..50)
-        .map(|n| format!("stash@{{{n}}}"))
-        .find(|r| rev(dir, r).as_deref() == Some(sha))?;
-    if git(dir, &["stash", "apply", "--quiet", &at]).is_ok() && conflicted(dir).is_empty() {
+    let at = stash_entry(dir, sha)?;
+    // Staged changes go back staged when they can; git refuses that without
+    // touching anything when the index can't take them, and then they go back
+    // as plain changes.
+    let applied = git(dir, &["stash", "apply", "--quiet", "--index", &at]).is_ok()
+        || (conflicted(dir).is_empty() && git(dir, &["stash", "apply", "--quiet", &at]).is_ok());
+    if applied && conflicted(dir).is_empty() {
         let _ = git(dir, &["stash", "drop", "--quiet", &at]);
         return None;
     }
@@ -736,7 +804,7 @@ fn put_back(dir: &str, sha: &str, files: &[String]) -> Option<String> {
     let mut checkout = vec!["checkout", "HEAD", "--"];
     checkout.extend(files.iter().map(String::as_str));
     let _ = git(dir, &checkout);
-    Some(at)
+    Some(sha.to_string())
 }
 
 /// The commit where the branch left `base`.
@@ -1580,7 +1648,8 @@ mod tests {
         let (r, repo) = merge_setup("merge-kept");
         std::fs::write(repo.join("f"), "a\nX\nc\n").unwrap();
         let merged = merge_into(&r, "feat", "main", true).unwrap();
-        assert_eq!(merged.kept.as_deref(), Some("stash@{0}"));
+        assert_eq!(merged.set_aside, vec!["f".to_string()]);
+        assert_eq!(merged.kept, rev(&r, "stash@{0}"));
         // The merged file, with no clash markers, and the change kept.
         assert_eq!(
             std::fs::read_to_string(repo.join("f")).unwrap(),
@@ -1588,6 +1657,68 @@ mod tests {
         );
         assert!(conflicted(&r).is_empty());
         assert!(git(&r, &["stash", "show", "-p"]).unwrap().contains("+X"));
+
+        // Brought back, the clash is marked in the file and the stash is empty.
+        let clash = bring_back(&r, merged.kept.as_deref().unwrap()).unwrap();
+        assert_eq!(clash, vec!["f".to_string()]);
+        let f = std::fs::read_to_string(repo.join("f")).unwrap();
+        assert!(
+            f.contains("<<<<<<<") && f.contains("X") && f.contains("B"),
+            "{f}"
+        );
+        assert!(git(&r, &["stash", "list"]).unwrap().trim().is_empty());
+        assert!(conflicted(&r).is_empty());
+        assert!(bring_back(&r, merged.kept.as_deref().unwrap()).is_err());
+    }
+
+    /// `merge_setup`, with `main` moved on so the merge makes a commit.
+    fn merge_setup_diverged(name: &str) -> (String, std::path::PathBuf) {
+        let (r, repo) = merge_setup(name);
+        std::fs::write(repo.join("h"), "x\n").unwrap();
+        sh(&repo, &["add", "h"]);
+        sh(&repo, &["commit", "-qm", "main moved on"]);
+        (r, repo)
+    }
+
+    #[test]
+    fn a_staged_change_to_another_file_is_in_the_way_of_a_merge_commit() {
+        let (r, repo) = merge_setup_diverged("merge-staged");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        sh(&repo, &["add", "g"]);
+        // Git won't make a merge commit over it, so it's named, not a raw error.
+        match merge_into(&r, "feat", "main", false) {
+            Err(MergeError::InTheWay { files, .. }) => assert_eq!(files, vec!["g".to_string()]),
+            other => panic!("expected in the way, got {other:?}"),
+        }
+        // Set aside, it merges and comes back staged.
+        let merged = merge_into(&r, "feat", "main", true).unwrap();
+        assert_eq!(merged.kept, None);
+        assert_eq!(
+            std::fs::read_to_string(repo.join("f")).unwrap(),
+            "a\nB\nc\n"
+        );
+        assert_eq!(std::fs::read_to_string(repo.join("g")).unwrap(), "2\n");
+        assert_eq!(staged_files(&r), vec!["g".to_string()]);
+        assert!(git(&r, &["stash", "list"]).unwrap().trim().is_empty());
+    }
+
+    #[test]
+    fn a_staged_change_doesnt_stop_a_fast_forward() {
+        let (r, repo) = merge_setup("merge-staged-ff");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        sh(&repo, &["add", "g"]);
+        assert_eq!(in_the_way(&r, "feat", "main"), None);
+        merge_into(&r, "feat", "main", false).unwrap();
+        assert_eq!(staged_files(&r), vec!["g".to_string()]);
+    }
+
+    #[test]
+    fn unstaged_changes_to_other_files_dont_stop_a_merge_commit() {
+        let (r, repo) = merge_setup_diverged("merge-other-diverged");
+        std::fs::write(repo.join("g"), "2\n").unwrap();
+        assert_eq!(in_the_way(&r, "feat", "main"), None);
+        merge_into(&r, "feat", "main", false).unwrap();
+        assert_eq!(std::fs::read_to_string(repo.join("g")).unwrap(), "2\n");
     }
 
     #[test]

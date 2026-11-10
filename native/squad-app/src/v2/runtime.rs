@@ -974,8 +974,6 @@ impl Runtime {
         }
         // The last turn's recap no longer tells how it ends.
         job.recap.clear();
-        // What it changes next may not touch the same files.
-        job.in_the_way.clear();
         job.resume_at = 0;
         // After a rewind the engine starts fresh: tell it what still stands.
         let text = if job.rewound {
@@ -1634,11 +1632,10 @@ impl Runtime {
             self.store.save();
             return;
         }
-        let set_aside = job.set_aside;
-        if let Some(j) = self.store.job_mut(id) {
-            j.set_aside = false;
-        }
-        match work::merge(&job, set_aside) {
+        // Your uncommitted changes in the way are set aside for the merge and
+        // put back after, the way git's --autostash does; you're asked only
+        // when they clash with what came in.
+        match work::merge(&job, true) {
             Ok(merged) => {
                 let msg = format!("Merged into {} as {}.", job.base, merged.hash);
                 if let Some(j) = self.store.job_mut(id) {
@@ -1647,13 +1644,15 @@ impl Runtime {
                     j.worktree.clear();
                     j.seen = true;
                     j.feed.push(store::Item::Note(msg.clone()));
-                    let files = std::mem::take(&mut j.in_the_way).join(", ");
-                    if let Some(at) = merged.kept {
+                    let files = merged.set_aside.join(", ");
+                    if let Some(sha) = merged.kept {
                         j.feed.push(store::Item::Note(format!(
-                            "Your uncommitted changes to {files} clash with what was merged, so they're kept in the stash as {at}. Run `git stash pop` in {} to bring them back and sort out the clash.",
-                            j.folder.path
+                            "Your uncommitted changes to {files} clash with what was merged, so they're set aside for now."
                         )));
-                    } else if set_aside {
+                        j.in_the_way = merged.set_aside;
+                        j.kept = sha;
+                        j.seen = false;
+                    } else if !files.is_empty() {
                         j.feed.push(store::Item::Note(format!(
                             "Your uncommitted changes to {files} were set aside for the merge and are back in place."
                         )));
@@ -1662,27 +1661,18 @@ impl Runtime {
                 self.say(msg);
             }
             Err(crate::git::MergeError::InTheWay { dir, files }) => {
+                // Only when not setting aside, which approving always does.
                 if let Some(j) = self.store.job_mut(id) {
-                    // Pressing Approve again with the same files in the way
-                    // says nothing new; the card above already shows them.
-                    if j.in_the_way != files {
-                        j.feed.push(store::Item::Note(format!(
-                            "Nothing was merged: {dir} has changes you haven't committed to {}, and this merge changes {} too.",
-                            files.join(", "),
-                            if files.len() == 1 { "it" } else { "them" }
-                        )));
-                        j.in_the_way = files;
-                    }
-                    j.seen = false;
+                    j.feed.push(store::Item::Error(format!(
+                        "Couldn't merge it: {}",
+                        crate::git::MergeError::InTheWay { dir, files }
+                    )));
                 }
-                self.say(
-                    "Couldn't merge it yet: uncommitted changes are in the way. It's on the job.",
-                );
+                self.say("Couldn't merge it. The reason is on the job.");
             }
             Err(crate::git::MergeError::Failed(why)) => {
                 let files = trouble::conflict_files(&why);
                 if let Some(j) = self.store.job_mut(id) {
-                    j.in_the_way.clear();
                     let error = format!("Couldn't merge it: {why}");
                     let repeat =
                         matches!(j.feed.last(), Some(store::Item::Error(e)) if *e == error);
@@ -1764,16 +1754,81 @@ impl Runtime {
         self.approve(id);
     }
 
-    /// Merges a job whose merge was held by uncommitted changes in your
-    /// checkout: they're stashed first and put back after.
+    /// What apps that asked before setting changes aside send: approving
+    /// does that now.
     pub fn set_aside_and_merge(&mut self, id: u64) {
-        if self.on_server(id, "set-aside-and-merge", serde_json::Value::Null) {
+        self.approve(id);
+    }
+
+    /// Your changes a merge set aside and couldn't put back, brought back into
+    /// your checkout with the clash marked in the files.
+    pub fn bring_back(&mut self, id: u64) {
+        if self.on_server(id, "bring-back", serde_json::Value::Null) {
             return;
         }
-        if let Some(j) = self.store.job_mut(id) {
-            j.set_aside = true;
+        let Some(job) = self.store.job(id).cloned() else {
+            return;
+        };
+        if job.kept.is_empty() {
+            return;
         }
-        self.approve(id);
+        let dir = crate::git::checked_out_at(&job.folder.path, &job.base)
+            .unwrap_or_else(|| job.folder.path.clone());
+        let back = crate::git::bring_back(&dir, &job.kept);
+        let Some(j) = self.store.job_mut(id) else {
+            return;
+        };
+        match back {
+            Ok(clash) if clash.is_empty() => {
+                j.feed.push(store::Item::Note(format!(
+                    "Your changes to {} are back in {dir}.",
+                    j.in_the_way.join(", ")
+                )));
+                j.kept.clear();
+                j.in_the_way.clear();
+            }
+            Ok(clash) => {
+                j.feed.push(store::Item::Note(format!(
+                    "Your changes are back in {dir}. {} {} both your lines and the merged ones, between <<<<<<< and >>>>>>>: keep what you want there and save.",
+                    clash.join(", "),
+                    if clash.len() == 1 { "has" } else { "have" }
+                )));
+                j.kept.clear();
+                j.in_the_way.clear();
+            }
+            Err(why) => {
+                j.feed.push(store::Item::Error(format!(
+                    "Couldn't bring your changes back: {why}"
+                )));
+                if why.contains("aren't in the stash") {
+                    j.kept.clear();
+                    j.in_the_way.clear();
+                }
+            }
+        }
+        self.store.save();
+    }
+
+    /// Leaves the changes a merge set aside in the stash, and puts the card
+    /// away. `git stash list` shows them as "Squad Code: set aside to merge …".
+    pub fn leave_kept(&mut self, id: u64) {
+        if self.on_server(id, "leave-kept", serde_json::Value::Null) {
+            return;
+        }
+        let Some(j) = self.store.job_mut(id) else {
+            return;
+        };
+        if j.kept.is_empty() {
+            return;
+        }
+        j.feed.push(store::Item::Note(format!(
+            "Your changes to {} stay in the stash, as \"Squad Code: set aside to merge {}\".",
+            j.in_the_way.join(", "),
+            j.branch
+        )));
+        j.kept.clear();
+        j.in_the_way.clear();
+        self.store.save();
     }
 
     /// Hands what the seatbelt found back to the job's bot to take out; it
@@ -3409,8 +3464,6 @@ fn fresh_branch(job: &mut store::Job) -> Option<String> {
             job.conflict.clear();
             job.held.clear();
             job.belt_ok = false;
-            job.in_the_way.clear();
-            job.set_aside = false;
             job.shipped.clear();
             job.shipping = false;
             job.pr.clear();
@@ -4254,30 +4307,29 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
     }
 
     #[test]
-    fn a_merge_held_by_your_changes_says_so_once_and_can_set_them_aside() {
+    fn your_changes_in_the_way_are_set_aside_and_a_clash_waits_for_you() {
         let mut b = bench("in-the-way");
         let id = b.start("WRITE-A Add a file called a");
         b.settle();
-        // You changed the same file in your checkout meanwhile.
+        // You made the same file in your checkout meanwhile.
         std::fs::write(b.repo.join("a.txt"), "mine\n").unwrap();
         git(&b.repo, &["add", "a.txt"]);
+        // Approve merges without asking; yours clash, so they wait aside.
         b.rt.approve(id);
-        b.rt.approve(id);
-        let job = b.job(id);
-        assert_eq!(job.status, Status::Review);
-        assert_eq!(job.in_the_way, vec!["a.txt".to_string()]);
-        let told = job
-            .feed
-            .iter()
-            .filter(|i| matches!(i, store::Item::Note(t) if t.starts_with("Nothing was merged")))
-            .count();
-        assert_eq!(told, 1, "feed: {:?}", job.feed);
-        assert!(!job.feed.iter().any(|i| matches!(i, store::Item::Error(_))));
-
-        b.rt.set_aside_and_merge(id);
         let job = b.job(id);
         assert_eq!(job.status, Status::Shipped, "feed: {:?}", job.feed);
-        assert!(job.in_the_way.is_empty());
+        assert_eq!(job.in_the_way, vec!["a.txt".to_string()]);
+        assert!(!job.kept.is_empty());
+        assert!(!job.feed.iter().any(|i| matches!(i, store::Item::Error(_))));
+        assert!(git(&b.repo, &["status", "--porcelain"]).trim().is_empty());
+
+        // Brought back, both sides are in the file to sort out.
+        b.rt.bring_back(id);
+        let job = b.job(id);
+        assert!(job.kept.is_empty() && job.in_the_way.is_empty());
+        let a = std::fs::read_to_string(b.repo.join("a.txt")).unwrap();
+        assert!(a.contains("<<<<<<<") && a.contains("mine"), "{a}");
+        assert!(git(&b.repo, &["stash", "list"]).trim().is_empty());
     }
 
     #[test]

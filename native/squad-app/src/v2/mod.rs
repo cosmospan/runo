@@ -2900,13 +2900,22 @@ impl Shell {
         cx.notify();
     }
 
-    /// Merges a job whose merge was held by uncommitted changes in your
-    /// checkout, setting them aside for it and putting them back after.
-    pub(super) fn set_aside_and_merge(&mut self, id: u64, cx: &mut Context<Self>) {
+    /// Brings back your changes a merge set aside and couldn't put back, with
+    /// the clash marked in the files.
+    pub(super) fn bring_back(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.sample_guard(cx) {
             return;
         }
-        self.crew.set_aside_and_merge(id);
+        self.crew.bring_back(id);
+        cx.notify();
+    }
+
+    /// Leaves those changes in the stash and puts the card away.
+    pub(super) fn leave_kept(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.sample_guard(cx) {
+            return;
+        }
+        self.crew.leave_kept(id);
         cx.notify();
     }
 
