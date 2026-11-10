@@ -590,8 +590,8 @@ impl Shell {
             .border_1()
             .border_color(c(ui::line2()));
         for (i, label, n) in [
+            // Needs you has its own page, so it isn't a filter here too.
             (0usize, "All", all.len()),
-            (1, "Needs you", needs.len()),
             (2, "Running", going.len()),
             (3, "Done", done.len()),
             (4, "Problems", trouble.len()),
@@ -864,20 +864,14 @@ impl Shell {
     }
 
     /// A job that isn't running: the bot's face on its colour, the title, how it
-    /// ended, and the few facts it has (lines, files, time, cost) as chips.
+    /// ended, the lines it changed and when. Files, time and cost are on its page.
     fn job_card(&mut self, j: &Job, cx: &mut Context<Self>) -> impl IntoElement {
         let id = j.id;
         let accent = j.bot.accent();
         let face = self.avatar(j.bot, 30.);
         let (word, tone) = super::home::status_of(j);
         let needs = j.needs_you();
-        let files = if j.changes.is_empty() {
-            j.files.len()
-        } else {
-            j.changes.len()
-        };
         let (added, removed) = j.lines();
-        let secs = j.seconds();
         let mut facts = div().flex_none().flex().items_center().gap(px(6.));
         if added + removed > 0 {
             facts = facts.child(
@@ -894,27 +888,6 @@ impl Shell {
                             .child(format!("\u{2212}{removed}")),
                     ),
             );
-        }
-        if files > 0 {
-            facts = facts.child(chip().child(format!(
-                "{files} {}",
-                if files == 1 { "file" } else { "files" }
-            )));
-        }
-        if secs > 0 && j.ended.is_some() {
-            facts = facts.child(
-                chip()
-                    .gap(px(5.))
-                    .child(
-                        gpui_kit::component::Icon::new(IconName::Clock)
-                            .size(px(11.))
-                            .text_color(c(ui::faint())),
-                    )
-                    .child(store::span(secs)),
-            );
-        }
-        if let Some(cost) = super::home::cost(&j.summary) {
-            facts = facts.child(chip().child(format!("${cost:.2}")));
         }
         let edge = if needs {
             super::theme::mix(ui::line(), tone.0, 0.35)

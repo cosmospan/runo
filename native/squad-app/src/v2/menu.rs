@@ -29,6 +29,8 @@ pub(super) enum Ctx {
     Bot(Member),
     /// A job's row or card.
     Job(u64),
+    /// The Open button on a job's page: its browser, terminal and folder.
+    JobOpen(u64),
     /// A message in a thread or a DM: its text, who a reply goes to, your own
     /// words to send again, and the job it's about.
     Message {
@@ -59,6 +61,9 @@ enum Act {
     StopJob(u64),
     RunAgain(u64),
     JobTerminal(u64),
+    JobBrowser(u64),
+    /// Opens the terminal on a job's page, or hides it when it's open.
+    JobTermToggle(u64),
     Reply(Reply),
     Edit(String),
     Quote(String),
@@ -269,6 +274,7 @@ impl Shell {
                 v
             }
             Ctx::Job(id) => self.job_items(*id),
+            Ctx::JobOpen(id) => self.open_items(*id),
             Ctx::Message {
                 copy,
                 reply,
@@ -302,6 +308,39 @@ impl Shell {
                 v
             }
         }
+    }
+
+    /// What a job's Open button offers: the places its work can be seen.
+    fn open_items(&self, id: u64) -> Vec<Entry> {
+        let Some(j) = self.crew.store.job(id) else {
+            return Vec::new();
+        };
+        let mut v = Vec::new();
+        if j.status != Status::Shipped {
+            v.push(item("Browser", IconName::Globe, Act::JobBrowser(id)));
+        }
+        v.push(item(
+            if self.term_open == Some(id) {
+                "Hide terminal"
+            } else {
+                "Terminal"
+            },
+            IconName::SquareTerminal,
+            Act::JobTermToggle(id),
+        ));
+        v.push(item(
+            reveal_label(),
+            IconName::FolderOpen,
+            Act::Reveal(PathBuf::from(j.dir())),
+        ));
+        if !j.pr.is_empty() {
+            v.push(item(
+                "Pull request",
+                IconName::GitPullRequest,
+                Act::OpenLink(j.pr.clone()),
+            ));
+        }
+        v
     }
 
     fn job_items(&self, id: u64) -> Vec<Entry> {
@@ -429,6 +468,8 @@ impl Shell {
                     self.toggle_term(id, window, cx);
                 }
             }
+            Act::JobTermToggle(id) => self.toggle_term(id, window, cx),
+            Act::JobBrowser(id) => self.open_job_browser(id, None, cx),
             Act::Reply(Reply::Job(id)) => self.reply_open = Some(id),
             Act::Reply(Reply::Bot(who)) if self.dm() == Some(who) => {
                 self.put_in_box(String::new(), window, cx)

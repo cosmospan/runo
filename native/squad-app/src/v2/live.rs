@@ -208,22 +208,14 @@ impl Shell {
                     )
                 },
             )
-            // A job on your server: its screen, where anything the bot
-            // opens (a browser, the app it's testing) shows up.
-            // The job's own browser, where its bot tries pages and you can too.
-            .when(!matches!(job.status, Status::Shipped), |d| {
+            // Its browser, terminal and folder, under one Open menu.
+            .map(|d| {
                 let id = job.id;
                 d.child(
-                    ui::ghost_i("job-browser", IconName::Globe, "Browser")
-                        .tooltip(|window, cx| {
-                            gpui_kit::component::tooltip::Tooltip::new(
-                                "This job's own browser, inside Squad: watch the bot try pages, or open one yourself.",
-                            )
-                            .build(window, cx)
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.open_job_browser(id, None, cx)
-                        })),
+                    ui::ghost_i("job-open", IconName::ChevronDown, "Open").on_mouse_down(
+                        MouseButton::Left,
+                        self.on_menu(super::menu::Ctx::JobOpen(id), cx),
+                    ),
                 )
             })
             .when(running && !job.remote_on.is_empty(), |d| {
@@ -235,34 +227,6 @@ impl Shell {
                     ui::ghost_i("stop", IconName::CircleStop, "Stop")
                         .text_color(c(ui::RED))
                         .on_click(cx.listener(move |this, _, _, cx| this.stop_job(id, cx))),
-                )
-            })
-            .map(|d| {
-                let id = job.id;
-                let open = self.term_open == Some(id);
-                d.child(
-                    ui::ghost_i(
-                        "terminal",
-                        IconName::SquareTerminal,
-                        if open { "Hide terminal" } else { "Terminal" },
-                    )
-                    .tooltip(|window, cx| {
-                        gpui_kit::component::tooltip::Tooltip::new(
-                            "A shell in this job's own branch (⌃`)",
-                        )
-                        .build(window, cx)
-                    })
-                    .on_click(
-                        cx.listener(move |this, _, window, cx| this.toggle_term(id, window, cx)),
-                    ),
-                )
-            })
-            .when(!running, |d| {
-                let path = job.folder.path.clone();
-                d.child(
-                    ui::ghost_i("open-folder", IconName::FolderOpen, "Open folder").on_click(
-                        cx.listener(move |_, _, _, cx| cx.reveal_path(std::path::Path::new(&path))),
-                    ),
                 )
             });
         let fraction = match (running, progress) {
@@ -937,33 +901,13 @@ impl Shell {
         div()
             .flex()
             .flex_col()
+            // The header already says the status; this says how it went.
             .child(section(
-                "Status",
+                "Summary",
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(8.))
-                    .child({
-                        let (word, tone) = super::home::status_of(job);
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .px(px(12.))
-                            .py(px(9.))
-                            .rounded(px(10.))
-                            .bg(c(tone.1))
-                            .border_1()
-                            .border_color(c(tone.2))
-                            .child(div().size(px(8.)).rounded_full().bg(c(tone.0)))
-                            .child(
-                                div()
-                                    .text_size(px(13.5))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(tone.0))
-                                    .child(word),
-                            )
-                    })
                     .when(!stats.is_empty(), |d| d.child(stats_grid))
                     .child(
                         div()
@@ -1004,7 +948,12 @@ impl Shell {
                     ),
             ))
             .when(!job.plan.is_empty(), |d| d.child(section("Plan", plan)))
-            .child(section("Files changed", files))
+            // The review card lists them while there's a review; a job that
+            // only reads has none to list.
+            .when(
+                job.status != Status::Review && !(touched.is_empty() && !job.mode.writes()),
+                |d| d.child(section("Files changed", files)),
+            )
             .when(has_more, |d| {
                 d.child(section(&format!("{}'s other jobs", job.bot.name()), more))
             })

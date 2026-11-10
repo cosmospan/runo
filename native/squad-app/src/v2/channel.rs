@@ -1500,7 +1500,6 @@ impl Shell {
                     .child(f),
             );
         }
-        let names: Vec<&str> = bots.iter().map(|b| b.name()).collect();
         let about = if busy > 0 {
             format!("{} \u{b7} {busy} working", bots.len())
         } else {
@@ -1523,14 +1522,6 @@ impl Shell {
                     .font_weight(FontWeight::BOLD)
                     .text_color(c(ui::ink()))
                     .child(format!("#{name}")),
-            )
-            .child(
-                div()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(12.5))
-                    .text_color(c(ui::faint()))
-                    .child(super::and_list(&names)),
             )
             .child(div().flex_1())
             .child(

@@ -4,6 +4,17 @@ All notable changes to Squad Code are documented here. Entries before 2.0 were w
 
 ## [Unreleased]
 
+### Changed
+
+- A simpler window, with each thing shown once:
+  - The sidebar keeps Needs you, All jobs and Crew. Usage opens from the spend in the status bar, the Try list is gone (its links are in Settings), and the sidebar's search and new-job buttons are gone too: the search box in the top bar and the thread's box do those.
+  - A job's page shows its status once, in the header. The right sidebar's first section is now Summary (time, turns, cost and a line on where it's at), and it lists changed files only when the review card doesn't. A job that only reads no longer shows an empty Files changed.
+  - Browser, Terminal and Open folder on a job's page are one **Open** menu, with the pull request when there is one.
+  - Crew cards show the bot, its job, its status and its engine, with Setup, Chat and Give a job. Skills, tools and the jobs, success and spend figures are gone from the card, and so is the pin, which no longer did anything. Remove from crew is in the bot's Setup and its right-click menu.
+  - A thread's bar shows its bots as faces only, without the written-out list of names.
+  - All jobs drops its Needs you filter (Needs you has its own page), and each job's row shows the lines it changed and when, not five chips.
+  - Settings takes the window beside the rail, with Back at the top, instead of sitting next to the sidebar. Mascot is a tab in Appearance, and How work runs no longer repeats the Engines list.
+
 ## [2.0.0-alpha.9] - 2026-11-09
 
 ### Fixed

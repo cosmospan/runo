@@ -258,29 +258,6 @@ impl Setup {
         }
         deny
     }
-
-    /// The setup's lines as one line each, for the crew card.
-    pub fn perms_line(&self) -> String {
-        let p = self.perms;
-        let mut out = Vec::new();
-        if !p.edit {
-            out.push("read-only");
-        }
-        if !p.install {
-            out.push("no installs");
-        }
-        if !p.web {
-            out.push("no web");
-        }
-        if !p.push {
-            out.push("never pushes");
-        }
-        if out.is_empty() {
-            "default permissions".into()
-        } else {
-            out.join(", ")
-        }
-    }
 }
 
 static SETUPS: RwLock<Vec<(String, Setup)>> = RwLock::new(Vec::new());
@@ -375,7 +352,6 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.brief(), "");
         assert!(s.tool_rules().is_empty());
-        assert_eq!(s.perms_line(), "default permissions");
     }
 
     #[test]
@@ -405,7 +381,6 @@ mod tests {
         let deny = s.tool_rules();
         assert!(deny.contains(&"Bash(npm install:*)".to_string()));
         assert!(deny.contains(&"Bash(git push:*)".to_string()));
-        assert_eq!(s.perms_line(), "no installs, never pushes");
     }
 
     #[test]
