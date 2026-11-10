@@ -890,6 +890,8 @@ impl Runtime {
         }
         // The last turn's recap no longer tells how it ends.
         job.recap.clear();
+        // What it changes next may not touch the same files.
+        job.in_the_way.clear();
         job.resume_at = 0;
         // After a rewind the engine starts fresh: tell it what still stands.
         let text = if job.rewound {
@@ -897,6 +899,13 @@ impl Runtime {
             super::rewind::context(job, &text)
         } else {
             text
+        };
+        let text = match fresh_branch(job) {
+            Some(base) => format!(
+                "{}\n\nYou already worked on this, and that work is merged into {base}. You're now on a fresh branch from {base}: check the files before changing anything.\n\nNow: {text}",
+                job.title.trim()
+            ),
+            None => text,
         };
         if sent_back {
             let said = job
@@ -1541,24 +1550,62 @@ impl Runtime {
             self.store.save();
             return;
         }
-        match work::merge(&job) {
-            Ok(hash) => {
-                let msg = format!("Merged into {} as {hash}.", job.base);
+        let set_aside = job.set_aside;
+        if let Some(j) = self.store.job_mut(id) {
+            j.set_aside = false;
+        }
+        match work::merge(&job, set_aside) {
+            Ok(merged) => {
+                let msg = format!("Merged into {} as {}.", job.base, merged.hash);
                 if let Some(j) = self.store.job_mut(id) {
                     j.status = Status::Shipped;
                     j.shipped = msg.clone();
                     j.worktree.clear();
                     j.seen = true;
                     j.feed.push(store::Item::Note(msg.clone()));
+                    let files = std::mem::take(&mut j.in_the_way).join(", ");
+                    if let Some(at) = merged.kept {
+                        j.feed.push(store::Item::Note(format!(
+                            "Your uncommitted changes to {files} clash with what was merged, so they're kept in the stash as {at}. Run `git stash pop` in {} to bring them back and sort out the clash.",
+                            j.folder.path
+                        )));
+                    } else if set_aside {
+                        j.feed.push(store::Item::Note(format!(
+                            "Your uncommitted changes to {files} were set aside for the merge and are back in place."
+                        )));
+                    }
                 }
                 self.say(msg);
             }
-            Err(why) => {
+            Err(crate::git::MergeError::InTheWay { dir, files }) => {
+                if let Some(j) = self.store.job_mut(id) {
+                    // Pressing Approve again with the same files in the way
+                    // says nothing new; the card above already shows them.
+                    if j.in_the_way != files {
+                        j.feed.push(store::Item::Note(format!(
+                            "Nothing was merged: {dir} has changes you haven't committed to {}, and this merge changes {} too.",
+                            files.join(", "),
+                            if files.len() == 1 { "it" } else { "them" }
+                        )));
+                        j.in_the_way = files;
+                    }
+                    j.seen = false;
+                }
+                self.say(
+                    "Couldn't merge it yet: uncommitted changes are in the way. It's on the job.",
+                );
+            }
+            Err(crate::git::MergeError::Failed(why)) => {
                 let files = trouble::conflict_files(&why);
                 if let Some(j) = self.store.job_mut(id) {
+                    j.in_the_way.clear();
+                    let error = format!("Couldn't merge it: {why}");
+                    let repeat =
+                        matches!(j.feed.last(), Some(store::Item::Error(e)) if *e == error);
                     if files.is_empty() {
-                        j.feed
-                            .push(store::Item::Error(format!("Couldn't merge it: {why}")));
+                        if !repeat {
+                            j.feed.push(store::Item::Error(error));
+                        }
                     } else {
                         j.feed.push(store::Item::Note(format!(
                             "{} moved on and {} now clash, so nothing was merged.",
@@ -1629,6 +1676,18 @@ impl Runtime {
             j.feed.push(store::Item::Note(
                 "You said to go ahead in spite of the seatbelt.".into(),
             ));
+        }
+        self.approve(id);
+    }
+
+    /// Merges a job whose merge was held by uncommitted changes in your
+    /// checkout: they're stashed first and put back after.
+    pub fn set_aside_and_merge(&mut self, id: u64) {
+        if self.on_server(id, "set-aside-and-merge", serde_json::Value::Null) {
+            return;
+        }
+        if let Some(j) = self.store.job_mut(id) {
+            j.set_aside = true;
         }
         self.approve(id);
     }
@@ -3294,6 +3353,58 @@ fn mirror(job: &mut store::Job, there: store::Job) {
     }
 }
 
+/// A job that changes files and whose branch was merged or thrown away gets a
+/// fresh branch and worktree from where its base is now before it works again,
+/// so more words for it never land in your checkout. Gives back the base when
+/// it did. Its engine's conversation lived in the old folder, so it starts a
+/// new one.
+fn fresh_branch(job: &mut store::Job) -> Option<String> {
+    if !job.mode.writes()
+        || !job.worktree.is_empty()
+        || job.branch.is_empty()
+        || !job.remote_on.is_empty()
+    {
+        return None;
+    }
+    match work::isolate(&job.folder.path, &job.title, job.id) {
+        Ok(Some(iso)) => {
+            job.feed.push(store::Item::Note(format!(
+                "Its last branch is done with, so this goes on a new one, {}, and your checkout stays as it is.",
+                iso.branch
+            )));
+            job.branch = iso.branch;
+            job.worktree = iso.worktree;
+            job.base = iso.base.clone();
+            job.base_sha = iso.base_sha;
+            job.changes.clear();
+            job.checks.clear();
+            job.conflict.clear();
+            job.held.clear();
+            job.belt_ok = false;
+            job.in_the_way.clear();
+            job.set_aside = false;
+            job.shipped.clear();
+            job.shipping = false;
+            job.pr.clear();
+            job.pr_number = 0;
+            job.pr_line.clear();
+            job.pr_state.clear();
+            job.pr_failed.clear();
+            job.auto_merge = false;
+            job.marks.clear();
+            job.conversation.clear();
+            Some(iso.base)
+        }
+        Ok(None) => None,
+        Err(why) => {
+            job.feed.push(store::Item::Note(format!(
+                "Couldn't give it a new branch ({why}), so it works in your folder."
+            )));
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3993,6 +4104,62 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\"
             files.contains("a.txt") && files.contains("b.txt"),
             "{files}"
         );
+    }
+
+    #[test]
+    fn more_words_for_a_merged_job_go_on_a_new_branch() {
+        let mut b = bench("after-merge");
+        let id = b.start("WRITE-A Add a file called a");
+        b.settle();
+        b.rt.approve(id);
+        assert_eq!(b.job(id).status, Status::Shipped);
+
+        // Asked for more after the merge: it works apart again, not in the checkout.
+        b.rt.follow_up(&b.st, id, "WRITE-B Also add b".into());
+        b.settle();
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Review, "feed: {:?}", job.feed);
+        assert!(!job.worktree.is_empty());
+        assert!(Path::new(&job.worktree).join("b.txt").is_file());
+        assert!(!b.repo.join("b.txt").exists(), "the checkout is untouched");
+        assert!(git(&b.repo, &["status", "--porcelain"]).trim().is_empty());
+
+        // And it merges like any other.
+        b.rt.approve(id);
+        assert_eq!(
+            b.job(id).status,
+            Status::Shipped,
+            "feed: {:?}",
+            b.job(id).feed
+        );
+        assert!(git(&b.repo, &["ls-tree", "--name-only", "HEAD"]).contains("b.txt"));
+    }
+
+    #[test]
+    fn a_merge_held_by_your_changes_says_so_once_and_can_set_them_aside() {
+        let mut b = bench("in-the-way");
+        let id = b.start("WRITE-A Add a file called a");
+        b.settle();
+        // You changed the same file in your checkout meanwhile.
+        std::fs::write(b.repo.join("a.txt"), "mine\n").unwrap();
+        git(&b.repo, &["add", "a.txt"]);
+        b.rt.approve(id);
+        b.rt.approve(id);
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Review);
+        assert_eq!(job.in_the_way, vec!["a.txt".to_string()]);
+        let told = job
+            .feed
+            .iter()
+            .filter(|i| matches!(i, store::Item::Note(t) if t.starts_with("Nothing was merged")))
+            .count();
+        assert_eq!(told, 1, "feed: {:?}", job.feed);
+        assert!(!job.feed.iter().any(|i| matches!(i, store::Item::Error(_))));
+
+        b.rt.set_aside_and_merge(id);
+        let job = b.job(id);
+        assert_eq!(job.status, Status::Shipped, "feed: {:?}", job.feed);
+        assert!(job.in_the_way.is_empty());
     }
 
     #[test]

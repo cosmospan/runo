@@ -570,6 +570,9 @@ impl Shell {
         if let Some(card) = self.belt_card(job, cx) {
             feed = feed.child(card.ml(px(40.)).mr_0());
         }
+        if let Some(card) = self.in_the_way_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
         if let Some(card) = self.clash_card(job, cx) {
             feed = feed.child(card.ml(px(40.)).mr_0());
         }
