@@ -11,15 +11,22 @@ use super::ui::{self, c, ca};
 use super::Shell;
 
 impl Shell {
-    /// The jobs in Needs you, in the order the list shows them.
+    /// The jobs in the Inbox, in the order the list shows them.
     pub(super) fn inbox_ids(&self) -> Vec<u64> {
-        self.crew
+        let mut jobs: Vec<&Job> = self
+            .crew
             .store
             .listed()
             .into_iter()
             .filter(|j| j.needs_you())
-            .map(|j| j.id)
-            .collect()
+            .filter(|j| {
+                self.inbox_project
+                    .as_ref()
+                    .is_none_or(|p| &j.folder.path == p)
+            })
+            .collect();
+        jobs.sort_by_key(|j| inbox_group(j).0);
+        jobs.into_iter().map(|j| j.id).collect()
     }
 
     /// Needs you from the keyboard: arrows (or J and K) move, Enter opens the
@@ -81,7 +88,7 @@ impl Shell {
     /// Inbox: what needs you on the left, the picked item on the right with what
     /// the bot said, what it changed, and what you can do about it.
     pub(super) fn inbox(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let jobs: Vec<Job> = self
+        let every: Vec<Job> = self
             .crew
             .store
             .listed()
@@ -89,6 +96,29 @@ impl Shell {
             .filter(|j| j.needs_you())
             .cloned()
             .collect();
+        // One Inbox for every project, with a chip per project to narrow it.
+        let mut projects: Vec<(String, String, usize)> = Vec::new();
+        for j in &every {
+            match projects.iter_mut().find(|p| p.0 == j.folder.path) {
+                Some(p) => p.2 += 1,
+                None => projects.push((j.folder.path.clone(), j.folder.name.clone(), 1)),
+            }
+        }
+        if self
+            .inbox_project
+            .as_ref()
+            .is_some_and(|p| !projects.iter().any(|x| &x.0 == p))
+        {
+            self.inbox_project = None;
+        }
+        let only = self.inbox_project.clone();
+        let mut jobs: Vec<Job> = every
+            .iter()
+            .filter(|j| only.as_ref().is_none_or(|p| &j.folder.path == p))
+            .cloned()
+            .collect();
+        // Ready for review first, then what stopped, then the rest.
+        jobs.sort_by_key(|j| inbox_group(j).0);
         if jobs.is_empty() {
             return self.empty_place(
                 "You're all caught up",
@@ -119,7 +149,21 @@ impl Shell {
             .flex()
             .flex_col()
             .gap(px(8.));
+        let mut group = u8::MAX;
         for (n, j) in jobs.iter().enumerate() {
+            let (g, heading) = inbox_group(j);
+            if g != group {
+                group = g;
+                list = list.child(
+                    div()
+                        .pt(px(if n == 0 { 0. } else { 8. }))
+                        .px(px(4.))
+                        .font_family(ui::MONO)
+                        .text_size(px(10.5))
+                        .text_color(c(ui::faint()))
+                        .child(heading.to_uppercase()),
+                );
+            }
             let id = j.id;
             let on = id == pick;
             let face = self.avatar(j.bot, 30.);
@@ -227,7 +271,7 @@ impl Shell {
                                 div()
                                     .text_size(px(24.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Needs you"),
+                                    .child("Inbox"),
                             )
                             .child(
                                 div()
@@ -257,7 +301,69 @@ impl Shell {
                             })),
                     ),
             )
-            .child(list);
+            .when(projects.len() > 1, |d| {
+                let mut chips = div()
+                    .px(px(20.))
+                    .pb(px(8.))
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(6.));
+                let all = every.len();
+                let rows = std::iter::once((None, "All".to_string(), all)).chain(
+                    projects
+                        .iter()
+                        .map(|(p, name, n)| (Some(p.clone()), name.clone(), *n)),
+                );
+                for (k, (path, name, n)) in rows.enumerate() {
+                    let on = path == only;
+                    chips = chips.child(
+                        div()
+                            .id(("inbox-project", k))
+                            .h(px(26.))
+                            .px(px(10.))
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .rounded(px(5.))
+                            .border_1()
+                            .text_size(px(12.))
+                            .cursor_pointer()
+                            .map(|d| {
+                                if on {
+                                    d.bg(c(ui::ink()))
+                                        .border_color(c(ui::ink()))
+                                        .text_color(c(ui::theme().bg & 0xff_ffff))
+                                } else {
+                                    d.border_color(c(ui::line()))
+                                        .text_color(c(ui::muted()))
+                                        .hover(|s| s.text_color(c(ui::ink())))
+                                }
+                            })
+                            .child(name)
+                            .child(div().font_family(ui::MONO).opacity(0.7).child(n.to_string()))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.inbox_project = path.clone();
+                                this.inbox_pick = None;
+                                cx.notify();
+                            })),
+                    );
+                }
+                d.child(chips)
+            })
+            .child(list)
+            // The keyboard, said once at the foot.
+            .child(
+                div()
+                    .flex_none()
+                    .px(px(20.))
+                    .py(px(8.))
+                    .border_t_1()
+                    .border_color(c(ui::line2()))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.))
+                    .text_color(c(ui::faint()))
+                    .child("\u{2191}\u{2193} move \u{b7} \u{21b5} open \u{b7} A approve \u{b7} E mark seen"),
+            );
 
         let j = jobs
             .iter()
@@ -668,10 +774,50 @@ impl Shell {
             (4, "Stopped early", ui::RED, trouble),
             (3, "Done", ui::GREEN, done),
         ];
-        let mut body = div().flex().flex_col().gap(px(26.));
+        // The board: a column per state, side by side. The list: one under another.
+        let board = !self.jobs_list;
+        let mut body = if board {
+            div().flex().items_start().gap(px(16.))
+        } else {
+            div().flex().flex_col().gap(px(26.))
+        };
         let mut any = false;
         let mut shown = 0;
         for (key, label, dot, rows) in groups {
+            if board {
+                // Every column shows, empty or not, so the board keeps its shape.
+                any = true;
+                let mut cards = div().flex().flex_col().gap(px(8.));
+                for j in &rows {
+                    cards = cards.child(self.board_card(j, cx));
+                }
+                if rows.is_empty() {
+                    cards = cards.child(
+                        div()
+                            .py(px(18.))
+                            .flex()
+                            .justify_center()
+                            .rounded(px(7.))
+                            .border_1()
+                            .border_dashed()
+                            .border_color(c(ui::line()))
+                            .text_size(px(12.))
+                            .text_color(c(ui::faint()))
+                            .child("Nothing here"),
+                    );
+                }
+                body = body.child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(10.))
+                        .child(ui::heading(label, Some(dot), Some(rows.len())).px(px(4.)))
+                        .child(cards),
+                );
+                continue;
+            }
             if (filter != 0 && filter != key) || rows.is_empty() {
                 continue;
             }
@@ -722,7 +868,7 @@ impl Shell {
             .child(
                 div()
                     .w_full()
-                    .max_w(px(MAX_W))
+                    .when(!board, |d| d.max_w(px(MAX_W)))
                     .mx_auto()
                     .flex()
                     .flex_col()
@@ -754,10 +900,63 @@ impl Shell {
                             )
                             .child(search),
                     )
-                    .child(div().flex().child(filters))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .when(!board, |d| d.child(filters))
+                            .child(div().flex_1())
+                            .child(self.board_toggle(board, cx)),
+                    )
                     .child(body),
             )
             .into_any_element()
+    }
+
+    /// Board or List, as two halves of one switch.
+    fn board_toggle(&mut self, board: bool, cx: &mut Context<Self>) -> Div {
+        let mut d = div()
+            .flex()
+            .flex_none()
+            .p(px(2.))
+            .gap(px(2.))
+            .rounded(px(6.))
+            .border_1()
+            .border_color(c(ui::line()));
+        for (i, label, icon) in [
+            (0usize, "Board", IconName::Columns2),
+            (1, "List", IconName::ListTodo),
+        ] {
+            let on = (i == 0) == board;
+            d = d.child(
+                div()
+                    .id(("jobs-view", i))
+                    .h(px(26.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .rounded(px(4.))
+                    .text_size(px(12.5))
+                    .cursor_pointer()
+                    .map(|d| {
+                        if on {
+                            d.bg(c(ui::hover())).text_color(c(ui::ink()))
+                        } else {
+                            d.text_color(c(ui::muted()))
+                                .hover(|s| s.text_color(c(ui::ink())))
+                        }
+                    })
+                    .child(gpui_kit::component::Icon::new(icon).size(px(13.)))
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.jobs_list = i == 1;
+                        cx.notify();
+                    })),
+            );
+        }
+        d
     }
 
     /// A job at work: one card in the bot's colour with the step it's on, how long
@@ -863,6 +1062,149 @@ impl Shell {
             .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
     }
 
+    /// A board column's card: narrow, so it stacks. The bot and the title (two
+    /// lines at most), how it stands, then the lines it changed and when. A
+    /// running job shows the step it's on and a thin bar instead.
+    fn board_card(&mut self, j: &Job, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = j.id;
+        let accent = j.bot.accent();
+        let running = j.status == Status::Running;
+        let face = self.avatar(j.bot, 22.);
+        let (word, tone) = super::home::status_of(j);
+        let (added, removed) = j.lines();
+        let when = match store::ago(j.ended.unwrap_or(j.started)).as_str() {
+            "just now" => "now".to_string(),
+            a => a.to_string(),
+        };
+        let frac = if running {
+            j.progress()
+                .map(|(d, n)| self.glide_bar(id, d as f32 / n.max(1) as f32))
+        } else {
+            None
+        };
+        let pulse = 0.4 + 0.6 * super::motion::breath();
+        let (state, col) = if running {
+            let what = match j.progress() {
+                Some((d, n)) => format!("Step {} of {n}", (d + 1).min(n)),
+                None => "Working".to_string(),
+            };
+            (
+                format!("{what} \u{b7} {}", store::span(j.seconds())),
+                accent,
+            )
+        } else {
+            (word, tone.0)
+        };
+        let edge = if j.needs_you() {
+            super::theme::mix(ui::line(), tone.0, 0.35)
+        } else {
+            ui::line2()
+        };
+        let hover_edge = super::theme::mix(ui::line(), accent, 0.6);
+        let foot = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .text_size(px(11.5))
+            .text_color(c(ui::faint()))
+            .child(
+                div()
+                    .size(px(6.))
+                    .flex_none()
+                    .rounded_full()
+                    .bg(c(col))
+                    .when(running, |d| d.opacity(pulse)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(c(col))
+                    .child(state),
+            )
+            .when(added + removed > 0, |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .flex()
+                        .gap(px(4.))
+                        .font_family(ui::MONO)
+                        .child(
+                            div()
+                                .text_color(c(ui::t_green()))
+                                .child(format!("+{added}")),
+                        )
+                        .child(
+                            div()
+                                .text_color(c(ui::t_red()))
+                                .child(format!("\u{2212}{removed}")),
+                        ),
+                )
+            })
+            .when(!running, |d| d.child(div().flex_none().child(when)));
+        div()
+            .id(("jobs-board", id as usize))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(12.))
+            .rounded(px(9.))
+            .bg(c(ui::panel()))
+            .border_1()
+            .border_color(c(edge))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(ui::raised())).border_color(c(hover_edge)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .min_w_0()
+                    .text_size(px(11.5))
+                    .text_color(c(ui::muted()))
+                    .child(face_tile(face, accent, 24.))
+                    .child(
+                        div()
+                            .flex_none()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(super::theme::mix(accent, ui::ink(), 0.35)))
+                            .child(j.bot.name()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .font_family(ui::MONO)
+                            .text_color(c(ui::faint()))
+                            .child(format!("{} #{}", j.folder.name, j.id)),
+                    ),
+            )
+            .child(
+                div()
+                    .text_size(px(13.))
+                    .line_height(px(18.))
+                    .max_h(px(36.))
+                    .overflow_hidden()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(super::channel::card_title(j)),
+            )
+            .when(running, |d| {
+                d.child(match frac {
+                    Some(f) => ui::bar(f, accent).h(px(3.)),
+                    None => ui::sweep(accent, 0.).h(px(3.)),
+                })
+            })
+            .child(foot)
+            .on_mouse_down(
+                MouseButton::Right,
+                self.on_menu(super::menu::Ctx::Job(id), cx),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx)))
+    }
+
     /// A job that isn't running: the bot's face on its colour, the title, how it
     /// ended, the lines it changed and when. Files, time and cost are on its page.
     fn job_card(&mut self, j: &Job, cx: &mut Context<Self>) -> impl IntoElement {
@@ -943,6 +1285,16 @@ impl Shell {
 
 /// How wide the jobs page's column grows: past this, cards only stretch empty space.
 const MAX_W: f32 = 980.;
+
+/// Where a job sits in the Inbox: ready for review first, then what stopped,
+/// then anything else that wants a look.
+fn inbox_group(j: &Job) -> (u8, &'static str) {
+    match j.status {
+        Status::Review => (0, "Ready for review"),
+        Status::Failed | Status::Stopped | Status::Interrupted => (1, "Stopped"),
+        _ => (2, "To look at"),
+    }
+}
 
 /// Splits jobs into needs you, running, done, and stopped early, keeping order.
 fn sort_jobs(jobs: &[Job]) -> (Vec<Job>, Vec<Job>, Vec<Job>, Vec<Job>) {

@@ -702,6 +702,10 @@ pub struct Shell {
     web: webpage::Web,
     /// The job workspace's tab.
     ws_tab: peek::Tab,
+    /// The Inbox's project filter, by folder path: None shows every project.
+    inbox_project: Option<String>,
+    /// Jobs shows as a list instead of the board.
+    jobs_list: bool,
     server_url: Option<String>,
     palette_sel: usize,
     palette_at: Instant,
@@ -1444,6 +1448,8 @@ impl Shell {
             screen_focus: cx.focus_handle(),
             web,
             ws_tab: peek::Tab::default(),
+            inbox_project: None,
+            jobs_list: false,
             server_url: None,
             palette_sel: 0,
             palette_at: Instant::now(),
