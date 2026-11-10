@@ -613,13 +613,23 @@ impl Shell {
         // The project's own places. The Inbox and Machines sit on the rail,
         // since they span every project.
         let working = self.crew.store.running().count();
-        let nav = div().flex().flex_col().gap(px(1.)).child(
-            row("side-history", place == Place::History)
-                .child(Icon::new(IconName::LayoutDashboard).size(px(16.)))
-                .child("Jobs")
-                .when(working > 0, |d| d.child(running(working).ml_auto()))
-                .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
-        );
+        let nav = div()
+            .flex()
+            .flex_col()
+            .gap(px(1.))
+            .child(
+                row("side-overview", place == Place::Overview)
+                    .child(Icon::new(IconName::House).size(px(16.)))
+                    .child("Overview")
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::Overview, cx))),
+            )
+            .child(
+                row("side-history", place == Place::History)
+                    .child(Icon::new(IconName::LayoutDashboard).size(px(16.)))
+                    .child("Jobs")
+                    .when(working > 0, |d| d.child(running(working).ml_auto()))
+                    .on_click(cx.listener(|this, _, _, cx| this.go(Place::History, cx))),
+            );
 
         let threads = self.thread_list(cx);
         let crew = self.crew_list(cx);
@@ -1233,6 +1243,7 @@ impl Shell {
             ),
             Place::Inbox => "Inbox".into(),
             Place::History => "All jobs".into(),
+            Place::Overview => "Overview".into(),
             Place::Chat(m) => format!("Crew / {}", m.name()),
             Place::Crew => "Crew".into(),
             // A job sits in its thread, so the path goes through it.
@@ -1576,7 +1587,7 @@ impl Shell {
 }
 
 /// A path with the home folder written as `~`.
-fn short_path(path: &str) -> String {
+pub(super) fn short_path(path: &str) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     match path.strip_prefix(&home) {
         Some(rest) if !home.is_empty() => format!("~{rest}"),

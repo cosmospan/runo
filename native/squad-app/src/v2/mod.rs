@@ -34,6 +34,7 @@ mod mascot;
 mod menu;
 mod motion;
 mod myserver;
+mod overview;
 mod palette;
 mod peek;
 mod prefs;
@@ -88,6 +89,8 @@ use ui::{c, ca};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Place {
     Today,
+    /// The project's Overview: run, Git, setup and activity.
+    Overview,
     Inbox,
     History,
     Chat(Member),
@@ -622,6 +625,8 @@ pub struct Shell {
     palette_input: Entity<InputState>,
     /// History's search box.
     history_input: Entity<InputState>,
+    /// The Overview's form for squad.toml.
+    proj_form: overview::ProjectForm,
     /// The filter over the right sidebar's Files tab.
     files_input: Entity<InputState>,
     /// The right sidebar shows its Files tab (beats `list_git`).
@@ -840,7 +845,12 @@ fn nav_slot(place: Place) -> Option<f32> {
     let i = match place {
         Place::Today => 0,
         Place::Inbox => 1,
-        Place::History | Place::Live(_) | Place::Race(_) | Place::Goal(_) | Place::Browser(_) => 2,
+        Place::Overview
+        | Place::History
+        | Place::Live(_)
+        | Place::Race(_)
+        | Place::Goal(_)
+        | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
         Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
@@ -948,6 +958,7 @@ impl Shell {
         let history_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Filter jobs by title, bot or folder…")
         });
+        let proj_form = overview::ProjectForm::new(window, cx);
         let files_input = cx.new(|cx| InputState::new(window, cx).placeholder("Find a file…"));
         let clear = cx
             .global::<crate::settings::AppSettings>()
@@ -1243,6 +1254,7 @@ impl Shell {
             Ok("chat") => Place::Chat(Member::Fin),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
+            Ok("overview") => Place::Overview,
             Ok("engines") => Place::Settings(Pane::Engines),
             Ok("server") => Place::Settings(Pane::Server),
             Ok("settings") => Place::Settings(Pane::Work),
@@ -1402,6 +1414,7 @@ impl Shell {
             focus_moved: Instant::now(),
             palette_input,
             history_input,
+            proj_form,
             files_input,
             list_files: false,
             files_open: Default::default(),
@@ -3610,6 +3623,7 @@ impl Render for Shell {
             Place::Chat(who) => self.chat(who, cx),
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
+            Place::Overview => self.overview(cx),
             Place::Settings(pane) => self.settings(pane, cx),
             Place::Usage => self.usage(cx),
             Place::Server => self.server_page(cx),

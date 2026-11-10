@@ -348,15 +348,25 @@ impl Shell {
         jobs: &[Job],
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let body = div()
+        div()
             .id("git-side")
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .px(px(20.))
             .pb(px(24. + super::DOCK_ROOM))
-            .flex()
-            .flex_col();
+            .child(self.git_sections(folder, jobs, cx))
+    }
+
+    /// The Git side's blocks, one under another, for the sidebar and for the
+    /// project's Overview.
+    pub(super) fn git_sections(
+        &mut self,
+        folder: &str,
+        jobs: &[Job],
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let body = div().flex().flex_col();
         let quiet = |text: &str| {
             div()
                 .text_size(px(12.5))
