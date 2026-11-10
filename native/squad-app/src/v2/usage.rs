@@ -22,7 +22,7 @@ struct Share {
 }
 
 impl Shell {
-    pub(super) fn usage(&mut self, _cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn usage(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let now = store::now();
         let recent: Vec<_> = self
             .crew
@@ -286,6 +286,88 @@ impl Shell {
             );
         }
 
+        // The week's dearest jobs, so a surprise on the chart has a name.
+        let mut dear: Vec<_> = recent
+            .iter()
+            .filter(|j| now.saturating_sub(j.started) < 7 * 86_400)
+            .filter_map(|j| cost(&j.summary).map(|v| (v, j)))
+            .filter(|(v, _)| *v > 0.)
+            .collect();
+        dear.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let mut costly = ui::card().overflow_hidden().child(
+            div()
+                .h(px(36.))
+                .px(px(16.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .bg(c(ui::raised()))
+                .border_b_1()
+                .border_color(c(ui::line()))
+                .text_size(px(11.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(ui::faint()))
+                .child(div().flex_1().child("Most expensive jobs this week"))
+                .child(div().w(px(70.)).flex().justify_end().child("Time"))
+                .child(div().w(px(64.)).flex().justify_end().child("Spend")),
+        );
+        if dear.is_empty() {
+            costly = costly.child(
+                div()
+                    .px(px(16.))
+                    .py(px(18.))
+                    .text_size(px(12.5))
+                    .text_color(c(ui::faint()))
+                    .child("Nothing this week has cost anything yet."),
+            );
+        }
+        for (v, j) in dear.into_iter().take(8) {
+            let face = self.avatar(j.bot, 20.);
+            let id = j.id;
+            costly = costly.child(
+                div()
+                    .id(("usage-job", id))
+                    .h(px(42.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .border_b_1()
+                    .border_color(c(ui::line2()))
+                    .border_dashed()
+                    .text_size(px(13.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(ui::hover())))
+                    .child(face)
+                    .child(div().flex_1().min_w_0().truncate().child(j.title.clone()))
+                    .child(
+                        div()
+                            .font_family(ui::MONO)
+                            .text_size(px(11.5))
+                            .text_color(c(ui::faint()))
+                            .child(format!("#{id}")),
+                    )
+                    .child(
+                        div()
+                            .w(px(70.))
+                            .flex()
+                            .justify_end()
+                            .text_color(c(ui::muted()))
+                            .child(hours(j.seconds())),
+                    )
+                    .child(
+                        div()
+                            .w(px(64.))
+                            .flex()
+                            .justify_end()
+                            .font_family(ui::MONO)
+                            .text_size(px(12.))
+                            .child(format!("${v:.2}")),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+            );
+        }
+
         div()
             .id("usage")
             .size_full()
@@ -321,6 +403,7 @@ impl Shell {
                     .child(chart)
                     .child(table),
             )
+            .child(costly)
             .into_any_element()
     }
 }

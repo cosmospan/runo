@@ -221,6 +221,7 @@ impl Shell {
         let setup = self.overview_setup(&here, cx);
         let work = self.overview_work(&folder, cx);
         let lately = self.overview_lately(&folder.name, &jobs, cx);
+        let issues = self.overview_issues(&here, &jobs, cx);
         let git = panel()
             .w(px(GIT_W))
             .flex_none()
@@ -263,6 +264,7 @@ impl Shell {
                                             .child(setup.flex_1().min_w_0())
                                             .child(work.flex_1().min_w_0()),
                                     )
+                                    .child(issues)
                                     .child(lately),
                             )
                             .child(git),
@@ -591,6 +593,251 @@ impl Shell {
                     }),
                 ),
             ))
+    }
+
+    /// The project's open issues, each one a click from a job, what the crew
+    /// closed this week, and whether pull requests close their issues.
+    fn overview_issues(&mut self, here: &str, jobs: &[Job], cx: &mut Context<Self>) -> Div {
+        let demo = self.crew.store.demo;
+        let stale = self.issue_list.as_ref().is_none_or(|l| {
+            l.folder != here || (!l.loading && l.at.elapsed() > std::time::Duration::from_secs(300))
+        });
+        if stale {
+            self.read_issues(here.to_string(), demo, cx);
+        }
+        let close = cx.global::<crate::settings::AppSettings>().v2_close_issues;
+        let quiet = |text: String| {
+            div()
+                .py(px(6.))
+                .text_size(px(12.5))
+                .text_color(c(ui::faint()))
+                .child(text)
+        };
+        let (loading, error, items) = match self.issue_list.as_ref() {
+            Some(l) => (l.loading, l.error.clone(), l.items.clone()),
+            None => (true, None, Vec::new()),
+        };
+        let mut rows = div().flex().flex_col();
+        if items.is_empty() {
+            rows = rows.child(quiet(match (loading, error) {
+                (true, _) => "Reading the open issues…".to_string(),
+                (false, Some(e)) => e,
+                (false, None) => "No open issues.".to_string(),
+            }));
+        }
+        for (i, it) in items.iter().take(8).enumerate() {
+            let n = it.number;
+            let closes = format!("Closes #{n}");
+            let taken = jobs.iter().find(|j| {
+                j.issue == closes
+                    && !matches!(
+                        j.status,
+                        Status::Failed | Status::Stopped | Status::Interrupted
+                    )
+            });
+            let mut row = div()
+                .h(px(36.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .border_t_1()
+                .border_color(c(ui::line2()))
+                .text_size(px(13.))
+                .child(
+                    div()
+                        .w(px(40.))
+                        .flex_none()
+                        .font_family(ui::MONO)
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(format!("#{n}")),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(c(ui::ink()))
+                        .child(it.title.clone()),
+                );
+            for label in it.labels.iter().take(2) {
+                row = row.child(
+                    div()
+                        .flex_none()
+                        .px(px(6.))
+                        .rounded(px(4.))
+                        .bg(c(ui::well()))
+                        .text_size(px(11.))
+                        .text_color(c(ui::muted()))
+                        .child(label.clone()),
+                );
+            }
+            row = match taken {
+                Some(j) => {
+                    let id = j.id;
+                    row.child(
+                        ui::ghost(
+                            ("ov-issue-job", i),
+                            format!("#{id} \u{b7} {}", j.bot.name()),
+                        )
+                        .h(px(24.))
+                        .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+                    )
+                }
+                None => row.child(
+                    ui::ghost(("ov-issue-fix", i), "Give to the crew")
+                        .h(px(24.))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.go(Place::Today, cx);
+                            this.hand_over(format!("Fix issue {n}"), cx);
+                        })),
+                ),
+            };
+            rows = rows.child(row);
+        }
+        // Closed by the crew: shipped jobs that named an issue, this week.
+        let now = store::now();
+        let closed: Vec<&Job> = jobs
+            .iter()
+            .filter(|j| {
+                !j.issue.is_empty()
+                    && j.status == Status::Shipped
+                    && j.ended.is_some_and(|e| now.saturating_sub(e) < 7 * 86_400)
+            })
+            .collect();
+        if !closed.is_empty() {
+            rows = rows.child(
+                div()
+                    .pt(px(12.))
+                    .pb(px(4.))
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::muted()))
+                    .child("Closed by the crew this week"),
+            );
+        }
+        for j in closed {
+            let id = j.id;
+            let face = self.avatar(j.bot, 18.);
+            let key = j
+                .issue
+                .split_once(' ')
+                .map(|(_, k)| k.to_string())
+                .unwrap_or_default();
+            let tail = if j.pr_number > 0 {
+                format!("{key} \u{b7} PR #{}", j.pr_number)
+            } else {
+                key
+            };
+            rows = rows.child(
+                div()
+                    .id(("ov-closed", id as usize))
+                    .h(px(30.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .text_size(px(12.5))
+                    .child(face)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(c(ui::body()))
+                            .child(super::channel::card_title(j)),
+                    )
+                    .child(
+                        div()
+                            .font_family(ui::MONO)
+                            .text_size(px(11.5))
+                            .text_color(c(ui::t_green()))
+                            .child(tail),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_job(id, cx))),
+            );
+        }
+        let sub = if close {
+            "Open on GitHub. A job's pull request closes its issue when it merges."
+        } else {
+            "Open on GitHub. Pull requests link their issue and leave it open."
+        };
+        panel()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(card_head("Issues", Some(sub.to_string())))
+                    .child(
+                        div()
+                            .ml_auto()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .text_size(px(12.))
+                            .text_color(c(ui::muted()))
+                            .child("Close on merge")
+                            .child(
+                                div()
+                                    .id("ov-close-issues")
+                                    .cursor_pointer()
+                                    .child(super::prefs::switch(close))
+                                    .on_click(cx.listener(move |_, _, _, cx| {
+                                        super::issues::set_close_on_merge(!close);
+                                        cx.update_global::<crate::settings::AppSettings, _>(
+                                            |st, _| {
+                                                st.v2_close_issues = !close;
+                                                st.save();
+                                            },
+                                        );
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
+            )
+            .child(rows)
+    }
+
+    /// Reads the project's open issues off the UI thread; the demo has its own.
+    fn read_issues(&mut self, folder: String, demo: bool, cx: &mut Context<Self>) {
+        let keep = self
+            .issue_list
+            .take()
+            .filter(|l| l.folder == folder)
+            .map(|l| l.items)
+            .unwrap_or_default();
+        self.issue_list = Some(super::IssueList {
+            folder: folder.clone(),
+            at: std::time::Instant::now(),
+            loading: true,
+            items: keep,
+            error: None,
+        });
+        let task = cx.background_spawn(async move {
+            if demo {
+                return Ok(super::demo::issues());
+            }
+            super::issues::list_open(&folder)
+        });
+        cx.spawn(async move |this, cx| {
+            let got = task.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(l) = this.issue_list.as_mut() {
+                    l.loading = false;
+                    l.at = std::time::Instant::now();
+                    match got {
+                        Ok(items) => {
+                            l.items = items;
+                            l.error = None;
+                        }
+                        Err(e) => l.error = Some(e),
+                    }
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// Lately in the project: the latest jobs, newest first.

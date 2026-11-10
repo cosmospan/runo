@@ -2744,10 +2744,28 @@ impl Runtime {
         });
         for (id, results) in back {
             let mut retry = None;
+            let mut merge = false;
             if let Some(job) = self.store.job_mut(id) {
                 job.checks = results;
+                super::work::ignore(&mut job.checks, &job.ignored_checks);
                 job.checking = false;
-                retry = fix_turn(job);
+                merge = job.merge_on_green
+                    && job.status == Status::Review
+                    && job.held.is_empty()
+                    && job.conflict.is_empty()
+                    && super::work::verdict(&job.checks, false).1 == super::work::Verdict::Pass;
+                retry = if merge { None } else { fix_turn(job) };
+            }
+            if merge {
+                // Approved ahead of the checks: they're green, so it goes in.
+                if let Some(job) = self.store.job_mut(id) {
+                    job.merge_on_green = false;
+                    job.feed.push(store::Item::By(
+                        Member::Checker,
+                        "Every check passes, so it merges now, as you asked.".into(),
+                    ));
+                }
+                self.approve(id);
             }
             if let Some(prompt) = retry {
                 // fix_turn already said why in the feed.

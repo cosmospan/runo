@@ -35,6 +35,8 @@ pub enum Pane {
     Appearance,
     Mascot,
     Engines,
+    /// What the crew spent and did.
+    Usage,
     /// Your own server, for jobs that carry on with this computer closed.
     Server,
 }
@@ -47,6 +49,7 @@ impl Pane {
             Pane::Appearance => "Appearance",
             Pane::Mascot => "Mascot",
             Pane::Engines => "Engines",
+            Pane::Usage => "Usage",
             Pane::Server => "Servers",
         }
     }
@@ -58,6 +61,7 @@ impl Pane {
             Pane::Appearance => "Themes, glass, background and the mascot",
             Pane::Mascot => "Peek, colours and props",
             Pane::Engines => "Agents and models",
+            Pane::Usage => "Spend, jobs and time",
             Pane::Server => "Jobs that run with the lid closed",
         }
     }
@@ -69,6 +73,7 @@ impl Pane {
             Pane::Appearance => IconName::Palette,
             Pane::Mascot => IconName::Bot,
             Pane::Engines => IconName::Cpu,
+            Pane::Usage => IconName::ChartColumn,
             Pane::Server => IconName::Server,
         }
     }
@@ -82,7 +87,7 @@ fn save(cx: &mut App, f: impl FnOnce(&mut AppSettings)) {
 }
 
 /// A small on/off switch.
-fn switch(on: bool) -> Div {
+pub(super) fn switch(on: bool) -> Div {
     div()
         .w(px(34.))
         .h(px(20.))
@@ -427,10 +432,9 @@ impl Shell {
             Pane::Appearance => self.settings_appearance(cx),
             Pane::Mascot => self.settings_mascot(cx),
             Pane::Engines => self.engines(cx),
+            Pane::Usage => self.usage(cx),
             Pane::Server => self.settings_server(cx),
         };
-        let tabs =
-            matches!(pane, Pane::Appearance | Pane::Mascot).then(|| self.look_tabs(pane, cx));
         div()
             .size_full()
             .flex()
@@ -442,58 +446,16 @@ impl Shell {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .children(tabs)
                     .child(div().flex_1().min_h_0().child(body)),
             )
             .into_any_element()
     }
 
-    /// Appearance's two tabs: the app's theme, and the mascot.
-    fn look_tabs(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
-        let mut row = div()
-            .flex_none()
-            .flex()
-            .gap(px(18.))
-            .px(px(28.))
-            .pt(px(14.))
-            .border_b_1()
-            .border_color(c(ui::line2()));
-        for (p, label) in [(Pane::Appearance, "Theme"), (Pane::Mascot, "Mascot")] {
-            let on = p == pane;
-            row = row.child(
-                div()
-                    .id(("look-tab", p as usize))
-                    .pb(px(9.))
-                    .text_size(px(13.5))
-                    .cursor_pointer()
-                    .border_b_2()
-                    .map(|d| {
-                        if on {
-                            d.border_color(c(ui::ink()))
-                                .text_color(c(ui::ink()))
-                                .font_weight(FontWeight::SEMIBOLD)
-                        } else {
-                            d.border_color(transparent_black())
-                                .text_color(c(ui::muted()))
-                                .hover(|s| s.text_color(c(ui::ink())))
-                        }
-                    })
-                    .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.settings_pane = p;
-                        this.place = Place::Settings(p);
-                        cx.notify();
-                    })),
-            );
-        }
-        row
-    }
-
     /// Settings' own column: its title, then the panes in small groups.
     fn settings_nav(&mut self, pane: Pane, cx: &mut Context<Self>) -> Div {
         let groups: [(&'static str, &[Pane]); 3] = [
-            ("CREW", &[Pane::Work, Pane::Engines]),
-            ("APP", &[Pane::General, Pane::Appearance]),
+            ("CREW", &[Pane::Work, Pane::Engines, Pane::Usage]),
+            ("APP", &[Pane::General, Pane::Appearance, Pane::Mascot]),
             ("CONNECTIONS", &[Pane::Server]),
         ];
         let mut col = div()
@@ -552,8 +514,7 @@ impl Shell {
                     .child(label),
             );
             for &p in panes {
-                // Mascot is a tab inside Appearance.
-                let on = p == pane || (p == Pane::Appearance && pane == Pane::Mascot);
+                let on = p == pane;
                 col = col.child(
                     div()
                         .id(("settings-pane", p as usize))
@@ -1412,7 +1373,11 @@ impl Shell {
         };
         let grid = |frosted: bool, cx: &mut Context<Self>| {
             let mut d = div().flex().flex_wrap().gap(px(space::SM));
-            for t in ui::THEMES.iter().filter(|t| t.frosted == frosted) {
+            // The redesign's looks have their own picker above.
+            for t in ui::THEMES
+                .iter()
+                .filter(|t| t.frosted == frosted && theme::family_of(t.id).is_none())
+            {
                 d = d.child(card_for(t, cx));
             }
             d
@@ -1436,6 +1401,7 @@ impl Shell {
                         .child(line),
                 )
         };
+        let looks = self.looks_card(cx);
         let solid = grid(false, cx);
         let frosted = grid(true, cx);
         let window = self.transparency_card(cx);
@@ -1450,13 +1416,14 @@ impl Shell {
                 .flex_col()
                 .gap(px(space::L))
                 // Themes first: the choice most people come here for.
+                .child(looks)
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(space::SM))
                         .child(heading(
-                            "Solid",
+                            "More themes",
                             if theme::see_through() {
                                 "Opaque by design, see-through while the window switch is on."
                             } else {
@@ -1480,6 +1447,159 @@ impl Shell {
                 .child(picture)
                 .child(backdrop),
         )
+    }
+
+    /// The three looks, each light and dark, and whether to match the system.
+    fn looks_card(&mut self, cx: &mut Context<Self>) -> Div {
+        let current = ui::theme();
+        let family = theme::family_of(current.id);
+        let follow = theme::following();
+        let dark = !current.light;
+        let by_id = |id: &str| ui::THEMES.iter().find(|t| t.id == id);
+        let mut cards = div().flex().flex_wrap().gap(px(space::SM));
+        for f in theme::FAMILIES.iter() {
+            let on = family.is_some_and(|x| x.id == f.id);
+            let side = if dark { f.dark } else { f.light };
+            let Some(shown) = by_id(side) else { continue };
+            cards = cards.child(
+                div()
+                    .id(SharedString::from(format!("look-{}", f.id)))
+                    .w(px(206.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .p(px(10.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .cursor_pointer()
+                    .bg(c(ui::panel()))
+                    .map(|d| {
+                        if on {
+                            d.border_color(c(ui::pick()))
+                        } else {
+                            d.border_color(c(ui::line()))
+                                .hover(|s| s.border_color(c(ui::line_hi())))
+                        }
+                    })
+                    .child(swatch(shown))
+                    .child(
+                        div()
+                            .px(px(4.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(
+                                        div()
+                                            .text_size(px(13.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(c(ui::ink()))
+                                            .child(f.name),
+                                    )
+                                    .child(
+                                        div()
+                                            .ml_auto()
+                                            .text_size(px(10.5))
+                                            .font_family(ui::MONO)
+                                            .text_color(c(ui::faint()))
+                                            .child("LIGHT · DARK"),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .text_color(c(ui::muted()))
+                                    .truncate()
+                                    .child(f.line),
+                            ),
+                    )
+                    .on_click(cx.listener(move |_, _, window, cx| {
+                        let pref = if follow {
+                            format!("{}{}", f.id, theme::SYSTEM)
+                        } else if dark {
+                            f.dark.to_string()
+                        } else {
+                            f.light.to_string()
+                        };
+                        theme::set_pref(&pref, super::system_dark(window.appearance()));
+                        save(cx, |st| st.v2_theme = pref);
+                        cx.notify();
+                    })),
+            );
+        }
+        // Light, dark or the system's, for the look in use (or the default
+        // look, while an older theme is picked).
+        let fam = family.unwrap_or(&theme::FAMILIES[0]);
+        let mode = |id: &'static str, label: &'static str, on: bool, pref: String| {
+            segment(id, label, on).on_click(cx.listener(move |_, _, window, cx| {
+                theme::set_pref(&pref, super::system_dark(window.appearance()));
+                let pref = pref.clone();
+                save(cx, |st| st.v2_theme = pref);
+                cx.notify();
+            }))
+        };
+        let in_family = family.is_some();
+        let modes = segmented(vec![
+            mode(
+                "look-light",
+                "Light",
+                in_family && !follow && !dark,
+                fam.light.to_string(),
+            ),
+            mode(
+                "look-dark",
+                "Dark",
+                in_family && !follow && dark,
+                fam.dark.to_string(),
+            ),
+            mode(
+                "look-system",
+                "Match the system",
+                in_family && follow,
+                format!("{}{}", fam.id, theme::SYSTEM),
+            ),
+        ]);
+        let note = if follow {
+            if dark {
+                "Every theme has both. Right now it's dark, because your system is."
+            } else {
+                "Every theme has both. Right now it's light, because your system is."
+            }
+        } else {
+            "Every theme has both. Pick one, or follow your system as it changes."
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(space::SM))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(3.))
+                    .child(
+                        div()
+                            .text_size(px(13.5))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(ui::ink()))
+                            .child("Theme"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::muted()))
+                            .child("Three looks to start, each in light and dark."),
+                    ),
+            )
+            .child(cards)
+            .child(group(
+                "Light or dark",
+                vec![row("Light or dark", note, modes)],
+            ))
     }
 
     /// Window transparency: a switch, and a slider for how far the desktop shows

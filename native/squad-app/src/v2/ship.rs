@@ -128,7 +128,7 @@ pub fn pr_body(job: &Job) -> String {
         body.push('\n');
     }
     if !job.issue.is_empty() {
-        body.push_str(&job.issue);
+        body.push_str(&super::issues::pr_line(&job.issue));
         body.push_str("\n\n");
     }
     let (a, r) = job.lines();

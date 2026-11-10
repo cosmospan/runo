@@ -275,6 +275,95 @@ impl Shell {
     }
 
     /// Peek's heads-up: other jobs in the project change the same lines.
+    /// After a send-back: the lesson the crew found in what you said, to keep
+    /// for this bot, for the whole crew, or let go. Nothing is kept until you
+    /// say so.
+    pub(super) fn lesson_card(&mut self, j: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        if j.lesson_offer.is_empty() {
+            return None;
+        }
+        let id = j.id;
+        let bot = j.bot;
+        let face = self.avatar(bot, 18.);
+        let text = j.lesson_offer.clone();
+        let (keep, all) = (text.clone(), text.clone());
+        Some(
+            div()
+                .mx(px(14.))
+                .mb(px(10.))
+                .px(px(14.))
+                .py(px(12.))
+                .rounded(px(12.))
+                .bg(c(ui::raised()))
+                .border_1()
+                .border_color(c(ui::pick()))
+                .flex()
+                .flex_col()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(ui::ink()))
+                        .child(face)
+                        .child(format!("Keep this as a lesson for {}?", bot.name())),
+                )
+                .child(
+                    div()
+                        .pl(px(10.))
+                        .border_l_2()
+                        .border_color(c(bot.accent()))
+                        .text_size(px(13.))
+                        .line_height(px(19.))
+                        .text_color(c(ui::body()))
+                        .child(text),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(c(ui::muted()))
+                        .child(format!(
+                            "{} will follow it in every job in {} from now on. You can forget it any time under Crew, Memory.",
+                            bot.name(),
+                            j.folder.name
+                        )),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
+                            ui::solid(("lesson-keep", id as usize), "Keep it")
+                                .h(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.crew.keep_lesson(id, &keep, false);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            ui::ghost(("lesson-crew", id as usize), "For the whole crew")
+                                .h(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.crew.keep_lesson(id, &all, true);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            ui::ghost(("lesson-skip", id as usize), "Not now")
+                                .h(px(28.))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.crew.drop_lesson(id);
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        )
+    }
+
     pub(super) fn clash_card(&mut self, j: &Job, cx: &mut Context<Self>) -> Option<Div> {
         if j.clash_with.is_empty()
             || !matches!(j.status, Status::Running | Status::Done | Status::Review)

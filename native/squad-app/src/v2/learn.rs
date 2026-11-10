@@ -25,6 +25,8 @@ pub struct Lesson {
     /// The job it came from.
     pub job: u64,
     pub at: u64,
+    /// Every bot on the crew follows it in this project, not just `bot`.
+    pub crew: bool,
 }
 
 impl Default for Lesson {
@@ -35,6 +37,7 @@ impl Default for Lesson {
             text: String::new(),
             job: 0,
             at: 0,
+            crew: false,
         }
     }
 }
@@ -52,7 +55,7 @@ pub fn brief(who: Member, folder: &str) -> String {
     let all = LESSONS.read().unwrap_or_else(|e| e.into_inner());
     let mine: Vec<String> = all
         .iter()
-        .filter(|l| l.bot == who && l.folder == folder)
+        .filter(|l| (l.bot == who || l.crew) && l.folder == folder)
         .map(|l| format!("- {}", l.text.trim()))
         .collect();
     if mine.is_empty() {

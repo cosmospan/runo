@@ -8,6 +8,100 @@
 //! `#12` alone stays a Squad job number, as it is everywhere else.
 
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Pull requests close the issues they're for when they merge.
+static CLOSE_ON_MERGE: AtomicBool = AtomicBool::new(true);
+
+/// Sets whether pull requests close their issues on merge (Settings).
+pub fn set_close_on_merge(on: bool) {
+    CLOSE_ON_MERGE.store(on, Ordering::Relaxed);
+}
+
+/// The line a pull request carries for its issue: "Closes #12" as it is,
+/// or "Refs #12" when closing on merge is off.
+pub fn pr_line(closes: &str) -> String {
+    line_for(closes, CLOSE_ON_MERGE.load(Ordering::Relaxed))
+}
+
+fn line_for(closes: &str, close: bool) -> String {
+    if close {
+        return closes.to_string();
+    }
+    match closes.split_once(' ') {
+        Some((_, rest)) => format!("Refs {rest}"),
+        None => closes.to_string(),
+    }
+}
+
+/// An open issue in the project's list.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Listed {
+    pub number: u64,
+    pub title: String,
+    pub labels: Vec<String>,
+    pub url: String,
+}
+
+/// The project's open GitHub issues, newest first. Blocks: call it off the
+/// UI thread.
+pub fn list_open(folder: &str) -> Result<Vec<Listed>, String> {
+    let out = Command::new("gh")
+        .args([
+            "issue",
+            "list",
+            "--state",
+            "open",
+            "--limit",
+            "30",
+            "--json",
+            "number,title,labels,url",
+        ])
+        .current_dir(folder)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|_| {
+            "Install the GitHub CLI (gh) and sign in to see this project's issues.".to_string()
+        })?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(if err.contains("auth login") {
+            "Sign in to GitHub with gh auth login to see this project's issues.".into()
+        } else if err.contains("no git remotes") || err.contains("not a git repository") {
+            "This project has no GitHub remote, so it has no issues to show.".into()
+        } else {
+            err
+        });
+    }
+    parse_list(&String::from_utf8_lossy(&out.stdout))
+        .ok_or_else(|| "GitHub's answer didn't make sense".to_string())
+}
+
+/// `gh issue list --json number,title,labels,url`.
+pub fn parse_list(json: &str) -> Option<Vec<Listed>> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    Some(
+        v.as_array()?
+            .iter()
+            .filter_map(|i| {
+                Some(Listed {
+                    number: i["number"].as_u64()?,
+                    title: i["title"].as_str().unwrap_or("").to_string(),
+                    labels: i["labels"]
+                        .as_array()
+                        .map(|l| {
+                            l.iter()
+                                .filter_map(|x| x["name"].as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    url: i["url"].as_str().unwrap_or("").to_string(),
+                })
+            })
+            .collect(),
+    )
+}
 
 /// An issue a job names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -308,6 +402,23 @@ mod tests {
                 .unwrap_err()
                 .contains("Entity not found")
         );
+    }
+
+    #[test]
+    fn reads_the_open_list() {
+        let json = r#"[{"number":31,"title":"Safari checkout button does nothing","labels":[{"name":"bug"},{"name":"safari"}],"url":"https://github.com/acme/shop/issues/31"},{"number":30,"title":"Dark mode","labels":[],"url":""}]"#;
+        let l = parse_list(json).unwrap();
+        assert_eq!(l.len(), 2);
+        assert_eq!(l[0].number, 31);
+        assert_eq!(l[0].labels, ["bug", "safari"]);
+        assert!(parse_list("nope").is_none());
+    }
+
+    #[test]
+    fn closing_on_merge_can_be_turned_off() {
+        assert_eq!(line_for("Closes #12", true), "Closes #12");
+        assert_eq!(line_for("Closes #12", false), "Refs #12");
+        assert_eq!(line_for("Fixes ENG-4", false), "Refs ENG-4");
     }
 
     #[test]

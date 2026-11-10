@@ -484,25 +484,64 @@ impl Runtime {
             let Some(job) = self.store.job(id) else {
                 continue;
             };
-            let lesson = learn::Lesson {
-                bot: job.bot,
-                folder: job.folder.path.clone(),
-                text: rule.clone(),
-                job: id,
-                at: store::now(),
+            // Nothing is kept until the person says so: the job shows the
+            // lesson with Keep it, For the whole crew and Not now.
+            let known = self
+                .store
+                .lessons
+                .iter()
+                .any(|l| l.folder == job.folder.path && l.text.eq_ignore_ascii_case(&rule));
+            if known {
+                continue;
+            }
+            if let Some(j) = self.store.job_mut(id) {
+                j.lesson_offer = rule;
+            }
+            self.store.save();
+        }
+    }
+
+    /// Keeps the lesson job `id` offers, for its bot or (`crew`) for every bot
+    /// in the project. True when it was new.
+    pub fn keep_lesson(&mut self, id: u64, text: &str, crew: bool) -> bool {
+        let Some(job) = self.store.job_mut(id) else {
+            return false;
+        };
+        job.lesson_offer.clear();
+        let (bot, folder, project) = (job.bot, job.folder.path.clone(), job.folder.name.clone());
+        let text = text.trim().to_string();
+        let lesson = learn::Lesson {
+            bot,
+            folder,
+            text: text.clone(),
+            job: id,
+            at: store::now(),
+            crew,
+        };
+        let added = learn::add(&mut self.store.lessons, lesson);
+        if added {
+            learn::set_all(&self.store.lessons);
+            let who = if crew {
+                "The crew".to_string()
+            } else {
+                bot.name().to_string()
             };
-            let (bot, project) = (job.bot, job.folder.name.clone());
-            if learn::add(&mut self.store.lessons, lesson) {
-                learn::set_all(&self.store.lessons);
-                if let Some(j) = self.store.job_mut(id) {
-                    j.feed.push(store::Item::Note(format!(
-                        "{} will remember this in {project}: \u{201c}{rule}\u{201d}",
-                        bot.name()
-                    )));
-                }
-                self.store.save();
+            if let Some(j) = self.store.job_mut(id) {
+                j.feed.push(store::Item::Note(format!(
+                    "{who} will remember this in {project}: \u{201c}{text}\u{201d}"
+                )));
             }
         }
+        self.store.save();
+        added
+    }
+
+    /// Lets the lesson job `id` offers go.
+    pub fn drop_lesson(&mut self, id: u64) {
+        if let Some(j) = self.store.job_mut(id) {
+            j.lesson_offer.clear();
+        }
+        self.store.save();
     }
 
     /// Forgets lesson `i` of the ones `who` keeps in `folder`.

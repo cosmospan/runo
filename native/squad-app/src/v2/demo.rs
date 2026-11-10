@@ -77,6 +77,10 @@ pub fn seed() -> Store {
     );
     j.status = Status::Shipped;
     j.shipped = "Merged into main as 3f2a1c9.".into();
+    // It ran on last night's shift.
+    j.shift = true;
+    j.issue = "Closes #22".into();
+    j.pr_number = 48;
     j.changes = vec![change("src/coupon.tsx", "M", 12, 4)];
     j.feed = vec![Item::Text(
         "The coupon field was hidden by the keyboard. It now scrolls into view.".into(),
@@ -168,8 +172,29 @@ pub fn seed() -> Store {
         tool("Edit src/checkout/pay.ts", "edit", 1),
         tool("Run npm test", "bash", 1),
         Item::Text("A retry after a timeout sent the charge again. Each charge now carries a key, so the payment service ignores the repeat. I added a test that retries twice and checks there's one charge.".into()),
+        Item::You("Also cover a retry that lands after the first charge went through.".into()),
+        tool("Edit src/checkout/pay.test.ts", "edit", 1),
+        Item::Text("Added that case: the second call finds the key and returns the first charge.".into()),
         Item::By(Member::Fin, "Heads up: #9 Add gift cards changes the same lines, in pay.ts around line 22. Whichever is approved second will need its branch brought up to date.".into()),
         Item::By(Member::Shipper, "I stopped before pushing. Something in this change shouldn't leave your computer: Looks like a Stripe secret key (src/checkout/pay.ts:41), and 1 more.".into()),
+    ];
+    // Where its files stood before each turn, so it can be rewound.
+    if j.worktree.is_empty() {
+        j.worktree = format!("{}/.squad/work/4", folder.path);
+    }
+    j.marks = vec![
+        super::rewind::Mark {
+            feed_at: 0,
+            sha: "demo".into(),
+            said: "Stop double charges on retry".into(),
+            at: t - 1_800,
+        },
+        super::rewind::Mark {
+            feed_at: 5,
+            sha: "demo".into(),
+            said: "Also cover a retry that lands after the first charge went through.".into(),
+            at: t - 1_500,
+        },
     ];
     jobs.push(j);
 
@@ -260,10 +285,13 @@ pub fn seed() -> Store {
         change("src/checkout/total.ts", "M", 18, 6),
         change("src/cart/summary.tsx", "M", 25, 2),
     ];
-    j.checks = vec![check("npm test", true, 40)];
+    j.checks = vec![check("npm test", true, 40), check("npm run lint", false, 9)];
+    j.checks[1].tail = "src/legacy/coupon.js\n  14:7  error  'total' is assigned a value but never used  no-unused-vars\n\n1 problem (1 error, 0 warnings)\nNot in this job's files. It fails on main too.".into();
     j.ahead = 3;
     j.behind = 4;
     j.clash_with = vec![(4, "pay.ts around line 22".into())];
+    // You sent it back once over how it showed prices.
+    j.lesson_offer = "Show prices with formatMoney from src/lib/money.ts, never toFixed.".into();
     j.conflict = vec![
         "src/checkout/total.ts".into(),
         "src/cart/summary.tsx".into(),
@@ -452,6 +480,7 @@ pub fn seed() -> Store {
             text: "Use the money helpers in src/lib/money.ts, never floats, for prices.".into(),
             job: 1,
             at: t - 3_000,
+            crew: false,
         }],
         threads: vec![
             thread(
@@ -639,4 +668,28 @@ pub fn repos() -> std::collections::HashMap<String, super::runtime::RepoLine> {
         },
     ))
     .collect()
+}
+
+/// The demo project's open issues, as `gh issue list` would give them.
+pub(super) fn issues() -> Vec<super::issues::Listed> {
+    let issue = |number: u64, title: &str, labels: &[&str]| super::issues::Listed {
+        number,
+        title: title.into(),
+        labels: labels.iter().map(|l| l.to_string()).collect(),
+        url: format!("https://github.com/acme/shop/issues/{number}"),
+    };
+    vec![
+        issue(
+            31,
+            "Checkout button does nothing on Safari",
+            &["bug", "safari"],
+        ),
+        issue(
+            29,
+            "Show the order total before the payment step",
+            &["checkout"],
+        ),
+        issue(27, "Gift card balance shows NaN after a refund", &["bug"]),
+        issue(24, "Dark mode for the account pages", &["design"]),
+    ]
 }

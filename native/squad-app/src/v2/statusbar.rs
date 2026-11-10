@@ -738,7 +738,7 @@ impl Shell {
                 link("usage-page", IconName::ChartColumn, "Usage details").on_click(cx.listener(
                     |this, _, _, cx| {
                         this.usage_open = false;
-                        this.go(Place::Usage, cx)
+                        this.go(Place::Settings(super::Pane::Usage), cx)
                     },
                 )),
             );

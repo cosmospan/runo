@@ -105,8 +105,6 @@ pub enum Place {
     Goal(u64),
     /// Settings, open on one pane.
     Settings(Pane),
-    /// What the crew cost and did lately.
-    Usage,
     /// Your server: how it's doing, and its controls.
     Server,
     /// Your server's screen, live.
@@ -758,6 +756,15 @@ pub struct Shell {
     racing: usize,
     /// A job from Today's box is a goal to split into jobs.
     splitting: bool,
+    /// The Run it later menu by the send button is open.
+    later_menu: bool,
+    /// When the next job sent from the thread's box starts, as /later words
+    /// ("tonight", "tomorrow 9am"); None sends it now.
+    later_pick: Option<String>,
+    /// The project's open issues on its Overview, as last read.
+    issue_list: Option<IssueList>,
+    /// A rewind waiting for its OK: the job and the point.
+    rewind_ask: Option<(u64, usize)>,
     /// Terminal drawers' shells, by job, and the job whose drawer is open.
     terms: HashMap<u64, crate::pty::Shell>,
     term_open: Option<u64>,
@@ -863,9 +870,7 @@ fn nav_slot(place: Place) -> Option<f32> {
         | Place::Browser(_) => 2,
         Place::Chat(_) => 3,
         Place::Crew => 4,
-        Place::Settings(_) | Place::Usage | Place::Server | Place::Screen | Place::Welcome => {
-            return None
-        }
+        Place::Settings(_) | Place::Server | Place::Screen | Place::Welcome => return None,
     };
     Some(i as f32 * 46.)
 }
@@ -1019,6 +1024,8 @@ impl Shell {
         };
         let (web, web_sub) = webpage::Web::new(window, cx);
         let mut subs = vec![
+            // A theme that follows the system redraws when the system switches.
+            cx.observe_window_appearance(window, |_, _, cx| cx.notify()),
             // The background image's dim and show-through preview as you drag; its
             // blur needs a new copy made, so that waits until you let go.
             cx.subscribe_in(&bg_dim_slider, window, move |_, _, event, _, cx| {
@@ -1275,7 +1282,7 @@ impl Shell {
             Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
             Ok("appearance") => Place::Settings(Pane::Appearance),
-            Ok("usage") => Place::Usage,
+            Ok("usage") => Place::Settings(Pane::Usage),
             Ok("machine") => Place::Server,
             Ok("needs") => Place::Inbox,
             Ok("goal") => store
@@ -1289,6 +1296,13 @@ impl Shell {
                 .iter()
                 .find(|j| j.race != 0)
                 .map(|j| Place::Race(j.race))
+                .unwrap_or(Place::Today),
+            // "job:9" opens job #9's workspace.
+            Ok(p) if p.starts_with("job:") => p[4..]
+                .parse()
+                .ok()
+                .filter(|id| store.job(*id).is_some())
+                .map(Place::Live)
                 .unwrap_or(Place::Today),
             Ok("review" | "review-jobs" | "review-files") => store
                 .jobs
@@ -1499,6 +1513,10 @@ impl Shell {
             diff_text: String::new(),
             racing: 0,
             splitting: false,
+            later_menu: false,
+            later_pick: None,
+            issue_list: None,
+            rewind_ask: None,
             terms: HashMap::new(),
             term_open: None,
             term_focus: cx.focus_handle(),
@@ -2870,10 +2888,35 @@ impl Shell {
     /// Rewinds a job to before its turn `k`: its files go back and the
     /// later turns leave its feed.
     pub(super) fn rewind_job(&mut self, id: u64, k: usize, cx: &mut Context<Self>) {
+        self.rewind_ask = None;
         if let Err(why) = self.crew.rewind(id, k) {
             self.say(why);
         }
         cx.notify();
+    }
+
+    /// Rewinds, then puts the message it went back over in the job's box, to
+    /// change and send again.
+    pub(super) fn rewind_and_edit(
+        &mut self,
+        id: u64,
+        k: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let said = self.crew.store.job(id).and_then(|j| {
+            let at = j.marks.get(k)?.feed_at;
+            match j.feed.get(at) {
+                Some(store::Item::You(t)) => Some(t.clone()),
+                _ => j.marks.get(k).map(|m| m.said.clone()),
+            }
+        });
+        self.rewind_job(id, k, cx);
+        if let Some(text) = said {
+            self.live_input
+                .update(cx, |i, cx| i.set_value(text, window, cx));
+            self.live_input.read(cx).focus_handle(cx).focus(window, cx);
+        }
     }
 
     /// A stopped or interrupted job picks up where it was.
@@ -2916,6 +2959,38 @@ impl Shell {
             return;
         }
         self.crew.leave_kept(id);
+        cx.notify();
+    }
+
+    /// A check that fails on its own, not because of job `id`: Fixer gets a
+    /// job of its own to make it pass.
+    pub(super) fn fix_check(
+        &mut self,
+        id: u64,
+        command: &str,
+        tail: &str,
+        folder: store::Folder,
+        cx: &mut Context<Self>,
+    ) {
+        let end: Vec<&str> = tail.lines().rev().take(30).collect();
+        let end: Vec<&str> = end.into_iter().rev().collect();
+        let text = format!(
+            "The check `{command}` fails in this project, and not because of job #{id}. Make it pass without changing what it checks.\n\nThe end of its output:\n```\n{}\n```",
+            end.join("\n")
+        );
+        self.start_job_in(Member::Fixer, Mode::Fix, text, folder, cx);
+    }
+
+    /// Leaves a failing check out of job `id`'s verdict: it fails on its own.
+    pub(super) fn ignore_check(&mut self, id: u64, command: &str, cx: &mut Context<Self>) {
+        if let Some(j) = self.crew.store.job_mut(id) {
+            if !j.ignored_checks.iter().any(|c| c == command) {
+                j.ignored_checks.push(command.to_string());
+            }
+            let ignored = j.ignored_checks.clone();
+            work::ignore(&mut j.checks, &ignored);
+        }
+        self.crew.store.save();
         cx.notify();
     }
 
@@ -3555,6 +3630,7 @@ impl Render for Shell {
         self.poll(cx);
         self.poll_maker(window, cx);
         data::set_here(self.crew.store.folder().map_or("", |f| f.path.as_str()));
+        theme::follow_system(system_dark(window.appearance()));
         if self.applied_theme != look() {
             self.applied_theme = look();
             apply_theme(window, cx);
@@ -3653,7 +3729,6 @@ impl Render for Shell {
             Place::History => self.history(cx),
             Place::Overview => self.overview(cx),
             Place::Settings(pane) => self.settings(pane, cx),
-            Place::Usage => self.usage(cx),
             Place::Server => self.machines(cx),
             Place::Screen => self.screen_page(window, cx),
             // A job's browser is a tab of its workspace.
@@ -3823,7 +3898,7 @@ impl Render for Shell {
                     "4" => Place::Chat(this.last_chat()),
                     "5" => Place::Crew,
                     "6" => Place::Settings(this.settings_pane),
-                    "7" => Place::Usage,
+                    "7" => Place::Settings(Pane::Usage),
                     _ => return,
                 };
                 this.go(to, cx);
@@ -3972,6 +4047,23 @@ fn background() -> WindowBackgroundAppearance {
     }
 }
 
+/// A project's open issues, as last read.
+pub(crate) struct IssueList {
+    pub folder: String,
+    pub at: Instant,
+    pub loading: bool,
+    pub items: Vec<issues::Listed>,
+    pub error: Option<String>,
+}
+
+/// The system is using a dark appearance.
+pub(crate) fn system_dark(a: gpui::WindowAppearance) -> bool {
+    matches!(
+        a,
+        gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark
+    )
+}
+
 /// Puts the theme in use on the window and on the kit's text boxes and menus.
 fn apply_theme(window: &mut Window, cx: &mut App) {
     use gpui_kit::component::{Theme, ThemeMode};
@@ -4005,7 +4097,8 @@ fn apply_theme(window: &mut Window, cx: &mut App) {
 pub fn open_window(cx: &mut App) {
     // The look first: the window opens with the background it needs.
     let st = cx.global::<crate::settings::AppSettings>();
-    ui::set_theme(&st.v2_theme);
+    theme::set_pref(&st.v2_theme, system_dark(cx.window_appearance()));
+    issues::set_close_on_merge(st.v2_close_issues);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
     theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);

@@ -435,7 +435,11 @@ impl Shell {
                             )
                             .build(window, cx)
                         })
-                        .on_click(cx.listener(move |this, _, _, cx| this.rewind_job(id, k, cx))),
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.rewind_ask = Some((id, k));
+                            this.live_scroll.scroll_to_bottom();
+                            cx.notify();
+                        })),
                     ),
                 );
             }
@@ -537,6 +541,13 @@ impl Shell {
         }
         if let Some(card) = self.clash_card(job, cx) {
             feed = feed.child(card.ml(px(40.)).mr_0());
+        }
+        if let Some(card) = self.lesson_card(job, cx) {
+            feed = feed.child(card.ml(px(40.)).mr_0());
+        }
+        // A rewind waiting for its OK sits last, where the eye already is.
+        if let Some((_, k)) = self.rewind_ask.filter(|(id, _)| *id == job.id) {
+            feed = feed.child(self.rewind_confirm(job, k, cx));
         }
         // The review itself is the workspace's Changes tab, beside this.
         if running {
@@ -985,6 +996,150 @@ impl Shell {
             .when(has_more, |d| {
                 d.child(section(&format!("{}'s other jobs", job.bot.name()), more))
             })
+            .children(self.rewind_points(job, cx))
+    }
+
+    /// Asks before a rewind: what goes back and what leaves the feed, with
+    /// Cancel, Rewind and edit, and Rewind.
+    fn rewind_confirm(&mut self, job: &Job, k: usize, cx: &mut Context<Self>) -> Div {
+        let id = job.id;
+        let at = job.marks.get(k).map_or(job.feed.len(), |m| m.feed_at);
+        let later = job.marks.len().saturating_sub(k);
+        let gone = job.feed[at.min(job.feed.len())..]
+            .iter()
+            .filter(|i| matches!(i, Item::You(_) | Item::Text(_)))
+            .count();
+        let line = |text: String| {
+            div()
+                .flex()
+                .gap(px(8.))
+                .text_size(px(12.5))
+                .line_height(px(18.))
+                .text_color(c(ui::body()))
+                .child(
+                    div()
+                        .flex_none()
+                        .text_color(c(ui::faint()))
+                        .child("\u{2022}"),
+                )
+                .child(div().flex_1().min_w_0().child(text))
+        };
+        div()
+            .ml(px(40.))
+            .px(px(14.))
+            .py(px(12.))
+            .rounded(px(12.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::pick()))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .text_size(px(13.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(Icon::new(IconName::Undo2).size(px(14.)))
+                    .child("Rewind to before this message?"),
+            )
+            .child(line(format!(
+                "The files on its branch go back to how they were then. {} later {} undone.",
+                later,
+                if later == 1 { "turn is" } else { "turns are" }
+            )))
+            .child(line(format!(
+                "{gone} {} after it leave the feed, and {} forgets them.",
+                if gone == 1 { "message" } else { "messages" },
+                job.bot.name()
+            )))
+            .child(line(
+                "Only the job's own branch changes. Your folder isn't touched.".to_string(),
+            ))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(div().flex_1())
+                    .child(
+                        ui::ghost(("rewind-cancel", id as usize), "Cancel")
+                            .h(px(28.))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.rewind_ask = None;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        ui::ghost(("rewind-edit", id as usize), "Rewind and edit")
+                            .h(px(28.))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.rewind_and_edit(id, k, window, cx)
+                            })),
+                    )
+                    .child(
+                        ui::solid(("rewind-go", id as usize), "Rewind")
+                            .h(px(28.))
+                            .on_click(
+                                cx.listener(move |this, _, _, cx| this.rewind_job(id, k, cx)),
+                            ),
+                    ),
+            )
+    }
+
+    /// Every point the job can go back to, newest first, each with Rewind.
+    /// Nothing while it can't be rewound.
+    fn rewind_points(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        let points = super::rewind::points(job);
+        if points.is_empty() {
+            return None;
+        }
+        let id = job.id;
+        let mut list = div().flex().flex_col();
+        for k in points.into_iter().rev() {
+            let m = &job.marks[k];
+            list = list.child(
+                div()
+                    .h(px(32.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .border_b_1()
+                    .border_color(c(ui::line2()))
+                    .child(
+                        div()
+                            .w(px(64.))
+                            .flex_none()
+                            .font_family(ui::MONO)
+                            .text_size(px(11.))
+                            .text_color(c(ui::faint()))
+                            .child(store::ago(m.at)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.5))
+                            .text_color(c(ui::body()))
+                            .child(format!("Before \u{201c}{}\u{201d}", m.said)),
+                    )
+                    .child(
+                        ui::ghost(("rewind-point", id as usize * 1000 + k), "Rewind")
+                            .h(px(24.))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.rewind_ask = Some((id, k));
+                                this.go(Place::Live(id), cx);
+                                this.live_scroll.scroll_to_bottom();
+                                cx.notify();
+                            })),
+                    ),
+            );
+        }
+        Some(section("Rewind points", list))
     }
 
     /// A centred message for a place with nothing in it.

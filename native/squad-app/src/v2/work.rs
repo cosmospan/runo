@@ -198,6 +198,19 @@ pub fn run_checks(dir: String) -> Receiver<Vec<CheckRun>> {
 
 /// "641 / 641 passed" style counts are the check tool's business; this is the
 /// one-line verdict Squad Code shows.
+/// What an ignored check says in place of why it couldn't run.
+pub const IGNORED: &str = "ignored for this job";
+
+/// Marks the checks the person said to ignore on this job, so they don't
+/// fail it or start a fix turn.
+pub fn ignore(checks: &mut [CheckRun], ignored: &[String]) {
+    for c in checks.iter_mut() {
+        if !c.ok && ignored.contains(&c.command) {
+            c.infra = IGNORED.into();
+        }
+    }
+}
+
 pub fn verdict(checks: &[CheckRun], checking: bool) -> (String, Verdict) {
     if checking {
         return ("Checker is running the checks".into(), Verdict::Running);
@@ -211,10 +224,20 @@ pub fn verdict(checks: &[CheckRun], checking: bool) -> (String, Verdict) {
         .count();
     let skipped = checks
         .iter()
-        .filter(|c| !c.ok && !c.infra.is_empty())
+        .filter(|c| !c.ok && !c.infra.is_empty() && c.infra != IGNORED)
+        .count();
+    let ignored = checks
+        .iter()
+        .filter(|c| !c.ok && c.infra == IGNORED)
         .count();
     let n = checks.len();
-    if failed == 0 && skipped == 0 {
+    if failed == 0 && skipped == 0 && ignored > 0 {
+        let passed = n - ignored;
+        (
+            format!("{passed} of {n} pass, {ignored} ignored for this job"),
+            Verdict::Pass,
+        )
+    } else if failed == 0 && skipped == 0 {
         let text = if n == 1 {
             "The check passes".to_string()
         } else {
@@ -510,6 +533,27 @@ mod tests {
         assert!(!Path::new(&iso.worktree).exists());
         assert!(!git::has_branch(&folder, &iso.branch));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_ignored_check_does_not_fail_the_job() {
+        let mut checks = vec![
+            CheckRun {
+                command: "npm run lint".into(),
+                ok: true,
+                ..Default::default()
+            },
+            CheckRun {
+                command: "npm test".into(),
+                ok: false,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(verdict(&checks, false).1, Verdict::Fail);
+        ignore(&mut checks, &["npm test".to_string()]);
+        let (said, v) = verdict(&checks, false);
+        assert_eq!(v, Verdict::Pass);
+        assert_eq!(said, "1 of 2 pass, 1 ignored for this job");
     }
 
     #[test]

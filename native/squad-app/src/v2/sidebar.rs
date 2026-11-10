@@ -1260,7 +1260,6 @@ impl Shell {
                 None => "Jobs / Plan".into(),
             },
             Place::Settings(_) => "Settings".into(),
-            Place::Usage => "Usage".into(),
             Place::Server => "Machines".into(),
             Place::Screen => "Machines / Screen".into(),
             Place::Browser(id) => match self.crew.store.job(id) {
