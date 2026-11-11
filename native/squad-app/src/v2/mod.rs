@@ -442,6 +442,8 @@ pub struct Shell {
     /// The request whose Deny is open for a reason.
     denying: Option<String>,
     live_input: Entity<InputState>,
+    /// The job box's Ask chip: the next follow-up only asks.
+    live_ask: bool,
     /// Live's feed scrolls itself to the newest line while the job runs.
     live_scroll: ScrollHandle,
     live_len: usize,
@@ -522,6 +524,8 @@ pub struct Shell {
     maker_found: crate::settings::Discovered,
     /// The walkthrough's step and the crew picked in it.
     setup_step: usize,
+    /// The walkthrough's engine step lists every agent, not just the common ones.
+    setup_more: bool,
     /// The bot maker is open on Crew.
     maker_open: bool,
     /// The engines popover over the status bar is open.
@@ -529,7 +533,8 @@ pub struct Shell {
     /// The agent picked on Engines.
     engine_sel: Option<usize>,
     /// Engines shows each bot's brain rather than the engines themselves.
-    engine_brains: bool,
+    /// Settings › Engines lists every engine it knows, not just the common ones.
+    engines_all: bool,
     /// The Settings pane last open, where the sidebar's Settings goes back to.
     settings_pane: Pane,
     /// The bot being dressed in Settings → Mascot.
@@ -565,8 +570,6 @@ pub struct Shell {
     viewer: Option<viewer::Viewer>,
     /// A project waiting for you to confirm removing it, or deleting its folder.
     gone: Option<menu::Gone>,
-    /// Running job cards showing their raw commands.
-    raw_open: std::collections::HashSet<u64>,
     /// The thread's "About this thread" panel is open.
     about_open: bool,
     /// A risky ask Peek wants you to OK first: its message in the thread, the
@@ -631,8 +634,6 @@ pub struct Shell {
     /// The machine open on the Machines page: 0 this computer, 1 your server.
     machine_pick: u8,
     crew_tab: crew::CrewTab,
-    /// The project whose lessons the Memory tab shows, when not this one.
-    memory_folder: Option<String>,
     /// Memory's line for adding something a bot should always know.
     memory_input: Entity<InputState>,
     /// The filter over the right sidebar's Files tab.
@@ -643,6 +644,23 @@ pub struct Shell {
     files_open: std::collections::HashSet<String>,
     /// The files last listed for the Files tab: the folder, when, and its files.
     files_seen: Option<(String, Instant, std::sync::Arc<Vec<String>>)>,
+    /// The file shown in a job's Files tab, and whether its tree lists only
+    /// the files the job changed.
+    file_pick: Option<String>,
+    files_changed_only: bool,
+    /// The bot the DM box's placeholder names.
+    chat_hint: Option<Member>,
+    /// What the Memory tab's box says it teaches.
+    memory_hint: Option<String>,
+    /// How many days Settings > Usage looks back: 7, 14 or 30.
+    usage_days: u64,
+    /// The Settings drop-down that is open, by its id.
+    select_open: Option<&'static str>,
+    /// Job folders whose changed files' folders were opened once already.
+    files_seeded: std::collections::HashSet<String>,
+    /// The picked file as read: its path, lines, and the lines the job
+    /// changed, so it isn't read again every frame.
+    job_view: Option<filetab::FileView>,
     /// Settings, My server: the `you@host` box, the connecting in progress and
     /// what it has said so far.
     server_input: Entity<InputState>,
@@ -748,6 +766,8 @@ pub struct Shell {
     /// line's place in the shown diff.
     line_at: Option<(u64, String, usize)>,
     line_input: Entity<InputState>,
+    /// The side panel's box for more words when sending a job back.
+    peek_note: Entity<InputState>,
     /// Comments on diff lines, waiting to go back with Send back.
     line_notes: Vec<review::LineNote>,
     /// The point-and-change bar on a job's browser.
@@ -758,6 +778,8 @@ pub struct Shell {
     splitting: bool,
     /// The Run it later menu by the send button is open.
     later_menu: bool,
+    /// A DM's box starts a job (Do) instead of asking (Ask).
+    dm_do: bool,
     /// When the next job sent from the thread's box starts, as /later words
     /// ("tonight", "tomorrow 9am"); None sends it now.
     later_pick: Option<String>,
@@ -889,6 +911,9 @@ impl Shell {
         let live_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add to the job…"));
         let line_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("What should change here? Enter adds it")
+        });
+        let peek_note = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Or write here to add more words\u{2026}")
         });
         let pick_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("What should change about it? Enter sends it")
@@ -1133,7 +1158,11 @@ impl Shell {
                     let text = input.read(cx).value().trim().to_string();
                     if let (false, Place::Chat(who)) = (text.is_empty(), this.place) {
                         input.update(cx, |i, cx| i.set_value("", window, cx));
-                        this.ask(who, text, cx);
+                        if this.dm_do {
+                            this.job_from_dm(who, text, cx);
+                        } else {
+                            this.ask(who, text, cx);
+                        }
                     }
                 }
             }),
@@ -1162,29 +1191,9 @@ impl Shell {
                     }
                 }
             }),
-            cx.subscribe_in(&live_input, window, |this, input, event, window, cx| {
+            cx.subscribe_in(&live_input, window, |this, _input, event, window, cx| {
                 if let InputEvent::PressEnter { .. } = event {
-                    let text = input.read(cx).value().trim().to_string();
-                    // The job on its own page, or open beside its thread.
-                    let job = match this.place {
-                        Place::Live(id) => Some(id),
-                        Place::Today => this.reply_open,
-                        _ => None,
-                    };
-                    if let (false, Some(id)) = (text.is_empty(), job) {
-                        input.update(cx, |i, cx| i.set_value("", window, cx));
-                        // To a finished job, Peek's engine reads it first:
-                        // "run the app" runs it, "stop" stops it, and the
-                        // rest goes to the bot.
-                        let idle = this
-                            .crew
-                            .store
-                            .job(id)
-                            .is_some_and(|j| j.status != Status::Running);
-                        if !(idle && this.read_follow_up(id, text.clone(), cx)) {
-                            this.follow_up(id, text, cx);
-                        }
-                    }
+                    this.send_live(window, cx);
                 }
             }),
         ];
@@ -1272,12 +1281,20 @@ impl Shell {
         };
         let start = match std::env::var("SQUADCODE_PLACE").as_deref() {
             Ok("crew") => Place::Crew,
+            Ok(p) if p.starts_with("crew:") => Place::Crew,
             Ok("chat") => Place::Chat(Member::Fin),
+            // "chat:explainer" opens a direct message with that bot.
+            Ok(p) if p.starts_with("chat:") => Member::all()
+                .into_iter()
+                .find(|m| m.name().eq_ignore_ascii_case(&p[5..]))
+                .map(Place::Chat)
+                .unwrap_or(Place::Today),
             Ok("inbox") => Place::Inbox,
             Ok("history") => Place::History,
             Ok("overview") => Place::Overview,
             Ok("engines") => Place::Settings(Pane::Engines),
             Ok("server") => Place::Settings(Pane::Server),
+            Ok("work") => Place::Settings(Pane::Work),
             Ok("settings") => Place::Settings(Pane::Work),
             Ok("general") => Place::Settings(Pane::General),
             Ok("mascot") => Place::Settings(Pane::Mascot),
@@ -1291,6 +1308,7 @@ impl Shell {
                 .map(|g| Place::Goal(g.id))
                 .unwrap_or(Place::Today),
             Ok("jobs" | "files") => Place::Today,
+            Ok(p) if p.starts_with("thread:") => Place::Today,
             Ok("race") => store
                 .jobs
                 .iter()
@@ -1299,6 +1317,9 @@ impl Shell {
                 .unwrap_or(Place::Today),
             // "job:9" opens job #9's workspace.
             Ok(p) if p.starts_with("job:") => p[4..]
+                .split(':')
+                .next()
+                .unwrap_or_default()
                 .parse()
                 .ok()
                 .filter(|id| store.job(*id).is_some())
@@ -1321,7 +1342,7 @@ impl Shell {
                 .last()
                 .map(|j| Place::Live(j.id))
                 .unwrap_or(Place::Today),
-            Ok("welcome") => Place::Welcome,
+            Ok(p) if p == "welcome" || p.starts_with("welcome:") => Place::Welcome,
             Ok("maker" | "maker-review" | "setup") => Place::Crew,
             _ if !store.set_up => Place::Welcome,
             _ => Place::Today,
@@ -1346,7 +1367,9 @@ impl Shell {
             deny_input,
             denying: None,
             live_input,
+            live_ask: false,
             line_input: line_input.clone(),
+            peek_note,
             line_notes: Vec::new(),
             line_at: None,
             pick_input: pick_input.clone(),
@@ -1378,10 +1401,11 @@ impl Shell {
             moods: HashMap::new(),
             target: None,
             setup_step: 0,
+            setup_more: false,
             maker_open: false,
             usage_open: false,
             engine_sel: None,
-            engine_brains: false,
+            engines_all: false,
             settings_pane: Pane::Work,
             applied_theme: look(),
             fin_sel: Member::Guard,
@@ -1400,7 +1424,6 @@ impl Shell {
             menu_hot: None,
             viewer: None,
             gone: None,
-            raw_open: Default::default(),
             about_open: false,
             confirming: None,
             reading: None,
@@ -1446,12 +1469,19 @@ impl Shell {
             crew_pick: None,
             machine_pick: 0,
             crew_tab: crew::CrewTab::default(),
-            memory_folder: None,
             memory_input,
             files_input,
             list_files: false,
             files_open: Default::default(),
             files_seen: None,
+            file_pick: None,
+            files_changed_only: false,
+            usage_days: 7,
+            chat_hint: None,
+            memory_hint: None,
+            select_open: None,
+            files_seeded: Default::default(),
+            job_view: None,
             server_input,
             server_setup: None,
             server_log: Vec::new(),
@@ -1514,6 +1544,7 @@ impl Shell {
             racing: 0,
             splitting: false,
             later_menu: false,
+            dm_do: false,
             later_pick: None,
             issue_list: None,
             rewind_ask: None,
@@ -1549,6 +1580,50 @@ impl Shell {
             }
             // The status bar's usage popover, open.
             Ok("usage-open") => shell.usage_open = true,
+            Ok("palette") => shell.open_palette(window, cx),
+            // "job:9:files" opens job #9's workspace on its Files tab.
+            Ok(p) if p.starts_with("job:") && p.matches(':').count() == 2 => {
+                let tab = p.rsplit(':').next().unwrap_or_default();
+                if let Some(t) = peek::Tab::ALL
+                    .into_iter()
+                    .find(|t| t.name().eq_ignore_ascii_case(tab))
+                {
+                    shell.ws_tab = t;
+                    if t == peek::Tab::Terminal {
+                        if let Ok(id) = p[4..].split(':').next().unwrap_or_default().parse() {
+                            shell.toggle_term(id, window, cx);
+                        }
+                    }
+                }
+            }
+            // "thread:1" opens thread #1.
+            Ok(p) if p.starts_with("thread:") => {
+                if let Ok(id) = p[7..].parse() {
+                    shell.crew.store.thread_now = id;
+                }
+            }
+            // "crew:fixer:memory" opens Fixer's profile on its Memory tab.
+            Ok(p) if p.starts_with("crew:") => {
+                let mut parts = p[5..].split(':');
+                let who = parts.next().unwrap_or_default();
+                shell.crew_pick = Member::all()
+                    .into_iter()
+                    .find(|m| m.name().eq_ignore_ascii_case(who));
+                if let Some(tab) = parts.next() {
+                    if let Some(t) = crew::CrewTab::ALL
+                        .into_iter()
+                        .find(|t| format!("{t:?}").eq_ignore_ascii_case(tab))
+                    {
+                        shell.crew_tab = t;
+                    }
+                }
+            }
+            // The menu bar panel, open on its own at the screen's corner.
+            Ok("tray") => cx.defer(crate::menubar::open_panel),
+            // "welcome:3" opens the walkthrough on its fourth step.
+            Ok(p) if p.starts_with("welcome:") => {
+                shell.setup_step = p[8..].parse().unwrap_or(0);
+            }
             // A job's peek open beside its thread.
             Ok("peek") => {
                 let pick = shell
@@ -1557,6 +1632,18 @@ impl Shell {
                     .jobs
                     .iter()
                     .find(|j| j.status == Status::Review && j.race == 0)
+                    .map(|j| (j.id, j.thread));
+                if let Some((id, thread)) = pick {
+                    shell.crew.store.thread_now = thread;
+                    shell.reply_open = Some(id);
+                }
+            }
+            // "peek:2" opens job #2's peek beside its thread.
+            Ok(p) if p.starts_with("peek:") => {
+                let pick = p[5..]
+                    .parse::<u64>()
+                    .ok()
+                    .and_then(|id| shell.crew.store.job(id))
                     .map(|j| (j.id, j.thread));
                 if let Some((id, thread)) = pick {
                     shell.crew.store.thread_now = thread;
@@ -1599,7 +1686,11 @@ impl Shell {
         }
         // A file open in the viewer, for looking at it.
         if let Some(file) = std::env::var_os("SQUADCODE_VIEW") {
-            shell.open_file(file.into(), None, window, cx);
+            let job = match shell.place {
+                Place::Live(id) => Some(id),
+                _ => None,
+            };
+            shell.open_file(file.into(), job, window, cx);
         }
         shell
     }
@@ -1804,7 +1895,7 @@ impl Shell {
 
     /// The text from Today's box becomes a job for the bot its mode goes to, or a
     /// question for Explainer.
-    fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
+    pub(super) fn hand_over(&mut self, text: String, cx: &mut Context<Self>) {
         // The person spoke here: the bots may talk among themselves again.
         if let Some(f) = self.crew.store.folder().map(|f| f.path.clone()) {
             let here = self.crew.store.thread_here();
@@ -2919,6 +3010,37 @@ impl Shell {
         }
     }
 
+    /// Sends what's typed in a job's own box: to the job on its own page,
+    /// or open beside its thread.
+    pub(super) fn send_live(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let input = self.live_input.clone();
+        let text = input.read(cx).value().trim().to_string();
+        let job = match self.place {
+            Place::Live(id) => Some(id),
+            Place::Today => self.reply_open,
+            _ => None,
+        };
+        if let (false, Some(id)) = (text.is_empty(), job) {
+            input.update(cx, |i, cx| i.set_value("", window, cx));
+            // To a finished job, Peek's engine reads it first: "run the app"
+            // runs it, "stop" stops it, and the rest goes to the bot.
+            let idle = self
+                .crew
+                .store
+                .job(id)
+                .is_some_and(|j| j.status != Status::Running);
+            if !(idle && self.read_follow_up(id, text.clone(), cx)) {
+                // Ask: it answers, and leaves the files as they are.
+                let text = if self.live_ask {
+                    format!("Only answer this; don't change any files. {text}")
+                } else {
+                    text
+                };
+                self.follow_up(id, text, cx);
+            }
+        }
+    }
+
     /// A stopped or interrupted job picks up where it was.
     pub(super) fn carry_on(&mut self, id: u64, cx: &mut Context<Self>) {
         let st = Self::app_settings(cx);
@@ -3723,8 +3845,32 @@ impl Render for Shell {
             Place::Live(id) => self.workspace(id, window, cx),
             Place::Race(id) => self.race(id, cx),
             Place::Goal(id) => self.goal_page(id, cx),
-            Place::Crew => self.crew(cx),
-            Place::Chat(who) => self.chat(who, cx),
+            Place::Crew => {
+                let teach = self.crew_pick.map(|who| {
+                    let here = self
+                        .crew
+                        .store
+                        .folder()
+                        .map(|f| f.name.clone())
+                        .unwrap_or_else(|| "this project".into());
+                    format!("Teach {} something about {here}\u{2026}", who.name())
+                });
+                if let Some(t) = teach.filter(|t| self.memory_hint.as_ref() != Some(t)) {
+                    self.memory_hint = Some(t.clone());
+                    self.memory_input
+                        .update(cx, |i, cx| i.set_placeholder(t, window, cx));
+                }
+                self.crew(cx)
+            }
+            Place::Chat(who) => {
+                if self.chat_hint != Some(who) {
+                    self.chat_hint = Some(who);
+                    let hint = format!("Message {}\u{2026}", who.name());
+                    self.chat_input
+                        .update(cx, |i, cx| i.set_placeholder(hint, window, cx));
+                }
+                self.chat(who, cx)
+            }
             Place::Inbox => self.inbox(cx),
             Place::History => self.history(cx),
             Place::Overview => self.overview(cx),
@@ -4099,6 +4245,7 @@ pub fn open_window(cx: &mut App) {
     let st = cx.global::<crate::settings::AppSettings>();
     theme::set_pref(&st.v2_theme, system_dark(cx.window_appearance()));
     issues::set_close_on_merge(st.v2_close_issues);
+    work::set_belt(st.v2_belt_secrets, st.v2_belt_checks);
     theme::set_see_through(st.v2_see_through, st.v2_clear);
     theme::set_glass_popovers(st.v2_glass_popovers, st.v2_pop_clear);
     theme::set_image(!st.v2_bg_image.trim().is_empty(), st.v2_bg_show);

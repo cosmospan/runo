@@ -51,11 +51,6 @@ impl Shell {
         b.on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx)))
     }
 
-    /// The review card at the end of a job's feed, once it has changes.
-    pub(super) fn review_card(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
-        self.review_body(job, cx).map(|d| d.ml(px(40.)))
-    }
-
     /// Checker's run of the project's checks on a job: the verdict with Run
     /// again, then each check with its time, and the end of a failing one's
     /// output. The review and the workspace's Checks tab both show it.
@@ -234,6 +229,333 @@ impl Shell {
         proof
     }
 
+    /// The workspace's Checks tab: Checker's run as a header with Run all
+    /// again, a mono tally, one row per check with its output when it
+    /// failed, Merge when checks pass, and where the checks come from.
+    pub(super) fn checks_tab(&mut self, job: &Job, cx: &mut Context<Self>) -> Div {
+        let id = job.id;
+        let n = job.checks.len();
+        let checker = self.avatar(Member::Checker, 22.);
+        let when = job
+            .ended
+            .map(|t| match super::store::ago(t).as_str() {
+                "just now" => "just now".to_string(),
+                a => format!("{a} ago"),
+            })
+            .unwrap_or_default();
+        let head = div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(checker)
+            .child(
+                div()
+                    .text_size(px(14.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(ui::ink()))
+                    .child(if job.checking {
+                        "Checker is running the checks".to_string()
+                    } else if n == 0 {
+                        "No checks have run".to_string()
+                    } else {
+                        format!("Checker ran {n} check{}", if n == 1 { "" } else { "s" })
+                    }),
+            )
+            .when(!job.checking && !when.is_empty() && n > 0, |d| {
+                d.child(
+                    div()
+                        .font_family(ui::MONO)
+                        .text_size(px(11.5))
+                        .text_color(c(ui::faint()))
+                        .child(when),
+                )
+            })
+            .child(div().flex_1())
+            .when(!job.checking && job.mode.writes(), |d| {
+                d.child(
+                    ui::dbtn_i(
+                        "checks-all",
+                        IconName::RotateCw,
+                        "Run all again",
+                        ui::Btn::Plain,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| this.recheck(id, cx))),
+                )
+            });
+
+        let pass = job.checks.iter().filter(|ch| ch.ok).count();
+        let ignored = job
+            .checks
+            .iter()
+            .filter(|ch| ch.infra == work::IGNORED)
+            .count();
+        let couldnt = job
+            .checks
+            .iter()
+            .filter(|ch| !ch.ok && !ch.infra.is_empty() && ch.infra != work::IGNORED)
+            .count();
+        let fail = n - pass - ignored - couldnt;
+        let mut tally = div()
+            .flex()
+            .gap(px(6.))
+            .font_family(ui::MONO)
+            .text_size(px(11.5));
+        let mut parts: Vec<(String, u32)> = Vec::new();
+        if pass > 0 {
+            parts.push((format!("{pass} passed"), ui::t_green()));
+        }
+        if fail > 0 {
+            parts.push((format!("{fail} failed"), ui::t_red()));
+        }
+        if couldnt > 0 {
+            parts.push((format!("{couldnt} couldn't run"), ui::t_amber()));
+        }
+        if ignored > 0 {
+            parts.push((format!("{ignored} ignored"), ui::faint()));
+        }
+        for (i, (t, col)) in parts.into_iter().enumerate() {
+            if i > 0 {
+                tally = tally.child(div().text_color(c(ui::faint())).child("\u{b7}"));
+            }
+            tally = tally.child(div().text_color(c(col)).child(t));
+        }
+
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .rounded(px(6.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .overflow_hidden();
+        if job.checking {
+            list = list.child(ui::sweep(ui::BLUE, 0.).h(px(3.)));
+        }
+        for (k, check) in job.checks.iter().enumerate() {
+            let ignored = check.infra == work::IGNORED;
+            let (icon, col) = if check.ok {
+                (IconName::Check, ui::t_green())
+            } else if ignored {
+                (IconName::Minus, ui::faint())
+            } else if !check.infra.is_empty() {
+                (IconName::TriangleAlert, ui::t_amber())
+            } else {
+                (IconName::X, ui::t_red())
+            };
+            let failed = !check.ok && check.infra.is_empty();
+            let tail: Vec<&str> = check.tail.lines().rev().take(12).collect();
+            let tail: Vec<String> = tail.into_iter().rev().map(str::to_string).collect();
+            let mut row = div()
+                .px(px(12.))
+                .py(px(12.))
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .when(k > 0, |d| d.border_t_1().border_color(c(ui::line())))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(10.))
+                        .child(
+                            div()
+                                .size(px(18.))
+                                .flex_none()
+                                .rounded(px(3.))
+                                .bg(ca(col, 0.12))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(Icon::new(icon).size(px(12.)).text_color(c(col))),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(ui::ink()))
+                                        .child(check_name(&check.command)),
+                                )
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .font_family(ui::MONO)
+                                        .text_size(px(11.))
+                                        .text_color(c(ui::faint()))
+                                        .child(if check.infra.is_empty() || ignored {
+                                            check.command.clone()
+                                        } else {
+                                            format!("{} \u{b7} {}", check.command, check.infra)
+                                        }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .font_family(ui::MONO)
+                                .text_size(px(11.))
+                                .text_color(c(ui::faint()))
+                                .child(format!("{}s", check.secs)),
+                        )
+                        .when(!job.checking && job.mode.writes(), |d| {
+                            d.child(
+                                ui::dbtn_i(
+                                    ("check-again", k),
+                                    IconName::RotateCw,
+                                    "Run again",
+                                    ui::Btn::Ghost,
+                                )
+                                .tooltip(|window, cx| {
+                                    gpui_kit::component::tooltip::Tooltip::new(
+                                        "Checker runs every check again",
+                                    )
+                                    .build(window, cx)
+                                })
+                                .on_click(cx.listener(move |this, _, _, cx| this.recheck(id, cx))),
+                            )
+                        }),
+                );
+            if !check.ok && !ignored && !tail.iter().all(|l| l.trim().is_empty()) {
+                let mut out = div()
+                    .ml(px(28.))
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(4.))
+                    .bg(c(ui::panel()))
+                    .border_1()
+                    .border_color(c(ui::line_hi()))
+                    .font_family(ui::MONO)
+                    .text_size(px(11.5))
+                    .line_height(px(19.))
+                    .text_color(c(ui::body()));
+                for (i, l) in tail.into_iter().enumerate() {
+                    out = out.child(
+                        div()
+                            .when(i == 0 && failed, |d| d.text_color(c(ui::t_red())))
+                            .child(l),
+                    );
+                }
+                row = row.child(out);
+            }
+            if failed && !job.checking {
+                let cmd = check.command.clone();
+                let (fix_cmd, tail) = (cmd.clone(), check.tail.clone());
+                let folder = job.folder.clone();
+                row = row.child(
+                    div()
+                        .ml(px(28.))
+                        .flex()
+                        .gap(px(6.))
+                        .child(
+                            ui::dbtn(("check-fix", k), "Start a job to fix it", ui::Btn::Plain)
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.fix_check(id, &fix_cmd, &tail, folder.clone(), cx)
+                                })),
+                        )
+                        .child(
+                            ui::dbtn(("check-ignore", k), "Ignore for this job", ui::Btn::Ghost)
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.ignore_check(id, &cmd, cx)
+                                })),
+                        ),
+                );
+            }
+            list = list.child(row);
+        }
+
+        let on = job.merge_on_green;
+        let merge =
+            (job.status == Status::Review).then(|| {
+                div()
+                    .id(("merge-green-tab", id as usize))
+                    .px(px(14.))
+                    .py(px(12.))
+                    .rounded(px(6.))
+                    .bg(c(ui::raised()))
+                    .border_1()
+                    .border_color(c(ui::line()))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(ui::ink()))
+                                    .child("Merge when checks pass"),
+                            )
+                            .child(div().text_size(px(12.)).text_color(c(ui::body())).child(
+                                "Approve now, and it merges the moment every check is green.",
+                            )),
+                    )
+                    .child(super::prefs::switch(on))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(j) = this.crew.store.job_mut(id) {
+                            j.merge_on_green = !on;
+                        }
+                        this.crew.store.save();
+                        cx.notify();
+                    }))
+            });
+
+        let source = check_source(&job.folder.path);
+        let foot = div()
+            .flex()
+            .flex_wrap()
+            .gap(px(4.))
+            .text_size(px(12.))
+            .text_color(c(ui::body()))
+            .child("Checks come from")
+            .child(
+                div()
+                    .when(source != "the project", |d| {
+                        d.font_family(ui::MONO).text_color(c(ui::ink()))
+                    })
+                    .child(format!("{source}.")),
+            )
+            .child("Change them in")
+            .child(
+                div()
+                    .id("checks-settings")
+                    .cursor_pointer()
+                    .text_color(c(ui::accent_text()))
+                    .hover(|s| s.underline())
+                    .child("Settings, How work runs.")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go(super::Place::Settings(super::Pane::Work), cx)
+                    })),
+            );
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(head)
+            .when(n > 0, |d| d.child(tally))
+            .when(n > 0 || job.checking, |d| d.child(list))
+            .when(n == 0 && !job.checking, |d| {
+                d.child(div().text_size(px(13.)).text_color(c(ui::body())).child(
+                    if job.mode.writes() {
+                        "Checker runs the project's checks when the bot finishes."
+                    } else {
+                        "A job that only reads has no checks to run."
+                    },
+                ))
+            })
+            .children(merge)
+            .when(job.mode.writes(), |d| d.child(foot))
+    }
+
     /// The review on its own, without the feed's indent: for the peek pane
     /// and the workspace's Changes tab.
     pub(super) fn review_body(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
@@ -274,7 +596,7 @@ impl Shell {
             .gap(px(10.))
             .border_b_1()
             .border_color(c(ui::line()))
-            .child(super::home::pill("Ready for review", ui::ask_tone()))
+            .child(super::home::pill("To review", ui::ask_tone()))
             .child(
                 div()
                     .text_size(px(13.))
@@ -399,7 +721,7 @@ impl Shell {
             );
             if open {
                 let text = self.diff_text.clone();
-                list = list.child(self.diff_lines(id, &f.path, &text, cx));
+                list = list.child(self.diff_lines(id, &f.path, &text, DIFF_LINES, cx));
             }
         }
 
@@ -482,6 +804,317 @@ impl Shell {
                 .child(proof)
                 .child(list)
                 .child(foot),
+        )
+    }
+}
+
+impl Shell {
+    /// The workspace's Changes tab, as the design draws it: the size of the
+    /// change and the branch with the buttons to decide, the files, and the
+    /// open file's diff, where a click on a line comments on it. A job on its
+    /// way out, or out, shows its pull request or where it went instead.
+    pub(super) fn changes_pane(&mut self, job: &Job, cx: &mut Context<Self>) -> Option<Div> {
+        if matches!(job.status, Status::Shipping | Status::Shipped) {
+            return self.review_body(job, cx);
+        }
+        if job.changes.is_empty() {
+            return None;
+        }
+        let id = job.id;
+        // The open file: the one you picked, else the first.
+        let picked = self
+            .diff_open
+            .as_ref()
+            .filter(|(j, p)| *j == id && job.changes.iter().any(|f| &f.path == p))
+            .map(|(_, p)| p.clone());
+        let path = match picked {
+            Some(p) => p,
+            None => {
+                let first = job.changes[0].path.clone();
+                self.diff_text = work::diff(job, &first);
+                self.diff_open = Some((id, first.clone()));
+                first
+            }
+        };
+        let (added, removed) = job.lines();
+        let files = job.changes.len();
+        let review = job.status == Status::Review;
+        let held = review && !job.held.is_empty() && !job.belt_ok;
+        let blocked = held || !job.conflict.is_empty();
+        let failing = !job.checking && work::verdict(&job.checks, false).1 == Verdict::Fail;
+        let notes = self.line_notes.iter().filter(|n| n.job == id).count();
+        let full = self.approve_label(job);
+        let way = self.way(job);
+        let github = ship::remote_url(&job.folder.path).is_some_and(|u| ship::is_github(&u));
+        let switch = match way {
+            ship::Way::PullRequest => Some(("Merge here instead", ship::Way::Merge)),
+            ship::Way::Merge if github => Some(("Open a PR instead", ship::Way::PullRequest)),
+            ship::Way::Merge => None,
+        };
+        let mono = |t: String, col: u32| {
+            div()
+                .flex_none()
+                .font_family(ui::MONO)
+                .text_size(px(12.))
+                .text_color(c(col))
+                .child(t)
+        };
+        let head = div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .text_size(px(12.5))
+            .text_color(c(ui::body()))
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(px(13.5))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(ui::ink()))
+                    .child(format!(
+                        "{files} {}",
+                        if files == 1 { "file" } else { "files" }
+                    )),
+            )
+            .child(mono(format!("+{added}"), ui::t_green()))
+            .child(mono(format!("\u{2212}{removed}"), ui::t_red()))
+            .when(!job.branch.is_empty(), |d| {
+                d.child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .font_family(ui::MONO)
+                        .text_size(px(12.))
+                        .child(format!("{} \u{2192} {}", job.branch, job.base)),
+                )
+            })
+            .child(div().flex_1())
+            .when(review, |d| {
+                let approve_words = if failing { "Approve anyway" } else { "Approve" };
+                d.child(
+                    ui::dbtn("ws-discard", "Discard", ui::Btn::Ghost)
+                        .on_click(cx.listener(move |this, _, _, cx| this.discard_job(id, cx))),
+                )
+                .child(
+                    ui::dbtn(
+                        "ws-send-back",
+                        if notes > 0 {
+                            format!("Send back \u{b7} {notes}")
+                        } else {
+                            "Send back".to_string()
+                        },
+                        ui::Btn::Plain,
+                    )
+                    .tooltip(move |window, cx| {
+                        gpui_kit::component::tooltip::Tooltip::new(if notes > 0 {
+                            "Send your comments on its lines back"
+                        } else {
+                            "Say what to change in the box on the left"
+                        })
+                        .build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if this.line_notes.iter().any(|n| n.job == id) {
+                            this.send_line_notes(id, cx);
+                        } else {
+                            this.live_ask = false;
+                            this.live_input.read(cx).focus_handle(cx).focus(window, cx);
+                        }
+                    })),
+                )
+                .when(blocked, |d| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .font_family(ui::MONO)
+                            .text_size(px(10.5))
+                            .text_color(c(ui::faint()))
+                            .child(if held { "HELD" } else { "CLASH" }),
+                    )
+                })
+                .child(
+                    ui::dbtn("ws-approve", approve_words, ui::Btn::Primary)
+                        .tooltip(move |window, cx| {
+                            gpui_kit::component::tooltip::Tooltip::new(full.clone())
+                                .build(window, cx)
+                        })
+                        .when(blocked, |d| d.opacity(0.35).cursor_default())
+                        .when(!blocked, |d| {
+                            d.on_click(cx.listener(move |this, _, _, cx| this.approve(id, cx)))
+                        }),
+                )
+            });
+
+        // The files; the open one is shaded.
+        let mut list = div().flex().flex_col();
+        for (i, f) in job.changes.iter().enumerate() {
+            let on = f.path == path;
+            let p = f.path.clone();
+            list = list.child(
+                div()
+                    .id(("ws-file", i))
+                    .h(px(23.))
+                    .px(px(8.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(10.))
+                    .border_b_1()
+                    .border_color(c(ui::line()))
+                    .cursor_pointer()
+                    .when(on, |d| d.bg(c(ui::hover())).rounded_t(px(4.)))
+                    .when(!on, |d| d.hover(|s| s.bg(c(ui::hover()))))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .font_family(ui::MONO)
+                            .text_size(px(12.))
+                            .text_color(c(ui::ink()))
+                            .child(f.path.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_none()
+                            .gap(px(6.))
+                            .font_family(ui::MONO)
+                            .text_size(px(12.))
+                            .when(f.added > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(c(ui::t_green()))
+                                        .child(format!("+{}", f.added)),
+                                )
+                            })
+                            .when(f.removed > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(c(ui::t_red()))
+                                        .child(format!("\u{2212}{}", f.removed)),
+                                )
+                            }),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.diff_text = this
+                            .crew
+                            .store
+                            .job(id)
+                            .map(|j| work::diff(j, &p))
+                            .unwrap_or_default();
+                        this.diff_open = Some((id, p.clone()));
+                        this.line_at = None;
+                        cx.notify();
+                    })),
+            );
+        }
+
+        // The open file's diff in a box: its name and first hunk on top.
+        let text = self.diff_text.clone();
+        let hunk = text
+            .lines()
+            .find(|l| l.starts_with("@@"))
+            .map(|l| {
+                l.splitn(4, ' ')
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .split(" @@")
+                    .next()
+                    .map(|h| format!("{h} @@"))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        let lines = self.diff_lines(id, &path, &text, DIFF_LINES, cx);
+        let hint = (self.line_at.as_ref().is_none_or(|(j, _, _)| *j != id) && review).then(|| {
+            div()
+                .mx(px(12.))
+                .mb(px(12.))
+                .ml(px(62.))
+                .px(px(10.))
+                .py(px(8.))
+                .rounded(px(5.))
+                .bg(c(ui::bg()))
+                .border_1()
+                .border_color(c(ui::line()))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .text_size(px(12.5))
+                .child(
+                    div()
+                        .size(px(18.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(4.))
+                        .bg(c(ui::pick_fill()))
+                        .text_color(c(ui::pick_on()))
+                        .font_family(ui::MONO)
+                        .text_size(px(10.))
+                        .child(super::channel::you_letter()),
+                )
+                .child(div().text_color(c(ui::faint())).child(format!(
+                    "Click a line to comment on it, and it goes back to {}\u{2026}",
+                    job.bot.name()
+                )))
+        });
+        let diff = div()
+            .rounded(px(6.))
+            .bg(c(ui::raised()))
+            .border_1()
+            .border_color(c(ui::line()))
+            .overflow_hidden()
+            .child(
+                div()
+                    .px(px(12.))
+                    .py(px(8.))
+                    .flex()
+                    .gap(px(10.))
+                    .bg(c(ui::hover()))
+                    .border_b_1()
+                    .border_color(c(ui::line()))
+                    .font_family(ui::MONO)
+                    .text_size(px(12.))
+                    .text_color(c(ui::ink()))
+                    .child(div().min_w_0().truncate().child(path.clone()))
+                    .child(div().flex_1())
+                    .child(div().flex_none().text_color(c(ui::faint())).child(hunk)),
+            )
+            .child(lines)
+            .children(hint);
+
+        let way_line = switch.filter(|_| review).map(|(words, to)| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .text_size(px(12.))
+                .text_color(c(ui::faint()))
+                .child(match way {
+                    ship::Way::PullRequest => "Approve opens a pull request.".to_string(),
+                    ship::Way::Merge => format!("Approve merges into {} here.", job.base),
+                })
+                .child(
+                    div()
+                        .id("ws-way")
+                        .text_color(c(ui::accent_text()))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .cursor_pointer()
+                        .child(words)
+                        .on_click(cx.listener(move |this, _, _, cx| this.set_way(id, to, cx))),
+                )
+        });
+
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .child(head)
+                .children(way_line)
+                .child(list)
+                .child(diff),
         )
     }
 }
@@ -723,15 +1356,19 @@ pub(super) fn notes_message(notes: &[&LineNote]) -> String {
 impl Shell {
     /// A job's diff for one file, coloured line by line; click a line to
     /// comment on it.
-    fn diff_lines(&mut self, job: u64, path: &str, diff: &str, cx: &mut Context<Self>) -> Div {
+    pub(super) fn diff_lines(
+        &mut self,
+        job: u64,
+        path: &str,
+        diff: &str,
+        limit: usize,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let mut body = div()
             .py(px(6.))
-            .bg(c(ui::well()))
-            .border_t_1()
-            .border_color(c(ui::line2()))
             .font_family(ui::MONO)
-            .text_size(px(11.5))
-            .line_height(px(18.));
+            .text_size(px(12.))
+            .line_height(px(20.));
         let lines = numbered(diff);
         if lines.is_empty() {
             return body.child(
@@ -741,31 +1378,44 @@ impl Shell {
             );
         }
         let total = lines.len();
-        for (at, (num, l)) in lines.into_iter().take(DIFF_LINES).enumerate() {
+        let limit = limit.min(DIFF_LINES);
+        for (at, (num, l)) in lines.into_iter().take(limit).enumerate() {
             let hunk = l.starts_with("@@");
-            let (fg, bg) = if l.starts_with('+') {
-                (ui::add(), Some(ca(ui::GREEN, 0.08)))
+            let (mark, bg) = if l.starts_with('+') {
+                ("+", Some(ca(ui::t_green(), 0.08)))
             } else if l.starts_with('-') {
-                (ui::del(), Some(ca(ui::RED, 0.08)))
-            } else if hunk {
-                (ui::faint(), None)
+                ("\u{2212}", Some(ca(ui::t_red(), 0.07)))
             } else {
-                (ui::body(), None)
+                (" ", None)
+            };
+            let mark_col = if l.starts_with('+') {
+                ui::t_green()
+            } else {
+                ui::t_red()
             };
             let picked = self
                 .line_at
                 .as_ref()
                 .is_some_and(|(j, p, a)| *j == job && p == path && *a == at);
             let p = path.to_string();
+            let shown_num = if hunk {
+                String::new()
+            } else {
+                num.split(',').next().unwrap_or("").to_string()
+            };
+            let code = if hunk {
+                l.to_string()
+            } else {
+                l.get(1..).unwrap_or("").to_string()
+            };
             body = body.child(
                 div()
                     .id(SharedString::from(format!("dl-{job}-{path}-{at}")))
-                    .px(px(16.))
+                    .pr(px(10.))
                     .flex()
-                    .gap(px(10.))
                     .whitespace_nowrap()
                     .overflow_hidden()
-                    .text_color(c(fg))
+                    .text_color(c(if hunk { ui::faint() } else { ui::ink() }))
                     .when_some(bg, |d, bg| d.bg(bg))
                     .when(picked, |d| d.bg(ca(ui::AMBER, 0.16)))
                     .when(!hunk, |d| {
@@ -784,15 +1434,25 @@ impl Shell {
                     })
                     .child(
                         div()
-                            .w(px(34.))
+                            .w(px(38.))
                             .flex_none()
+                            .pr(px(10.))
+                            .flex()
+                            .justify_end()
                             .text_color(c(ui::faint()))
-                            .child(num.split(',').next().unwrap_or("").to_string()),
+                            .child(shown_num),
                     )
-                    .child(if l.is_empty() {
+                    .child(
+                        div()
+                            .w(px(14.))
+                            .flex_none()
+                            .text_color(c(mark_col))
+                            .child(mark),
+                    )
+                    .child(if code.is_empty() {
                         " ".to_string()
                     } else {
-                        l.to_string()
+                        code
                     }),
             );
             // Comments already on this line.
@@ -803,28 +1463,70 @@ impl Shell {
                 .filter(|(_, x)| x.job == job && x.path == path && x.at == at)
             {
                 let text = note.text.clone();
+                let line = note.line.split(',').next().unwrap_or("").to_string();
                 body = body.child(
                     div()
-                        .mx(px(16.))
-                        .my(px(3.))
-                        .px(px(10.))
-                        .py(px(5.))
-                        .rounded(px(8.))
-                        .bg(ca(ui::AMBER, 0.12))
-                        .border_1()
-                        .border_color(ca(ui::AMBER, 0.35))
+                        .px(px(12.))
+                        .py(px(8.))
                         .flex()
-                        .items_center()
-                        .gap(px(8.))
+                        .items_start()
+                        .gap(px(10.))
+                        .bg(c(ui::raised()))
+                        .border_l(px(3.))
+                        .border_color(c(ui::accent_bar()))
+                        .border_t_1()
+                        .border_b_1()
                         .font_family("Geist")
-                        .text_size(px(12.5))
-                        .text_color(c(ui::ink()))
                         .child(
-                            Icon::new(IconName::MessageSquare)
-                                .size(px(12.))
-                                .text_color(c(ui::t_amber())),
+                            div()
+                                .size(px(20.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(4.))
+                                .bg(c(ui::pick_fill()))
+                                .text_size(px(11.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(ui::pick_on()))
+                                .child("Y"),
                         )
-                        .child(div().flex_1().min_w_0().child(text))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(6.))
+                                        .child(
+                                            div()
+                                                .text_size(px(12.5))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(c(ui::ink()))
+                                                .child("You"),
+                                        )
+                                        .child(
+                                            div()
+                                                .font_family(ui::MONO)
+                                                .text_size(px(11.))
+                                                .text_color(c(ui::faint()))
+                                                .child(format!("line {line}")),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .line_height(px(19.))
+                                        .whitespace_normal()
+                                        .text_color(c(ui::ink()))
+                                        .child(text),
+                                ),
+                        )
                         .child(
                             ui::icon_btn(SharedString::from(format!("dn-{job}-{i}")), IconName::X)
                                 .size(px(20.))
@@ -872,12 +1574,12 @@ impl Shell {
                 );
             }
         }
-        if total > DIFF_LINES {
+        if total > limit && limit == DIFF_LINES {
             body = body.child(
                 div()
                     .px(px(16.))
                     .text_color(c(ui::faint()))
-                    .child(format!("{} more lines", total - DIFF_LINES)),
+                    .child(format!("{} more lines", total - limit)),
             );
         }
         body
@@ -903,6 +1605,30 @@ impl Shell {
         cx.notify();
     }
 
+    /// Sends a job back with its line comments and any more words, as one
+    /// message.
+    pub(super) fn send_back_with(&mut self, id: u64, words: String, cx: &mut Context<Self>) {
+        let notes: Vec<&LineNote> = self.line_notes.iter().filter(|n| n.job == id).collect();
+        let mut text = if notes.is_empty() {
+            String::new()
+        } else {
+            notes_message(&notes)
+        };
+        let words = words.trim();
+        if !words.is_empty() {
+            if !text.is_empty() {
+                text.push_str("\n\n");
+            }
+            text.push_str(words);
+        }
+        if text.is_empty() {
+            return;
+        }
+        self.line_notes.retain(|n| n.job != id);
+        self.line_at = None;
+        self.follow_up(id, text, cx);
+    }
+
     /// Sends a job back with its line comments, as one message.
     pub(super) fn send_line_notes(&mut self, id: u64, cx: &mut Context<Self>) {
         let notes: Vec<&LineNote> = self.line_notes.iter().filter(|n| n.job == id).collect();
@@ -917,9 +1643,67 @@ impl Shell {
     }
 }
 
+/// A check's short name from its command: "npm test" reads "Tests".
+pub(super) fn check_name(command: &str) -> String {
+    let low = command.to_lowercase();
+    for (word, name) in [
+        ("clippy", "Clippy"),
+        ("lint", "Lint"),
+        ("eslint", "Lint"),
+        ("fmt", "Format"),
+        ("format", "Format"),
+        ("prettier", "Format"),
+        ("typecheck", "Types"),
+        ("tsc", "Types"),
+        ("mypy", "Types"),
+        ("test", "Tests"),
+        ("pytest", "Tests"),
+        ("build", "Build"),
+    ] {
+        if low
+            .split(|ch: char| !ch.is_alphanumeric())
+            .any(|w| w == word)
+        {
+            return name.into();
+        }
+    }
+    let last = command.split_whitespace().last().unwrap_or(command);
+    let mut chars = last.chars();
+    match chars.next() {
+        Some(f) => f.to_uppercase().chain(chars).collect(),
+        None => "Check".into(),
+    }
+}
+
+/// The file the project's checks come from.
+fn check_source(dir: &str) -> &'static str {
+    let d = std::path::Path::new(dir);
+    for f in [
+        "squad.toml",
+        "package.json",
+        "Cargo.toml",
+        "pyproject.toml",
+        "go.mod",
+        "Makefile",
+    ] {
+        if d.join(f).exists() {
+            return f;
+        }
+    }
+    "the project"
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{notes_message, numbered, LineNote};
+    use super::{check_name, notes_message, numbered, LineNote};
+
+    #[test]
+    fn checks_read_by_what_they_do() {
+        assert_eq!(check_name("npm test"), "Tests");
+        assert_eq!(check_name("pnpm lint"), "Lint");
+        assert_eq!(check_name("cargo clippy -- -D warnings"), "Clippy");
+        assert_eq!(check_name("make check"), "Check");
+    }
 
     #[test]
     fn lines_are_numbered_from_their_hunk() {

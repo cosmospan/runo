@@ -30,6 +30,34 @@ fn lime() -> bool {
     super::theme::family_of(theme().id).is_some()
 }
 
+/// The look's accent as text and marks on the page (the design's `--vtx`):
+/// a deep lime, violet or plum that reads on the ground. Violet elsewhere.
+pub fn accent_text() -> u32 {
+    match theme().id {
+        "graphite-lime" => 0x4E6A00,
+        "graphite-lime-dark" => 0xC8F04B,
+        "harbour" => 0x4B3DC2,
+        "harbour-dark" => 0xB8B2FF,
+        "orchid" => 0x8E2479,
+        "orchid-dark" => 0xF4B8EC,
+        _ => t_violet(),
+    }
+}
+
+/// The look's accent as a solid mark (the design's `--vbar`): rings, dots
+/// and the picked tile's edge.
+pub fn accent_bar() -> u32 {
+    match theme().id {
+        "graphite-lime" => 0x8DB516,
+        "graphite-lime-dark" => 0xA8D12F,
+        "harbour" => 0x6C5CE7,
+        "harbour-dark" => 0x8B7FF0,
+        "orchid" => 0xB8399F,
+        "orchid-dark" => 0xD45BBE,
+        _ => VIOLET,
+    }
+}
+
 /// A picked option's edge, like the chosen card in Settings.
 pub fn pick() -> u32 {
     if lime() {
@@ -54,15 +82,6 @@ pub fn pick_on() -> u32 {
         on_fill()
     } else {
         0xFFFFFF
-    }
-}
-
-/// Words that say a thing is picked.
-pub fn pick_text() -> u32 {
-    if lime() {
-        ink()
-    } else {
-        t_violet()
     }
 }
 
@@ -172,6 +191,45 @@ pub fn pattern(area: crate::pattern::Area) -> Option<AnyElement> {
     )
 }
 
+/// The design's faint 24px grid under a conversation, unless a pattern of
+/// the person's own already covers the page.
+pub fn feed_grid() -> Option<AnyElement> {
+    if crate::pattern::current() != crate::pattern::Pattern::Off {
+        return None;
+    }
+    let t = theme();
+    let col = ca(t.ink, if t.light { 0.035 } else { 0.05 });
+    Some(
+        canvas(
+            |_, _, _| (),
+            move |b, _, window, _| {
+                let step = px(24.);
+                let mut x = b.origin.x;
+                while x < b.right() {
+                    window.paint_quad(gpui_kit::fill(
+                        Bounds::new(point(x, b.origin.y), size(px(1.), b.size.height)),
+                        col,
+                    ));
+                    x += step;
+                }
+                let mut y = b.origin.y;
+                while y < b.bottom() {
+                    window.paint_quad(gpui_kit::fill(
+                        Bounds::new(point(b.origin.x, y), size(b.size.width, px(1.))),
+                        col,
+                    ));
+                    y += step;
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element(),
+    )
+}
+
 /// `p` painted over the element it's laid in, `gain` times its usual strength.
 pub fn pattern_of(p: crate::pattern::Pattern, gain: f32) -> AnyElement {
     let t = theme();
@@ -203,7 +261,7 @@ pub fn chrome(el: Div) -> Div {
 }
 
 /// A card's corner radius.
-pub const CARD_R: f32 = 10.;
+pub const CARD_R: f32 = 6.;
 
 /// The ground under everything: the sidebar sits on it and the page canvas
 /// floats over it. A shade darker than the page in every theme, keeping a
@@ -384,45 +442,37 @@ fn pill_base(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
         })
 }
 
-/// A tinted status badge, like "Ready for review": the tone's text on its
-/// own soft fill, with a dot.
+/// A status badge the design's way, like "■ TO REVIEW": a small square in
+/// the tone's colour and the word in mono capitals.
 pub fn badge(tone: Tone, label: impl Into<SharedString>) -> Div {
-    let (text, fill, _) = tone;
+    let (text, _, _) = tone;
+    let label: SharedString = label.into();
     div()
-        .h(px(22.))
-        .px(px(8.))
+        .h(px(20.))
         .flex()
         .flex_none()
         .items_center()
         .gap(px(6.))
-        .rounded(px(6.))
-        .bg(c(fill))
-        .text_size(px(12.))
-        .font_weight(FontWeight::MEDIUM)
+        .font_family(MONO)
+        .text_size(px(10.5))
+        .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(text))
-        .child(super::motion::dot(text, 6., live_tone(tone)))
-        .child(label.into())
-}
-
-/// Whether a badge in `tone` is for something live: running, or waiting on
-/// you. Its dot breathes.
-fn live_tone(tone: Tone) -> bool {
-    tone == super::theme::run_tone() || tone == ask_tone()
+        .child(div().size(px(6.)).flex_none().bg(c(text)))
+        .child(label.to_uppercase())
 }
 
 /// A keyboard hint, like "⌘K".
 pub fn kbd(text: impl Into<SharedString>) -> Div {
     div()
-        .h(px(18.))
+        .h(px(17.))
         .px(px(5.))
         .flex()
         .items_center()
-        .rounded(px(4.))
-        .border_1()
-        .border_color(c(line()))
+        .rounded(px(3.))
+        .bg(c(hover()))
         .text_size(px(10.5))
         .font_family(MONO)
-        .text_color(c(faint()))
+        .text_color(c(muted()))
         .child(text.into())
 }
 
@@ -490,12 +540,11 @@ pub fn heading(label: &str, dot: Option<u32>, count: Option<usize>) -> Div {
         .flex()
         .items_center()
         .gap(px(7.))
-        .text_size(px(11.))
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_family(MONO)
+        .text_size(px(10.5))
+        .font_weight(FontWeight::MEDIUM)
         .text_color(c(faint()))
-        .when_some(dot, |d, col| {
-            d.child(div().size(px(6.)).rounded_full().bg(c(col)))
-        })
+        .when_some(dot, |d, col| d.child(div().size(px(6.)).bg(c(col))))
         .child(label.to_uppercase())
         .child(div().flex_1())
         .when_some(count, |d, n| d.child(n.to_string()))
@@ -521,6 +570,21 @@ pub fn status(color: u32, label: impl Into<SharedString>) -> Div {
         .text_color(c(color))
         .child(div().size(px(7.)).rounded_full().bg(c(color)))
         .child(label.into())
+}
+
+/// How a job stands, the design's way: a small square in its colour and the
+/// words in mono capitals, like "■ TO REVIEW".
+pub fn mono_status(color: u32, label: &str) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .font_family(MONO)
+        .text_size(px(10.5))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(color))
+        .child(div().size(px(6.)).flex_none().bg(c(color)))
+        .child(label.to_uppercase())
 }
 
 /// A thin progress bar.
@@ -591,4 +655,70 @@ pub(super) fn put_text(
         window,
         cx,
     );
+}
+
+/// The redesign's three button weights.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Btn {
+    /// A white button with a hairline, like "Send back".
+    Plain,
+    /// The look's fill, like "Approve".
+    Primary,
+    /// Words only, like "Discard".
+    Ghost,
+}
+
+/// The design's small button (`.btn`): 28 tall, radius 4, 12.5px.
+pub fn dbtn(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Btn) -> Stateful<Div> {
+    dbtn_base(id, kind).child(label.into())
+}
+
+/// A design button led by an icon, like "▣ Terminal".
+pub fn dbtn_i(
+    id: impl Into<ElementId>,
+    icon: IconName,
+    label: impl Into<SharedString>,
+    kind: Btn,
+) -> Stateful<Div> {
+    dbtn_base(id, kind)
+        .child(Icon::new(icon).size(px(13.)))
+        .child(label.into())
+}
+
+fn dbtn_base(id: impl Into<ElementId>, kind: Btn) -> Stateful<Div> {
+    let d = div()
+        .id(id)
+        .h(px(28.))
+        .px(px(11.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .gap(px(6.))
+        .rounded(px(4.))
+        .text_size(px(12.5))
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .whitespace_nowrap();
+    match kind {
+        Btn::Plain => d
+            .bg(c(raised()))
+            .border_1()
+            .border_color(c(line_hi()))
+            .text_color(c(ink()))
+            .hover(|s| s.bg(c(hover())))
+            .active(|s| s.bg(c(press()))),
+        Btn::Primary => d
+            .bg(c(fill()))
+            .border_1()
+            .border_color(ca(0x000000, 0.12))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(on_fill()))
+            .hover(|s| s.bg(c(fill_hover())))
+            .active(|s| s.bg(c(fill_press()))),
+        Btn::Ghost => d
+            .text_color(c(body()))
+            .hover(|s| s.bg(c(hover())).text_color(c(ink())))
+            .active(|s| s.bg(c(press()))),
+    }
 }
